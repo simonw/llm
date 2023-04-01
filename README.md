@@ -17,7 +17,7 @@ You need an OpenAI API key, which should either be set in the `OPENAI_API_KEY` e
 
 ## Usage
 
-So far this tool only has one command - `llm chatgpt`. You can just use `llm` as this is the default command.
+The default command for this is `llm chatgpt` - you can use `llm` instead if you prefer.
 
 To run a prompt:
 
@@ -32,6 +32,20 @@ To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
     llm 'Ten names for cheesecakes' -4
 
 Pass `--model <model name>` to use a different model.
+
+## Logging to SQLite
+
+If a SQLite database file exists in `~/.llm/log.db` then the tool will log all prompts and responses to it.
+
+You can create that file by running the `init-db` command:
+
+    llm init-db
+
+Now any prompts you run will be logged to that database.
+
+To avoid logging a prompt, pass `--no-log` or `-n` to the command:
+
+    llm 'Ten names for cheesecakes' -n
 
 ## Help
 
