@@ -1,9 +1,9 @@
 # llm
 
-[![PyPI](https://img.shields.io/pypi/v/llm.svg)](https://pypi.org/project/llm/)
-[![Changelog](https://img.shields.io/github/v/release/simonw/llm?include_prereleases&label=changelog)](https://github.com/simonw/llm/releases)
-[![Tests](https://github.com/simonw/llm/workflows/Test/badge.svg)](https://github.com/simonw/llm/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/simonw/llm/blob/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/llm.svg)](https://pypi.org/project/llm-cli/)
+[![Changelog](https://img.shields.io/github/v/release/simonw/llm-cli?include_prereleases&label=changelog)](https://github.com/simonw/llm-cli/releases)
+[![Tests](https://github.com/simonw/llm-cli/workflows/Test/badge.svg)](https://github.com/simonw/llm-cli/actions?query=workflow%3ATest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/simonw/llm-cli/blob/master/LICENSE)
 
 Access large language models from the command-line
 
@@ -11,7 +11,7 @@ Access large language models from the command-line
 
 Install this tool using `pip`:
 
-    pip install llm
+    pip install llm-cli
 
 You need an OpenAI API key, which should either be set in the `OPENAI_API_KEY` environment variable, or saved in a plain text file called `~/.openai-api-key.txt` in your home directory.
 
