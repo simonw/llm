@@ -1,4 +1,4 @@
-# llm
+# llm-cli
 
 [![PyPI](https://img.shields.io/pypi/v/llm.svg)](https://pypi.org/project/llm-cli/)
 [![Changelog](https://img.shields.io/github/v/release/simonw/llm-cli?include_prereleases&label=changelog)](https://github.com/simonw/llm-cli/releases)

@@ -13,7 +13,7 @@ def get_long_description():
 
 
 setup(
-    name="llm",
+    name="llm-cli",
     description="Access large language models from the command-line",
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
