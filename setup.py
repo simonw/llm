@@ -26,10 +26,10 @@ setup(
     },
     license="Apache License, Version 2.0",
     version=VERSION,
-    packages=["llm"],
+    packages=["llm_cli"],
     entry_points="""
         [console_scripts]
-        llm=llm.cli:cli
+        llm=llm_cli.cli:cli
     """,
     install_requires=["click", "openai", "click-default-group-wheel"],
     extras_require={"test": ["pytest"]},
