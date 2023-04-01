@@ -1,11 +1,10 @@
 from click.testing import CliRunner
-from llm_cli.cli import cli
+from llm.cli import cli
 
 
-def test_prompt_required():
+def test_version():
     runner = CliRunner()
     with runner.isolated_filesystem():
-        result = runner.invoke(cli)
-        assert result.exit_code == 2
-        assert "Missing argument 'PROMPT'" in result.output
-
+        result = runner.invoke(cli, ["--version"])
+        assert result.exit_code == 0
+        assert result.output.startswith("cli, version ")

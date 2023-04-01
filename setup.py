@@ -13,7 +13,7 @@ def get_long_description():
 
 
 setup(
-    name="llm-cli",
+    name="llm",
     description="Access large language models from the command-line",
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
@@ -26,10 +26,10 @@ setup(
     },
     license="Apache License, Version 2.0",
     version=VERSION,
-    packages=["llm_cli"],
+    packages=["llm"],
     entry_points="""
         [console_scripts]
-        llm=llm_cli.cli:cli
+        llm=llm.cli:cli
     """,
     install_requires=["click", "openai", "click-default-group-wheel"],
     extras_require={"test": ["pytest"]},

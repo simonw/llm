@@ -10,7 +10,7 @@ import sys
     default="chatgpt",
     default_if_no_args=True,
 )
-@click.version_option(package_name="llm_cli")
+@click.version_option()
 def cli():
     "Access large language models from the command-line"
 
@@ -55,10 +55,8 @@ def get_openai_api_key():
     # Expand this to home directory / ~.openai-api-key.txt
     if "OPENAI_API_KEY" in os.environ:
         return os.environ["OPENAI_API_KEY"]
-    path = os.path.expanduser("~/.openai-api-key.txt")
+    path = os.path.expanduser('~/.openai-api-key.txt')
     # If the file exists, read it
     if os.path.exists(path):
         return open(path).read().strip()
-    raise click.ClickException(
-        "No OpenAI API key found. Set OPENAI_API_KEY environment variable or create ~/.openai-api-key.txt"
-    )
+    raise click.ClickException("No OpenAI API key found. Set OPENAI_API_KEY environment variable or create ~/.openai-api-key.txt")
