@@ -6,6 +6,11 @@ import os
 import sqlite_utils
 import sys
 
+CODE_SYSTEM_PROMPT = """
+You are a code generating tool. Return just the code, with no explanation
+or context other than comments in the code itself.
+""".strip()
+
 
 @click.group(
     cls=DefaultGroup,
@@ -24,13 +29,18 @@ def cli():
 @click.option("-m", "--model", help="Model to use")
 @click.option("-s", "--stream", is_flag=True, help="Stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
-def chatgpt(prompt, system, gpt4, model, stream, no_log):
+@click.option("--code", is_flag=True, help="System prompt to optimize for code output")
+def chatgpt(prompt, system, gpt4, model, stream, no_log, code):
     "Execute prompt against ChatGPT"
     openai.api_key = get_openai_api_key()
     if gpt4:
         model = "gpt-4"
     if not model:
         model = "gpt-3.5-turbo"
+    if code and system:
+        raise click.ClickException("Cannot use --code and --system together")
+    if code:
+        system = CODE_SYSTEM_PROMPT
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -55,8 +65,10 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log):
             messages=messages,
         )
         content = response.choices[0].message.content
-        print(content)
         log(no_log, "chatgpt", system, prompt, content, model)
+        if code:
+            content = unwrap_markdown(content)
+        print(content)
 
 
 @cli.command()
@@ -105,3 +117,13 @@ def log(no_log, provider, system, prompt, response, model):
             "timestamp": str(datetime.datetime.utcnow()),
         }
     )
+
+
+def unwrap_markdown(content):
+    # Remove first and last line if they are triple backticks
+    lines = [l for l in content.split("\n")]
+    if lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
