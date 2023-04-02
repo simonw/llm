@@ -1,6 +1,7 @@
 import click
 from click_default_group import DefaultGroup
 import datetime
+import json
 import openai
 import os
 import sqlite_utils
@@ -84,6 +85,28 @@ def init_db():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     db = sqlite_utils.Database(path)
     db.vacuum()
+
+
+@cli.command()
+@click.option(
+    "-n",
+    "--count",
+    default=3,
+    help="Number of entries to show - 0 for all",
+)
+@click.option(
+    "-p",
+    "--path",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def logs(count, path):
+    path = path or get_log_db_path()
+    if not os.path.exists(path):
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    rows = db["log"].rows_where(order_by="-rowid", limit=count or None)
+    click.echo(json.dumps(list(rows), indent=2))
 
 
 def get_openai_api_key():
