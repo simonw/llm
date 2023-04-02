@@ -5,6 +5,9 @@ import openai
 import os
 import sqlite_utils
 import sys
+import warnings
+
+warnings.simplefilter("ignore", ResourceWarning)
 
 CODE_SYSTEM_PROMPT = """
 You are a code generating tool. Return just the code, with no explanation
@@ -90,7 +93,8 @@ def get_openai_api_key():
     path = os.path.expanduser("~/.openai-api-key.txt")
     # If the file exists, read it
     if os.path.exists(path):
-        return open(path).read().strip()
+        with open(path) as fp:
+            return fp.read().strip()
     raise click.ClickException(
         "No OpenAI API key found. Set OPENAI_API_KEY environment variable or create ~/.openai-api-key.txt"
     )
