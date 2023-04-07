@@ -27,18 +27,23 @@ def cli():
 
 
 @cli.command()
-@click.argument("prompt")
+@click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
 @click.option("-4", "--gpt4", is_flag=True, help="Use GPT-4")
+@click.option('-i', '--stdin', is_flag=True, help="Read prompt from standard input")
 @click.option("-m", "--model", help="Model to use")
 @click.option("-s", "--stream", is_flag=True, help="Stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
-def chatgpt(prompt, system, gpt4, model, stream, no_log, code):
+def chatgpt(prompt, system, gpt4, stdin, model, stream, no_log, code):
     "Execute prompt against ChatGPT"
     openai.api_key = get_openai_api_key()
     if gpt4:
         model = "gpt-4"
+    if prompt is None and stdin:
+        prompt = sys.stdin.read()
+    if not prompt:
+        raise click.UsageError("No prompt provided")
     if not model:
         model = "gpt-3.5-turbo"
     if code and system:
