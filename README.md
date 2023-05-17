@@ -33,6 +33,10 @@ To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
 
 Pass `--model <model name>` to use a different model.
 
+You can also send a prompt to standard input, for example:
+
+    echo 'Ten names for cheesecakes' | llm
+
 ### Using with a shell
 
 To generate a description of changes made to a Git repository since the last commit:
@@ -47,6 +51,11 @@ You can use `--system '...'` to set a system prompt.
 
     llm 'SQL to calculate total sales by month' -s \
       --system 'You are an exaggerated sentient cheesecake that knows SQL and talks about cheesecake a lot'
+
+This is useful for piping content to standard input, for example:
+
+    curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
+      llm --system 'Suggest topics for this post as a JSON array' --stream
 
 The `--code` option will set a system prompt for you that attempts to output just code without explanation, and will strip off any leading or trailing markdown code block syntax. You can use this to generate code and write it straight to a file:
 
