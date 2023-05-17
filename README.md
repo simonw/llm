@@ -33,6 +33,14 @@ To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
 
 Pass `--model <model name>` to use a different model.
 
+### Using with a shell
+
+To generate a description of changes made to a Git repository since the last commit:
+
+    llm "Describe these changes: $(git diff)"
+
+This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
+
 ## System prompts
 
 You can use `--system '...'` to set a system prompt.
