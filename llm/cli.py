@@ -175,6 +175,13 @@ def get_history(chat_id):
             "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
         )
     db = sqlite_utils.Database(log_path)
+    # Check if the chat_id column exists in the DB. If not create it. This is a
+    # migration path for people who have been using llm before chat_id was
+    # added.
+    if db["log"].columns and "chat_id" not in {
+        column.name for column in db["log"].columns
+    }:
+        db["log"].add_column("chat_id", int)
     if chat_id == -1:
         # Return the most recent chat
         last_row = list(
