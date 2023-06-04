@@ -33,7 +33,15 @@ def cli():
 @click.option("-m", "--model", help="Model to use")
 @click.option("-s", "--stream", is_flag=True, help="Stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
-@click.option("-c", "--chat-id", is_flag=False, flag_value=-1, help="Chat ID to use", default=None, type=int)
+@click.option(
+    "-c",
+    "--chat-id",
+    is_flag=False,
+    flag_value=-1,
+    help="Continue the last conversation. Optionally takes in a chat id to continue a specific conversation from history.",
+    default=None,
+    type=int,
+)
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
 def chatgpt(prompt, system, gpt4, model, stream, no_log, code, chat_id):
     "Execute prompt against ChatGPT"
@@ -157,21 +165,28 @@ def log(no_log, provider, system, prompt, response, model, chat_id=None):
         }
     )
 
+
 def get_history(chat_id):
     if chat_id is None:
         return None, []
     log_path = get_log_db_path()
     if not os.path.exists(log_path):
-        return None, []
+        raise click.ClickException(
+            "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
+        )
     db = sqlite_utils.Database(log_path)
     if chat_id == -1:
         # Return the most recent chat
-        last_row = list(db["log"].rows_where(order_by="-rowid", limit=1, select="rowid, *"))
+        last_row = list(
+            db["log"].rows_where(order_by="-rowid", limit=1, select="rowid, *")
+        )
         if last_row:
             chat_id = last_row[0].get("chat_id") or last_row[0].get("rowid")
-        else: # Database is empty
+        else:  # Database is empty
             return None, []
-    rows = db["log"].rows_where("rowid = ? or chat_id = ?", [chat_id, chat_id], order_by="rowid")
+    rows = db["log"].rows_where(
+        "rowid = ? or chat_id = ?", [chat_id, chat_id], order_by="rowid"
+    )
     return chat_id, rows
 
 
