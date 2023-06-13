@@ -52,30 +52,33 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code):
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    if stream:
-        response = []
-        for chunk in openai.ChatCompletion.create(
-            model=model,
-            messages=messages,
-            stream=True,
-        ):
-            content = chunk["choices"][0].get("delta", {}).get("content")
-            if content is not None:
-                response.append(content)
-                print(content, end="")
-                sys.stdout.flush()
-        print("")
-        log(no_log, "chatgpt", system, prompt, "".join(response), model)
-    else:
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=messages,
-        )
-        content = response.choices[0].message.content
-        log(no_log, "chatgpt", system, prompt, content, model)
-        if code:
-            content = unwrap_markdown(content)
-        print(content)
+    try:
+        if stream:
+            response = []
+            for chunk in openai.ChatCompletion.create(
+                model=model,
+                messages=messages,
+                stream=True,
+            ):
+                content = chunk["choices"][0].get("delta", {}).get("content")
+                if content is not None:
+                    response.append(content)
+                    print(content, end="")
+                    sys.stdout.flush()
+            print("")
+            log(no_log, "chatgpt", system, prompt, "".join(response), model)
+        else:
+            response = openai.ChatCompletion.create(
+                model=model,
+                messages=messages,
+            )
+            content = response.choices[0].message.content
+            log(no_log, "chatgpt", system, prompt, content, model)
+            if code:
+                content = unwrap_markdown(content)
+            print(content)
+    except openai.error.OpenAIError as ex:
+        raise click.ClickException(str(ex))
 
 
 @cli.command()
