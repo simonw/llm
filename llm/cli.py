@@ -34,6 +34,7 @@ def cli():
 @click.option("-s", "--stream", is_flag=True, help="Stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
+    "_continue",
     "-c",
     "--continue",
     is_flag=False,
@@ -43,7 +44,7 @@ def cli():
     type=int,
 )
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
-def chatgpt(prompt, system, gpt4, model, stream, no_log, code, chat_id):
+def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue):
     "Execute prompt against ChatGPT"
     if prompt is None:
         # Read from stdin instead
@@ -58,7 +59,7 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, chat_id):
     if code:
         system = CODE_SYSTEM_PROMPT
     messages = []
-    chat_id, history = get_history(chat_id)
+    chat_id, history = get_history(_continue)
     if history:
         for entry in history:
             if entry.get("system"):
