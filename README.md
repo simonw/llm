@@ -95,6 +95,12 @@ Or `-n 0` to see everything that has ever been logged:
 
     llm logs -n 0
 
+You can truncate the displayed prompts and responses using the `-t/--truncate` option:
+
+    llm logs -n 5 -t
+
+This is useful for finding a conversation that you would like to continue.
+
 You can also use [Datasette](https://datasette.io/) to browse your logs like this:
 
     datasette ~/.llm/log.db
