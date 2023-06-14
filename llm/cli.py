@@ -166,7 +166,8 @@ def log(no_log, provider, system, prompt, response, model, chat_id=None):
             "response": response,
             "model": model,
             "timestamp": str(datetime.datetime.utcnow()),
-        }
+        },
+        alter=True,
     )
 
 
