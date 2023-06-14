@@ -15,6 +15,8 @@ You are a code generating tool. Return just the code, with no explanation
 or context other than comments in the code itself.
 """.strip()
 
+DEFAULT_MODEL = "gpt-3.5-turbo"
+
 
 @click.group(
     cls=DefaultGroup,
@@ -79,8 +81,8 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    if model is None and history_model is not None:
-        model = history_model
+    if model is None:
+        model = history_model or DEFAULT_MODEL
     try:
         if stream:
             response = []
