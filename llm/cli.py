@@ -35,10 +35,10 @@ def cli():
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
     "-c",
-    "--chat-id",
+    "--continue",
     is_flag=False,
     flag_value=-1,
-    help="Continue the last conversation. Optionally takes in a chat id to continue a specific conversation from history.",
+    help="Continue the last conversation. Optionally takes a chat ID of a specific conversation.",
     default=None,
     type=int,
 )
