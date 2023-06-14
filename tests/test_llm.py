@@ -1,8 +1,10 @@
 from click.testing import CliRunner
 from llm.cli import cli
 import json
+import os
 import pytest
 import sqlite_utils
+from unittest import mock
 
 
 def test_version():
@@ -46,3 +48,25 @@ def test_logs(n, log_path):
         else:
             expected_length = n
     assert len(logs) == expected_length
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("use_stdin", (True, False))
+def test_llm_default_prompt(requests_mock, use_stdin):
+    mocked = requests_mock.post(
+        "https://api.openai.com/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Bob, Alice, Eve"}}]},
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    prompt = "three names for a pet pelican"
+    input = None
+    args = []
+    if use_stdin:
+        input = prompt
+    else:
+        args.append(prompt)
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+    assert mocked.last_request.headers["Authorization"] == "Bearer X"
