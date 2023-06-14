@@ -56,8 +56,6 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
     openai.api_key = get_openai_api_key()
     if gpt4:
         model = "gpt-4"
-    if not model:
-        model = "gpt-3.5-turbo"
     if code and system:
         raise click.ClickException("Cannot use --code and --system together")
     if code:
@@ -70,15 +68,19 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
     else:
         _continue = chat_id
     chat_id, history = get_history(_continue)
+    history_model = None
     if history:
         for entry in history:
             if entry.get("system"):
                 messages.append({"role": "system", "content": entry["system"]})
             messages.append({"role": "user", "content": entry["prompt"]})
             messages.append({"role": "assistant", "content": entry["response"]})
+            history_model = entry["model"]
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+    if model is None and history_model is not None:
+        model = history_model
     try:
         if stream:
             response = []
