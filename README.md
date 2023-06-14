@@ -19,7 +19,7 @@ You need an OpenAI API key, which should either be set in the `OPENAI_API_KEY` e
 
 ## Usage
 
-The default command for this is `llm chatgpt` - you can use `llm` instead if you prefer.
+The default command for this is `llm openai` - you can use `llm` instead if you prefer.
 
 To run a prompt:
 

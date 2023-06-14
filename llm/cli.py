@@ -20,7 +20,7 @@ DEFAULT_MODEL = "gpt-3.5-turbo"
 
 @click.group(
     cls=DefaultGroup,
-    default="chatgpt",
+    default="openai",
     default_if_no_args=True,
 )
 @click.version_option()
@@ -28,7 +28,7 @@ def cli():
     "Access large language models from the command-line"
 
 
-@cli.command()
+@cli.command(name="openai")
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
 @click.option("-4", "--gpt4", is_flag=True, help="Use GPT-4")
@@ -50,8 +50,8 @@ def cli():
     type=int,
 )
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
-def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id):
-    "Execute prompt against ChatGPT"
+def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id):
+    "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead
         prompt = sys.stdin.read()
@@ -97,14 +97,14 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
                     print(content, end="")
                     sys.stdout.flush()
             print("")
-            log(no_log, "chatgpt", system, prompt, "".join(response), model, chat_id)
+            log(no_log, "openai", system, prompt, "".join(response), model, chat_id)
         else:
             response = openai.ChatCompletion.create(
                 model=model,
                 messages=messages,
             )
             content = response.choices[0].message.content
-            log(no_log, "chatgpt", system, prompt, content, model, chat_id)
+            log(no_log, "openai", system, prompt, content, model, chat_id)
             if code:
                 content = unwrap_markdown(content)
             print(content)
