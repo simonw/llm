@@ -37,14 +37,18 @@ def cli():
     "_continue",
     "-c",
     "--continue",
-    is_flag=False,
+    is_flag=True,
     flag_value=-1,
-    help="Continue the last conversation. Optionally takes a chat ID of a specific conversation.",
-    default=None,
+    help="Continue the most recent conversation.",
+)
+@click.option(
+    "chat_id",
+    "--chat",
+    help="Continue the conversation with the given chat ID.",
     type=int,
 )
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
-def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue):
+def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id):
     "Execute prompt against ChatGPT"
     if prompt is None:
         # Read from stdin instead
@@ -59,6 +63,12 @@ def chatgpt(prompt, system, gpt4, model, stream, no_log, code, _continue):
     if code:
         system = CODE_SYSTEM_PROMPT
     messages = []
+    if _continue:
+        _continue = -1
+        if chat_id:
+            raise click.ClickException("Cannot use --continue and --chat together")
+    else:
+        _continue = chat_id
     chat_id, history = get_history(_continue)
     if history:
         for entry in history:
