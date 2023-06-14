@@ -123,13 +123,26 @@ def init_db():
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
 )
-def logs(count, path):
+@click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+def logs(count, path, truncate):
     path = path or get_log_db_path()
     if not os.path.exists(path):
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
-    rows = db["log"].rows_where(order_by="-rowid", limit=count or None)
+    rows = list(
+        db["log"].rows_where(order_by="-rowid", select="rowid, *", limit=count or None)
+    )
+    if truncate:
+        for row in rows:
+            row["prompt"] = _truncate_string(row["prompt"])
+            row["response"] = _truncate_string(row["response"])
     click.echo(json.dumps(list(rows), indent=2))
+
+
+def _truncate_string(s, max_length=100):
+    if len(s) > max_length:
+        return s[: max_length - 3] + "..."
+    return s
 
 
 def get_openai_api_key():
