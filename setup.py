@@ -32,6 +32,6 @@ setup(
         llm=llm.cli:cli
     """,
     install_requires=["click", "openai", "click-default-group-wheel", "sqlite-utils"],
-    extras_require={"test": ["pytest"]},
+    extras_require={"test": ["pytest", "requests-mock"]},
     python_requires=">=3.7",
 )
