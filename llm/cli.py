@@ -123,14 +123,18 @@ def keys():
     "Manage API keys for different models"
 
 
-@keys.command()
-def path():
+@keys.command(name="path")
+def keys_path_command():
     "Output path to keys.json file"
     click.echo(keys_path())
 
 
 def keys_path():
-    return pathlib.Path(os.environ.get("LLM_KEYS_PATH") or user_dir() / "keys.json")
+    llm_keys_path = os.environ.get("LLM_KEYS_PATH")
+    if llm_keys_path:
+        return pathlib.Path(llm_keys_path)
+    else:
+        return user_dir() / "keys.json"
 
 
 @keys.command(name="set")
@@ -159,7 +163,22 @@ def set_(name, value):
     path.write_text(json.dumps(current, indent=2) + "\n")
 
 
-@cli.command()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def logs():
+    "Tools for exploring logs"
+
+
+@logs.command(name="path")
+def logs_path():
+    "Output path to logs.db file"
+    click.echo(log_db_path())
+
+
+@logs.command(name="list")
 @click.option(
     "-n",
     "--count",
@@ -173,7 +192,8 @@ def set_(name, value):
     help="Path to log database",
 )
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
-def logs(count, path, truncate):
+def logs_list(count, path, truncate):
+    "Show logged prompts and their responses"
     path = pathlib.Path(path or log_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -225,7 +245,11 @@ def user_dir():
 
 
 def log_db_path():
-    return pathlib.Path(os.environ.get("LLM_LOG_PATH") or user_dir() / "log.db")
+    llm_log_path = os.environ.get("LLM_LOG_PATH")
+    if llm_log_path:
+        return pathlib.Path(llm_log_path)
+    else:
+        return user_dir() / "log.db"
 
 
 def log(no_log, system, prompt, response, model, chat_id=None):
