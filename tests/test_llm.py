@@ -30,7 +30,7 @@ def test_logs(n, log_path):
         for i in range(100)
     )
     runner = CliRunner()
-    args = ["logs", "-p", log_path]
+    args = ["logs", "-p", str(log_path)]
     if n is not None:
         args.extend(["-n", str(n)])
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -43,6 +43,20 @@ def test_logs(n, log_path):
         else:
             expected_length = n
     assert len(logs) == expected_length
+
+
+@pytest.mark.parametrize("env", ({}, {"LLM_LOG_PATH": "/tmp/log.db"}))
+def test_logs_path(monkeypatch, env, log_path):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "path"])
+    assert result.exit_code == 0
+    if env:
+        expected = env["LLM_LOG_PATH"]
+    else:
+        expected = str(log_path)
+    assert result.output.strip() == expected
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
