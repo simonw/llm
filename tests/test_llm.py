@@ -16,10 +16,9 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
-@pytest.fixture
-def log_path(tmp_path):
-    path = str(tmp_path / "log.db")
-    db = sqlite_utils.Database(path)
+@pytest.mark.parametrize("n", (None, 0, 2))
+def test_logs(n, log_path):
+    db = sqlite_utils.Database(str(log_path))
     migrate(db)
     db["log"].insert_all(
         {
@@ -30,11 +29,6 @@ def log_path(tmp_path):
         }
         for i in range(100)
     )
-    return path
-
-
-@pytest.mark.parametrize("n", (None, 0, 2))
-def test_logs(n, log_path):
     runner = CliRunner()
     args = ["logs", "-p", log_path]
     if n is not None:
@@ -53,7 +47,10 @@ def test_logs(n, log_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
-def test_llm_default_prompt(requests_mock, use_stdin):
+def test_llm_default_prompt(requests_mock, use_stdin, log_path):
+    # Reset the log_path database
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["log"].delete_where()
     mocked = requests_mock.post(
         "https://api.openai.com/v1/chat/completions",
         json={"choices": [{"message": {"content": "Bob, Alice, Eve"}}]},
@@ -71,3 +68,14 @@ def test_llm_default_prompt(requests_mock, use_stdin):
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
     assert mocked.last_request.headers["Authorization"] == "Bearer X"
+    # Was it logged?
+    rows = list(log_db["log"].rows)
+    assert len(rows) == 1
+    expected = {
+        "model": "gpt-3.5-turbo",
+        "prompt": "three names for a pet pelican",
+        "system": None,
+        "response": "Bob, Alice, Eve",
+        "chat_id": None,
+    }
+    assert expected.items() <= rows[0].items()

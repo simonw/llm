@@ -7,7 +7,7 @@ import pytest
 
 
 @pytest.mark.parametrize("env", ({}, {"LLM_KEYS_PATH": "/tmp/foo.json"}))
-def test_keys_path(monkeypatch, env):
+def test_keys_path(monkeypatch, env, keys_path):
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     runner = CliRunner()
@@ -16,9 +16,7 @@ def test_keys_path(monkeypatch, env):
     if env:
         expected = env["LLM_KEYS_PATH"]
     else:
-        expected = os.path.join(
-            user_data_dir("io.datasette.llm", "Datasette"), "keys.json"
-        )
+        expected = keys_path
     assert result.output.strip() == expected
 
 
