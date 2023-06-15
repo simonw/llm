@@ -1,8 +1,6 @@
 from click.testing import CliRunner
-from platformdirs import user_data_dir
 import json
 from llm.cli import cli
-import os
 import pytest
 
 
