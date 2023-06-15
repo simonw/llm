@@ -9,12 +9,15 @@ import pathlib
 import sqlite_utils
 import sys
 import warnings
+import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 
 MODEL_ALIASES = {"4": "gpt-4", "gpt4": "gpt-4", "chatgpt": "gpt-3.5-turbo"}
+
+DEFAULT_TEMPLATE = "prompt: "
 
 
 @click.group(
@@ -206,6 +209,63 @@ def logs_list(count, path, truncate):
             row["prompt"] = _truncate_string(row["prompt"])
             row["response"] = _truncate_string(row["response"])
     click.echo(json.dumps(list(rows), indent=2))
+
+
+@cli.group()
+def templates():
+    "Manage prompt templates"
+
+
+@templates.command(name="list")
+def templates_list():
+    "List available templates"
+    path = template_dir()
+    for file in path.glob("*.yaml"):
+        print(file.stem)
+
+
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified template"
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        raise click.ClickException(f"Template '{name}' does not exist")
+    click.echo(
+        yaml.dump(yaml.safe_load(path.read_text()), indent=4, default_flow_style=False)
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified template"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=path)
+    # Validate that template
+    try:
+        yaml.safe_load(path.read_text())
+    except yaml.YAMLError as ex:
+        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output path to templates directory"
+    click.echo(template_dir())
+
+
+def template_dir():
+    llm_templates_path = os.environ.get("LLM_TEMPLATES_PATH")
+    if llm_templates_path:
+        path = pathlib.Path(llm_templates_path)
+    else:
+        path = user_dir() / "templates"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _truncate_string(s, max_length=100):
