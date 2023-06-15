@@ -148,6 +148,7 @@ def init_db():
 )
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 def logs(count, path, truncate):
+    "Show log entries"
     if not LOG_DB.exists():
         raise click.ClickException(f"No log database found at {LOG_DB}. Run `llm init-db` to create {LOG_DB}")
     db = sqlite_utils.Database(LOG_DB)
