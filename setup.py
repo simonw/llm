@@ -36,7 +36,6 @@ setup(
         "openai",
         "click-default-group-wheel",
         "sqlite-utils",
-        "platformdirs",
     ],
     extras_require={"test": ["pytest", "requests-mock"]},
     python_requires=">=3.7",

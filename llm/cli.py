@@ -6,7 +6,6 @@ from .migrations import migrate
 import openai
 import os
 import pathlib
-from platformdirs import user_data_dir
 import sqlite_utils
 import sys
 import warnings
@@ -241,7 +240,7 @@ def load_keys():
 
 
 def user_dir():
-    return pathlib.Path(user_data_dir("io.datasette.llm", "Datasette"))
+    return pathlib.Path(click.get_app_dir("io.datasette.llm"))
 
 
 def log_db_path():
