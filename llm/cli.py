@@ -23,7 +23,7 @@ DEFAULT_MODEL = "gpt-3.5-turbo"
 
 @click.group(
     cls=DefaultGroup,
-    default="openai",
+    default="prompt",
     default_if_no_args=True,
 )
 @click.version_option()
@@ -31,7 +31,7 @@ def cli():
     "Access large language models from the command-line"
 
 
-@cli.command(name="openai")
+@cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
 @click.option("-4", "--gpt4", is_flag=True, help="Use GPT-4")
@@ -54,7 +54,7 @@ def cli():
 )
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
 @click.option("--key", help="API key to use")
-def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id, key):
+def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead

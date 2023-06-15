@@ -1,6 +1,6 @@
 # Usage
 
-The default command for this is `llm openai` - you can use `llm` instead if you prefer.
+The default command for this is `llm prompt` - you can use `llm` instead if you prefer.
 
 ## Executing a prompt
 
