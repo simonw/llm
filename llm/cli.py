@@ -2,6 +2,7 @@ import click
 from click_default_group import DefaultGroup
 import datetime
 import json
+from .migrations import migrate
 import openai
 import os
 import pathlib
@@ -83,7 +84,7 @@ def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, k
                 messages=messages,
             )
             content = response.choices[0].message.content
-            log(no_log, "openai", system, prompt, content, model, chat_id)
+            log(no_log, system, prompt, content, model, chat_id)
             print(content)
         else:
             response = []
@@ -98,7 +99,7 @@ def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, k
                     print(content, end="")
                     sys.stdout.flush()
             print("")
-            log(no_log, "openai", system, prompt, "".join(response), model, chat_id)
+            log(no_log, system, prompt, "".join(response), model, chat_id)
     except openai.error.AuthenticationError as ex:
         raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
     except openai.error.OpenAIError as ex:
@@ -181,6 +182,7 @@ def logs(count, path, truncate):
     if not os.path.exists(path):
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
+    migrate(db)
     rows = list(
         db["log"].rows_where(order_by="-rowid", select="rowid, *", limit=count or None)
     )
@@ -226,16 +228,16 @@ def get_log_db_path():
     return os.path.expanduser("~/.llm/log.db")
 
 
-def log(no_log, provider, system, prompt, response, model, chat_id=None):
+def log(no_log, system, prompt, response, model, chat_id=None):
     if no_log:
         return
     log_path = get_log_db_path()
     if not os.path.exists(log_path):
         return
     db = sqlite_utils.Database(log_path)
+    migrate(db)
     db["log"].insert(
         {
-            "provider": provider,
             "system": system,
             "prompt": prompt,
             "chat_id": chat_id,
@@ -243,7 +245,6 @@ def log(no_log, provider, system, prompt, response, model, chat_id=None):
             "model": model,
             "timestamp": str(datetime.datetime.utcnow()),
         },
-        alter=True,
     )
 
 
@@ -256,23 +257,15 @@ def get_history(chat_id):
             "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
         )
     db = sqlite_utils.Database(log_path)
-    # Check if the chat_id column exists in the DB. If not create it. This is a
-    # migration path for people who have been using llm before chat_id was
-    # added.
-    if db["log"].columns and "chat_id" not in {
-        column.name for column in db["log"].columns
-    }:
-        db["log"].add_column("chat_id", int)
+    migrate(db)
     if chat_id == -1:
         # Return the most recent chat
-        last_row = list(
-            db["log"].rows_where(order_by="-rowid", limit=1, select="rowid, *")
-        )
+        last_row = list(db["log"].rows_where(order_by="-id", limit=1))
         if last_row:
-            chat_id = last_row[0].get("chat_id") or last_row[0].get("rowid")
+            chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
         else:  # Database is empty
             return None, []
     rows = db["log"].rows_where(
-        "rowid = ? or chat_id = ?", [chat_id, chat_id], order_by="rowid"
+        "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
     )
     return chat_id, rows
