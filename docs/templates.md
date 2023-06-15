@@ -16,7 +16,7 @@ llm templates edit summary
 ```
 This will open a system default editor.
 
-You can also create a file called `summary.yaml` in the folder shown by runnnig `llm templates path`, for example:
+You can also create a file called `summary.yaml` in the folder shown by running `llm templates path`, for example:
 ```bash
 $ llm templates path
 /Users/simon/Library/Application Support/io.datasette.llm/templates
