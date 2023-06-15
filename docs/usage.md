@@ -14,7 +14,9 @@ To disable streaming and only return the response once it has completed:
 
 To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
 
-    llm 'Ten names for cheesecakes' -4
+    llm 'Ten names for cheesecakes' -m gpt4
+
+You can use `-m 4` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model.
 

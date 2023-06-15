@@ -15,6 +15,8 @@ warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 
+MODEL_ALIASES = {"4": "gpt-4", "gpt4": "gpt-4", "chatgpt": "gpt-3.5-turbo"}
+
 
 @click.group(
     cls=DefaultGroup,
@@ -29,7 +31,6 @@ def cli():
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
-@click.option("-4", "--gpt4", is_flag=True, help="Use GPT-4")
 @click.option("-m", "--model", help="Model to use")
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
@@ -48,14 +49,12 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
-def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, key):
+def prompt(prompt, system, model, no_stream, no_log, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead
         prompt = sys.stdin.read()
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
-    if gpt4:
-        model = "gpt-4"
     messages = []
     if _continue:
         _continue = -1
@@ -77,6 +76,9 @@ def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, k
     messages.append({"role": "user", "content": prompt})
     if model is None:
         model = history_model or DEFAULT_MODEL
+    else:
+        # Resolve model aliases
+        model = MODEL_ALIASES.get(model, model)
     try:
         if no_stream:
             response = openai.ChatCompletion.create(
