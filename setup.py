@@ -31,7 +31,13 @@ setup(
         [console_scripts]
         llm=llm.cli:cli
     """,
-    install_requires=["click", "openai", "click-default-group-wheel", "sqlite-utils"],
+    install_requires=[
+        "click",
+        "openai",
+        "click-default-group-wheel",
+        "sqlite-utils",
+        "platformdirs",
+    ],
     extras_require={"test": ["pytest", "requests-mock"]},
     python_requires=">=3.7",
 )
