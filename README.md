@@ -15,7 +15,7 @@ Install this tool using `pip`:
 
     pip install llm
 
-[Detailed installation instructions](https://llm.datasette.io/en/stable/installation.html).
+[Detailed installation instructions](https://llm.datasette.io/en/latest/installation.html).
 
 ## Getting started
 
@@ -42,7 +42,7 @@ llm "Five cute names for a pet penguin"
 4. Flappy
 5. Chilly
 ```
-Read the [usage instructions](https://llm.datasette.io/en/stable/usage.html) for more.
+Read the [usage instructions](https://llm.datasette.io/en/latest/usage.html) for more.
 
 ## Help
 
