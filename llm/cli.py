@@ -112,6 +112,8 @@ def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
             if code:
                 content = unwrap_markdown(content)
             print(content)
+    except openai.error.AuthenticationError as ex:
+        raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
     except openai.error.OpenAIError as ex:
         raise click.ClickException(str(ex))
 
