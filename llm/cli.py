@@ -4,6 +4,9 @@ import datetime
 import json
 import openai
 import os
+import pathlib
+from platformdirs import user_data_dir
+import requests
 import sqlite_utils
 import sys
 import warnings
@@ -122,6 +125,51 @@ def init_db():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     db = sqlite_utils.Database(path)
     db.vacuum()
+
+
+@cli.group()
+def keys():
+    "Manage API keys for different models"
+
+
+@keys.command()
+def path():
+    "Output path to keys.json file"
+    click.echo(keys_path())
+
+
+def keys_path():
+    return os.environ.get("LLM_KEYS_PATH") or os.path.join(user_dir(), "keys.json")
+
+
+def user_dir():
+    return user_data_dir("io.datasette.llm", "Datasette")
+
+
+@keys.command(name="set")
+@click.argument("name")
+@click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
+def set_(name, value):
+    """
+    Save a key in keys.json
+
+    Example usage:
+
+    \b
+        $ llm keys set openai
+        Enter key: ...
+    """
+    default = {"// Note": "This file stores secret API credentials. Do not share!"}
+    path = pathlib.Path(keys_path())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(json.dumps(default))
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        current = default
+    current[name] = value
+    path.write_text(json.dumps(current, indent=2) + "\n")
 
 
 @cli.command()
