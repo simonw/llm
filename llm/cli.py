@@ -109,11 +109,11 @@ def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, k
 @cli.command()
 def init_db():
     "Ensure ~/.llm/log.db SQLite database exists"
-    path = get_log_db_path()
-    if os.path.exists(path):
+    path = log_db_path()
+    if path.exists():
         return
     # Ensure directory exists
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(path)
     db.vacuum()
 
@@ -130,11 +130,7 @@ def path():
 
 
 def keys_path():
-    return os.environ.get("LLM_KEYS_PATH") or os.path.join(user_dir(), "keys.json")
-
-
-def user_dir():
-    return user_data_dir("io.datasette.llm", "Datasette")
+    return pathlib.Path(os.environ.get("LLM_KEYS_PATH") or user_dir() / "keys.json")
 
 
 @keys.command(name="set")
@@ -178,8 +174,8 @@ def set_(name, value):
 )
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 def logs(count, path, truncate):
-    path = path or get_log_db_path()
-    if not os.path.exists(path):
+    path = pathlib.Path(path or log_db_path())
+    if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
@@ -224,15 +220,19 @@ def load_keys():
         return {}
 
 
-def get_log_db_path():
-    return os.path.expanduser("~/.llm/log.db")
+def user_dir():
+    return pathlib.Path(user_data_dir("io.datasette.llm", "Datasette"))
+
+
+def log_db_path():
+    return pathlib.Path(os.environ.get("LLM_LOG_PATH") or user_dir() / "log.db")
 
 
 def log(no_log, system, prompt, response, model, chat_id=None):
     if no_log:
         return
-    log_path = get_log_db_path()
-    if not os.path.exists(log_path):
+    log_path = log_db_path()
+    if not log_path.exists():
         return
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -251,8 +251,8 @@ def log(no_log, system, prompt, response, model, chat_id=None):
 def get_history(chat_id):
     if chat_id is None:
         return None, []
-    log_path = get_log_db_path()
-    if not os.path.exists(log_path):
+    log_path = log_db_path()
+    if not log_path.exists():
         raise click.ClickException(
             "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
         )
