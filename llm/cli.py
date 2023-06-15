@@ -110,7 +110,7 @@ def prompt(prompt, system, model, no_stream, no_log, _continue, chat_id, key):
 
 @cli.command()
 def init_db():
-    "Ensure ~/.llm/log.db SQLite database exists"
+    "Ensure log.db SQLite database exists"
     path = log_db_path()
     if path.exists():
         return
@@ -278,7 +278,7 @@ def get_history(chat_id):
     log_path = log_db_path()
     if not log_path.exists():
         raise click.ClickException(
-            "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
+            "This feature requires logging. Run `llm init-db` to create log.db"
         )
     db = sqlite_utils.Database(log_path)
     migrate(db)
