@@ -7,6 +7,7 @@ import openai
 import os
 import pathlib
 import sqlite_utils
+from string import Template
 import sys
 import warnings
 import yaml
@@ -34,6 +35,7 @@ def cli():
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
 @click.option("-m", "--model", help="Model to use")
+@click.option("-t", "--template", help="Template to use")
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
@@ -51,12 +53,25 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
-def prompt(prompt, system, model, no_stream, no_log, _continue, chat_id, key):
+def prompt(prompt, system, model, template, no_stream, no_log, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead
         prompt = sys.stdin.read()
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
+    if template:
+        # Cannot be used with system
+        if system:
+            raise click.ClickException("Cannot use --template and --system together")
+        template_details = load_template(template)
+        if not template_details.get("prompt"):
+            # It's a system prompt template
+            system = template_details["system"]
+        else:
+            # Interpolate our existing prompt
+            input = prompt
+            prompt = Template(template_details["prompt"]).substitute(input=input)
+            system = template_details.get("system")
     messages = []
     if _continue:
         _continue = -1
@@ -246,10 +261,7 @@ def templates_edit(name):
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
     click.edit(filename=path)
     # Validate that template
-    try:
-        yaml.safe_load(path.read_text())
-    except yaml.YAMLError as ex:
-        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+    load_template(name)
 
 
 @templates.command(name="path")
@@ -329,6 +341,22 @@ def log(no_log, system, prompt, response, model, chat_id=None):
             "timestamp": str(datetime.datetime.utcnow()),
         },
     )
+
+
+def load_template(name):
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        raise click.ClickException(f"Invalid template: {name}")
+    try:
+        loaded = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as ex:
+        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+    if isinstance(loaded, str):
+        return {"prompt": loaded}
+    # It must contain at least a prompt or a system
+    if not (loaded.get("prompt") or loaded.get("system")):
+        raise click.ClickException("Template must include either prompt: or system:")
+    return loaded
 
 
 def get_history(chat_id):
