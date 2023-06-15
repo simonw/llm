@@ -56,8 +56,15 @@ def cli():
 def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
+        if sys.stdin.isatty():
+            # No data being piped in and no arguments provided,
+            # so show help message and exit.
+            click.echo(cli.get_help(click.get_current_context()))
+            return
+
         # Read from stdin instead
         prompt = sys.stdin.read()
+
     openai.api_key = get_openai_api_key()
     if gpt4:
         model = "gpt-4"
