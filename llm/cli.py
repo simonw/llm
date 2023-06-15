@@ -4,6 +4,7 @@ import datetime
 import json
 import openai
 import os
+from pathlib import Path
 import sqlite_utils
 import sys
 import warnings
@@ -16,6 +17,8 @@ or context other than comments in the code itself.
 """.strip()
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
+
+LOG_DB = Path().home() / ".llm" / "log.db"
 
 
 @click.group(
@@ -114,13 +117,12 @@ def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_i
 
 @cli.command()
 def init_db():
-    "Ensure ~/.llm/log.db SQLite database exists"
-    path = get_log_db_path()
-    if os.path.exists(path):
+    "Ensure the log SQLite database exists"
+    if LOG_DB.exists():
         return
     # Ensure directory exists
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    db = sqlite_utils.Database(path)
+    LOG_DB.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(LOG_DB)
     db.vacuum()
 
 
@@ -139,10 +141,9 @@ def init_db():
 )
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 def logs(count, path, truncate):
-    path = path or get_log_db_path()
-    if not os.path.exists(path):
-        raise click.ClickException("No log database found at {}".format(path))
-    db = sqlite_utils.Database(path)
+    if not LOG_DB.exists():
+        raise click.ClickException(f"No log database found at {LOG_DB}. Run `llm init-db` to create {LOG_DB}")
+    db = sqlite_utils.Database(LOG_DB)
     rows = list(
         db["log"].rows_where(order_by="-rowid", select="rowid, *", limit=count or None)
     )
@@ -163,27 +164,22 @@ def get_openai_api_key():
     # Expand this to home directory / ~.openai-api-key.txt
     if "OPENAI_API_KEY" in os.environ:
         return os.environ["OPENAI_API_KEY"]
-    path = os.path.expanduser("~/.openai-api-key.txt")
+    API_key_path = Path.home() / ".openai-api-key.txt"
     # If the file exists, read it
-    if os.path.exists(path):
-        with open(path) as fp:
-            return fp.read().strip()
+    if API_key_path.exists():
+        with open(API_key_path) as file:
+            return file.read().strip()
     raise click.ClickException(
         "No OpenAI API key found. Set OPENAI_API_KEY environment variable or create ~/.openai-api-key.txt"
     )
 
 
-def get_log_db_path():
-    return os.path.expanduser("~/.llm/log.db")
-
-
 def log(no_log, provider, system, prompt, response, model, chat_id=None):
     if no_log:
         return
-    log_path = get_log_db_path()
-    if not os.path.exists(log_path):
+    if not LOG_DB.exists():
         return
-    db = sqlite_utils.Database(log_path)
+    db = sqlite_utils.Database(LOG_DB)
     db["log"].insert(
         {
             "provider": provider,
@@ -201,12 +197,11 @@ def log(no_log, provider, system, prompt, response, model, chat_id=None):
 def get_history(chat_id):
     if chat_id is None:
         return None, []
-    log_path = get_log_db_path()
-    if not os.path.exists(log_path):
+    if not LOG_DB.exists():
         raise click.ClickException(
-            "This feature requires logging. Run `llm init-db` to create ~/.llm/log.db"
+            f"This feature requires logging. Run `llm init-db` to create {LOG_DB}"
         )
-    db = sqlite_utils.Database(log_path)
+    db = sqlite_utils.Database(LOG_DB)
     # Check if the chat_id column exists in the DB. If not create it. This is a
     # migration path for people who have been using llm before chat_id was
     # added.
