@@ -199,9 +199,7 @@ def logs_list(count, path, truncate):
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
-    rows = list(
-        db["log"].rows_where(order_by="-rowid", select="rowid, *", limit=count or None)
-    )
+    rows = list(db["log"].rows_where(order_by="-id", limit=count or None))
     if truncate:
         for row in rows:
             row["prompt"] = _truncate_string(row["prompt"])
