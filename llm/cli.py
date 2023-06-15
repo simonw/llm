@@ -53,12 +53,13 @@ def cli():
     type=int,
 )
 @click.option("--code", is_flag=True, help="System prompt to optimize for code output")
-def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id):
+@click.option("--key", help="API key to use")
+def openai_(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead
         prompt = sys.stdin.read()
-    openai.api_key = get_openai_api_key()
+    openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
     if gpt4:
         model = "gpt-4"
     if code and system:
@@ -207,18 +208,29 @@ def _truncate_string(s, max_length=100):
     return s
 
 
-def get_openai_api_key():
-    # Expand this to home directory / ~.openai-api-key.txt
-    if "OPENAI_API_KEY" in os.environ:
-        return os.environ["OPENAI_API_KEY"]
-    path = os.path.expanduser("~/.openai-api-key.txt")
-    # If the file exists, read it
-    if os.path.exists(path):
-        with open(path) as fp:
-            return fp.read().strip()
-    raise click.ClickException(
-        "No OpenAI API key found. Set OPENAI_API_KEY environment variable or create ~/.openai-api-key.txt"
-    )
+def get_key(key_arg, default_key, env_var=None):
+    keys = load_keys()
+    if key_arg in keys:
+        return keys[key_arg]
+    if env_var and os.environ.get(env_var):
+        return os.environ[env_var]
+    if key_arg:
+        return key_arg
+    default = keys.get(default_key)
+    if not default:
+        message = "No key found - add one using 'llm keys set {}'".format(default_key)
+        if env_var:
+            message += " or set the {} environment variable".format(env_var)
+        raise click.ClickException(message)
+    return default
+
+
+def load_keys():
+    path = pathlib.Path(keys_path())
+    if path.exists():
+        return json.loads(path.read_text())
+    else:
+        return {}
 
 
 def get_log_db_path():
