@@ -13,11 +13,6 @@ import warnings
 
 warnings.simplefilter("ignore", ResourceWarning)
 
-CODE_SYSTEM_PROMPT = """
-You are a code generating tool. Return just the code, with no explanation
-or context other than comments in the code itself.
-""".strip()
-
 DEFAULT_MODEL = "gpt-3.5-turbo"
 
 
@@ -52,7 +47,6 @@ def cli():
     help="Continue the conversation with the given chat ID.",
     type=int,
 )
-@click.option("--code", is_flag=True, help="System prompt to optimize for code output")
 @click.option("--key", help="API key to use")
 def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
@@ -62,10 +56,6 @@ def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
     if gpt4:
         model = "gpt-4"
-    if code and system:
-        raise click.ClickException("Cannot use --code and --system together")
-    if code:
-        system = CODE_SYSTEM_PROMPT
     messages = []
     if _continue:
         _continue = -1
