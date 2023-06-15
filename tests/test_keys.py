@@ -59,21 +59,23 @@ def test_uses_correct_key(requests_mock, monkeypatch, tmpdir):
 
     runner = CliRunner()
     # Called without --key uses environment variable
-    result = runner.invoke(cli, ["hello"], catch_exceptions=False)
+    result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result.exit_code == 0
     assert_key("from-env")
     # Called without --key and with no environment variable uses keys.json
     monkeypatch.setenv("OPENAI_API_KEY", "")
-    result2 = runner.invoke(cli, ["hello"], catch_exceptions=False)
+    result2 = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result2.exit_code == 0
     assert_key("from-keys-file")
     # Called with --key name-in-keys.json uses that value
-    result3 = runner.invoke(cli, ["hello", "--key", "other"], catch_exceptions=False)
+    result3 = runner.invoke(
+        cli, ["hello", "--key", "other", "--no-stream"], catch_exceptions=False
+    )
     assert result3.exit_code == 0
     assert_key("other-key")
     # Called with --key something-else uses exactly that
     result4 = runner.invoke(
-        cli, ["hello", "--key", "custom-key"], catch_exceptions=False
+        cli, ["hello", "--key", "custom-key", "--no-stream"], catch_exceptions=False
     )
     assert result4.exit_code == 0
     assert_key("custom-key")

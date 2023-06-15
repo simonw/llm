@@ -61,7 +61,7 @@ def test_llm_default_prompt(requests_mock, use_stdin):
     runner = CliRunner()
     prompt = "three names for a pet pelican"
     input = None
-    args = []
+    args = ["--no-stream"]
     if use_stdin:
         input = prompt
     else:

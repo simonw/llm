@@ -6,7 +6,6 @@ import openai
 import os
 import pathlib
 from platformdirs import user_data_dir
-import requests
 import sqlite_utils
 import sys
 import warnings
@@ -31,7 +30,7 @@ def cli():
 @click.option("--system", help="System prompt to use")
 @click.option("-4", "--gpt4", is_flag=True, help="Use GPT-4")
 @click.option("-m", "--model", help="Model to use")
-@click.option("-s", "--stream", is_flag=True, help="Stream output")
+@click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
     "_continue",
@@ -48,7 +47,7 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
-def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id, key):
+def prompt(prompt, system, gpt4, model, no_stream, no_log, _continue, chat_id, key):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
         # Read from stdin instead
@@ -78,7 +77,15 @@ def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id
     if model is None:
         model = history_model or DEFAULT_MODEL
     try:
-        if stream:
+        if no_stream:
+            response = openai.ChatCompletion.create(
+                model=model,
+                messages=messages,
+            )
+            content = response.choices[0].message.content
+            log(no_log, "openai", system, prompt, content, model, chat_id)
+            print(content)
+        else:
             response = []
             for chunk in openai.ChatCompletion.create(
                 model=model,
@@ -92,16 +99,6 @@ def prompt(prompt, system, gpt4, model, stream, no_log, code, _continue, chat_id
                     sys.stdout.flush()
             print("")
             log(no_log, "openai", system, prompt, "".join(response), model, chat_id)
-        else:
-            response = openai.ChatCompletion.create(
-                model=model,
-                messages=messages,
-            )
-            content = response.choices[0].message.content
-            log(no_log, "openai", system, prompt, content, model, chat_id)
-            if code:
-                content = unwrap_markdown(content)
-            print(content)
     except openai.error.AuthenticationError as ex:
         raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
     except openai.error.OpenAIError as ex:
@@ -279,13 +276,3 @@ def get_history(chat_id):
         "rowid = ? or chat_id = ?", [chat_id, chat_id], order_by="rowid"
     )
     return chat_id, rows
-
-
-def unwrap_markdown(content):
-    # Remove first and last line if they are triple backticks
-    lines = [l for l in content.split("\n")]
-    if lines[0].strip().startswith("```"):
-        lines = lines[1:]
-    if lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return "\n".join(lines)

@@ -4,13 +4,13 @@ The default command for this is `llm prompt` - you can use `llm` instead if you 
 
 ## Executing a prompt
 
-To run a prompt:
+To run a prompt, streaming tokens as they come in:
 
     llm 'Ten names for cheesecakes'
 
-To stream the results a token at a time:
+To disable streaming and only return the response once it has completed:
 
-    llm 'Ten names for cheesecakes' -s
+    llm 'Ten names for cheesecakes' --no-stream
 
 To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
 
@@ -52,10 +52,10 @@ This pattern of using `$(command)` inside a double quoted string is a useful way
 
 You can use `--system '...'` to set a system prompt.
 
-    llm 'SQL to calculate total sales by month' -s \
+    llm 'SQL to calculate total sales by month' \
       --system 'You are an exaggerated sentient cheesecake that knows SQL and talks about cheesecake a lot'
 
 This is useful for piping content to standard input, for example:
 
     curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
-      llm --system 'Suggest topics for this post as a JSON array' --stream
+      llm --system 'Suggest topics for this post as a JSON array'
