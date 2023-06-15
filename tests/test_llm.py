@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 from llm.cli import cli
+from llm.migrations import migrate
 import json
 import os
 import pytest
@@ -19,9 +20,9 @@ def test_version():
 def log_path(tmp_path):
     path = str(tmp_path / "log.db")
     db = sqlite_utils.Database(path)
+    migrate(db)
     db["log"].insert_all(
         {
-            "command": "chatgpt",
             "system": "system",
             "prompt": "prompt",
             "response": "response",
@@ -38,7 +39,7 @@ def test_logs(n, log_path):
     args = ["logs", "-p", log_path]
     if n is not None:
         args.extend(["-n", str(n)])
-    result = runner.invoke(cli, args)
+    result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     logs = json.loads(result.output)
     expected_length = 3
