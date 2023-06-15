@@ -1,0 +1,4 @@
+furo==2022.06.21
+sphinx-autobuild
+myst-parser
+cogapp
