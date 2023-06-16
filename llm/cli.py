@@ -6,6 +6,7 @@ from .migrations import migrate
 import openai
 import os
 import pathlib
+import shutil
 import sqlite_utils
 from string import Template
 import sys
@@ -235,8 +236,24 @@ def templates():
 def templates_list():
     "List available templates"
     path = template_dir()
+    pairs = []
     for file in path.glob("*.yaml"):
-        print(file.stem)
+        name = file.stem
+        template = load_template(name)
+        pairs.append((name, template.get("prompt") or ""))
+    max_name_len = max(len(p[0]) for p in pairs)
+    fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
+    for name, prompt in pairs:
+        text = fmt.format(name=name, prompt=prompt)
+        click.echo(display_truncated(text))
+
+
+def display_truncated(text):
+    console_width = shutil.get_terminal_size()[0]
+    if len(text) > console_width:
+        return text[: console_width - 3] + "..."
+    else:
+        return text
 
 
 @templates.command(name="show")
