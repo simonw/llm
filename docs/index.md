@@ -21,4 +21,5 @@ setup
 usage
 logging
 contributing
+changelog
 ```
