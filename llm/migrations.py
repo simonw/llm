@@ -78,3 +78,9 @@ def m004_column_order(db):
 @migration
 def m004_drop_provider(db):
     db["log"].transform(drop=("provider",))
+
+
+@migration
+def m005_debug(db):
+    db["log"].add_column("debug", str)
+    db["log"].add_column("duration_ms", int)

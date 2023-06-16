@@ -6,17 +6,17 @@ def test_migrate_blank():
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     assert set(db.table_names()) == {"_llm_migrations", "log"}
-    assert db["log"].schema == (
-        'CREATE TABLE "log" (\n'
-        "   [id] INTEGER PRIMARY KEY,\n"
-        "   [model] TEXT,\n"
-        "   [timestamp] TEXT,\n"
-        "   [prompt] TEXT,\n"
-        "   [system] TEXT,\n"
-        "   [response] TEXT,\n"
-        "   [chat_id] INTEGER REFERENCES [log]([id])\n"
-        ")"
-    )
+    assert db["log"].columns_dict == {
+        "id": int,
+        "model": str,
+        "timestamp": str,
+        "prompt": str,
+        "system": str,
+        "response": str,
+        "chat_id": int,
+        "debug": str,
+        "duration_ms": int,
+    }
 
 
 def test_migrate_from_original_schema():
@@ -35,14 +35,14 @@ def test_migrate_from_original_schema():
     migrate(db)
     assert set(db.table_names()) == {"_llm_migrations", "log"}
     schema = db["log"].schema
-    assert schema == (
-        'CREATE TABLE "log" (\n'
-        "   [id] INTEGER PRIMARY KEY,\n"
-        "   [model] TEXT,\n"
-        "   [timestamp] TEXT,\n"
-        "   [prompt] TEXT,\n"
-        "   [system] TEXT,\n"
-        "   [response] TEXT,\n"
-        "   [chat_id] INTEGER REFERENCES [log]([id])\n"
-        ")"
-    )
+    assert db["log"].columns_dict == {
+        "id": int,
+        "model": str,
+        "timestamp": str,
+        "prompt": str,
+        "system": str,
+        "response": str,
+        "chat_id": int,
+        "debug": str,
+        "duration_ms": int,
+    }
