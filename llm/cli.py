@@ -2,13 +2,14 @@ import click
 from click_default_group import DefaultGroup
 import datetime
 import json
+from llm import Template
 from .migrations import migrate
 import openai
 import os
 import pathlib
 import shutil
 import sqlite_utils
-from string import Template
+from string import Template as StringTemplate
 import sys
 import warnings
 import yaml
@@ -64,15 +65,15 @@ def prompt(prompt, system, model, template, no_stream, no_log, _continue, chat_i
         # Cannot be used with system
         if system:
             raise click.ClickException("Cannot use --template and --system together")
-        template_details = load_template(template)
-        if not template_details.get("prompt"):
+        template_obj = load_template(template)
+        if not template_obj.prompt:
             # It's a system prompt template
-            system = template_details["system"]
+            system = template_obj.system
         else:
             # Interpolate our existing prompt
             input = prompt
-            prompt = Template(template_details["prompt"]).substitute(input=input)
-            system = template_details.get("system")
+            prompt = StringTemplate(template_obj.prompt).substitute(input=input)
+            system = template_obj.system
     messages = []
     if _continue:
         _continue = -1
@@ -240,7 +241,7 @@ def templates_list():
     for file in path.glob("*.yaml"):
         name = file.stem
         template = load_template(name)
-        pairs.append((name, template.get("prompt") or ""))
+        pairs.append((name, template.prompt or ""))
     max_name_len = max(len(p[0]) for p in pairs)
     fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
     for name, prompt in pairs:
@@ -260,11 +261,13 @@ def display_truncated(text):
 @click.argument("name")
 def templates_show(name):
     "Show the specified template"
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        raise click.ClickException(f"Template '{name}' does not exist")
+    template = load_template(name)
     click.echo(
-        yaml.dump(yaml.safe_load(path.read_text()), indent=4, default_flow_style=False)
+        yaml.dump(
+            dict((k, v) for k, v in template.dict().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
     )
 
 
@@ -369,11 +372,9 @@ def load_template(name):
     except yaml.YAMLError as ex:
         raise click.ClickException("Invalid YAML: {}".format(str(ex)))
     if isinstance(loaded, str):
-        return {"prompt": loaded}
-    # It must contain at least a prompt or a system
-    if not (loaded.get("prompt") or loaded.get("system")):
-        raise click.ClickException("Template must include either prompt: or system:")
-    return loaded
+        return Template(name=name, prompt=loaded)
+    loaded["name"] = name
+    return Template.parse_obj(loaded)
 
 
 def get_history(chat_id):
