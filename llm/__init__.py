@@ -7,3 +7,6 @@ class Template(BaseModel):
     prompt: Optional[str]
     system: Optional[str]
     model: Optional[str]
+
+    class Config:
+        extra = "forbid"

@@ -7,6 +7,7 @@ from .migrations import migrate
 import openai
 import os
 import pathlib
+import pydantic
 import shutil
 import sqlite_utils
 from string import Template as StringTemplate
@@ -387,7 +388,13 @@ def load_template(name):
     if isinstance(loaded, str):
         return Template(name=name, prompt=loaded)
     loaded["name"] = name
-    return Template.parse_obj(loaded)
+    try:
+        return Template.parse_obj(loaded)
+    except pydantic.ValidationError as e:
+        msg = "A validation error occurred:"
+        for error in e.errors():
+            msg += f"\n  {error['loc'][0]}: {error['msg']}"
+        raise click.ClickException(msg)
 
 
 def get_history(chat_id):
