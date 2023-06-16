@@ -61,13 +61,14 @@ Here's the SQL schema used by the `log.db` database:
 import cog
 from llm.migrations import migrate
 import sqlite_utils
+import re
 db = sqlite_utils.Database(memory=True)
 migrate(db)
 schema = db["log"].schema
 
 def cleanup_sql(sql):
     first_line = sql.split('(')[0]
-    inner = sql.split('(')[1].split(')')[0];
+    inner = re.search(r'\((.*)\)', sql, re.DOTALL).group(1)
     columns = [l.strip() for l in inner.split(',')]
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
@@ -83,7 +84,9 @@ CREATE TABLE "log" (
   [prompt] TEXT,
   [system] TEXT,
   [response] TEXT,
-  [chat_id] INTEGER REFERENCES [log]
+  [chat_id] INTEGER REFERENCES [log]([id]),
+  [debug] TEXT,
+  [duration_ms] INTEGER
 );
 ```
 <!-- [[[end]]] -->
