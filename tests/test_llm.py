@@ -61,15 +61,10 @@ def test_logs_path(monkeypatch, env, log_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
-def test_llm_default_prompt(requests_mock, use_stdin, log_path):
+def test_llm_default_prompt(mocked_openai, use_stdin, log_path):
     # Reset the log_path database
     log_db = sqlite_utils.Database(str(log_path))
     log_db["log"].delete_where()
-    mocked = requests_mock.post(
-        "https://api.openai.com/v1/chat/completions",
-        json={"choices": [{"message": {"content": "Bob, Alice, Eve"}}]},
-        headers={"Content-Type": "application/json"},
-    )
     runner = CliRunner()
     prompt = "three names for a pet pelican"
     input = None
@@ -81,7 +76,7 @@ def test_llm_default_prompt(requests_mock, use_stdin, log_path):
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    assert mocked.last_request.headers["Authorization"] == "Bearer X"
+    assert mocked_openai.last_request.headers["Authorization"] == "Bearer X"
     # Was it logged?
     rows = list(log_db["log"].rows)
     assert len(rows) == 1
