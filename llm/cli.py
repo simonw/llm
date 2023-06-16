@@ -252,7 +252,7 @@ def templates_list():
         pairs.append((name, template.prompt or ""))
     max_name_len = max(len(p[0]) for p in pairs)
     fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
-    for name, prompt in pairs:
+    for name, prompt in sorted(pairs):
         text = fmt.format(name=name, prompt=prompt)
         click.echo(display_truncated(text))
 
