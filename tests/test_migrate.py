@@ -34,7 +34,6 @@ def test_migrate_from_original_schema():
     )
     migrate(db)
     assert set(db.table_names()) == {"_llm_migrations", "log"}
-    schema = db["log"].schema
     assert db["log"].columns_dict == {
         "id": int,
         "model": str,
