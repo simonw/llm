@@ -22,4 +22,5 @@ usage
 templates
 logging
 contributing
+changelog
 ```

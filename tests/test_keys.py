@@ -31,7 +31,7 @@ def test_keys_set(monkeypatch, tmpdir):
     }
 
 
-def test_uses_correct_key(requests_mock, monkeypatch, tmpdir):
+def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
     keys_path = tmpdir / "keys.json"
     keys_path.write_text(
         json.dumps(
@@ -44,14 +44,11 @@ def test_uses_correct_key(requests_mock, monkeypatch, tmpdir):
     )
     monkeypatch.setenv("LLM_KEYS_PATH", str(keys_path))
     monkeypatch.setenv("OPENAI_API_KEY", "from-env")
-    mocked = requests_mock.post(
-        "https://api.openai.com/v1/chat/completions",
-        json={"choices": [{"message": {"content": "Bob, Alice, Eve"}}]},
-        headers={"Content-Type": "application/json"},
-    )
 
     def assert_key(key):
-        assert mocked.last_request.headers["Authorization"] == "Bearer {}".format(key)
+        assert mocked_openai.last_request.headers[
+            "Authorization"
+        ] == "Bearer {}".format(key)
 
     runner = CliRunner()
     # Called without --key uses environment variable

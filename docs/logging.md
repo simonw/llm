@@ -53,3 +53,40 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 ```bash
 datasette "$(llm logs path)"
 ```
+## SQL schema
+
+Here's the SQL schema used by the `log.db` database:
+
+<!-- [[[cog
+import cog
+from llm.migrations import migrate
+import sqlite_utils
+import re
+db = sqlite_utils.Database(memory=True)
+migrate(db)
+schema = db["log"].schema
+
+def cleanup_sql(sql):
+    first_line = sql.split('(')[0]
+    inner = re.search(r'\((.*)\)', sql, re.DOTALL).group(1)
+    columns = [l.strip() for l in inner.split(',')]
+    return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
+
+cog.out(
+    "```sql\n{}\n```\n".format(cleanup_sql(schema))
+)
+]]] -->
+```sql
+CREATE TABLE "log" (
+  [id] INTEGER PRIMARY KEY,
+  [model] TEXT,
+  [timestamp] TEXT,
+  [prompt] TEXT,
+  [system] TEXT,
+  [response] TEXT,
+  [chat_id] INTEGER REFERENCES [log]([id]),
+  [debug] TEXT,
+  [duration_ms] INTEGER
+);
+```
+<!-- [[[end]]] -->
