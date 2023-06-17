@@ -1,4 +1,5 @@
 furo==2022.06.21
 sphinx-autobuild
+sphinx-copybutton
 myst-parser
 cogapp
