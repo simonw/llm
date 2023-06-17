@@ -292,7 +292,14 @@ def templates_list():
     for file in path.glob("*.yaml"):
         name = file.stem
         template = load_template(name)
-        pairs.append((name, (template.prompt or "").replace("\n", " ")))
+        text = []
+        if template.system:
+            text.append(f"system: {template.system}")
+            if template.prompt:
+                text.append(f"prompt: {template.prompt}")
+        else:
+            text = [template.prompt]
+        pairs.append((name, "".join(text).replace("\n", " ")))
     max_name_len = max(len(p[0]) for p in pairs)
     fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
     for name, prompt in sorted(pairs):
