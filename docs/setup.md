@@ -3,13 +3,13 @@
 ## Installation
 
 Install this tool using `pip`:
-
-    pip install llm
-
+```bash
+pip install llm
+```
 Or using [pipx](https://pypa.github.io/pipx/):
-
-    pipx install llm
-
+```bash
+pipx install llm
+```
 ## Authentication
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.
@@ -44,16 +44,16 @@ On macOS this will be `~/Library/Application Support/io.datasette.llm/keys.json`
 
 Keys can be passed directly using the `--key` option, like this:
 
-```
+```bash
 llm "Five names for pet weasels" --key sk-my-key-goes-here
 ```
 You can also pass the alias of a key stored in the `keys.json` file. For example, if you want to maintain a personal API key you could add that like this:
-```
+```bash
 llm keys set personal
 ```
 And then use it for prompts like so:
 
-```
+```bash
 llm "Five friendly names for a pet skunk" --key personal
 ```
 
