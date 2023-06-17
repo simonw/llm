@@ -1,3 +1,4 @@
+(prompt-templates)=
 # Prompt templates
 
 Prompt templates can be created to reuse useful prompts with different input data.
