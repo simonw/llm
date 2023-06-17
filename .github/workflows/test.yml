@@ -25,4 +25,7 @@ jobs:
     - name: Run tests
       run: |
         pytest
-
+    - name: Check if cog needs to be run
+      run: |
+        pip install -r docs/requirements.txt
+        cog --check docs/*.md

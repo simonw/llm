@@ -32,7 +32,21 @@ DEFAULT_TEMPLATE = "prompt: "
 )
 @click.version_option()
 def cli():
-    "Access large language models from the command-line"
+    """
+    Access large language models from the command-line
+
+    Documentation: https://llm.datasette.io/
+
+    To get started, obtain an OpenAI key and set it like this:
+
+    \b
+        $ llm keys set openai
+        Enter key: ...
+
+    Then execute a prompt like this:
+
+        llm 'Five outrageous names for a pet pelican'
+    """
 
 
 @cli.command(name="prompt")
@@ -67,7 +81,11 @@ def cli():
 def prompt(
     prompt, system, model, template, param, no_stream, no_log, _continue, chat_id, key
 ):
-    "Execute a prompt against on OpenAI model"
+    """
+    Execute a prompt
+
+    Documentation: https://llm.datasette.io/en/stable/usage.html
+    """
     if prompt is None:
         if template:
             # If running a template only consume from stdin if it has data
@@ -151,7 +169,11 @@ def prompt(
 
 @cli.command()
 def init_db():
-    "Ensure log.db SQLite database exists"
+    """
+    Ensure the log.db SQLite database exists
+
+    All subsequent prompts will be logged to this database.
+    """
     path = log_db_path()
     if path.exists():
         return
@@ -163,12 +185,12 @@ def init_db():
 
 @cli.group()
 def keys():
-    "Manage API keys for different models"
+    "Manage stored API keys for different models"
 
 
 @keys.command(name="path")
 def keys_path_command():
-    "Output path to keys.json file"
+    "Output the path to the keys.json file"
     click.echo(keys_path())
 
 
@@ -185,7 +207,7 @@ def keys_path():
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
 def set_(name, value):
     """
-    Save a key in keys.json
+    Save a key in the keys.json file
 
     Example usage:
 
@@ -212,12 +234,12 @@ def set_(name, value):
     default_if_no_args=True,
 )
 def logs():
-    "Tools for exploring logs"
+    "Tools for exploring logged prompts and responses"
 
 
 @logs.command(name="path")
 def logs_path():
-    "Output path to logs.db file"
+    "Output the path to the log.db file"
     click.echo(log_db_path())
 
 
@@ -236,7 +258,7 @@ def logs_path():
 )
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 def logs_list(count, path, truncate):
-    "Show logged prompts and their responses"
+    "Show recent logged prompts and their responses"
     path = pathlib.Path(path or log_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -252,12 +274,12 @@ def logs_list(count, path, truncate):
 
 @cli.group()
 def templates():
-    "Manage prompt templates"
+    "Manage stored prompt templates"
 
 
 @templates.command(name="list")
 def templates_list():
-    "List available templates"
+    "List available prompt templates"
     path = template_dir()
     pairs = []
     for file in path.glob("*.yaml"):
@@ -282,7 +304,7 @@ def display_truncated(text):
 @templates.command(name="show")
 @click.argument("name")
 def templates_show(name):
-    "Show the specified template"
+    "Show the specified prompt template"
     template = load_template(name)
     click.echo(
         yaml.dump(
@@ -296,7 +318,7 @@ def templates_show(name):
 @templates.command(name="edit")
 @click.argument("name")
 def templates_edit(name):
-    "Edit the specified template"
+    "Edit the specified prompt template using the default $EDITOR"
     # First ensure it exists
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
@@ -308,7 +330,7 @@ def templates_edit(name):
 
 @templates.command(name="path")
 def templates_path():
-    "Output path to templates directory"
+    "Output the path to the templates directory"
     click.echo(template_dir())
 
 
