@@ -45,7 +45,7 @@ def test_logs(n, log_path):
     assert len(logs) == expected_length
 
 
-@pytest.mark.parametrize("env", ({}, {"LLM_LOG_PATH": "/tmp/log.db"}))
+@pytest.mark.parametrize("env", ({}, {"LLM_LOG_PATH": "/tmp/logs.db"}))
 def test_logs_path(monkeypatch, env, log_path):
     for key, value in env.items():
         monkeypatch.setenv(key, value)

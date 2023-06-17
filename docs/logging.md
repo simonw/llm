@@ -14,7 +14,7 @@ llm logs path
 ```
 On my Mac that outputs:
 ```
-/Users/simon/Library/Application Support/io.datasette.llm/log.db
+/Users/simon/Library/Application Support/io.datasette.llm/logs.db
 ```
 This will differ for other operating systems.
 
@@ -55,7 +55,7 @@ datasette "$(llm logs path)"
 ```
 ## SQL schema
 
-Here's the SQL schema used by the `log.db` database:
+Here's the SQL schema used by the `logs.db` database:
 
 <!-- [[[cog
 import cog
