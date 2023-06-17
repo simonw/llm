@@ -5,17 +5,44 @@ Prompt templates can be created to reuse useful prompts with different input dat
 
 ## Getting started
 
-Here's a template for summarizing text:
+The easiest way to create a template is using the `--save template_name` option.
 
-```yaml
-'Summarize this: $input'
+Here's how to create a template for summarizing text:
+
+```bash
+llm 'Summarize this: $input' --save summarize
 ```
-This is a string of YAML - hence the single quotes. The `$input` token will be replaced by extra content provided to the template when it is executed.
-
-To create this template with the name `summary` run the following:
-
+You can also create templates using system prompts:
+```bash
+llm --system 'Summarize this' --save summarize
 ```
-llm templates edit summary
+You can set the default model for a template using `--model`:
+
+```bash
+llm --system 'Summarize this' --model gpt-4 --save summarize
+```
+
+## Using a template
+
+You can execute a named template using the `-t/--template` option:
+
+```bash
+curl -s https://example.com/ | llm -t summary
+```
+
+This can be combined with the `-m` option to specify a different model:
+```bash
+curl -s https://llm.datasette.io/en/latest/ | \
+  llm -t summary -m gpt-3.5-turbo-16k
+```
+
+## Templates as YAML files
+
+Templates are stored as YAML files on disk.
+
+You can edit (or create) a YAML file for a template using the `llm templates edit` command:
+```
+llm templates edit summarize
 ```
 This will open the system default editor.
 
@@ -32,21 +59,6 @@ You can also create a file called `summary.yaml` in the folder shown by running 
 $ llm templates path
 /Users/simon/Library/Application Support/io.datasette.llm/templates
 ```
-
-## Using a template
-
-You can execute a named template using the `-t/--template` option:
-
-```bash
-curl -s https://example.com/ | llm -t summary
-```
-
-This can be combined with the `-m` option to specify a different model:
-```bash
-curl -s https://llm.datasette.io/en/latest/ | \
-  llm -t summary -m gpt-3.5-turbo-16k
-```
-## Longer prompts
 
 You can also represent this template as a YAML dictionary with a `prompt:` key, like this one:
 
@@ -75,9 +87,7 @@ Output:
 
 ## System templates
 
-Templates are YAML files. A template can contain a single string, as shown above, which will then be treated as the prompt.
-
-When working with models that support system prompts (such as `gpt-3.5-turbo` and `gpt-4`) you can instead set a system prompt using a `system:` key like so:
+When working with models that support system prompts (such as `gpt-3.5-turbo` and `gpt-4`) you can set a system prompt using a `system:` key like so:
 
 ```yaml
 system: Summarize this

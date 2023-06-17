@@ -87,8 +87,19 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
+@click.option("--save", help="Save prompt with this template name")
 def prompt(
-    prompt, system, model, template, param, no_stream, no_log, _continue, chat_id, key
+    prompt,
+    system,
+    model,
+    template,
+    param,
+    no_stream,
+    no_log,
+    _continue,
+    chat_id,
+    key,
+    save,
 ):
     """
     Execute a prompt
@@ -100,11 +111,46 @@ def prompt(
             # If running a template only consume from stdin if it has data
             if not sys.stdin.isatty():
                 prompt = sys.stdin.read()
-        else:
-            # Hang waiting for input to stdin
+        elif not save:
+            # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
 
+    if save:
+        # We are saving their prompt/system/etc to a new template
+        # Fields to save: prompt, system, model - and more in the future
+        bad_options = []
+        for option, var in (
+            ("--template", template),
+            ("--continue", _continue),
+            ("--chat", chat_id),
+            ("--param", param),
+        ):
+            if var:
+                bad_options.append(option)
+        if bad_options:
+            raise click.ClickException(
+                "--save cannot be used with {}".format(", ".join(bad_options))
+            )
+        path = template_dir() / f"{save}.yaml"
+        to_save = {}
+        if model:
+            to_save["model"] = MODEL_ALIASES.get(model, model)
+        if prompt:
+            to_save["prompt"] = prompt
+        if system:
+            to_save["system"] = system
+        path.write_text(
+            yaml.dump(
+                to_save,
+                indent=4,
+                default_flow_style=False,
+            ),
+            "utf-8",
+        )
+        return
+
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
+
     if template:
         params = dict(param)
         # Cannot be used with system
@@ -117,6 +163,7 @@ def prompt(
             raise click.ClickException(str(ex))
         if model is None and template_obj.model:
             model = template_obj.model
+
     messages = []
     if _continue:
         _continue = -1

@@ -4,6 +4,7 @@ from llm.cli import cli
 import os
 from unittest import mock
 import pytest
+import yaml
 
 
 @pytest.mark.parametrize(
@@ -54,6 +55,33 @@ def test_templates_list(templates_path):
         "three : template three is very long template three is very long template thre...\n"
         "two   : template two\n"
     )
+
+
+@pytest.mark.parametrize(
+    "args,expected_prompt,expected_error",
+    (
+        (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
+        (["hello $foo"], {"prompt": "hello $foo"}, None),
+        (["--system", "system"], {"system": "system"}, None),
+        (["-t", "template"], None, "--save cannot be used with --template"),
+        (["--continue"], None, "--save cannot be used with --continue"),
+        (["--chat", "123"], None, "--save cannot be used with --chat"),
+        (["-p", "key", "value"], None, "--save cannot be used with --param"),
+    ),
+)
+def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
+    assert not (templates_path / "saved.yaml").exists()
+    runner = CliRunner()
+    result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
+    if not expected_error:
+        assert result.exit_code == 0
+        assert (
+            yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
+            == expected_prompt
+        )
+    else:
+        assert result.exit_code == 1
+        assert expected_error in result.output
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
