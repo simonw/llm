@@ -1,11 +1,14 @@
 # llm
 
 [![PyPI](https://img.shields.io/pypi/v/llm.svg)](https://pypi.org/project/llm/)
+[![Documentation](https://readthedocs.org/projects/llm/badge/?version=latest)](https://llm.datasette.io/)
 [![Changelog](https://img.shields.io/github/v/release/simonw/llm?include_prereleases&label=changelog)](https://github.com/simonw/llm/releases)
 [![Tests](https://github.com/simonw/llm/workflows/Test/badge.svg)](https://github.com/simonw/llm/actions?query=workflow%3ATest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/simonw/llm/blob/master/LICENSE)
 
 Access large language models from the command-line
+
+Full documentation: **[llm.datasette.io](https://llm.datasette.io/)**
 
 See [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/) for more on this project.
 
@@ -15,7 +18,7 @@ Install this tool using `pip`:
 
     pip install llm
 
-[Detailed installation instructions](https://llm.datasette.io/en/stable/installation.html).
+[Detailed installation instructions](https://llm.datasette.io/en/stable/setup.html).
 
 ## Getting started
 
