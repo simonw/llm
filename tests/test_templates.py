@@ -39,12 +39,14 @@ def test_templates_list(templates_path):
     (templates_path / "four.yaml").write_text(
         "'this one\n\nhas newlines in it'", "utf-8"
     )
+    (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
     runner = CliRunner()
     result = runner.invoke(cli, ["templates", "list"])
     assert result.exit_code == 0
     assert result.output == (
         "four  : this one has newlines in it\n"
         "one   : template one\n"
+        "sys   : system: Summarize this\n"
         "three : template three is very long template three is very long template thre...\n"
         "two   : template two\n"
     )
