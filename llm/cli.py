@@ -76,6 +76,8 @@ def prompt(prompt, system, model, template, no_stream, no_log, _continue, chat_i
             input = prompt
             prompt = StringTemplate(template_obj.prompt).substitute(input=input)
             system = template_obj.system
+        if model is None and template_obj.model:
+            model = template_obj.model
     messages = []
     if _continue:
         _continue = -1
