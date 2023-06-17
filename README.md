@@ -18,6 +18,10 @@ Install this tool using `pip`:
 
     pip install llm
 
+Or using [Homebrew](https://brew.sh/):
+
+    brew install simonw/llm/llm
+
 [Detailed installation instructions](https://llm.datasette.io/en/stable/setup.html).
 
 ## Getting started
