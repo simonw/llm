@@ -46,7 +46,7 @@ source_suffix = ".rst"
 master_doc = "index"
 
 # General information about the project.
-project = "llm"
+project = "LLM"
 copyright = "2023, Simon Willison"
 author = "Simon Willison"
 
@@ -96,7 +96,7 @@ html_theme = "furo"
 # documentation.
 
 html_theme_options = {}
-html_title = "llm"
+html_title = "LLM"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -134,7 +134,7 @@ latex_documents = [
     (
         master_doc,
         "llm.tex",
-        "llm documentation",
+        "LLM documentation",
         "Simon Willison",
         "manual",
     )
@@ -149,7 +149,7 @@ man_pages = [
     (
         master_doc,
         "llm",
-        "llm documentation",
+        "LLM documentation",
         [author],
         1,
     )
@@ -165,7 +165,7 @@ texinfo_documents = [
     (
         master_doc,
         "llm",
-        "llm documentation",
+        "LLM documentation",
         author,
         "llm",
         " Access large language models from the command-line ",
