@@ -82,6 +82,7 @@ Options:
   -c, --continue              Continue the most recent conversation.
   --chat INTEGER              Continue the conversation with the given chat ID.
   --key TEXT                  API key to use
+  --save TEXT                 Save prompt with this template name
   --help                      Show this message and exit.
 ```
 ### llm init-db --help
