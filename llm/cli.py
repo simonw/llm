@@ -40,6 +40,13 @@ def cli():
 @click.option("--system", help="System prompt to use")
 @click.option("-m", "--model", help="Model to use")
 @click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-p",
+    "--param",
+    multiple=True,
+    type=(str, str),
+    help="Parameters for template",
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
@@ -57,25 +64,24 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
-def prompt(prompt, system, model, template, no_stream, no_log, _continue, chat_id, key):
+def prompt(
+    prompt, system, model, template, param, no_stream, no_log, _continue, chat_id, key
+):
     "Execute a prompt against on OpenAI model"
-    if prompt is None:
+    if prompt is None and not param:
         # Read from stdin instead
         prompt = sys.stdin.read()
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
     if template:
+        params = dict(param)
         # Cannot be used with system
         if system:
-            raise click.ClickException("Cannot use --template and --system together")
+            raise click.ClickException("Cannot use -t/--template and --system together")
         template_obj = load_template(template)
-        if not template_obj.prompt:
-            # It's a system prompt template
-            system = template_obj.system
-        else:
-            # Interpolate our existing prompt
-            input = prompt
-            prompt = StringTemplate(template_obj.prompt).substitute(input=input)
-            system = template_obj.system
+        try:
+            prompt, system = template_obj.execute(prompt, params)
+        except Template.MissingVariables as ex:
+            raise click.ClickException(str(ex))
         if model is None and template_obj.model:
             model = template_obj.model
     messages = []

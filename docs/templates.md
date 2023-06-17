@@ -90,6 +90,32 @@ system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
 ```
 
+## Additional template variables
+
+Templates that work against the user's normal input (content that is either piped to the tool via standard input or passed as a command-line argument) use just the `$input` variable.
+
+You can use additional named variables. These will then need to be provided using the `-p/--param` option when executing the template.
+
+Here's an example template called `recipe`, created using `llm templates edit recipe`:
+
+```yaml
+prompt: |
+    Suggest a recipe using ingredients: $ingredients
+
+    It should be based on cuisine from this country: $country
+```
+This can be executed like so:
+
+```bash
+llm -t recipe -p ingredients 'sausages, milk' -p country Germany
+```
+My output started like this:
+> Recipe: German Sausage and Potato Soup
+>
+> Ingredients:
+> - 4 German sausages
+> - 2 cups whole milk
+
 ## Setting a default model for a template
 
 Templates executed using `llm -t template-name` will execute using the default model that the user has configured for the tool - or `gpt-3.5-turbo` if they have not configured their own default.
