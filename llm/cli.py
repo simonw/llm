@@ -296,7 +296,7 @@ def templates_list():
         if template.system:
             text.append(f"system: {template.system}")
             if template.prompt:
-                text.append(f"prompt: {template.prompt}")
+                text.append(f" prompt: {template.prompt}")
         else:
             text = [template.prompt]
         pairs.append((name, "".join(text).replace("\n", " ")))
