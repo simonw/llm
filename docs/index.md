@@ -21,6 +21,7 @@ setup
 usage
 templates
 logging
+help
 contributing
 changelog
 ```
