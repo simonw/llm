@@ -141,6 +141,7 @@ I got this:
 
 > My previous test subject seemed to have learned something new about iMovie. They exported keynote slides as individual images [...] Quite impressive for a human.
 
+(prompt-default-parameters)=
 ## Specifying default parameters
 
 You can also specify default values for parameters, using a `defaults:` key.
