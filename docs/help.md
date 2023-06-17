@@ -4,6 +4,8 @@ This page lists the `--help` output for all of the `llm` commands.
 
 <!-- [[[cog
 from click.testing import CliRunner
+import sys
+sys._called_from_test = True
 from llm.cli import cli
 def all_help(cli):
     "Return all help for Click command and its subcommands"
@@ -57,6 +59,7 @@ Commands:
   init-db    Ensure the logs.db SQLite database exists
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
+  plugins    List installed plugins
   templates  Manage stored prompt templates
 ```
 ### llm prompt --help
@@ -208,6 +211,15 @@ Options:
 Usage: llm templates path [OPTIONS]
 
   Output the path to the templates directory
+
+Options:
+  --help  Show this message and exit.
+```
+### llm plugins --help
+```
+Usage: llm plugins [OPTIONS]
+
+  List installed plugins
 
 Options:
   --help  Show this message and exit.
