@@ -1,4 +1,4 @@
-# llm
+# LLM
 
 A command-line utility for interacting with Large Language Models, such as OpenAI's GPT series.
 
