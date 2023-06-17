@@ -1,6 +1,12 @@
 import pytest
 
 
+def pytest_configure(config):
+    import sys
+
+    sys._called_from_test = True
+
+
 @pytest.fixture
 def log_path(tmpdir):
     return tmpdir / "logs.db"

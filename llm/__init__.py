@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 import string
 from typing import Optional
+from .hookspecs import hookimpl  # noqa
+from .hookspecs import hookspec  # noqa
 
 
 class Template(BaseModel):

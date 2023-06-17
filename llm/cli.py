@@ -4,6 +4,7 @@ import datetime
 import json
 from llm import Template
 from .migrations import migrate
+from .plugins import pm, get_plugins
 import openai
 import os
 import pathlib
@@ -307,6 +308,12 @@ def templates_list():
         click.echo(display_truncated(text))
 
 
+@cli.command(name="plugins")
+def plugins_list():
+    "List installed plugins"
+    click.echo(json.dumps(get_plugins(), indent=2))
+
+
 def display_truncated(text):
     console_width = shutil.get_terminal_size()[0]
     if len(text) > console_width:
@@ -468,3 +475,6 @@ def get_history(chat_id):
         "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
     )
     return chat_id, rows
+
+
+pm.hook.register_commands(cli=cli)
