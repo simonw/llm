@@ -123,7 +123,8 @@ system: Summarize this text in the voice of $voice
 ```
 Then to run it:
 ```bash
-curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | strip-tags -m | llm -t summarize -p voice GlaDOS
+curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | \
+  strip-tags -m | llm -t summarize -p voice GlaDOS
 ```
 I got this:
 
