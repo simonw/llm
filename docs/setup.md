@@ -14,6 +14,23 @@ Or using [Homebrew](https://brew.sh/):
 ```bash
 brew install simonw/llm/llm
 ```
+
+## Upgrading to the latest version
+
+If you installed using `pip`:
+```bash
+pip install -U llm
+```
+For `pipx`:
+```bash
+pipx upgrade llm
+```
+For Homebrew:
+```bash
+brew tap --repair simonw/llm
+brew upgrade simonw/llm/llm
+```
+
 ## Authentication
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.
