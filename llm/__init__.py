@@ -10,6 +10,7 @@ class Template(BaseModel):
     prompt: Optional[str]
     system: Optional[str]
     model: Optional[str]
+    defaults: Optional[dict]
 
     class Config:
         extra = "forbid"
@@ -20,6 +21,10 @@ class Template(BaseModel):
     def execute(self, input, params=None):
         params = params or {}
         params["input"] = input
+        if self.defaults:
+            for k, v in self.defaults.items():
+                if k not in params:
+                    params[k] = v
         if not self.prompt:
             system = self.interpolate(self.system, params)
             prompt = input
