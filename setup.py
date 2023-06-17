@@ -20,6 +20,7 @@ setup(
     author="Simon Willison",
     url="https://github.com/simonw/llm",
     project_urls={
+        "Documentation": "https://llm.datasette.io/",
         "Issues": "https://github.com/simonw/llm/issues",
         "CI": "https://github.com/simonw/llm/actions",
         "Changelog": "https://github.com/simonw/llm/releases",
