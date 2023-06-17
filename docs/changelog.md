@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `llm "prompt" --save template` option for saving a prompt directly to a template. [#55](https://github.com/simonw/llm/issues/55)
+- Prompt templates can now specify {ref}`default values <prompt-default-parameters>` for parameters. Thanks,  Chris Mungall. [#57]([https://github.com/simonw/llm/issues/57](https://github.com/simonw/llm/pull/57))
 
 (v0_4_1)=
 ## 0.4.1 (2023-06-17)
