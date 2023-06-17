@@ -141,6 +141,34 @@ I got this:
 
 > My previous test subject seemed to have learned something new about iMovie. They exported keynote slides as individual images [...] Quite impressive for a human.
 
+## Specifying default parameters
+
+You can also specify default values for parameters, using a `defaults:` key.
+
+```yaml
+prompt: Summarize this text in the voice of $voice
+defaults:
+  voice: GlaDOS
+```
+
+When running without `-p` it will choose the default:
+
+```bash
+curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | \
+  strip-tags -m | llm -t summarize
+```
+
+But you can override the defaults with `-p`:
+
+```bash
+curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | \
+  strip-tags -m | llm -t summarize -p voice Yoda
+```
+
+I got this:
+
+> Text, summarize in Yoda's voice, I will: "Hmm, young padawan. Summary of this text, you seek. Hmmm. ...
+
 ## Setting a default model for a template
 
 Templates executed using `llm -t template-name` will execute using the default model that the user has configured for the tool - or `gpt-3.5-turbo` if they have not configured their own default.
