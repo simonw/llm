@@ -177,7 +177,7 @@ def prompt(
 @cli.command()
 def init_db():
     """
-    Ensure the log.db SQLite database exists
+    Ensure the logs.db SQLite database exists
 
     All subsequent prompts will be logged to this database.
     """
@@ -246,7 +246,7 @@ def logs():
 
 @logs.command(name="path")
 def logs_path():
-    "Output the path to the log.db file"
+    "Output the path to the logs.db file"
     click.echo(log_db_path())
 
 
@@ -391,7 +391,7 @@ def log_db_path():
     if llm_log_path:
         return pathlib.Path(llm_log_path)
     else:
-        return user_dir() / "log.db"
+        return user_dir() / "logs.db"
 
 
 def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start=None):
@@ -446,7 +446,7 @@ def get_history(chat_id):
     log_path = log_db_path()
     if not log_path.exists():
         raise click.ClickException(
-            "This feature requires logging. Run `llm init-db` to create log.db"
+            "This feature requires logging. Run `llm init-db` to create logs.db"
         )
     db = sqlite_utils.Database(log_path)
     migrate(db)

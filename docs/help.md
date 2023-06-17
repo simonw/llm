@@ -54,7 +54,7 @@ Options:
 
 Commands:
   prompt*    Execute a prompt
-  init-db    Ensure the log.db SQLite database exists
+  init-db    Ensure the logs.db SQLite database exists
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
   templates  Manage stored prompt templates
@@ -83,7 +83,7 @@ Options:
 ```
 Usage: llm init-db [OPTIONS]
 
-  Ensure the log.db SQLite database exists
+  Ensure the logs.db SQLite database exists
 
   All subsequent prompts will be logged to this database.
 
@@ -138,13 +138,13 @@ Options:
 
 Commands:
   list*  Show recent logged prompts and their responses
-  path   Output the path to the log.db file
+  path   Output the path to the logs.db file
 ```
 #### llm logs path --help
 ```
 Usage: llm logs path [OPTIONS]
 
-  Output the path to the log.db file
+  Output the path to the logs.db file
 
 Options:
   --help  Show this message and exit.
