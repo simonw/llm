@@ -37,22 +37,35 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
 
   Access large language models from the command-line
 
+  Documentation: https://llm.datasette.io/
+
+  To get started, obtain an OpenAI key and set it like this:
+
+      $ llm keys set openai
+      Enter key: ...
+
+  Then execute a prompt like this:
+
+      llm 'Five outrageous names for a pet pelican'
+
 Options:
   --version  Show the version and exit.
   --help     Show this message and exit.
 
 Commands:
-  prompt*    Execute a prompt against on OpenAI model
-  init-db    Ensure log.db SQLite database exists
-  keys       Manage API keys for different models
-  logs       Tools for exploring logs
-  templates  Manage prompt templates
+  prompt*    Execute a prompt
+  init-db    Ensure the log.db SQLite database exists
+  keys       Manage stored API keys for different models
+  logs       Tools for exploring logged prompts and responses
+  templates  Manage stored prompt templates
 ```
 ### llm prompt --help
 ```
 Usage: llm prompt [OPTIONS] [PROMPT]
 
-  Execute a prompt against on OpenAI model
+  Execute a prompt
+
+  Documentation: https://llm.datasette.io/en/stable/usage.html
 
 Options:
   --system TEXT               System prompt to use
@@ -70,7 +83,9 @@ Options:
 ```
 Usage: llm init-db [OPTIONS]
 
-  Ensure log.db SQLite database exists
+  Ensure the log.db SQLite database exists
+
+  All subsequent prompts will be logged to this database.
 
 Options:
   --help  Show this message and exit.
@@ -79,20 +94,20 @@ Options:
 ```
 Usage: llm keys [OPTIONS] COMMAND [ARGS]...
 
-  Manage API keys for different models
+  Manage stored API keys for different models
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  path  Output path to keys.json file
-  set   Save a key in keys.json
+  path  Output the path to the keys.json file
+  set   Save a key in the keys.json file
 ```
 #### llm keys path --help
 ```
 Usage: llm keys path [OPTIONS]
 
-  Output path to keys.json file
+  Output the path to the keys.json file
 
 Options:
   --help  Show this message and exit.
@@ -101,7 +116,7 @@ Options:
 ```
 Usage: llm keys set [OPTIONS] NAME
 
-  Save a key in keys.json
+  Save a key in the keys.json file
 
   Example usage:
 
@@ -116,20 +131,20 @@ Options:
 ```
 Usage: llm logs [OPTIONS] COMMAND [ARGS]...
 
-  Tools for exploring logs
+  Tools for exploring logged prompts and responses
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  Show logged prompts and their responses
-  path   Output path to logs.db file
+  list*  Show recent logged prompts and their responses
+  path   Output the path to the log.db file
 ```
 #### llm logs path --help
 ```
 Usage: llm logs path [OPTIONS]
 
-  Output path to logs.db file
+  Output the path to the log.db file
 
 Options:
   --help  Show this message and exit.
@@ -138,7 +153,7 @@ Options:
 ```
 Usage: llm logs list [OPTIONS]
 
-  Show logged prompts and their responses
+  Show recent logged prompts and their responses
 
 Options:
   -n, --count INTEGER  Number of entries to show - 0 for all
@@ -150,22 +165,22 @@ Options:
 ```
 Usage: llm templates [OPTIONS] COMMAND [ARGS]...
 
-  Manage prompt templates
+  Manage stored prompt templates
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  edit  Edit the specified template
-  list  List available templates
-  path  Output path to templates directory
-  show  Show the specified template
+  edit  Edit the specified prompt template using the default $EDITOR
+  list  List available prompt templates
+  path  Output the path to the templates directory
+  show  Show the specified prompt template
 ```
 #### llm templates list --help
 ```
 Usage: llm templates list [OPTIONS]
 
-  List available templates
+  List available prompt templates
 
 Options:
   --help  Show this message and exit.
@@ -174,7 +189,7 @@ Options:
 ```
 Usage: llm templates show [OPTIONS] NAME
 
-  Show the specified template
+  Show the specified prompt template
 
 Options:
   --help  Show this message and exit.
@@ -183,7 +198,7 @@ Options:
 ```
 Usage: llm templates edit [OPTIONS] NAME
 
-  Edit the specified template
+  Edit the specified prompt template using the default $EDITOR
 
 Options:
   --help  Show this message and exit.
@@ -192,7 +207,7 @@ Options:
 ```
 Usage: llm templates path [OPTIONS]
 
-  Output path to templates directory
+  Output the path to the templates directory
 
 Options:
   --help  Show this message and exit.
