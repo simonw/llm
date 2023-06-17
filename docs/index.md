@@ -19,6 +19,7 @@ maxdepth: 3
 ---
 setup
 usage
+templates
 logging
 contributing
 changelog

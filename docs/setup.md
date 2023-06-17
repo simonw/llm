@@ -21,6 +21,7 @@ Keys can be persisted in a file that is used by the tool. This file is called `k
 ```
 llm keys path
 ```
+On macOS this will be `~/Library/Application Support/io.datasette.llm/keys.json`. On Linux it may be something like `~/.config/io.datasette.llm/keys.json`.
 
 Rather than editing this file directly, you can instead add keys to it using the `llm keys set` command.
 

@@ -2,20 +2,27 @@ import click
 from click_default_group import DefaultGroup
 import datetime
 import json
+from llm import Template
 from .migrations import migrate
 import openai
 import os
 import pathlib
+import pydantic
+import shutil
 import sqlite_utils
+from string import Template as StringTemplate
 import sys
 import time
 import warnings
+import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 
 MODEL_ALIASES = {"4": "gpt-4", "gpt4": "gpt-4", "chatgpt": "gpt-3.5-turbo"}
+
+DEFAULT_TEMPLATE = "prompt: "
 
 
 @click.group(
@@ -32,6 +39,14 @@ def cli():
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
 @click.option("-m", "--model", help="Model to use")
+@click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-p",
+    "--param",
+    multiple=True,
+    type=(str, str),
+    help="Parameters for template",
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option(
@@ -49,12 +64,32 @@ def cli():
     type=int,
 )
 @click.option("--key", help="API key to use")
-def prompt(prompt, system, model, no_stream, no_log, _continue, chat_id, key):
+def prompt(
+    prompt, system, model, template, param, no_stream, no_log, _continue, chat_id, key
+):
     "Execute a prompt against on OpenAI model"
     if prompt is None:
-        # Read from stdin instead
-        prompt = sys.stdin.read()
+        if template:
+            # If running a template only consume from stdin if it has data
+            if not sys.stdin.isatty():
+                prompt = sys.stdin.read()
+        else:
+            # Hang waiting for input to stdin
+            prompt = sys.stdin.read()
+
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
+    if template:
+        params = dict(param)
+        # Cannot be used with system
+        if system:
+            raise click.ClickException("Cannot use -t/--template and --system together")
+        template_obj = load_template(template)
+        try:
+            prompt, system = template_obj.execute(prompt, params)
+        except Template.MissingVariables as ex:
+            raise click.ClickException(str(ex))
+        if model is None and template_obj.model:
+            model = template_obj.model
     messages = []
     if _continue:
         _continue = -1
@@ -215,6 +250,78 @@ def logs_list(count, path, truncate):
     click.echo(json.dumps(list(rows), indent=2))
 
 
+@cli.group()
+def templates():
+    "Manage prompt templates"
+
+
+@templates.command(name="list")
+def templates_list():
+    "List available templates"
+    path = template_dir()
+    pairs = []
+    for file in path.glob("*.yaml"):
+        name = file.stem
+        template = load_template(name)
+        pairs.append((name, template.prompt or ""))
+    max_name_len = max(len(p[0]) for p in pairs)
+    fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
+    for name, prompt in sorted(pairs):
+        text = fmt.format(name=name, prompt=prompt)
+        click.echo(display_truncated(text))
+
+
+def display_truncated(text):
+    console_width = shutil.get_terminal_size()[0]
+    if len(text) > console_width:
+        return text[: console_width - 3] + "..."
+    else:
+        return text
+
+
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified template"
+    template = load_template(name)
+    click.echo(
+        yaml.dump(
+            dict((k, v) for k, v in template.dict().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified template"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=path)
+    # Validate that template
+    load_template(name)
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output path to templates directory"
+    click.echo(template_dir())
+
+
+def template_dir():
+    llm_templates_path = os.environ.get("LLM_TEMPLATES_PATH")
+    if llm_templates_path:
+        path = pathlib.Path(llm_templates_path)
+    else:
+        path = user_dir() / "templates"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _truncate_string(s, max_length=100):
     if len(s) > max_length:
         return s[: max_length - 3] + "..."
@@ -282,6 +389,26 @@ def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start
             "duration_ms": duration_ms,
         },
     )
+
+
+def load_template(name):
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        raise click.ClickException(f"Invalid template: {name}")
+    try:
+        loaded = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as ex:
+        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+    if isinstance(loaded, str):
+        return Template(name=name, prompt=loaded)
+    loaded["name"] = name
+    try:
+        return Template.parse_obj(loaded)
+    except pydantic.ValidationError as e:
+        msg = "A validation error occurred:"
+        for error in e.errors():
+            msg += f"\n  {error['loc'][0]}: {error['msg']}"
+        raise click.ClickException(msg)
 
 
 def get_history(chat_id):
