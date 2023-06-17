@@ -68,9 +68,15 @@ def prompt(
     prompt, system, model, template, param, no_stream, no_log, _continue, chat_id, key
 ):
     "Execute a prompt against on OpenAI model"
-    if prompt is None and not param:
-        # Read from stdin instead
-        prompt = sys.stdin.read()
+    if prompt is None:
+        if template:
+            # If running a template only consume from stdin if it has data
+            if not sys.stdin.isatty():
+                prompt = sys.stdin.read()
+        else:
+            # Hang waiting for input to stdin
+            prompt = sys.stdin.read()
+
     openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
     if template:
         params = dict(param)
