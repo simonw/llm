@@ -1,5 +1,13 @@
 # Changelog
 
+(v0_4_1)=
+## 0.4.1 (2023-06-17)
+
+- LLM can now be installed using Homebrew: `brew install simonw/llm/llm`. [#50](https://github.com/simonw/llm/issues/50)
+- `llm` is now styled LLM in the documentation. [#45](https://github.com/simonw/llm/issues/45)
+- Examples in documentation now include a copy button. [#43](https://github.com/simonw/llm/issues/43)
+- `llm templates` command no longer has its display disrupted by newlines. [#42](https://github.com/simonw/llm/issues/42)
+- `llm templates` command now includes system prompt, if set. [#44](https://github.com/simonw/llm/issues/44)
 
 (v0_4)=
 ## 0.4 (2023-06-17)
