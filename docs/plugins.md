@@ -2,13 +2,19 @@
 
 LLM plugins can provide extra features to the tool.
 
+The [llm-hello-world](https://github.com/simonw/llm-hello-world) plugin is the current best example of how to build and package a plugin.
+
 ## Installing plugins
 
-Plugins can be installed by running `pip install` in the same virtual environment as `llm` itself:
+Plugins must be installed in the same virtual environment as LLM itself. You can use the `llm install` command (a thin wrapper around `pip install`) for this:
 ```bash
-pip install llm-hello-world
+llm install llm-hello-world
 ```
-The [llm-hello-world](https://github.com/simonw/llm-hello-world) plugin is the current best example of how to build and package a plugin.
+Plugins can be uninstalled with `llm uninstall`:
+```bash
+llm uninstall llm-hello-world -y
+```
+The `-y` flag skips asking for confirmation.
 
 ## Listing installed plugins
 

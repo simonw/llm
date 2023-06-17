@@ -9,6 +9,7 @@ import openai
 import os
 import pathlib
 import pydantic
+from runpy import run_module
 import shutil
 import sqlite_utils
 from string import Template as StringTemplate
@@ -353,6 +354,30 @@ def templates_edit(name):
 def templates_path():
     "Output the path to the templates directory"
     click.echo(template_dir())
+
+
+@cli.command()
+@click.argument("packages", nargs=-1, required=True)
+@click.option(
+    "-U", "--upgrade", is_flag=True, help="Upgrade packages to latest version"
+)
+def install(packages, upgrade):
+    """Install packages from PyPI into the same environment as LLM"""
+    args = ["pip", "install"]
+    if upgrade:
+        args += ["--upgrade"]
+    args += list(packages)
+    sys.argv = args
+    run_module("pip", run_name="__main__")
+
+
+@cli.command()
+@click.argument("packages", nargs=-1, required=True)
+@click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
+def uninstall(packages, yes):
+    """Uninstall Python packages from the LLM environment"""
+    sys.argv = ["pip", "uninstall"] + list(packages) + (["-y"] if yes else [])
+    run_module("pip", run_name="__main__")
 
 
 def template_dir():

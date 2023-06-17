@@ -57,10 +57,12 @@ Options:
 Commands:
   prompt*    Execute a prompt
   init-db    Ensure the logs.db SQLite database exists
+  install    Install packages from PyPI into the same environment as LLM
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
   plugins    List installed plugins
   templates  Manage stored prompt templates
+  uninstall  Uninstall Python packages from the LLM environment
 ```
 ### llm prompt --help
 ```
@@ -223,5 +225,25 @@ Usage: llm plugins [OPTIONS]
 
 Options:
   --help  Show this message and exit.
+```
+### llm install --help
+```
+Usage: llm install [OPTIONS] PACKAGES...
+
+  Install packages from PyPI into the same environment as LLM
+
+Options:
+  -U, --upgrade  Upgrade packages to latest version
+  --help         Show this message and exit.
+```
+### llm uninstall --help
+```
+Usage: llm uninstall [OPTIONS] PACKAGES...
+
+  Uninstall Python packages from the LLM environment
+
+Options:
+  -y, --yes  Don't ask for confirmation
+  --help     Show this message and exit.
 ```
 <!-- [[[end]]] -->
