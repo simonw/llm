@@ -14,20 +14,13 @@ Or using [pipx](https://pypa.github.io/pipx/):
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.
 
+You can obtain an API key for OpenAI's language models from [the API keys page](https://platform.openai.com/account/api-keys) on their site.
+
 ### Saving and using stored keys
 
-Keys can be persisted in a file that is used by the tool. This file is called `keys.json` and is located at the path shown when you run the following command:
+The easiest way to store an API key is to use the `llm keys set` command:
 
-```
-llm keys path
-```
-On macOS this will be `~/Library/Application Support/io.datasette.llm/keys.json`. On Linux it may be something like `~/.config/io.datasette.llm/keys.json`.
-
-Rather than editing this file directly, you can instead add keys to it using the `llm keys set` command.
-
-To set your OpenAI API key, run the following:
-
-```
+```bash
 llm keys set openai
 ```
 You will be prompted to enter the key like this:
@@ -35,11 +28,18 @@ You will be prompted to enter the key like this:
 % llm keys set openai
 Enter key:
 ```
-Enter the key and hit Enter - the key will be saved to your `keys.json` file and automatically used for future command runs:
+Once stored, this key will be automatically used for subsequent calls to the API:
 
-```
+```bash
 llm "Five ludicrous names for a pet lobster"
 ```
+Keys that are stored in this way live in a file called `keys.json`. This file is located at the path shown when you run the following command:
+
+```bash
+llm keys path
+```
+On macOS this will be `~/Library/Application Support/io.datasette.llm/keys.json`. On Linux it may be something like `~/.config/io.datasette.llm/keys.json`.
+
 ### Passing keys using the --key option
 
 Keys can be passed directly using the `--key` option, like this:
