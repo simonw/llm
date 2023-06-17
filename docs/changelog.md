@@ -1,5 +1,7 @@
 # Changelog
 
+
+(v0_4)=
 ## 0.4 (2023-06-17)
 
 ### Prompt templates
@@ -108,16 +110,19 @@ That schema is [included in the documentation](https://llm.datasette.io/en/stabl
 - The new `gpt-3.5-turbo-16k` model with a 16,000 token context length can now also be accessed using `-m chatgpt-16k` or `-m 3.5-16k`. Thanks, Benjamin Kirkbride. [#37](https://github.com/simonw/llm/issues/37)
 - Improved display of error messages from OpenAI. [#15](https://github.com/simonw/llm/issues/15)
 
+(v0_3)=
 ## 0.3 (2023-05-17)
 
 - `llm logs` command for browsing logs of previously executed completions. [#3](https://github.com/simonw/llm/issues/3)
 - `llm "Python code to output factorial 10" --code` option which sets a system prompt designed to encourage code to be output without any additional explanatory text. [#5](https://github.com/simonw/llm/issues/5)
 - Tool can now accept a prompt piped directly to standard input. [#11](https://github.com/simonw/llm/issues/11)
 
+(v0_2)=
 ## 0.2 (2023-04-01)
 
 - If a SQLite database exists in `~/.llm/log.db` all prompts and responses are logged to that file. The `llm init-db` command can be used to create this file. [#2](https://github.com/simonw/llm/issues/2)
 
+(v0_1)=
 ## 0.1 (2023-04-01)
 
 - Initial prototype release. [#1](https://github.com/simonw/llm/issues/1)
