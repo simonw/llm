@@ -42,4 +42,4 @@ To release a new version:
 2. Update the version number in `setup.py`
 3. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
 4. Wait for the package to push to PyPI and then...
-5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/blob/main/.github/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
+5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
