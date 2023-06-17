@@ -2,16 +2,21 @@
 
 A command-line utility for interacting with Large Language Models, such as OpenAI's GPT series.
 
-**Quick start**:
+## Quick start
 
-```
+```bash
+# Install LLM
 pip install llm
+# Or use: brew install simonw/llm/llm
+
+# Paste your OpenAI API key into this:
 llm keys set openai
-# Paste in your API key
+
+# Run a prompt
 llm "Ten fun names for a pet pelican"
 ```
 
-**Contents**
+## Contents
 
 ```{toctree}
 ---
@@ -21,6 +26,7 @@ setup
 usage
 templates
 logging
+plugins
 help
 contributing
 changelog
