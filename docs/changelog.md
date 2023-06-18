@@ -17,6 +17,12 @@
 (v0_4)=
 ## 0.4 (2023-06-17)
 
+This release includes some backwards-incompatible changes:
+
+- The `-4` option for GPT-4 is now `-m 4`.
+- The `--code` option has been removed.
+- The `-s` option has been removed as streaming is now the default. Use `--no-stream` to opt out of streaming.
+
 ### Prompt templates
 
 {ref}`prompt-templates` is a new feature that allows prompts to be saved as templates and re-used with different variables.
