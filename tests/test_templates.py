@@ -16,7 +16,15 @@ import yaml
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
         ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
         ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
-        ("$one and $two", None, {"one": 99}, {"one": 1, "two": 2}, "1 and 2", None, None),
+        (
+            "$one and $two",
+            None,
+            {"one": 99},
+            {"one": 1, "two": 2},
+            "1 and 2",
+            None,
+            None,
+        ),
     ),
 )
 def test_template_execute(
