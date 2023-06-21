@@ -25,6 +25,7 @@ DEFAULT_MODEL = "gpt-3.5-turbo"
 MODEL_ALIASES = {
     "4": "gpt-4",
     "gpt4": "gpt-4",
+    "4-16k": "gpt-4-32k",
     "chatgpt": "gpt-3.5-turbo",
     "3.5": "gpt-3.5-turbo",
     "chatgpt-16k": "gpt-3.5-turbo-16k",
