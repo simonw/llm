@@ -124,7 +124,6 @@ def prompt(
             ("--template", template),
             ("--continue", _continue),
             ("--chat", chat_id),
-            ("--param", param),
         ):
             if var:
                 bad_options.append(option)
@@ -140,6 +139,8 @@ def prompt(
             to_save["prompt"] = prompt
         if system:
             to_save["system"] = system
+        if param:
+            to_save["defaults"] = dict(param)
         path.write_text(
             yaml.dump(
                 to_save,
