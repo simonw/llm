@@ -350,11 +350,15 @@ def templates_list():
         else:
             text = [template.prompt]
         pairs.append((name, "".join(text).replace("\n", " ")))
-    max_name_len = max(len(p[0]) for p in pairs)
-    fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
-    for name, prompt in sorted(pairs):
-        text = fmt.format(name=name, prompt=prompt)
-        click.echo(display_truncated(text))
+    try:
+        max_name_len = max(len(p[0]) for p in pairs)
+    except ValueError:
+        return
+    else:
+        fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
+        for name, prompt in sorted(pairs):
+            text = fmt.format(name=name, prompt=prompt)
+            click.echo(display_truncated(text))
 
 
 @cli.command(name="plugins")
