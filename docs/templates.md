@@ -21,6 +21,11 @@ You can set the default model for a template using `--model`:
 ```bash
 llm --system 'Summarize this' --model gpt-4 --save summarize
 ```
+You can also save default parameters:
+```bash
+llm --system 'Summarize this text in the voice of $voice' \
+  --model gpt-4 -p voice GlaDOS --save summarize
+```
 
 ## Using a template
 
@@ -147,7 +152,7 @@ I got this:
 You can also specify default values for parameters, using a `defaults:` key.
 
 ```yaml
-prompt: Summarize this text in the voice of $voice
+system: Summarize this text in the voice of $voice
 defaults:
   voice: GlaDOS
 ```

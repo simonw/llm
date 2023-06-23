@@ -83,7 +83,11 @@ def test_templates_list(templates_path):
         (["-t", "template"], None, "--save cannot be used with --template"),
         (["--continue"], None, "--save cannot be used with --continue"),
         (["--chat", "123"], None, "--save cannot be used with --chat"),
-        (["-p", "key", "value"], None, "--save cannot be used with --param"),
+        (
+            ["Say hello as $name", "-p", "name", "default-name"],
+            {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
