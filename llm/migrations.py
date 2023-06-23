@@ -84,3 +84,8 @@ def m004_drop_provider(db):
 def m005_debug(db):
     db["log"].add_column("debug", str)
     db["log"].add_column("duration_ms", int)
+
+
+@migration
+def m006_prompt_json(db):
+    db["log"].add_column("prompt_json", str)

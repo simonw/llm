@@ -192,14 +192,23 @@ def prompt(
         debug = {}
         if no_stream:
             start = time.time()
-            response = openai.ChatCompletion.create(
+            kwargs = {}
+            kwargs["prompt"] = prompt
+            # kwargs["messages"] = messages
+            kwargs["temperature"] = 0.7
+            kwargs["top_p"] = 0.1
+            # kwargs["top_k"] = 40
+            kwargs["max_length"] = 4096
+            kwargs["repeat_penalty"] = 1.18
+            # kwargs["repeat_penalty_tokens"] = 64
+            response = openai.Completion.create(
                 model=model,
-                messages=messages,
+                **kwargs,
             )
             debug["model"] = response.model
             debug["usage"] = response.usage
-            content = response.choices[0].message.content
-            log(no_log, system, prompt, content, model, chat_id, debug, start)
+            content = response.choices[0].text
+            log(no_log, system, prompt, json.dumps(kwargs), content, model, chat_id, debug, start)
             print(content)
         else:
             start = time.time()
@@ -216,7 +225,7 @@ def prompt(
                     print(content, end="")
                     sys.stdout.flush()
             print("")
-            log(no_log, system, prompt, "".join(response), model, chat_id, debug, start)
+            log(no_log, system, prompt, prompt_json, "".join(response), model, chat_id, debug, start)
     except openai.error.AuthenticationError as ex:
         raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
     except openai.error.OpenAIError as ex:
@@ -480,7 +489,7 @@ def log_db_path():
         return user_dir() / "logs.db"
 
 
-def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start=None):
+def log(no_log, system, prompt, prompt_json, response, model, chat_id=None, debug=None, start=None):
     duration_ms = None
     if start is not None:
         end = time.time()
@@ -496,6 +505,7 @@ def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start
         {
             "system": system,
             "prompt": prompt,
+            "prompt_json": prompt_json,
             "chat_id": chat_id,
             "response": response,
             "model": model,
