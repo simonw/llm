@@ -41,6 +41,13 @@ def test_template_execute(
         assert system == expected_system
 
 
+def test_templates_list_no_templates_found():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "list"])
+    assert result.exit_code == 0
+    assert result.output == ""
+
+
 def test_templates_list(templates_path):
     (templates_path / "one.yaml").write_text("template one", "utf-8")
     (templates_path / "two.yaml").write_text("template two", "utf-8")
