@@ -54,6 +54,8 @@ class Response(ABC):
 
 class Model(ABC):
     model_id: str
+    needs_key: Optional[str] = None
+    key_env_var: Optional[str] = None
 
     class Options(BaseModel):
         class Config:

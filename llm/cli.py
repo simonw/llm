@@ -188,8 +188,9 @@ def prompt(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
-    # TODO: Only do this for OpenAI models
-    openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
+    # Provide the API key, if one is needed
+    if model.needs_key and not model.key:
+        model.key = get_key(key, model.needs_key, model.key_env_var)
 
     if no_stream:
         chunk = list(model.prompt(prompt, system, stream=False))[0]
