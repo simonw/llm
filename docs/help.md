@@ -60,6 +60,7 @@ Commands:
   install    Install packages from PyPI into the same environment as LLM
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
+  models     Manage available models
   plugins    List installed plugins
   templates  Manage stored prompt templates
   uninstall  Uninstall Python packages from the LLM environment
@@ -166,6 +167,27 @@ Options:
   -p, --path FILE      Path to log database
   -t, --truncate       Truncate long strings in output
   --help               Show this message and exit.
+```
+### llm models --help
+```
+Usage: llm models [OPTIONS] COMMAND [ARGS]...
+
+  Manage available models
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list  List available models
+```
+#### llm models list --help
+```
+Usage: llm models list [OPTIONS]
+
+  List available models
+
+Options:
+  --help  Show this message and exit.
 ```
 ### llm templates --help
 ```
