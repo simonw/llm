@@ -3,6 +3,7 @@ import string
 from typing import Optional
 from .hookspecs import hookimpl  # noqa
 from .hookspecs import hookspec  # noqa
+from .models import Model, Prompt, Response, OptionsError  # noqa
 
 
 class Template(BaseModel):

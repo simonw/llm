@@ -4,7 +4,7 @@ import datetime
 import json
 from llm import Template
 from .migrations import migrate
-from .plugins import pm, get_plugins
+from .plugins import pm, get_plugins, get_model_aliases, get_models_with_aliases
 import openai
 import os
 import pathlib
@@ -21,16 +21,6 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
-
-MODEL_ALIASES = {
-    "4": "gpt-4",
-    "gpt4": "gpt-4",
-    "4-32k": "gpt-4-32k",
-    "chatgpt": "gpt-3.5-turbo",
-    "3.5": "gpt-3.5-turbo",
-    "chatgpt-16k": "gpt-3.5-turbo-16k",
-    "3.5-16k": "gpt-3.5-turbo-16k",
-}
 
 DEFAULT_TEMPLATE = "prompt: "
 
@@ -62,7 +52,7 @@ def cli():
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("--system", help="System prompt to use")
-@click.option("-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", help="Model to use")
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -92,7 +82,7 @@ def cli():
 def prompt(
     prompt,
     system,
-    model,
+    model_id,
     template,
     param,
     no_stream,
@@ -116,6 +106,8 @@ def prompt(
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
 
+    model_aliases = get_model_aliases()
+
     if save:
         # We are saving their prompt/system/etc to a new template
         # Fields to save: prompt, system, model - and more in the future
@@ -133,8 +125,11 @@ def prompt(
             )
         path = template_dir() / f"{save}.yaml"
         to_save = {}
-        if model:
-            to_save["model"] = MODEL_ALIASES.get(model, model)
+        if model_id:
+            try:
+                to_save["model"] = model_aliases[model_id].model_id
+            except KeyError:
+                raise click.ClickException("'{}' is not a known model".format(model_id))
         if prompt:
             to_save["prompt"] = prompt
         if system:
@@ -151,8 +146,6 @@ def prompt(
         )
         return
 
-    openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
-
     if template:
         params = dict(param)
         # Cannot be used with system
@@ -163,33 +156,55 @@ def prompt(
             prompt, system = template_obj.execute(prompt, params)
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
-        if model is None and template_obj.model:
-            model = template_obj.model
+        if model_id is None and template_obj.model:
+            model_id = template_obj.model
 
-    messages = []
-    if _continue:
-        _continue = -1
-        if chat_id:
-            raise click.ClickException("Cannot use --continue and --chat together")
-    else:
-        _continue = chat_id
-    chat_id, history = get_history(_continue)
     history_model = None
-    if history:
-        for entry in history:
-            if entry.get("system"):
-                messages.append({"role": "system", "content": entry["system"]})
-            messages.append({"role": "user", "content": entry["prompt"]})
-            messages.append({"role": "assistant", "content": entry["response"]})
-            history_model = entry["model"]
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-    if model is None:
-        model = history_model or DEFAULT_MODEL
+    # TODO: Re-introduce --continue mode
+    # messages = []
+    # if _continue:
+    #     _continue = -1
+    #     if chat_id:
+    #         raise click.ClickException("Cannot use --continue and --chat together")
+    # else:
+    #     _continue = chat_id
+    # chat_id, history = get_history(_continue)
+    # history_model = None
+    # if history:
+    #     for entry in history:
+    #         if entry.get("system"):
+    #             messages.append({"role": "system", "content": entry["system"]})
+    #         messages.append({"role": "user", "content": entry["prompt"]})
+    #         messages.append({"role": "assistant", "content": entry["response"]})
+    #         history_model = entry["model"]
+
+    # Figure out which model we are using
+    if model_id is None:
+        model_id = history_model or DEFAULT_MODEL
+
+    # Now resolve the model
+    try:
+        model = model_aliases[model_id]
+    except KeyError:
+        raise click.ClickException("'{}' is not a known model".format(model_id))
+
+    # TODO: Only do this for OpenAI models
+    openai.api_key = get_key(key, "openai", "OPENAI_API_KEY")
+
+    if no_stream:
+        chunk = list(model.prompt(prompt, system, stream=False))[0]
+        print(chunk)
     else:
-        # Resolve model aliases
-        model = MODEL_ALIASES.get(model, model)
+        for chunk in model.prompt(prompt, system):
+            print(chunk, end="")
+            sys.stdout.flush()
+        print("")
+
+    # TODO: Figure out OpenAI exception handling
+    # TODO: Log to database
+
+    return
+    # Original code:
     try:
         debug = {}
         if no_stream:
@@ -328,6 +343,22 @@ def logs_list(count, path, truncate):
             row["prompt"] = _truncate_string(row["prompt"])
             row["response"] = _truncate_string(row["response"])
     click.echo(json.dumps(list(rows), indent=2))
+
+
+@cli.group()
+def models():
+    "Manage available models"
+
+
+@models.command(name="list")
+def models_list():
+    "List available models"
+    for model_with_aliases in get_models_with_aliases():
+        extra = ""
+        if model_with_aliases.aliases:
+            extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+        output = str(model_with_aliases.model) + extra
+        click.echo(output)
 
 
 @cli.group()
