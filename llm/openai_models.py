@@ -1,4 +1,5 @@
 from . import Model, Prompt, OptionsError, Response, hookimpl
+from .errors import NeedsKeyException
 from typing import Optional
 import openai
 
@@ -12,9 +13,10 @@ def register_models(register):
 
 
 class ChatResponse(Response):
-    def __init__(self, prompt, stream):
+    def __init__(self, prompt, stream, key):
         self.prompt = prompt
         self.stream = stream
+        self.key = key
         super().__init__(prompt)
 
     def iter_prompt(self):
@@ -22,6 +24,7 @@ class ChatResponse(Response):
         if self.prompt.system:
             messages.append({"role": "system", "content": self.prompt.system})
         messages.append({"role": "user", "content": self.prompt.prompt})
+        openai.api_key = self.key
         if self.stream:
             for chunk in openai.ChatCompletion.create(
                 model=self.prompt.model.model_id,
@@ -47,12 +50,20 @@ class ChatResponse(Response):
 
 
 class Chat(Model):
-    def __init__(self, model_id, stream=True):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+
+    def __init__(self, model_id, key=None, stream=True):
         self.model_id = model_id
         self.stream = stream
+        self.key = key
 
     def execute(self, prompt: Prompt, stream: bool = True) -> ChatResponse:
-        return ChatResponse(prompt, stream)
+        if self.key is None:
+            raise NeedsKeyException(
+                "{} needs an API key, label={}".format(str(self), self.needs_key)
+            )
+        return ChatResponse(prompt, stream, key=self.key)
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
