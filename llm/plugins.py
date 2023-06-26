@@ -5,7 +5,7 @@ from typing import Dict, List
 from . import hookspecs
 from .models import ModelWithAliases, Model
 
-DEFAULT_PLUGINS = ("llm.openai_models",)
+DEFAULT_PLUGINS = ("llm.openai_models", "llm.vertex_models")
 
 pm = pluggy.PluginManager("llm")
 pm.add_hookspecs(hookspecs)

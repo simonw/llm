@@ -56,6 +56,7 @@ class Model(ABC):
     model_id: str
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
+    can_stream: bool = False
 
     class Options(BaseModel):
         class Config:

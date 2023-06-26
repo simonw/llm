@@ -14,10 +14,9 @@ def register_models(register):
 
 class ChatResponse(Response):
     def __init__(self, prompt, stream, key):
-        self.prompt = prompt
+        super().__init__(prompt)
         self.stream = stream
         self.key = key
-        super().__init__(prompt)
 
     def iter_prompt(self):
         messages = []
@@ -52,6 +51,7 @@ class ChatResponse(Response):
 class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
+    can_stream: bool = True
 
     def __init__(self, model_id, key=None, stream=True):
         self.model_id = model_id
