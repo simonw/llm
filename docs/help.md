@@ -61,6 +61,7 @@ Commands:
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
   plugins    List installed plugins
+  schemas    Manage stored schemas used for parsing inputs
   templates  Manage stored prompt templates
   uninstall  Uninstall Python packages from the LLM environment
 ```
@@ -223,6 +224,45 @@ Options:
 Usage: llm plugins [OPTIONS]
 
   List installed plugins
+
+Options:
+  --help  Show this message and exit.
+```
+### llm schemas --help
+```
+Usage: llm schemas [OPTIONS] COMMAND [ARGS]...
+
+  Manage stored schemas used for parsing inputs
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list  List all schemas available for use
+  path  Output the path to the schemas file
+  use
+```
+#### llm schemas path --help
+```
+Usage: llm schemas path [OPTIONS]
+
+  Output the path to the schemas file
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm schemas list --help
+```
+Usage: llm schemas list [OPTIONS]
+
+  List all schemas available for use
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm schemas use --help
+```
+Usage: llm schemas use [OPTIONS] SCHEMA_NAME
 
 Options:
   --help  Show this message and exit.
