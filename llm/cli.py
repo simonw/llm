@@ -442,7 +442,10 @@ def schemas_list():
    
 @schemas.command(name="use")
 @click.argument("schema_name")
-def schemas_use(schema_name):
+@click.option("-m", "--model", help="Model to use")
+def schemas_use(schema_name, model):
+    
+    model_to_use = MODEL_ALIASES.get(model, 'gpt-3.5-turbo-0613') # Use the latest turbo model if none defined
     # Load schemas
     imported_schemas = load_schemas(schema_file_path=str(schema_path()))
     schema_to_use = imported_schemas.__dict__[schema_name]
@@ -450,7 +453,7 @@ def schemas_use(schema_name):
     text = sys.stdin.read()
 
     completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0613",
+        model=model_to_use,
         functions=[schema_to_use.openai_schema],
         messages=[
             {"role": "system", "content": f"I'm going to ask for details about the following text. Use {schema_name} to parse this data."},
