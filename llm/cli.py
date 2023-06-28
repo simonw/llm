@@ -444,7 +444,7 @@ def schemas_list():
 @click.argument("schema_name")
 @click.option("-m", "--model", help="Model to use")
 def schemas_use(schema_name, model):
-    
+    """Specify a particular schema to apply to input data"""
     model_to_use = MODEL_ALIASES.get(model, 'gpt-3.5-turbo-0613') # Use the latest turbo model if none defined
     # Load schemas
     imported_schemas = load_schemas(schema_file_path=str(schema_path()))

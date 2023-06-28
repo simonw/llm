@@ -4,11 +4,7 @@
 
 - `llm "prompt" --save template` option for saving a prompt directly to a template. [#55](https://github.com/simonw/llm/issues/55)
 - Prompt templates can now specify {ref}`default values <prompt-default-parameters>` for parameters. Thanks,  Chris Mungall. [#57](https://github.com/simonw/llm/pull/57)
-
-(v0_4_2)=
-## 0.4.2 (2023-06-27)
-
-- LLM now supports Pydantic classes to be used as a custom "schema" to use the model to parse data into json outputs.
+- LLM now supports Pydantic classes to be used as a custom "schema" to use the model to parse data into json outputs. 
 
 (v0_4_1)=
 ## 0.4.1 (2023-06-17)
