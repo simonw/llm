@@ -1,7 +1,7 @@
 from setuptools import setup
 import os
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 
 
 def get_long_description():
@@ -40,6 +40,7 @@ setup(
         "pydantic",
         "PyYAML",
         "pluggy",
+        "openai_function_call"
     ],
     extras_require={"test": ["pytest", "requests-mock"]},
     python_requires=">=3.7",

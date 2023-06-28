@@ -17,6 +17,8 @@ import sys
 import time
 import warnings
 import yaml
+from importlib.machinery import SourceFileLoader
+from openai_function_call import OpenAISchema
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -408,6 +410,58 @@ def templates_path():
     "Output the path to the templates directory"
     click.echo(template_dir())
 
+@cli.group()
+def schemas():
+    "Manage stored schemas used for parsing inputs"
+
+# TODO: Allow for the loading of a dir instead of just one file.
+@schemas.command(name="path")
+def schema_show_path():
+    """Output the path to the schemas file"""
+    click.echo(schema_path())
+
+@schemas.command(name="list")
+def schemas_list():
+    """List all schemas available for use"""
+    try:
+        path_to_load = str(schema_path())
+
+        openai_schemas = SourceFileLoader('imported_openai_schemas', path_to_load).load_module()
+        existing_schemas = []
+
+        for k,v in openai_schemas.__dict__.items():
+            if "imported_openai_schemas." in str(v):
+                existing_schemas.append(k)
+
+        click.echo("\nAvailable schemas:\n------------------\n")
+        click.echo("\n".join(existing_schemas))  
+        click.echo("")
+
+    except FileNotFoundError:
+        raise click.ClickException(f"Schema file not found. \nLooking for: [{schema_path()}]")
+   
+@schemas.command(name="use")
+@click.argument("schema_name")
+def schemas_use(schema_name):
+    # Load schemas
+    imported_schemas = load_schemas(schema_file_path=str(schema_path()))
+    schema_to_use = imported_schemas.__dict__[schema_name]
+
+    text = sys.stdin.read()
+
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-0613",
+        functions=[schema_to_use.openai_schema],
+        messages=[
+            {"role": "system", "content": f"I'm going to ask for details about the following text. Use {schema_name} to parse this data."},
+            {"role": "user", "content": f"{text}"},
+        ],
+    )
+
+    output = schema_to_use.from_response(completion)
+    click.echo(output.json())
+
+
 
 @cli.command()
 @click.argument("packages", nargs=-1, required=True)
@@ -442,6 +496,20 @@ def template_dir():
     path.mkdir(parents=True, exist_ok=True)
     return path
 
+def schema_path():
+    LLM_SCHEMA_PATH = os.environ.get("LLM_SCHEMA_PATH")
+    if LLM_SCHEMA_PATH:
+        return pathlib.Path(LLM_SCHEMA_PATH)
+    
+    # If it isn't defined, check to see if it exists.
+    # If not, create a sample schema file.
+    path = user_dir() / "schemas"
+    path.mkdir(parents=True, exist_ok=True)
+    path = path / "schema.py"
+    if not path.exists():
+        click.echo("No schema file found. Creating default...")
+        shutil.copy("./llm/schemas.py", path)
+    return path
 
 def _truncate_string(s, max_length=100):
     if len(s) > max_length:
@@ -554,5 +622,14 @@ def get_history(chat_id):
     )
     return chat_id, rows
 
+def load_schemas(schema_file_path):
+    # Load custom OpenAI schemas
+    try:
+        openai_schemas = SourceFileLoader('imported_openai_schemas', schema_file_path).load_module()
+        return openai_schemas
+    except FileNotFoundError:
+        raise click.ClickException(
+            "The provided OpenAI schema file was not found."
+        )
 
 pm.hook.register_commands(cli=cli)
