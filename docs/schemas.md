@@ -73,6 +73,7 @@ This will output JSON as defined in the schema, such as:
    "penalty_amount" : 0,
    "regulator" : "Commodity Futures Trading Commission",
    "related_case" : "United States of America v. Cunwen Zhu, Case No. 3:23-cr-66-BDJMCR"
+}
 ```
 
 ## Creating new schemas
