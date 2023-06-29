@@ -1,13 +1,14 @@
 # Schemas
 
-LLM schemas allow for the definition of custom schemas, which may be useful for parsing unstructured data into a useful format.
+LLM schemas allow for the definition of custom schemas, which may be useful for parsing unstructured data into a useful format. Schemas use a combination of Pydantic and OpenAISchema to define field types and descriptions, which ultimately will be used by the OpenAI functions to parse data into a structured format. By default, the output of the `schema` command is in JSON format.
 
 ## Defining schemas
 
-Plugins must be installed in the same virtual environment as LLM itself. You can use the `llm install` command (a thin wrapper around `pip install`) for this:
+Schemas must be defined in the `schemas.py` file as valid Pydantic model classes. A sample schema file is provided, and on the first run will be saved under the schemas folder in the same `user_dir` as other `llm` files.
 
+Further, the schema file path can be viewed by using `llm schemas path`.
 
-For example the following schema may be used to extract data from an LAPD press release (as seen [on Twitter](https://twitter.com/kcimc/status/1668789461780668416):
+As an example, the following schema may be used to extract data from an LAPD press release (as seen [on Twitter](https://twitter.com/kcimc/status/1668789461780668416):
 
 ```python
 class CFTCEnforcementDetails(OpenAISchema):
@@ -42,7 +43,7 @@ By default, two example schemas are provided.
 
 ## Using schemas
 
-Schemas work best with unstructured text and with complementary tools like `strip-tags` as noted [here](https://simonwillison.net/2023/May/18/cli-tools-for-llms/).
+Schemas are typically useful when working with unstructured text and are complemented by tools like `strip-tags` as noted [here](https://simonwillison.net/2023/May/18/cli-tools-for-llms/).
 
 Once defined, simply specify the schema (based on what is available using `llm schemas list`) to use. 
 
@@ -76,8 +77,6 @@ This will output JSON as defined in the schema, such as:
 }
 ```
 
-## Creating new schemas
+### Specifying which model to use
 
-Identify the schema file by using `llm schemas path`. By default, it will be saved under the schemas folder in the same `user_dir` as other `llm` files.
-
-Schemas use a combination of Pydantic and OpenAISchema to define a field type and description. This will be used by the ChatGPT functions capability to parse the incoming data into the pre-defined fields.
+By default, the `gpt-3.5-turbo-0613` will be used. Otherwise, you may use the `-m` or `--model` flags to specify which model to use, exactly as you would when using `llm` with other prompts.
