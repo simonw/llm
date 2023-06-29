@@ -645,7 +645,7 @@ from typing import List, Any
 
 # Example page: https://www.cftc.gov/PressRoom/PressReleases/8726-23
 class CFTCEnforcementDetails(OpenAISchema):
-    # Extract information regarding CFTC enforcement action(s)
+    \"\"\"Extract information regarding CFTC enforcement action(s)\"\"\"
     date:               str = Field(..., description="Date of the action")
     regulator:          str = Field(..., description="Name of the regulator bringing the action")
     enforcement_type:   str = Field(..., description="Type of enforcement action: warning letter, civil fines, suspension/revocation of license, civil lawsuit, criminal lawsuit")
@@ -658,7 +658,7 @@ class CFTCEnforcementDetails(OpenAISchema):
 
 # Example page: https://www.lapdonline.org/newsroom/officer-involved-shooting-in-hollywood-area-nrf059-18ma/
 class LAPDEventDetails(OpenAISchema):
-    #Details of LAPD press releases
+    \"\"\"Details of LAPD press releases\"\"\"
     date:       str = Field(..., description="Date of event")
     injured:    str = Field(..., description="Who was injured in the event, if any")
     serial:     int = Field(..., description="Officer badge or serial number, if applicable")
