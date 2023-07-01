@@ -18,8 +18,6 @@ On my Mac that outputs:
 ```
 This will differ for other operating systems.
 
-(You can customize the location of this file by setting a path in the `LLM_LOG_PATH` environment variable.)
-
 Once that SQLite database has been created any prompts you run will be logged to that database.
 
 To avoid logging a prompt, pass `--no-log` or `-n` to the command:

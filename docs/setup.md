@@ -89,3 +89,17 @@ The environment variable will be used only if no `--key` option is passed to the
 If no environment variable is found, the tool will fall back to checking `keys.json`.
 
 You can force the tool to use the key from `keys.json` even if an environment variable has also been set using `llm "prompt" --key openai`.
+
+## Custom directory location
+
+This tool stores various files - prompt templates, stored keys, preferences, a database of logs - in a directory on your computer.
+
+On macOS this is `~/Library/Application Support/io.datasette.llm/`.
+
+On Linux it may be something like `~/.config/io.datasette.llm/`.
+
+You can set a custom location for this directory by setting the `LLM_USER_PATH` environment variable:
+
+```bash
+export LLM_USER_PATH=/path/to/my/custom/directory
+```

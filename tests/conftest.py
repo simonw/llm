@@ -8,27 +8,22 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def log_path(tmpdir):
-    return tmpdir / "logs.db"
+def user_path(tmpdir):
+    dir = tmpdir / "llm.datasette.io"
+    dir.mkdir()
+    return dir
 
 
 @pytest.fixture
-def keys_path(tmpdir):
-    return tmpdir / "keys.json"
-
-
-@pytest.fixture
-def templates_path(tmpdir):
-    path = tmpdir / "templates"
-    path.mkdir()
-    return path
+def templates_path(user_path):
+    dir = user_path / "templates"
+    dir.mkdir()
+    return dir
 
 
 @pytest.fixture(autouse=True)
-def env_setup(monkeypatch, log_path, keys_path, templates_path):
-    monkeypatch.setenv("LLM_KEYS_PATH", str(keys_path))
-    monkeypatch.setenv("LLM_LOG_PATH", str(log_path))
-    monkeypatch.setenv("LLM_TEMPLATES_PATH", str(templates_path))
+def env_setup(monkeypatch, user_path):
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
 
 
 @pytest.fixture

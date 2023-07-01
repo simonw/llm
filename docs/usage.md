@@ -61,3 +61,40 @@ This is useful for piping content to standard input, for example:
 
     curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
       llm -s 'Suggest topics for this post as a JSON array'
+
+## Listing available models
+
+The `llm models list` command lists every model that can be used with LLM, along with any aliases:
+
+```
+llm models list
+```
+Example output:
+```
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
+OpenAI Chat: gpt-4 (aliases: 4, gpt4)
+OpenAI Chat: gpt-4-32k (aliases: 4-32k)
+PaLM 2: chat-bison-001 (aliases: palm, palm2)
+```
+You can use pass the full model name or any of the aliases to the `-m/--model` option:
+
+```
+llm -m chatgpt-16k 'As many names for cheesecakes as you can think of, with detailed descriptions'
+```
+Models that have been installed using plugins will be shown here as well.
+
+## Setting a custom model
+
+The model used when calling `llm` without the `-m/--model` option defaults to `gpt-3.5-turbo` - the fastest and least expensive OpenAI model, and the same model family that powers ChatGPT.
+
+You can use the `llm models default` command to set a different default model. For GPT-4 (slower and more expensive, but more capable) run this:
+
+```bash
+llm models default gpt-4
+```
+You can view the current model by running this:
+```
+llm models default
+```
+Any of the supported aliases for a model can be passed to this command.

@@ -17,8 +17,9 @@ def test_version():
 
 
 @pytest.mark.parametrize("n", (None, 0, 2))
-def test_logs(n, log_path):
-    db = sqlite_utils.Database(str(log_path))
+def test_logs(n, user_path):
+    log_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(log_path)
     migrate(db)
     db["log"].insert_all(
         {
@@ -45,24 +46,25 @@ def test_logs(n, log_path):
     assert len(logs) == expected_length
 
 
-@pytest.mark.parametrize("env", ({}, {"LLM_LOG_PATH": "/tmp/logs.db"}))
-def test_logs_path(monkeypatch, env, log_path):
+@pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
+def test_logs_path(monkeypatch, env, user_path):
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     runner = CliRunner()
     result = runner.invoke(cli, ["logs", "path"])
     assert result.exit_code == 0
     if env:
-        expected = env["LLM_LOG_PATH"]
+        expected = env["LLM_USER_PATH"] + "/logs.db"
     else:
-        expected = str(log_path)
+        expected = str(user_path) + "/logs.db"
     assert result.output.strip() == expected
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
-def test_llm_default_prompt(mocked_openai, use_stdin, log_path):
+def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     # Reset the log_path database
+    log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
     log_db["log"].delete_where()
     runner = CliRunner()
