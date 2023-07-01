@@ -61,8 +61,8 @@ def register_commands(cli):
 
 
 class ChatResponse(Response):
-    def __init__(self, prompt, stream, key):
-        super().__init__(prompt)
+    def __init__(self, prompt, model, stream, key):
+        super().__init__(prompt, model)
         self.stream = stream
         self.key = key
 
@@ -111,7 +111,7 @@ class Chat(Model):
             raise NeedsKeyException(
                 "{} needs an API key, label={}".format(str(self), self.needs_key)
             )
-        return ChatResponse(prompt, stream, key=key)
+        return ChatResponse(prompt, self, stream, key=key)
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
