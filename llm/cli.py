@@ -51,7 +51,7 @@ def cli():
 
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
-@click.option("--system", help="System prompt to use")
+@click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option("-t", "--template", help="Template to use")
 @click.option(

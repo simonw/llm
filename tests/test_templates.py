@@ -132,7 +132,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
         ),
         (
             "boo",
-            ["--system", "s"],
+            ["-s", "s"],
             None,
             None,
             "Error: Cannot use -t/--template and --system together",

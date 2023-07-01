@@ -52,7 +52,7 @@ This pattern of using `$(command)` inside a double quoted string is a useful way
 
 ## System prompts
 
-You can use `--system '...'` to set a system prompt.
+You can use `-s/--system '...'` to set a system prompt.
 
     llm 'SQL to calculate total sales by month' \
       --system 'You are an exaggerated sentient cheesecake that knows SQL and talks about cheesecake a lot'
@@ -60,4 +60,4 @@ You can use `--system '...'` to set a system prompt.
 This is useful for piping content to standard input, for example:
 
     curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
-      llm --system 'Suggest topics for this post as a JSON array'
+      llm -s 'Suggest topics for this post as a JSON array'
