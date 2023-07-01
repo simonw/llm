@@ -34,6 +34,18 @@ class Response(ABC):
         self._debug = {}
         self._done = False
 
+    def reply(self, prompt, system=None, **options):
+        new_prompt = [self.prompt.prompt, self.text(), prompt]
+        return self.model.execute(
+            Prompt(
+                "\n".join(new_prompt),
+                system=system or self.prompt.system or None,
+                model=self.model,
+                options=options,
+            ),
+            stream=self.stream,
+        )
+
     def __iter__(self):
         if self._done:
             return self._chunks
