@@ -26,8 +26,9 @@ class OptionsError(Exception):
 
 
 class Response(ABC):
-    def __init__(self, prompt: Prompt):
+    def __init__(self, prompt: Prompt, model: "Model"):
         self.prompt = prompt
+        self.model = model
         self._chunks = []
         self._debug = {}
         self._done = False

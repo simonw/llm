@@ -9,9 +9,9 @@ def register_models(register):
 
 
 class VertexResponse(Response):
-    def __init__(self, prompt, key):
+    def __init__(self, prompt, model, key):
         self.key = key
-        super().__init__(prompt)
+        super().__init__(prompt, model)
 
     def iter_prompt(self):
         url = (
@@ -43,7 +43,7 @@ class Vertex(Model):
             raise NeedsKeyException(
                 "{} needs an API key, label={}".format(str(self), self.needs_key)
             )
-        return VertexResponse(prompt, key=self.key)
+        return VertexResponse(prompt, self, key=self.key)
 
     def __str__(self):
         return "Vertex Chat: {}".format(self.model_id)
