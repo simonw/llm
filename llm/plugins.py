@@ -52,3 +52,15 @@ def get_model_aliases() -> Dict[str, Model]:
             model_aliases[alias] = model_with_aliases.model
         model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
+
+
+class UnknownModelError(KeyError):
+    pass
+
+
+def get_model(name):
+    aliases = get_model_aliases()
+    try:
+        return aliases[name]
+    except KeyError:
+        raise UnknownModelError(name)

@@ -179,13 +179,23 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list  List available models
+  default  Show or set the default model
+  list     List available models
 ```
 #### llm models list --help
 ```
 Usage: llm models list [OPTIONS]
 
   List available models
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm models default --help
+```
+Usage: llm models default [OPTIONS] [MODEL]
+
+  Show or set the default model
 
 Options:
   --help  Show this message and exit.

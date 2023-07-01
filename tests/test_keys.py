@@ -1,30 +1,31 @@
 from click.testing import CliRunner
 import json
 from llm.cli import cli
+import pathlib
 import pytest
 
 
-@pytest.mark.parametrize("env", ({}, {"LLM_KEYS_PATH": "/tmp/foo.json"}))
-def test_keys_path(monkeypatch, env, keys_path):
+@pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-keys-test"}))
+def test_keys_in_user_path(monkeypatch, env, user_path):
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     runner = CliRunner()
     result = runner.invoke(cli, ["keys", "path"])
     assert result.exit_code == 0
     if env:
-        expected = env["LLM_KEYS_PATH"]
+        expected = env["LLM_USER_PATH"] + "/keys.json"
     else:
-        expected = keys_path
+        expected = user_path + "/keys.json"
     assert result.output.strip() == expected
 
 
 def test_keys_set(monkeypatch, tmpdir):
-    keys_path = str(tmpdir / "keys.json")
-    monkeypatch.setenv("LLM_KEYS_PATH", keys_path)
+    user_path = str(tmpdir / "user/keys")
+    monkeypatch.setenv("LLM_USER_PATH", user_path)
     runner = CliRunner()
     result = runner.invoke(cli, ["keys", "set", "openai"], input="foo")
     assert result.exit_code == 0
-    content = open(keys_path).read()
+    content = open(user_path + "/keys.json").read()
     assert json.loads(content) == {
         "// Note": "This file stores secret API credentials. Do not share!",
         "openai": "foo",
@@ -32,7 +33,9 @@ def test_keys_set(monkeypatch, tmpdir):
 
 
 def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
-    keys_path = tmpdir / "keys.json"
+    user_dir = tmpdir / "user-dir"
+    pathlib.Path(user_dir).mkdir()
+    keys_path = user_dir / "keys.json"
     keys_path.write_text(
         json.dumps(
             {
@@ -42,7 +45,7 @@ def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
         ),
         "utf-8",
     )
-    monkeypatch.setenv("LLM_KEYS_PATH", str(keys_path))
+    monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
     monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
     def assert_key(key):

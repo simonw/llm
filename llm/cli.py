@@ -4,7 +4,13 @@ import datetime
 import json
 from llm import Template
 from .migrations import migrate
-from .plugins import pm, get_plugins, get_model_aliases, get_models_with_aliases
+from .plugins import (
+    pm,
+    get_plugins,
+    get_model,
+    get_model_aliases,
+    get_models_with_aliases,
+)
 import openai
 import os
 import pathlib
@@ -180,7 +186,7 @@ def prompt(
 
     # Figure out which model we are using
     if model_id is None:
-        model_id = history_model or DEFAULT_MODEL
+        model_id = history_model or get_default_model()
 
     # Now resolve the model
     try:
@@ -255,7 +261,7 @@ def init_db():
 
     All subsequent prompts will be logged to this database.
     """
-    path = log_db_path()
+    path = logs_db_path()
     if path.exists():
         return
     # Ensure directory exists
@@ -276,11 +282,7 @@ def keys_path_command():
 
 
 def keys_path():
-    llm_keys_path = os.environ.get("LLM_KEYS_PATH")
-    if llm_keys_path:
-        return pathlib.Path(llm_keys_path)
-    else:
-        return user_dir() / "keys.json"
+    return user_dir() / "keys.json"
 
 
 @keys.command(name="set")
@@ -321,7 +323,7 @@ def logs():
 @logs.command(name="path")
 def logs_path():
     "Output the path to the logs.db file"
-    click.echo(log_db_path())
+    click.echo(logs_db_path())
 
 
 @logs.command(name="list")
@@ -340,7 +342,7 @@ def logs_path():
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 def logs_list(count, path, truncate):
     "Show recent logged prompts and their responses"
-    path = pathlib.Path(path or log_db_path())
+    path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
@@ -367,6 +369,21 @@ def models_list():
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         output = str(model_with_aliases.model) + extra
         click.echo(output)
+
+
+@models.command(name="default")
+@click.argument("model", required=False)
+def models_default(model):
+    "Show or set the default model"
+    if not model:
+        click.echo(get_default_model())
+        return
+    # Validate it is a known model
+    try:
+        model = get_model(model)
+        set_default_model(model.model_id)
+    except KeyError:
+        raise click.ClickException("Unknown model: {}".format(model))
 
 
 @cli.group()
@@ -473,11 +490,7 @@ def uninstall(packages, yes):
 
 
 def template_dir():
-    llm_templates_path = os.environ.get("LLM_TEMPLATES_PATH")
-    if llm_templates_path:
-        path = pathlib.Path(llm_templates_path)
-    else:
-        path = user_dir() / "templates"
+    path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -514,15 +527,27 @@ def load_keys():
 
 
 def user_dir():
+    llm_user_path = os.environ.get("LLM_USER_PATH")
+    if llm_user_path:
+        return pathlib.Path(llm_user_path)
     return pathlib.Path(click.get_app_dir("io.datasette.llm"))
 
 
-def log_db_path():
-    llm_log_path = os.environ.get("LLM_LOG_PATH")
-    if llm_log_path:
-        return pathlib.Path(llm_log_path)
+def get_default_model():
+    path = user_dir() / "default_model.txt"
+    if path.exists():
+        return path.read_text().strip()
     else:
-        return user_dir() / "logs.db"
+        return DEFAULT_MODEL
+
+
+def set_default_model(model):
+    path = user_dir() / "default_model.txt"
+    path.write_text(model)
+
+
+def logs_db_path():
+    return user_dir() / "logs.db"
 
 
 def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start=None):
@@ -532,7 +557,7 @@ def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start
         duration_ms = int((end - start) * 1000)
     if no_log:
         return
-    log_path = log_db_path()
+    log_path = logs_db_path()
     if not log_path.exists():
         return
     db = sqlite_utils.Database(log_path)
@@ -574,7 +599,7 @@ def load_template(name):
 def get_history(chat_id):
     if chat_id is None:
         return None, []
-    log_path = log_db_path()
+    log_path = logs_db_path()
     if not log_path.exists():
         raise click.ClickException(
             "This feature requires logging. Run `llm init-db` to create logs.db"
