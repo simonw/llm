@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Generator, Optional, Set
 from abc import ABC, abstractmethod
+import os
 from pydantic import BaseModel
 
 
@@ -54,6 +55,7 @@ class Response(ABC):
 
 class Model(ABC):
     model_id: str
+    key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
     can_stream: bool = False
@@ -62,10 +64,25 @@ class Model(ABC):
         class Config:
             extra = "forbid"
 
-    def prompt(self, prompt, system=None, stream=True, **options):
+    def get_key(self):
+        if self.needs_key is None:
+            return None
+        if self.key is not None:
+            return self.key
+        if self.key_env_var is not None:
+            return os.environ.get(self.key_env_var)
+        return None
+
+    def prompt(self, prompt, system=None, **options):
         return self.execute(
             Prompt(prompt, system=system, model=self, options=self.Options(**options)),
-            stream=stream,
+            stream=False,
+        )
+
+    def stream(self, prompt, system=None, **options):
+        return self.execute(
+            Prompt(prompt, system=system, model=self, options=self.Options(**options)),
+            stream=True,
         )
 
     @abstractmethod
