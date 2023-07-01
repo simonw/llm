@@ -1,6 +1,6 @@
-from . import Model, Prompt, OptionsError, Response, hookimpl
-from .errors import NeedsKeyException
-from .utils import dicts_to_table_string
+from llm import Model, Prompt, OptionsError, Response, hookimpl
+from llm.errors import NeedsKeyException
+from llm.utils import dicts_to_table_string
 import click
 import datetime
 from typing import Optional

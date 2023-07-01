@@ -1,5 +1,5 @@
-from . import Model, Prompt, Response, hookimpl
-from .errors import NeedsKeyException
+from llm import Model, Prompt, Response, hookimpl
+from llm.errors import NeedsKeyException
 import requests
 
 
