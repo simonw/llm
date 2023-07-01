@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Generator, Optional, Set
 from abc import ABC, abstractmethod
 import os
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 
 @dataclass
@@ -62,8 +62,7 @@ class Model(ABC):
     can_stream: bool = False
 
     class Options(BaseModel):
-        class Config:
-            extra = "forbid"
+        model_config = ConfigDict(extra="forbid")
 
     def get_key(self):
         if self.needs_key is None:
