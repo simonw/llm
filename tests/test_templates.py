@@ -174,6 +174,7 @@ def test_template_basic(
         assert mocked_openai.last_request.json() == {
             "model": expected_model,
             "messages": [{"role": "user", "content": expected_input}],
+            "stream": False,
         }
     else:
         assert result.exit_code == 1
