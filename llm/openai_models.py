@@ -53,17 +53,17 @@ class Chat(Model):
     key_env_var = "OPENAI_API_KEY"
     can_stream: bool = True
 
-    def __init__(self, model_id, key=None, stream=True):
+    def __init__(self, model_id, key=None):
         self.model_id = model_id
-        self.stream = stream
         self.key = key
 
     def execute(self, prompt: Prompt, stream: bool = True) -> ChatResponse:
-        if self.key is None:
+        key = self.get_key()
+        if key is None:
             raise NeedsKeyException(
                 "{} needs an API key, label={}".format(str(self), self.needs_key)
             )
-        return ChatResponse(prompt, stream, key=self.key)
+        return ChatResponse(prompt, stream, key=key)
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
