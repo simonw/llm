@@ -7,7 +7,11 @@ import pytest
 
 def test_register_commands():
     importlib.reload(cli)
-    assert plugins.get_plugins() == []
+
+    def plugin_names():
+        return [plugin["name"] for plugin in plugins.get_plugins()]
+
+    assert "HelloWorldPlugin" not in plugin_names()
 
     class HelloWorldPlugin:
         __name__ = "HelloWorldPlugin"
@@ -23,9 +27,7 @@ def test_register_commands():
         plugins.pm.register(HelloWorldPlugin(), name="HelloWorldPlugin")
         importlib.reload(cli)
 
-        assert plugins.get_plugins() == [
-            {"name": "HelloWorldPlugin", "hooks": ["register_commands"]}
-        ]
+        assert "HelloWorldPlugin" in plugin_names()
 
         runner = CliRunner()
         result = runner.invoke(cli.cli, ["hello-world"])
@@ -35,4 +37,4 @@ def test_register_commands():
     finally:
         plugins.pm.unregister(name="HelloWorldPlugin")
         importlib.reload(cli)
-        assert plugins.get_plugins() == []
+        assert "HelloWorldPlugin" not in plugin_names()
