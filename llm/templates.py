@@ -1,17 +1,15 @@
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 import string
 from typing import Optional
 
 
 class Template(BaseModel):
     name: str
-    prompt: Optional[str]
-    system: Optional[str]
-    model: Optional[str]
-    defaults: Optional[dict]
-
-    class Config:
-        extra = "forbid"
+    prompt: Optional[str] = None
+    system: Optional[str] = None
+    model: Optional[str] = None
+    defaults: Optional[dict] = None
+    model_config = ConfigDict(extra="forbid")
 
     class MissingVariables(Exception):
         pass
