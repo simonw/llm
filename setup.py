@@ -41,6 +41,6 @@ setup(
         "PyYAML",
         "pluggy",
     ],
-    extras_require={"test": ["pytest", "requests-mock"]},
+    extras_require={"test": ["pytest", "requests-mock", "cogapp"]},
     python_requires=">=3.7",
 )
