@@ -29,6 +29,7 @@ maxdepth: 3
 ---
 setup
 usage
+python-api
 templates
 logging
 plugins
