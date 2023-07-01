@@ -563,7 +563,7 @@ def load_template(name):
         return Template(name=name, prompt=loaded)
     loaded["name"] = name
     try:
-        return Template.parse_obj(loaded)
+        return Template.model_validate(loaded)
     except pydantic.ValidationError as e:
         msg = "A validation error occurred:"
         for error in e.errors():
