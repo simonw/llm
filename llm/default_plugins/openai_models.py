@@ -62,8 +62,7 @@ def register_commands(cli):
 
 class ChatResponse(Response):
     def __init__(self, prompt, model, stream, key):
-        super().__init__(prompt, model)
-        self.stream = stream
+        super().__init__(prompt, model, stream)
         self.key = key
 
     def iter_prompt(self):
