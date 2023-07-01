@@ -34,6 +34,6 @@ def test_openai_models(mocked_models):
     assert result.exit_code == 0
     assert result.output == (
         "id                    owned_by    created            \n"
-        "ada:2020-05-03        openai      2020-05-03T13:26:40\n"
-        "babbage:2020-05-03    openai      2020-05-03T13:26:40\n"
+        "ada:2020-05-03        openai      2020-05-03T20:26:40\n"
+        "babbage:2020-05-03    openai      2020-05-03T20:26:40\n"
     )

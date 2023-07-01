@@ -46,7 +46,7 @@ def register_commands(cli):
             to_print = []
             for model in models:
                 # Print id, owned_by, root, created as ISO 8601
-                created_str = datetime.datetime.fromtimestamp(
+                created_str = datetime.datetime.utcfromtimestamp(
                     model["created"]
                 ).isoformat()
                 to_print.append(
