@@ -192,20 +192,21 @@ def prompt(
     if model.needs_key and not model.key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
 
-    prompt_kwargs = {}
-    if model.can_stream:
-        prompt_kwargs = {"stream": not no_stream}
+    should_stream = model.can_stream and not no_stream
+    if should_stream:
+        method = model.stream
     else:
-        no_stream = False
+        method = model.prompt
 
-    if no_stream:
-        chunk = list(model.prompt(prompt, system, **prompt_kwargs))[0]
-        print(chunk)
-    else:
-        for chunk in model.prompt(prompt, system, **prompt_kwargs):
+    response = method(prompt, system)
+
+    if should_stream:
+        for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
         print("")
+    else:
+        print(response.text())
 
     # TODO: Figure out OpenAI exception handling
     # TODO: Log to database
