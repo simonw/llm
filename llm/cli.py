@@ -492,10 +492,10 @@ def get_key(key_arg, default_key, env_var=None):
     keys = load_keys()
     if key_arg in keys:
         return keys[key_arg]
-    if env_var and os.environ.get(env_var):
-        return os.environ[env_var]
     if key_arg:
         return key_arg
+    if env_var and os.environ.get(env_var):
+        return os.environ[env_var]
     default = keys.get(default_key)
     if not default:
         message = "No key found - add one using 'llm keys set {}'".format(default_key)
