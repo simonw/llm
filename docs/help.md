@@ -61,6 +61,7 @@ Commands:
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
   models     Manage available models
+  openai     Commands for working directly with the OpenAI API
   plugins    List installed plugins
   templates  Manage stored prompt templates
   uninstall  Uninstall Python packages from the LLM environment
@@ -268,5 +269,28 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
 Options:
   -y, --yes  Don't ask for confirmation
   --help     Show this message and exit.
+```
+### llm openai --help
+```
+Usage: llm openai [OPTIONS] COMMAND [ARGS]...
+
+  Commands for working directly with the OpenAI API
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  models  List models available to you from the OpenAI API
+```
+#### llm openai models --help
+```
+Usage: llm openai models [OPTIONS]
+
+  List models available to you from the OpenAI API
+
+Options:
+  --json      Output as JSON
+  --key TEXT  OpenAI API key
+  --help      Show this message and exit.
 ```
 <!-- [[[end]]] -->
