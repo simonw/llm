@@ -75,7 +75,7 @@ Usage: llm prompt [OPTIONS] [PROMPT]
   Documentation: https://llm.datasette.io/en/stable/usage.html
 
 Options:
-  --system TEXT               System prompt to use
+  -s, --system TEXT           System prompt to use
   -m, --model TEXT            Model to use
   -t, --template TEXT         Template to use
   -p, --param <TEXT TEXT>...  Parameters for template
