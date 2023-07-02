@@ -34,7 +34,7 @@ def m001_initial(db):
     # Ensure the original table design exists, so other migrations can run
     if db["log"].exists():
         # It needs to have the chat_id column
-        if not "chat_id" in db["log"].columns_dict:
+        if "chat_id" not in db["log"].columns_dict:
             db["log"].add_column("chat_id")
         return
     db["log"].create(

@@ -34,3 +34,6 @@ jobs:
     - name: Run mypy
       run: |
         mypy llm
+    - name: Run ruff
+      run: |
+        ruff .

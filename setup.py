@@ -48,6 +48,7 @@ setup(
             "cogapp",
             "mypy",
             "black",
+            "ruff",
             "types-PyYAML",
             "types-requests",
         ]

@@ -11,14 +11,12 @@ from .plugins import (
     get_model_aliases,
     get_models_with_aliases,
 )
-import openai
 import os
 import pathlib
 import pydantic
 from runpy import run_module
 import shutil
 import sqlite_utils
-from string import Template as StringTemplate
 import sys
 import time
 import warnings
@@ -219,39 +217,39 @@ def prompt(
 
     return
     # Original code:
-    try:
-        debug = {}
-        if no_stream:
-            start = time.time()
-            response = openai.ChatCompletion.create(
-                model=model,
-                messages=messages,
-            )
-            debug["model"] = response.model
-            debug["usage"] = response.usage
-            content = response.choices[0].message.content
-            log(no_log, system, prompt, content, model, chat_id, debug, start)
-            print(content)
-        else:
-            start = time.time()
-            response = []
-            for chunk in openai.ChatCompletion.create(
-                model=model,
-                messages=messages,
-                stream=True,
-            ):
-                debug["model"] = chunk.model
-                content = chunk["choices"][0].get("delta", {}).get("content")
-                if content is not None:
-                    response.append(content)
-                    print(content, end="")
-                    sys.stdout.flush()
-            print("")
-            log(no_log, system, prompt, "".join(response), model, chat_id, debug, start)
-    except openai.error.AuthenticationError as ex:
-        raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
-    except openai.error.OpenAIError as ex:
-        raise click.ClickException(str(ex))
+    # try:
+    #     debug = {}
+    #     if no_stream:
+    #         start = time.time()
+    #         response = openai.ChatCompletion.create(
+    #             model=model,
+    #             messages=messages,
+    #         )
+    #         debug["model"] = response.model
+    #         debug["usage"] = response.usage
+    #         content = response.choices[0].message.content
+    #         log(no_log, system, prompt, content, model, chat_id, debug, start)
+    #         print(content)
+    #     else:
+    #         start = time.time()
+    #         response = []
+    #         for chunk in openai.ChatCompletion.create(
+    #             model=model,
+    #             messages=messages,
+    #             stream=True,
+    #         ):
+    #             debug["model"] = chunk.model
+    #             content = chunk["choices"][0].get("delta", {}).get("content")
+    #             if content is not None:
+    #                 response.append(content)
+    #                 print(content, end="")
+    #                 sys.stdout.flush()
+    #         print("")
+    #         log(no_log, system, prompt, "".join(response), model, chat_id, debug, start)
+    # except openai.error.AuthenticationError as ex:
+    #     raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
+    # except openai.error.OpenAIError as ex:
+    #     raise click.ClickException(str(ex))
 
 
 @cli.command()
