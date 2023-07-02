@@ -1,5 +1,6 @@
 import click
 from click_default_group import DefaultGroup
+from dataclasses import asdict
 import datetime
 import json
 from llm import Template
@@ -212,8 +213,22 @@ def prompt(
     else:
         print(response.text())
 
+    # Log to the database
+    if no_log:
+        return
+    log_path = logs_db_path()
+    if not log_path.exists():
+        return
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    log_message = response.to_log()
+    log_dict = asdict(log_message)
+    log_dict["duration_ms"] = response.duration_ms()
+    log_dict["timestamp_utc"] = response.timestamp_utc()
+    db["log2"].insert(log_dict, pk="id")
+
     # TODO: Figure out OpenAI exception handling
-    # TODO: Log to database
 
     return
     # Original code:
