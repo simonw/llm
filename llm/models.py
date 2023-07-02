@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import datetime
+import time
 from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
@@ -25,6 +27,19 @@ class OptionsError(Exception):
     pass
 
 
+@dataclass
+class LogMessage:
+    model: str  # Actually the model.model_id string
+    prompt: str  # Simplified string version of prompt
+    system: Optional[str]  # Simplified string of system prompt
+    options: Dict[str, Any]  # Any options e.g. temperature
+    prompt_json: str  # Detailed JSON of prompt
+    response: str  # Simplified string version of response
+    response_json: Dict[str, Any]  # Detailed JSON of response
+    chat_id: Optional[int]  # ID of chat, if this is part of one
+    debug_json: Dict[str, Any]  # Any debug info returned by the model
+
+
 class Response(ABC):
     def __init__(self, prompt: Prompt, model: "Model", stream: bool):
         self.prompt = prompt
@@ -46,12 +61,15 @@ class Response(ABC):
             stream=self.stream,
         )
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
             return self._chunks
         for chunk in self.iter_prompt():
             yield chunk
             self._chunks.append(chunk)
+        self._end = time.monotonic()
         self._done = True
 
     @abstractmethod
@@ -63,9 +81,22 @@ class Response(ABC):
         if not self._done:
             list(self)
 
-    def text(self):
+    def text(self) -> str:
         self._force()
         return "".join(self._chunks)
+
+    def duration_ms(self) -> int:
+        self._force()
+        return int((self._end - self._start) * 1000)
+
+    def timestamp_utc(self) -> str:
+        self._force()
+        return self._start_utcnow.isoformat()
+
+    @abstractmethod
+    def to_log(self) -> LogMessage:
+        "Return a LogMessage of data to log"
+        pass
 
 
 class Model(ABC):

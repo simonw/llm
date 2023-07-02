@@ -1,7 +1,8 @@
-from llm import Model, Prompt, Response, hookimpl
+from llm import LogMessage, Model, Prompt, Response, hookimpl
 from llm.errors import NeedsKeyException
 from llm.utils import dicts_to_table_string
 import click
+from dataclasses import asdict
 import datetime
 import openai
 import requests
@@ -80,7 +81,6 @@ class ChatResponse(Response):
                 content = chunk["choices"][0].get("delta", {}).get("content")
                 if content is not None:
                     yield content
-            self._done = True
         else:
             response = openai.ChatCompletion.create(
                 model=self.prompt.model.model_id,
@@ -89,9 +89,20 @@ class ChatResponse(Response):
             )
             self._debug["model"] = response.model
             self._debug["usage"] = response.usage
-            content = response.choices[0].message.content
-            self._done = True
-            yield content
+            yield response.choices[0].message.content
+
+    def to_log(self) -> LogMessage:
+        return LogMessage(
+            model=self.prompt.model.model_id,
+            prompt=self.prompt.prompt,
+            system=self.prompt.system,
+            options=dict(self.prompt.options),
+            prompt_json=json.dumps(asdict(self.prompt), default=repr),
+            response=self.text(),
+            response_json={},
+            chat_id=None,  # TODO
+            debug_json=self._debug,
+        )
 
 
 class Chat(Model):
