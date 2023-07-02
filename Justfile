@@ -14,6 +14,7 @@
   pipenv run black . --check
   pipenv run cog --check README.md docs/*.md
   pipenv run mypy llm
+  pipenv run ruff .
 
 # Rebuild docs with cog
 @cog:

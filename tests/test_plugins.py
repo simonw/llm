@@ -2,7 +2,6 @@ from click.testing import CliRunner
 import click
 import importlib
 from llm import cli, hookimpl, plugins
-import pytest
 
 
 def test_register_commands():
