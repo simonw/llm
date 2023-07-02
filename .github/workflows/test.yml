@@ -28,3 +28,9 @@ jobs:
     - name: Check if cog needs to be run
       run: |
         cog --check docs/*.md
+    - name: Run Black
+      run: |
+        black --check .
+    - name: Run mypy
+      run: |
+        mypy llm

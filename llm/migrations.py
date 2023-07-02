@@ -1,6 +1,7 @@
 import datetime
+from typing import Callable, List
 
-MIGRATIONS = []
+MIGRATIONS: List[Callable] = []
 migration = MIGRATIONS.append
 
 

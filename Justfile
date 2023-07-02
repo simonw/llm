@@ -1,6 +1,10 @@
 # Run tests and linters
 @default: test lint
 
+# Install dependencies and test dependencies
+@init:
+  pipenv run pip install -e '.[test]'
+
 # Run pytest with supplied options
 @test *options:
   pipenv run pytest {{options}}
@@ -9,6 +13,7 @@
 @lint:
   pipenv run black . --check
   pipenv run cog --check README.md docs/*.md
+  pipenv run mypy llm
 
 # Rebuild docs with cog
 @cog:
