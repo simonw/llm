@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
@@ -30,8 +30,8 @@ class Response(ABC):
         self.prompt = prompt
         self.model = model
         self.stream = stream
-        self._chunks = []
-        self._debug = {}
+        self._chunks: List[str] = []
+        self._debug: Dict[str, Any] = {}
         self._done = False
 
     def reply(self, prompt, system=None, **options):
