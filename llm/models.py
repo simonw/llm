@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Generator, Optional, Set
+from typing import Any, Dict, Iterator, Optional, Set
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
@@ -55,7 +55,8 @@ class Response(ABC):
         self._done = True
 
     @abstractmethod
-    def iter_prompt(self) -> Generator[str, None, None]:
+    def iter_prompt(self) -> Iterator[str]:
+        "Execute prompt and yield chunks of text, or yield a single big chunk"
         pass
 
     def _force(self):
