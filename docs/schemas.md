@@ -8,7 +8,7 @@ Schemas must be defined in the `schemas.py` file as valid Pydantic model classes
 
 Further, the schema file path can be viewed by using `llm schemas path`.
 
-As an example, the following schema may be used to extract data from an LAPD press release (as seen [on Twitter](https://twitter.com/kcimc/status/1668789461780668416):
+As an example, the following schema may be used to extract data from a [CFTC press release](https://www.cftc.gov/PressRoom/PressReleases/8726-23):
 
 ```python
 class CFTCEnforcementDetails(OpenAISchema):
