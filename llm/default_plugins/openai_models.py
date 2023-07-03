@@ -2,10 +2,11 @@ from llm import LogMessage, Model, Prompt, Response, hookimpl
 from llm.errors import NeedsKeyException
 from llm.utils import dicts_to_table_string
 import click
-from dataclasses import asdict
 import datetime
 import openai
+from pydantic import field_validator
 import requests
+from typing import Optional, Union
 import json
 
 
@@ -76,6 +77,7 @@ class ChatResponse(Response):
                 model=self.prompt.model.model_id,
                 messages=messages,
                 stream=True,
+                **not_nulls(self.prompt.options),
             ):
                 self._debug["model"] = chunk.model
                 content = chunk["choices"][0].get("delta", {}).get("content")
@@ -96,8 +98,10 @@ class ChatResponse(Response):
             model=self.prompt.model.model_id,
             prompt=self.prompt.prompt,
             system=self.prompt.system,
-            options=dict(self.prompt.options),
-            prompt_json=json.dumps(asdict(self.prompt), default=repr),
+            options=not_nulls(self.prompt.options),
+            prompt_json=json.dumps(self.prompt.prompt_json)
+            if self.prompt.prompt_json
+            else None,
             response=self.text(),
             response_json={},
             chat_id=None,  # TODO
@@ -109,6 +113,40 @@ class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     can_stream: bool = True
+
+    class Options(Model.Options):
+        temperature: Optional[float] = None
+        max_tokens: Optional[int] = None
+        top_p: Optional[float] = None
+        frequency_penalty: Optional[float] = None
+        presence_penalty: Optional[float] = None
+        stop: Optional[str] = None
+        logit_bias: Optional[Union[dict, str]] = None
+
+        @field_validator("logit_bias")
+        def validate_logit_bias(cls, logit_bias):
+            if logit_bias is None:
+                return None
+
+            if isinstance(logit_bias, str):
+                try:
+                    logit_bias = json.loads(logit_bias)
+                except json.JSONDecodeError:
+                    raise ValueError("Invalid JSON in logit_bias string")
+
+            validated_logit_bias = {}
+            for key, value in logit_bias.items():
+                try:
+                    int_key = int(key)
+                    int_value = int(value)
+                    if -100 <= int_value <= 100:
+                        validated_logit_bias[int_key] = int_value
+                    else:
+                        raise ValueError("Value must be between -100 and 100")
+                except ValueError:
+                    raise ValueError("Invalid key-value pair in logit_bias dictionary")
+
+            return validated_logit_bias
 
     def __init__(self, model_id, key=None):
         self.model_id = model_id
@@ -124,3 +162,7 @@ class Chat(Model):
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
+
+
+def not_nulls(data) -> dict:
+    return {key: value for key, value in data if value is not None}
