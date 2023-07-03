@@ -137,3 +137,24 @@ def m007_finish_logs_table(db):
 @migration
 def m008_reply_to_id_foreign_key(db):
     db["logs"].add_foreign_key("reply_to_id", "logs", "id")
+
+
+@migration
+def m008_fix_column_order_in_logs(db):
+    # reply_to_id ended up at the end after foreign key added
+    db["logs"].transform(
+        column_order=(
+            "id",
+            "model",
+            "prompt",
+            "system",
+            "prompt_json",
+            "options_json",
+            "response",
+            "response_json",
+            "reply_to_id",
+            "chat_id",
+            "duration_ms",
+            "timestamp_utc",
+        ),
+    )

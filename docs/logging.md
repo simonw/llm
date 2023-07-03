@@ -84,8 +84,8 @@ CREATE TABLE "logs" (
   [options_json] TEXT,
   [response] TEXT,
   [response_json] TEXT,
-  [reply_to_id] INTEGER,
-  [chat_id] INTEGER REFERENCES "logs"([id]),
+  [reply_to_id] INTEGER REFERENCES [logs]([id]),
+  [chat_id] INTEGER REFERENCES [logs]([id]),
   [duration_ms] INTEGER,
   [datetime_utc] TEXT
 );
