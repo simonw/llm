@@ -80,7 +80,6 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     assert result.output == "Bob, Alice, Eve\n"
     assert mocked_openai.last_request.headers["Authorization"] == "Bearer X"
 
-    return
     # Was it logged?
     rows = list(log_db["logs"].rows)
     assert len(rows) == 1
@@ -91,4 +90,24 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
         "response": "Bob, Alice, Eve",
         "chat_id": None,
     }
-    assert expected.items() <= rows[0].items()
+    expected = {
+        "model": "gpt-3.5-turbo",
+        "prompt": "three names for a pet pelican",
+        "system": None,
+        "options_json": "{}",
+        "response": "Bob, Alice, Eve",
+        "reply_to_id": None,
+        "chat_id": None,
+    }
+    row = rows[0]
+    assert expected.items() <= row.items()
+    assert isinstance(row["duration_ms"], int)
+    assert isinstance(row["datetime_utc"], str)
+    assert json.loads(row["prompt_json"]) == {
+        "messages": [{"role": "user", "content": "three names for a pet pelican"}]
+    }
+    assert json.loads(row["response_json"]) == {
+        "model": "gpt-3.5-turbo",
+        "usage": {},
+        "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+    }
