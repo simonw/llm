@@ -32,11 +32,14 @@ class LogMessage:
     model: str  # Actually the model.model_id string
     prompt: str  # Simplified string version of prompt
     system: Optional[str]  # Simplified string of system prompt
-    options: Dict[str, Any]  # Any options e.g. temperature
+    options_json: Dict[str, Any]  # Any options e.g. temperature
     prompt_json: Optional[Dict[str, Any]]  # Detailed JSON of prompt
     response: str  # Simplified string version of response
-    response_json: Dict[str, Any]  # Detailed JSON of response
-    chat_id: Optional[int]  # ID of chat, if this is part of one
+    response_json: Optional[Dict[str, Any]]  # Detailed JSON of response
+    reply_to_id: Optional[int]  # ID of message this is a reply to
+    chat_id: Optional[
+        int
+    ]  # ID of chat this is a part of (ID of first message in thread)
 
 
 class Response(ABC):
@@ -46,6 +49,7 @@ class Response(ABC):
         self.stream = stream
         self._chunks: List[str] = []
         self._done = False
+        self._response_json = None
 
     def reply(self, prompt, system=None, **options):
         new_prompt = [self.prompt.prompt, self.text(), prompt]
@@ -82,6 +86,10 @@ class Response(ABC):
     def text(self) -> str:
         self._force()
         return "".join(self._chunks)
+
+    def json(self) -> Optional[Dict[str, Any]]:
+        self._force()
+        return self._response_json
 
     def duration_ms(self) -> int:
         self._force()

@@ -65,7 +65,6 @@ class ChatResponse(Response):
     def __init__(self, prompt, model, stream, key):
         super().__init__(prompt, model, stream)
         self.key = key
-        self._response_json = None
         self._prompt_json = None
 
     def iter_prompt(self):
@@ -103,10 +102,11 @@ class ChatResponse(Response):
             model=self.prompt.model.model_id,
             prompt=self.prompt.prompt,
             system=self.prompt.system,
-            options=not_nulls(self.prompt.options),
+            options_json=not_nulls(self.prompt.options),
             prompt_json=self._prompt_json,
             response=self.text(),
-            response_json=self._response_json,
+            response_json=self.json(),
+            reply_to_id=None,  # TODO
             chat_id=None,  # TODO
         )
 
