@@ -30,6 +30,7 @@ maxdepth: 3
 setup
 usage
 templates
+schemas
 logging
 plugins
 help

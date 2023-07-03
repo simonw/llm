@@ -40,6 +40,7 @@ setup(
         "pydantic<2.0",
         "PyYAML",
         "pluggy",
+        "openai_function_call"
     ],
     extras_require={"test": ["pytest", "requests-mock"]},
     python_requires=">=3.7",
