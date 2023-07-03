@@ -1,7 +1,5 @@
 import click
 from click_default_group import DefaultGroup
-from dataclasses import asdict
-import datetime
 import json
 from llm import Template
 from .migrations import migrate
@@ -19,7 +17,6 @@ from runpy import run_module
 import shutil
 import sqlite_utils
 import sys
-import time
 import warnings
 import yaml
 
@@ -244,11 +241,7 @@ def prompt(
     db = sqlite_utils.Database(log_path)
     migrate(db)
 
-    log_message = response.to_log()
-    log_dict = asdict(log_message)
-    log_dict["duration_ms"] = response.duration_ms()
-    log_dict["timestamp_utc"] = response.timestamp_utc()
-    db["log2"].insert(log_dict, pk="id")
+    response.log_to_db(db)
 
     # TODO: Figure out OpenAI exception handling
 
@@ -382,7 +375,7 @@ def logs_list(count, path, truncate):
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
-    rows = list(db["log"].rows_where(order_by="-id", limit=count or None))
+    rows = list(db["logs"].rows_where(order_by="-id", limit=count or None))
     if truncate:
         for row in rows:
             row["prompt"] = _truncate_string(row["prompt"])
@@ -585,31 +578,6 @@ def logs_db_path():
     return user_dir() / "logs.db"
 
 
-def log(no_log, system, prompt, response, model, chat_id=None, start=None):
-    duration_ms = None
-    if start is not None:
-        end = time.time()
-        duration_ms = int((end - start) * 1000)
-    if no_log:
-        return
-    log_path = logs_db_path()
-    if not log_path.exists():
-        return
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    db["log"].insert(
-        {
-            "system": system,
-            "prompt": prompt,
-            "chat_id": chat_id,
-            "response": response,
-            "model": model,
-            "timestamp": str(datetime.datetime.utcnow()),
-            "duration_ms": duration_ms,
-        },
-    )
-
-
 def load_template(name):
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
@@ -642,12 +610,12 @@ def get_history(chat_id):
     migrate(db)
     if chat_id == -1:
         # Return the most recent chat
-        last_row = list(db["log"].rows_where(order_by="-id", limit=1))
+        last_row = list(db["logs"].rows_where(order_by="-id", limit=1))
         if last_row:
             chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
         else:  # Database is empty
             return None, []
-    rows = db["log"].rows_where(
+    rows = db["logs"].rows_where(
         "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
     )
     return chat_id, rows

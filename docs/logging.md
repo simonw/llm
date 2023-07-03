@@ -62,7 +62,7 @@ import sqlite_utils
 import re
 db = sqlite_utils.Database(memory=True)
 migrate(db)
-schema = db["log"].schema
+schema = db["logs"].schema
 
 def cleanup_sql(sql):
     first_line = sql.split('(')[0]
@@ -75,16 +75,19 @@ cog.out(
 )
 ]]] -->
 ```sql
-CREATE TABLE "log" (
+CREATE TABLE "logs" (
   [id] INTEGER PRIMARY KEY,
   [model] TEXT,
-  [timestamp] TEXT,
   [prompt] TEXT,
   [system] TEXT,
+  [prompt_json] TEXT,
+  [options_json] TEXT,
   [response] TEXT,
-  [chat_id] INTEGER REFERENCES [log]([id]),
-  [debug] TEXT,
-  [duration_ms] INTEGER
+  [response_json] TEXT,
+  [reply_to_id] INTEGER,
+  [chat_id] INTEGER REFERENCES "logs"([id]),
+  [duration_ms] INTEGER,
+  [datetime_utc] TEXT
 );
 ```
 <!-- [[[end]]] -->

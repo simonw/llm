@@ -21,7 +21,7 @@ def test_logs(n, user_path):
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
-    db["log"].insert_all(
+    db["logs"].insert_all(
         {
             "system": "system",
             "prompt": "prompt",
@@ -66,7 +66,7 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["log"].delete_where()
+    log_db["logs"].delete_where()
     runner = CliRunner()
     prompt = "three names for a pet pelican"
     input = None
@@ -82,7 +82,7 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
 
     return
     # Was it logged?
-    rows = list(log_db["log"].rows)
+    rows = list(log_db["logs"].rows)
     assert len(rows) == 1
     expected = {
         "model": "gpt-3.5-turbo",
