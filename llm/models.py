@@ -33,7 +33,7 @@ class LogMessage:
     prompt: str  # Simplified string version of prompt
     system: Optional[str]  # Simplified string of system prompt
     options: Dict[str, Any]  # Any options e.g. temperature
-    prompt_json: str  # Detailed JSON of prompt
+    prompt_json: Optional[str]  # Detailed JSON of prompt
     response: str  # Simplified string version of response
     response_json: Dict[str, Any]  # Detailed JSON of response
     chat_id: Optional[int]  # ID of chat, if this is part of one

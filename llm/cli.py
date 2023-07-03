@@ -58,6 +58,14 @@ def cli():
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
+@click.option(
+    "options",
+    "-o",
+    "--option",
+    type=(str, str),
+    multiple=True,
+    help="key/value options for the model",
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -88,6 +96,7 @@ def prompt(
     prompt,
     system,
     model_id,
+    options,
     template,
     param,
     no_stream,
@@ -116,17 +125,17 @@ def prompt(
     if save:
         # We are saving their prompt/system/etc to a new template
         # Fields to save: prompt, system, model - and more in the future
-        bad_options = []
+        disallowed_options = []
         for option, var in (
             ("--template", template),
             ("--continue", _continue),
             ("--chat", chat_id),
         ):
             if var:
-                bad_options.append(option)
-        if bad_options:
+                disallowed_options.append(option)
+        if disallowed_options:
             raise click.ClickException(
-                "--save cannot be used with {}".format(", ".join(bad_options))
+                "--save cannot be used with {}".format(", ".join(disallowed_options))
             )
         path = template_dir() / f"{save}.yaml"
         to_save = {}
@@ -197,13 +206,26 @@ def prompt(
     if model.needs_key and not model.key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
 
+    # Validate options
+    validated_options = {}
+    if options:
+        # Validate with pydantic
+        try:
+            validated_options = dict(
+                (key, value)
+                for key, value in model.Options(**dict(options))
+                if value is not None
+            )
+        except pydantic.ValidationError as ex:
+            raise click.ClickException(str(ex))
+
     should_stream = model.can_stream and not no_stream
     if should_stream:
         method = model.stream
     else:
         method = model.prompt
 
-    response = method(prompt, system)
+    response = method(prompt, system, **validated_options)
 
     if should_stream:
         for chunk in response:

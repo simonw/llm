@@ -75,17 +75,18 @@ Usage: llm prompt [OPTIONS] [PROMPT]
   Documentation: https://llm.datasette.io/en/stable/usage.html
 
 Options:
-  -s, --system TEXT           System prompt to use
-  -m, --model TEXT            Model to use
-  -t, --template TEXT         Template to use
-  -p, --param <TEXT TEXT>...  Parameters for template
-  --no-stream                 Do not stream output
-  -n, --no-log                Don't log to database
-  -c, --continue              Continue the most recent conversation.
-  --chat INTEGER              Continue the conversation with the given chat ID.
-  --key TEXT                  API key to use
-  --save TEXT                 Save prompt with this template name
-  --help                      Show this message and exit.
+  -s, --system TEXT            System prompt to use
+  -m, --model TEXT             Model to use
+  -o, --option <TEXT TEXT>...  key/value options for the model
+  -t, --template TEXT          Template to use
+  -p, --param <TEXT TEXT>...   Parameters for template
+  --no-stream                  Do not stream output
+  -n, --no-log                 Don't log to database
+  -c, --continue               Continue the most recent conversation.
+  --chat INTEGER               Continue the conversation with the given chat ID.
+  --key TEXT                   API key to use
+  --save TEXT                  Save prompt with this template name
+  --help                       Show this message and exit.
 ```
 ### llm init-db --help
 ```
