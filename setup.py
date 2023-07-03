@@ -37,7 +37,7 @@ setup(
         "openai",
         "click-default-group-wheel",
         "sqlite-utils",
-        "pydantic",
+        "pydantic<2.0",
         "PyYAML",
         "pluggy",
     ],
