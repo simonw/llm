@@ -33,8 +33,6 @@ The response from an LLM. This could encapusulate a string of text, but for stre
 
 Calling `.text()` will return the full text of the response, waiting for the stream to stop executing if necessary.
 
-The `.debug()` method, once the stream has finished, will return a dictionary of debug information about the response. This varies between different models.
-
 ## Template
 
 Templates are reusable objects that can be used to generate prompts. They are used  by the {ref}`prompt-templates` feature.

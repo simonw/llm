@@ -6,7 +6,7 @@ import datetime
 import openai
 from pydantic import field_validator
 import requests
-from typing import Optional, Union
+from typing import List, Optional, Union
 import json
 
 
@@ -65,6 +65,8 @@ class ChatResponse(Response):
     def __init__(self, prompt, model, stream, key):
         super().__init__(prompt, model, stream)
         self.key = key
+        self._response_json = None
+        self._prompt_json = None
 
     def iter_prompt(self):
         messages = []
@@ -72,25 +74,28 @@ class ChatResponse(Response):
             messages.append({"role": "system", "content": self.prompt.system})
         messages.append({"role": "user", "content": self.prompt.prompt})
         openai.api_key = self.key
+        self._prompt_json = {"messages": messages}
         if self.stream:
-            for chunk in openai.ChatCompletion.create(
+            completion = openai.ChatCompletion.create(
                 model=self.prompt.model.model_id,
                 messages=messages,
                 stream=True,
                 **not_nulls(self.prompt.options),
-            ):
-                self._debug["model"] = chunk.model
+            )
+            chunks = []
+            for chunk in completion:
+                chunks.append(chunk)
                 content = chunk["choices"][0].get("delta", {}).get("content")
                 if content is not None:
                     yield content
+            self._response_json = combine_chunks(chunks)
         else:
             response = openai.ChatCompletion.create(
                 model=self.prompt.model.model_id,
                 messages=messages,
                 stream=False,
             )
-            self._debug["model"] = response.model
-            self._debug["usage"] = response.usage
+            self._response_json = response.to_dict_recursive()
             yield response.choices[0].message.content
 
     def to_log(self) -> LogMessage:
@@ -99,13 +104,10 @@ class ChatResponse(Response):
             prompt=self.prompt.prompt,
             system=self.prompt.system,
             options=not_nulls(self.prompt.options),
-            prompt_json=json.dumps(self.prompt.prompt_json)
-            if self.prompt.prompt_json
-            else None,
+            prompt_json=self._prompt_json,
             response=self.text(),
-            response_json={},
+            response_json=self._response_json,
             chat_id=None,  # TODO
-            debug_json=self._debug,
         )
 
 
@@ -166,3 +168,28 @@ class Chat(Model):
 
 def not_nulls(data) -> dict:
     return {key: value for key, value in data if value is not None}
+
+
+def combine_chunks(chunks: List[dict]) -> dict:
+    content = ""
+    role = None
+
+    for item in chunks:
+        for choice in item["choices"]:
+            if "role" in choice["delta"]:
+                role = choice["delta"]["role"]
+            if "content" in choice["delta"]:
+                content += choice["delta"]["content"]
+            if choice["finish_reason"] is not None:
+                finish_reason = choice["finish_reason"]
+
+    return {
+        "id": chunks[0]["id"],
+        "object": chunks[0]["object"],
+        "model": chunks[0]["model"],
+        "created": chunks[0]["created"],
+        "index": chunks[0]["choices"][0]["index"],
+        "role": role,
+        "content": content,
+        "finish_reason": finish_reason,
+    }

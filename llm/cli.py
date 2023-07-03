@@ -585,7 +585,7 @@ def logs_db_path():
     return user_dir() / "logs.db"
 
 
-def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start=None):
+def log(no_log, system, prompt, response, model, chat_id=None, start=None):
     duration_ms = None
     if start is not None:
         end = time.time()
@@ -605,7 +605,6 @@ def log(no_log, system, prompt, response, model, chat_id=None, debug=None, start
             "response": response,
             "model": model,
             "timestamp": str(datetime.datetime.utcnow()),
-            "debug": debug,
             "duration_ms": duration_ms,
         },
     )

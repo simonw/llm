@@ -33,11 +33,10 @@ class LogMessage:
     prompt: str  # Simplified string version of prompt
     system: Optional[str]  # Simplified string of system prompt
     options: Dict[str, Any]  # Any options e.g. temperature
-    prompt_json: Optional[str]  # Detailed JSON of prompt
+    prompt_json: Optional[Dict[str, Any]]  # Detailed JSON of prompt
     response: str  # Simplified string version of response
     response_json: Dict[str, Any]  # Detailed JSON of response
     chat_id: Optional[int]  # ID of chat, if this is part of one
-    debug_json: Dict[str, Any]  # Any debug info returned by the model
 
 
 class Response(ABC):
@@ -46,7 +45,6 @@ class Response(ABC):
         self.model = model
         self.stream = stream
         self._chunks: List[str] = []
-        self._debug: Dict[str, Any] = {}
         self._done = False
 
     def reply(self, prompt, system=None, **options):
