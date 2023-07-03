@@ -85,3 +85,55 @@ def m004_drop_provider(db):
 def m005_debug(db):
     db["log"].add_column("debug", str)
     db["log"].add_column("duration_ms", int)
+
+
+@migration
+def m006_new_logs_table(db):
+    columns = db["log"].columns_dict
+    for column, type in (
+        ("options_json", str),
+        ("prompt_json", str),
+        ("response_json", str),
+        ("reply_to_id", int),
+    ):
+        # It's possible people running development code like myself
+        # might have accidentally created these columns already
+        if column not in columns:
+            db["log"].add_column(column, type)
+
+    # Use .transform() to rename options and timestamp_utc, and set new order
+    db["log"].transform(
+        column_order=(
+            "id",
+            "model",
+            "prompt",
+            "system",
+            "prompt_json",
+            "options_json",
+            "response",
+            "response_json",
+            "reply_to_id",
+            "chat_id",
+            "duration_ms",
+            "timestamp_utc",
+        ),
+        rename={
+            "timestamp": "timestamp_utc",
+            "options": "options_json",
+        },
+    )
+
+
+@migration
+def m007_finish_logs_table(db):
+    db["log"].transform(
+        drop={"debug"},
+        rename={"timestamp_utc": "datetime_utc"},
+    )
+    with db.conn:
+        db.execute("alter table log rename to logs")
+
+
+@migration
+def m008_reply_to_id_foreign_key(db):
+    db["logs"].add_foreign_key("reply_to_id", "logs", "id")

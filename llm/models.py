@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import datetime
 import time
 from typing import Any, Dict, Iterator, List, Optional, Set
@@ -32,8 +32,8 @@ class LogMessage:
     model: str  # Actually the model.model_id string
     prompt: str  # Simplified string version of prompt
     system: Optional[str]  # Simplified string of system prompt
-    options_json: Dict[str, Any]  # Any options e.g. temperature
     prompt_json: Optional[Dict[str, Any]]  # Detailed JSON of prompt
+    options_json: Dict[str, Any]  # Any options e.g. temperature
     response: str  # Simplified string version of response
     response_json: Optional[Dict[str, Any]]  # Detailed JSON of response
     reply_to_id: Optional[int]  # ID of message this is a reply to
@@ -95,14 +95,21 @@ class Response(ABC):
         self._force()
         return int((self._end - self._start) * 1000)
 
-    def timestamp_utc(self) -> str:
+    def datetime_utc(self) -> str:
         self._force()
         return self._start_utcnow.isoformat()
 
     @abstractmethod
-    def to_log(self) -> LogMessage:
+    def log_message(self) -> LogMessage:
         "Return a LogMessage of data to log"
         pass
+
+    def log_to_db(self, db):
+        message = self.log_message()
+        message_dict = asdict(message)
+        message_dict["duration_ms"] = self.duration_ms()
+        message_dict["datetime_utc"] = self.datetime_utc()
+        db["logs"].insert(message_dict, pk="id")
 
 
 class Model(ABC):

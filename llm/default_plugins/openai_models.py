@@ -97,13 +97,13 @@ class ChatResponse(Response):
             self._response_json = response.to_dict_recursive()
             yield response.choices[0].message.content
 
-    def to_log(self) -> LogMessage:
+    def log_message(self) -> LogMessage:
         return LogMessage(
             model=self.prompt.model.model_id,
             prompt=self.prompt.prompt,
             system=self.prompt.system,
-            options_json=not_nulls(self.prompt.options),
             prompt_json=self._prompt_json,
+            options_json=not_nulls(self.prompt.options),
             response=self.text(),
             response_json=self.json(),
             reply_to_id=None,  # TODO
