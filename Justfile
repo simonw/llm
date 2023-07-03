@@ -27,3 +27,7 @@
 # Apply Black
 @black:
   pipenv run black .
+
+# Run automatic fixes
+@fix: cog black
+  pipenv run ruff . --fix
