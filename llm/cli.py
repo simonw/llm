@@ -217,12 +217,10 @@ def prompt(
             raise click.ClickException(str(ex))
 
     should_stream = model.can_stream and not no_stream
-    if should_stream:
-        method = model.stream
-    else:
-        method = model.prompt
+    if not should_stream:
+        validated_options["stream"] = False
 
-    response = method(prompt, system, **validated_options)
+    response = model.prompt(prompt, system, **validated_options)
 
     if should_stream:
         for chunk in response:
