@@ -148,12 +148,12 @@ class Model(ABC):
         self,
         prompt: Optional[str],
         system: Optional[str] = None,
-        stream: bool = False,
+        stream: bool = True,
         **options
     ):
         return self.execute(
             Prompt(prompt, system=system, model=self, options=self.Options(**options)),
-            stream=False,
+            stream=stream,
         )
 
     @abstractmethod
