@@ -21,9 +21,8 @@ The `Model` class is an abstract base class that needs to be subclassed to provi
 
 Model instances provide the following methods:
 
-- `prompt(prompt: str, ...options) -> Prompt` - a convenience wrapper which creates a `Prompt` instance and then executes it. This is the most common way to use LLM models.
-- `stream(prompt: str) -> Response` - a convenient wrapper for `.execute(..., stream=True)`.
-- `execute(prompt: Prompt, stream: bool) -> Response` - execute a prepared Prompt instance against the model and return a `Response`, streaming or not-streaming.
+- `prompt(prompt: str, stream: bool, ...options) -> Prompt` - a convenience wrapper which creates a `Prompt` instance and then executes it. This is the most common way to use LLM models.
+- `execute(prompt: Prompt, stream: bool) -> Response` - execute a prepared Prompt instance against the model and return a `Response`.
 
 Models usually return subclasses of `Response` that are specific to that model.
 

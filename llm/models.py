@@ -144,16 +144,16 @@ class Model(ABC):
             return os.environ.get(self.key_env_var)
         return None
 
-    def prompt(self, prompt, system=None, **options):
+    def prompt(
+        self,
+        prompt: Optional[str],
+        system: Optional[str] = None,
+        stream: bool = False,
+        **options
+    ):
         return self.execute(
             Prompt(prompt, system=system, model=self, options=self.Options(**options)),
             stream=False,
-        )
-
-    def stream(self, prompt, system=None, **options):
-        return self.execute(
-            Prompt(prompt, system=system, model=self, options=self.Options(**options)),
-            stream=True,
         )
 
     @abstractmethod
