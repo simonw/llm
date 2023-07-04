@@ -13,7 +13,7 @@ class Prompt:
     model: "Model"
     system: Optional[str]
     prompt_json: Optional[str]
-    options: Dict[str, Any]
+    options: "Model.Options"
 
     def __init__(self, prompt, model, system=None, prompt_json=None, options=None):
         self.prompt = prompt
@@ -45,6 +45,7 @@ class LogMessage:
 class Response(ABC):
     def __init__(self, prompt: Prompt, model: "Model", stream: bool):
         self.prompt = prompt
+        self._prompt_json = None
         self.model = model
         self.stream = stream
         self._chunks: List[str] = []
@@ -99,10 +100,22 @@ class Response(ABC):
         self._force()
         return self._start_utcnow.isoformat()
 
-    @abstractmethod
     def log_message(self) -> LogMessage:
-        "Return a LogMessage of data to log"
-        pass
+        return LogMessage(
+            model=self.prompt.model.model_id,
+            prompt=self.prompt.prompt,
+            system=self.prompt.system,
+            prompt_json=self._prompt_json,
+            options_json={
+                key: value
+                for key, value in self.prompt.options.model_dump().items()
+                if value is not None
+            },
+            response=self.text(),
+            response_json=self.json(),
+            reply_to_id=None,  # TODO
+            chat_id=None,  # TODO
+        )
 
     def log_to_db(self, db):
         message = self.log_message()
