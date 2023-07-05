@@ -1,7 +1,7 @@
 from dataclasses import dataclass, asdict
 import datetime
 import time
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import cast, Any, Callable, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
@@ -156,9 +156,9 @@ class Model(ABC):
             stream=stream,
         )
 
-    @abstractmethod
     def execute(self, prompt: Prompt, stream: bool = True) -> Response:
-        pass
+        r = cast(Callable, getattr(self, "Response"))
+        return r(prompt, self, stream)
 
     @abstractmethod
     def __str__(self) -> str:
