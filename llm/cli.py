@@ -214,7 +214,7 @@ def prompt(
                 if value is not None
             )
         except pydantic.ValidationError as ex:
-            raise click.ClickException(str(ex))
+            raise click.ClickException(render_errors(ex.errors()))
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -589,10 +589,9 @@ def load_template(name):
     loaded["name"] = name
     try:
         return Template.model_validate(loaded)
-    except pydantic.ValidationError as e:
-        msg = "A validation error occurred:"
-        for error in e.errors():
-            msg += f"\n  {error['loc'][0]}: {error['msg']}"
+    except pydantic.ValidationError as ex:
+        msg = "A validation error occurred:\n"
+        msg += render_errors(ex.errors())
         raise click.ClickException(msg)
 
 
@@ -617,6 +616,14 @@ def get_history(chat_id):
         "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
     )
     return chat_id, rows
+
+
+def render_errors(errors):
+    output = []
+    for error in errors:
+        output.append(", ".join(error["loc"]))
+        output.append("  " + error["msg"])
+    return "\n".join(output)
 
 
 pm.hook.register_commands(cli=cli)
