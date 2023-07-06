@@ -172,9 +172,8 @@ class Model(ABC):
             kwargs["key"] = self.get_key()
         return r(prompt, self, stream, **kwargs)
 
-    @abstractmethod
     def __str__(self) -> str:
-        pass
+        return "{}: {}".format(self.__class__.__name__, self.model_id)
 
 
 @dataclass
