@@ -263,13 +263,14 @@ Options:
 ```
 ### llm install --help
 ```
-Usage: llm install [OPTIONS] PACKAGES...
+Usage: llm install [OPTIONS] [PACKAGES]...
 
   Install packages from PyPI into the same environment as LLM
 
 Options:
-  -U, --upgrade  Upgrade packages to latest version
-  --help         Show this message and exit.
+  -U, --upgrade             Upgrade packages to latest version
+  -e, --editable DIRECTORY  Install a project in editable mode from this path
+  --help                    Show this message and exit.
 ```
 ### llm uninstall --help
 ```
