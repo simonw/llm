@@ -111,3 +111,29 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
         "usage": {},
         "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
+
+    # Test "llm logs"
+    log_result = runner.invoke(cli, ["logs", "-n", "1"], catch_exceptions=False)
+    log_json = json.loads(log_result.output)
+    assert (
+        log_json[0].items()
+        >= {
+            "model": "gpt-3.5-turbo",
+            "prompt": "three names for a pet pelican",
+            "system": None,
+            "prompt_json": {
+                "messages": [
+                    {"role": "user", "content": "three names for a pet pelican"}
+                ]
+            },
+            "options_json": {},
+            "response": "Bob, Alice, Eve",
+            "response_json": {
+                "model": "gpt-3.5-turbo",
+                "usage": {},
+                "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+            },
+            "reply_to_id": None,
+            "chat_id": None,
+        }.items()
+    )
