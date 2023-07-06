@@ -126,6 +126,13 @@ class Response(ABC):
         db["logs"].insert(message_dict, pk="id")
 
 
+class Options(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+_Options = Options
+
+
 class Model(ABC):
     model_id: str
     key: Optional[str] = None
@@ -133,8 +140,8 @@ class Model(ABC):
     key_env_var: Optional[str] = None
     can_stream: bool = False
 
-    class Options(BaseModel):
-        model_config = ConfigDict(extra="forbid")
+    class Options(_Options):
+        pass
 
     def get_key(self):
         if self.needs_key is None:

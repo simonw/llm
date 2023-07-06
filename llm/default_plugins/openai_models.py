@@ -66,7 +66,7 @@ class Chat(Model):
     key_env_var = "OPENAI_API_KEY"
     can_stream: bool = True
 
-    class Options(Model.Options):
+    class Options(llm.Options):
         temperature: Optional[float] = None
         max_tokens: Optional[int] = None
         top_p: Optional[float] = None
