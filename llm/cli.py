@@ -376,10 +376,14 @@ def logs_list(count, path, truncate):
     db = sqlite_utils.Database(path)
     migrate(db)
     rows = list(db["logs"].rows_where(order_by="-id", limit=count or None))
-    if truncate:
-        for row in rows:
+    for row in rows:
+        if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
             row["response"] = _truncate_string(row["response"])
+        # Decode all JSON keys
+        for key in row:
+            if key.endswith("_json") and row[key] is not None:
+                row[key] = json.loads(row[key])
     click.echo(json.dumps(list(rows), indent=2))
 
 
