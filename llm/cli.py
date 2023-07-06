@@ -492,15 +492,23 @@ def templates_path():
 
 
 @cli.command()
-@click.argument("packages", nargs=-1, required=True)
+@click.argument("packages", nargs=-1, required=False)
 @click.option(
     "-U", "--upgrade", is_flag=True, help="Upgrade packages to latest version"
 )
-def install(packages, upgrade):
+@click.option(
+    "-e",
+    "--editable",
+    type=click.Path(readable=True, exists=True, dir_okay=True, file_okay=False),
+    help="Install a project in editable mode from this path",
+)
+def install(packages, upgrade, editable):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
         args += ["--upgrade"]
+    if editable:
+        args += ["--editable", str(editable)]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
