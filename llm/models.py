@@ -70,14 +70,14 @@ class Response(ABC):
         self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
             return self._chunks
-        for chunk in self.iter_prompt():
+        for chunk in self.iter_prompt(self.prompt):
             yield chunk
             self._chunks.append(chunk)
         self._end = time.monotonic()
         self._done = True
 
     @abstractmethod
-    def iter_prompt(self) -> Iterator[str]:
+    def iter_prompt(self, prompt: Prompt) -> Iterator[str]:
         "Execute prompt and yield chunks of text, or yield a single big chunk"
         pass
 

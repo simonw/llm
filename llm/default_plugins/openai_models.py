@@ -105,19 +105,19 @@ class Chat(Model):
             super().__init__(prompt, model, stream)
             self.key = key
 
-        def iter_prompt(self):
+        def iter_prompt(self, prompt):
             messages = []
-            if self.prompt.system:
-                messages.append({"role": "system", "content": self.prompt.system})
-            messages.append({"role": "user", "content": self.prompt.prompt})
+            if prompt.system:
+                messages.append({"role": "system", "content": prompt.system})
+            messages.append({"role": "user", "content": prompt.prompt})
             openai.api_key = self.key
             self._prompt_json = {"messages": messages}
             if self.stream:
                 completion = openai.ChatCompletion.create(
-                    model=self.prompt.model.model_id,
+                    model=prompt.model.model_id,
                     messages=messages,
                     stream=True,
-                    **not_nulls(self.prompt.options),
+                    **not_nulls(prompt.options),
                 )
                 chunks = []
                 for chunk in completion:
@@ -128,7 +128,7 @@ class Chat(Model):
                 self._response_json = combine_chunks(chunks)
             else:
                 response = openai.ChatCompletion.create(
-                    model=self.prompt.model.model_id,
+                    model=prompt.model.model_id,
                     messages=messages,
                     stream=False,
                 )
