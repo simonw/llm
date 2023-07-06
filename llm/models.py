@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 import datetime
+from .errors import NeedsKeyException
 import time
 from typing import cast, Any, Callable, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
@@ -141,8 +142,16 @@ class Model(ABC):
         if self.key is not None:
             return self.key
         if self.key_env_var is not None:
-            return os.environ.get(self.key_env_var)
-        return None
+            key = os.environ.get(self.key_env_var)
+            if key:
+                return key
+
+        message = "No key found - add one using 'llm keys set {}'".format(
+            self.needs_key
+        )
+        if self.key_env_var:
+            message += " or set the {} environment variable".format(self.key_env_var)
+        raise NeedsKeyException(message)
 
     def prompt(
         self,
@@ -158,7 +167,10 @@ class Model(ABC):
 
     def execute(self, prompt: Prompt, stream: bool = True) -> Response:
         r = cast(Callable, getattr(self, "Response"))
-        return r(prompt, self, stream)
+        kwargs = {}
+        if self.needs_key:
+            kwargs["key"] = self.get_key()
+        return r(prompt, self, stream, **kwargs)
 
     @abstractmethod
     def __str__(self) -> str:

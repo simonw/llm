@@ -1,6 +1,5 @@
-from llm import Model, Prompt, hookimpl
+from llm import Model, hookimpl
 import llm
-from llm.errors import NeedsKeyException
 from llm.utils import dicts_to_table_string
 import click
 import datetime
@@ -139,14 +138,6 @@ class Chat(Model):
     def __init__(self, model_id, key=None):
         self.model_id = model_id
         self.key = key
-
-    def execute(self, prompt: Prompt, stream: bool = True) -> Response:
-        key = self.get_key()
-        if key is None:
-            raise NeedsKeyException(
-                "{} needs an API key, label={}".format(str(self), self.needs_key)
-            )
-        return self.Response(prompt, self, stream, key=key)
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
