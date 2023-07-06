@@ -199,8 +199,8 @@ def prompt(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
-    # Provide the API key, if one is needed
-    if model.needs_key and not model.key:
+    # Provide the API key, if one is needed and has been provided
+    if model.needs_key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
 
     # Validate options
@@ -220,15 +220,17 @@ def prompt(
     if not should_stream:
         validated_options["stream"] = False
 
-    response = model.prompt(prompt, system, **validated_options)
-
-    if should_stream:
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
-        print("")
-    else:
-        print(response.text())
+    try:
+        response = model.prompt(prompt, system, **validated_options)
+        if should_stream:
+            for chunk in response:
+                print(chunk, end="")
+                sys.stdout.flush()
+            print("")
+        else:
+            print(response.text())
+    except Exception as ex:
+        raise click.ClickException(str(ex))
 
     # Log to the database
     if no_log:
@@ -543,13 +545,7 @@ def get_key(key_arg, default_key, env_var=None):
         return key_arg
     if env_var and os.environ.get(env_var):
         return os.environ[env_var]
-    default = keys.get(default_key)
-    if not default:
-        message = "No key found - add one using 'llm keys set {}'".format(default_key)
-        if env_var:
-            message += " or set the {} environment variable".format(env_var)
-        raise click.ClickException(message)
-    return default
+    return keys.get(default_key)
 
 
 def load_keys():
