@@ -535,11 +535,13 @@ llm uninstall llm-markov -y
 
 A neat quick option for distributing a simple plugin is to host it in a GitHub Gist. These are available for free with a GitHub account, and can be public or private. Gists can contain multiple files but don't support directory structures - which is OK, because our plugin is just two files, setup.py and llm_markov.py
 
-Here's an example Gist I created for this tutorial: https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823
+Here's an example Gist I created for this tutorial:
+
+[https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823](https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823)
 
 You can turn a Gist into an installable `.zip` URL by right-clicking on the "Download ZIP" button and selecting "Copy Link". Here's that link for my example Gist:
 
-https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823/archive/18c9794e2d40a9fc7dc84f5fd38e68f8bfccfe7d.zip
+`https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823/archive/18c9794e2d40a9fc7dc84f5fd38e68f8bfccfe7d.zip`
 
 The plugin can be installed using the `llm install` command like this:
 ```bash
