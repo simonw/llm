@@ -1,4 +1,4 @@
-# Writing a plugin to add support for a new model
+# Writing a plugin to support a new model
 
 This tutorial will walk you through developing a new plugin for LLM that adds support for a new Large Language Model.
 
