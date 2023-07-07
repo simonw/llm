@@ -33,6 +33,7 @@ python-api
 templates
 logging
 plugins
+tutorial-model-plugin
 help
 contributing
 changelog
