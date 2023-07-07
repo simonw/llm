@@ -49,6 +49,7 @@ setup(
             "mypy",
             "black",
             "ruff",
+            "types-click",
             "types-PyYAML",
             "types-requests",
         ]
