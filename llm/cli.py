@@ -108,16 +108,19 @@ def prompt(
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
     """
-    if prompt is None:
-        if template:
-            # If running a template only consume from stdin if it has data
-            if not sys.stdin.isatty():
-                prompt = sys.stdin.read()
-        elif not save:
-            # Hang waiting for input to stdin (unless --save)
-            prompt = sys.stdin.read()
-
     model_aliases = get_model_aliases()
+
+    def read_prompt():
+        nonlocal prompt
+        if prompt is None:
+            if template:
+                # If running a template only consume from stdin if it has data
+                if not sys.stdin.isatty():
+                    prompt = sys.stdin.read()
+            elif not save:
+                # Hang waiting for input to stdin (unless --save)
+                prompt = sys.stdin.read()
+        return prompt
 
     if save:
         # We are saving their prompt/system/etc to a new template
@@ -141,6 +144,7 @@ def prompt(
                 to_save["model"] = model_aliases[model_id].model_id
             except KeyError:
                 raise click.ClickException("'{}' is not a known model".format(model_id))
+        prompt = read_prompt()
         if prompt:
             to_save["prompt"] = prompt
         if system:
@@ -163,6 +167,7 @@ def prompt(
         if system:
             raise click.ClickException("Cannot use -t/--template and --system together")
         template_obj = load_template(template)
+        prompt = read_prompt()
         try:
             prompt, system = template_obj.execute(prompt, params)
         except Template.MissingVariables as ex:
@@ -219,6 +224,8 @@ def prompt(
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         validated_options["stream"] = False
+
+    prompt = read_prompt()
 
     try:
         response = model.prompt(prompt, system, **validated_options)
