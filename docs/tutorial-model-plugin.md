@@ -38,19 +38,18 @@ The `Markov` class implements the model. It sets a `model_id` - an identifier th
 
 That inner class, `Markov.Response`, implements the logic of the model inside the `iter_prompt()` method. We'll extend this to do something more useful in a later step.
 
-Next, create a `setup.py` file. This is necessary to tell LLM how to load your plugin:
+Next, create a `pyproject.toml` file. This is necessary to tell LLM how to load your plugin:
 
-```python
-from setuptools import setup
+```toml
+[project]
+name = "llm-markov"
+version = "0.1"
 
-setup(
-    name="llm-markov",
-    version="0.1",
-    modules=["llm_markov"],
-    entry_points={"llm": ["llm_markov = llm_markov"]},
-)
+[project.entry-points.llm]
+markov = "llm_markov"
 ```
-This is the simplest possible configuration. It provides the name of the plugin, indicates the module containing the code (here that's `llm_markov`) and provides an [entry point](https://setuptools.pypa.io/en/latest/userguide/entry_point.html) for `llm` telling it how to load the plugin.
+
+This is the simplest possible configuration. It defines a plugin name and provides an [entry point](https://setuptools.pypa.io/en/latest/userguide/entry_point.html) for `llm` telling it how to load the plugin.
 
 If you are comfortable with Python virtual environments you can create one now for your project, activate it and run `pip install llm` before the next step.
 
@@ -58,7 +57,7 @@ If you aren't familiar with virtual environments, don't worry: you can develop p
 
 ## Installing your plugin to try it out
 
-Having created a directory with a `setup.py` file and an `llm_markov.py` file, you can install your plugin into LLM by running this from inside your `llm-markov` directory:
+Having created a directory with a `pyproject.toml` file and an `llm_markov.py` file, you can install your plugin into LLM by running this from inside your `llm-markov` directory:
 
 ```bash
 llm install -e .
@@ -533,19 +532,19 @@ llm uninstall llm-markov -y
 
 ### GitHub Gists
 
-A neat quick option for distributing a simple plugin is to host it in a GitHub Gist. These are available for free with a GitHub account, and can be public or private. Gists can contain multiple files but don't support directory structures - which is OK, because our plugin is just two files, setup.py and llm_markov.py
+A neat quick option for distributing a simple plugin is to host it in a GitHub Gist. These are available for free with a GitHub account, and can be public or private. Gists can contain multiple files but don't support directory structures - which is OK, because our plugin is just two files, `pyproject.toml` and `llm_markov.py`.
 
 Here's an example Gist I created for this tutorial:
 
-[https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823](https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823)
+[https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6](https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6)
 
 You can turn a Gist into an installable `.zip` URL by right-clicking on the "Download ZIP" button and selecting "Copy Link". Here's that link for my example Gist:
 
-`https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823/archive/18c9794e2d40a9fc7dc84f5fd38e68f8bfccfe7d.zip`
+`https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6/archive/fe56f88f8d7927d2bad0edb9a520525cb3acd91b.zip`
 
 The plugin can be installed using the `llm install` command like this:
 ```bash
-llm install 'https://gist.github.com/simonw/bf2a5e5b019d19708e544a94d4928823/archive/18c9794e2d40a9fc7dc84f5fd38e68f8bfccfe7d.zip'
+llm install 'https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6/archive/fe56f88f8d7927d2bad0edb9a520525cb3acd91b.zip'
 ```
 
 ## GitHub repositories
@@ -565,52 +564,40 @@ You will need an account on PyPI, then you can enter your username and password 
 
 ## Adding metadata
 
-Before uploading a package to PyPI it's a good idea to add documentation and expand `setup.py` with additional metadata.
+Before uploading a package to PyPI it's a good idea to add documentation and expand `pyproject.toml` with additional metadata.
 
 Create a `README.md` file in the root of your plugin directory with instructions about how to install, configure and use your plugin.
 
-You can then replace `setup.py` with something like this:
+You can then replace `pyproject.toml` with something like this:
 
-```python
-from setuptools import setup
-import os
+```toml
+[project]
+name = "llm-markov"
+version = "0.1"
+description = "Plugin for LLM adding a Markov chain generating model"
+readme = "README.md"
+authors = [{name = "Simon Willison"}]
+license = {text = "Apache-2.0"}
+classifiers = [
+    "License :: OSI Approved :: Apache Software License"
+]
+dependencies = [
+    "llm"
+]
+requires-python = ">3.7"
 
-VERSION = "0.1"
+[project.urls]
+homepage = "https://github.com/simonw/llm-markov"
+Changelog = "https://github.com/simonw/llm-markov/releases"
+Issues = "https://github.com/simonw/llm-markov/issues"
 
-
-def get_long_description():
-    with open(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"),
-        encoding="utf8",
-    ) as fp:
-        return fp.read()
-
-
-setup(
-    name="llm-markov",
-    description="Plugin for LLM adding a Markov chain generating model",
-    long_description=get_long_description(),
-    long_description_content_type="text/markdown",
-    author="Simon Willison",
-    url="https://github.com/simonw/llm-markov",
-    project_urls={
-        "Issues": "https://github.com/simonw/llm-markov/issues",
-        "CI": "https://github.com/simonw/llm-markov/actions",
-        "Changelog": "https://github.com/simonw/llm-markov/releases",
-    },
-    license="Apache License, Version 2.0",
-    classifiers=["License :: OSI Approved :: Apache Software License"],
-    version=VERSION,
-    modules=["llm_markov"],
-    entry_points={"llm": ["llm_markov = llm_markov"]},
-    install_requires=["llm"],
-    python_requires=">=3.7",
-)
+[project.entry-points.llm]
+markov = "llm_markov"
 ```
 This will pull in your README to be displayed as part of your project's listing page on PyPI.
 
 It adds `llm` as a dependency, ensuring it will be installed if someone tries to install your plugin package without it.
 
-It adds some links to useful pages (you can drop the `project_urls=` section if those links are not useful for your project).
+It adds some links to useful pages (you can drop the `project.urls` section if those links are not useful for your project).
 
 You should drop a `LICENSE` file into the GitHub repository for your package as well. I like to use the Apache 2 license [like this](https://github.com/simonw/llm/blob/main/LICENSE).
