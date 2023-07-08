@@ -14,7 +14,7 @@ class Prompt:
     model: "Model"
     system: Optional[str]
     prompt_json: Optional[str]
-    options: "Model.Options"
+    options: "Options"
 
     def __init__(self, prompt, model, system=None, prompt_json=None, options=None):
         self.prompt = prompt
