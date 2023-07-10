@@ -1,16 +1,18 @@
 import click
 from click_default_group import DefaultGroup
 import json
-from llm import Template
-from .migrations import migrate
-from .plugins import (
-    pm,
+from llm import (
+    Template,
+    get_key,
     get_plugins,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
+    user_dir,
 )
-import os
+
+from .migrations import migrate
+from .plugins import pm
 import pathlib
 import pydantic
 from runpy import run_module
@@ -313,11 +315,7 @@ def keys():
 @keys.command(name="path")
 def keys_path_command():
     "Output the path to the keys.json file"
-    click.echo(keys_path())
-
-
-def keys_path():
-    return user_dir() / "keys.json"
+    click.echo(user_dir() / "keys.json")
 
 
 @keys.command(name="set")
@@ -334,7 +332,7 @@ def set_(name, value):
         Enter key: ...
     """
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
-    path = pathlib.Path(keys_path())
+    path = user_dir() / "keys.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text(json.dumps(default))
@@ -546,32 +544,6 @@ def _truncate_string(s, max_length=100):
     if len(s) > max_length:
         return s[: max_length - 3] + "..."
     return s
-
-
-def get_key(key_arg, default_key, env_var=None):
-    keys = load_keys()
-    if key_arg in keys:
-        return keys[key_arg]
-    if key_arg:
-        return key_arg
-    if env_var and os.environ.get(env_var):
-        return os.environ[env_var]
-    return keys.get(default_key)
-
-
-def load_keys():
-    path = pathlib.Path(keys_path())
-    if path.exists():
-        return json.loads(path.read_text())
-    else:
-        return {}
-
-
-def user_dir():
-    llm_user_path = os.environ.get("LLM_USER_PATH")
-    if llm_user_path:
-        return pathlib.Path(llm_user_path)
-    return pathlib.Path(click.get_app_dir("io.datasette.llm"))
 
 
 def get_default_model():

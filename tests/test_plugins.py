@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 import click
 import importlib
+import llm
 from llm import cli, hookimpl, plugins
 
 
@@ -8,7 +9,7 @@ def test_register_commands():
     importlib.reload(cli)
 
     def plugin_names():
-        return [plugin["name"] for plugin in plugins.get_plugins()]
+        return [plugin["name"] for plugin in llm.get_plugins()]
 
     assert "HelloWorldPlugin" not in plugin_names()
 

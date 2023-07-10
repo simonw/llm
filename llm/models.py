@@ -2,7 +2,7 @@ from dataclasses import dataclass, asdict
 import datetime
 from .errors import NeedsKeyException
 import time
-from typing import cast, Any, Callable, Dict, Iterator, List, Optional, Set
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Union
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
@@ -70,16 +70,13 @@ class Response(ABC):
         self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
             return self._chunks
-        for chunk in self.iter_prompt(self.prompt):
+        for chunk in self.model.iter_prompt(
+            self.prompt, stream=self.stream, response=self
+        ):
             yield chunk
             self._chunks.append(chunk)
         self._end = time.monotonic()
         self._done = True
-
-    @abstractmethod
-    def iter_prompt(self, prompt: Prompt) -> Iterator[str]:
-        "Execute prompt and yield chunks of text, or yield a single big chunk"
-        pass
 
     def _force(self):
         if not self._done:
@@ -160,6 +157,16 @@ class Model(ABC):
             message += " or set the {} environment variable".format(self.key_env_var)
         raise NeedsKeyException(message)
 
+    @abstractmethod
+    def iter_prompt(
+        self, prompt: Prompt, stream: bool, response: Response
+    ) -> Iterator[str]:
+        """
+        Execute a prompt and yield chunks of text, or yield a single big chunk.
+        Any additional useful information about the execution should be assigned to the response.
+        """
+        pass
+
     def prompt(
         self,
         prompt: Optional[str],
@@ -172,12 +179,36 @@ class Model(ABC):
             stream=stream,
         )
 
+    def chain(
+        self,
+        prompt: Union[Prompt, str],
+        system: Optional[str] = None,
+        stream: bool = True,
+        proceed: Optional[Callable] = None,
+        **options
+    ):
+        if proceed is None:
+
+            def proceed(response):
+                return None
+
+        while True:
+            if isinstance(prompt, str):
+                prompt = Prompt(
+                    prompt, model=self, system=system, options=self.Options(**options)
+                )
+            response = self.execute(
+                prompt,
+                stream=stream,
+            )
+            yield response
+            next_prompt = proceed(response)
+            if not next_prompt:
+                break
+            prompt = next_prompt
+
     def execute(self, prompt: Prompt, stream: bool = True) -> Response:
-        r = cast(Callable, getattr(self, "Response"))
-        kwargs = {}
-        if self.needs_key:
-            kwargs["key"] = self.get_key()
-        return r(prompt, self, stream, **kwargs)
+        return Response(prompt, self, stream)
 
     def __str__(self) -> str:
         return "{}: {}".format(self.__class__.__name__, self.model_id)
