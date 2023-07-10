@@ -4,7 +4,7 @@ from llm.utils import dicts_to_table_string
 import click
 import datetime
 import openai
-from pydantic import field_validator
+from pydantic import field_validator, Field
 import requests
 from typing import List, Optional, Union
 import json
@@ -67,13 +67,53 @@ class Chat(Model):
     can_stream: bool = True
 
     class Options(llm.Options):
-        temperature: Optional[float] = None
-        max_tokens: Optional[int] = None
-        top_p: Optional[float] = None
-        frequency_penalty: Optional[float] = None
-        presence_penalty: Optional[float] = None
-        stop: Optional[str] = None
-        logit_bias: Optional[Union[dict, str]] = None
+        temperature: Optional[float] = Field(
+            description=(
+                "What sampling temperature to use, between 0 and 2. Higher values like "
+                "0.8 will make the output more random, while lower values like 0.2 will "
+                "make it more focused and deterministic."
+            ),
+            default=None,
+        )
+        max_tokens: Optional[int] = Field(
+            description="Maximum number of tokens to generate", default=None
+        )
+        top_p: Optional[float] = Field(
+            description=(
+                "An alternative to sampling with temperature, called nucleus sampling, "
+                "where the model considers the results of the tokens with top_p "
+                "probability mass. So 0.1 means only the tokens comprising the top "
+                "10% probability mass are considered. Recommended to use top_p or "
+                "temperature but not both."
+            ),
+            default=None,
+        )
+        frequency_penalty: Optional[float] = Field(
+            description=(
+                "Number between -2.0 and 2.0. Positive values penalize new tokens based "
+                "on their existing frequency in the text so far, decreasing the model's "
+                "likelihood to repeat the same line verbatim."
+            ),
+            default=None,
+        )
+        presence_penalty: Optional[float] = Field(
+            description=(
+                "Number between -2.0 and 2.0. Positive values penalize new tokens based "
+                "on whether they appear in the text so far, increasing the model's "
+                "likelihood to talk about new topics."
+            ),
+            default=None,
+        )
+        stop: Optional[str] = Field(
+            description=("A string where the API will stop generating further tokens."),
+            default=None,
+        )
+        logit_bias: Optional[Union[dict, str]] = Field(
+            description=(
+                "Modify the likelihood of specified tokens appearing in the completion."
+            ),
+            default=None,
+        )
 
         @field_validator("logit_bias")
         def validate_logit_bias(cls, logit_bias):

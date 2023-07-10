@@ -19,6 +19,7 @@ from runpy import run_module
 import shutil
 import sqlite_utils
 import sys
+import textwrap
 import warnings
 import yaml
 
@@ -365,13 +366,32 @@ def models():
 
 
 @models.command(name="list")
-def models_list():
+@click.option(
+    "--options", is_flag=True, help="Show options for each model, if available"
+)
+def models_list(options):
     "List available models"
+    models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         output = str(model_with_aliases.model) + extra
+        if options and model_with_aliases.model.Options.model_fields:
+            for name, field in model_with_aliases.model.Options.model_fields.items():
+                type_info = str(field.annotation).replace("typing.", "")
+                if type_info.startswith("Optional["):
+                    type_info = type_info[9:-1]
+                bits = ["\n  ", name, ": ", type_info]
+                if field.description and (
+                    model_with_aliases.model.__class__
+                    not in models_that_have_shown_options
+                ):
+                    wrapped = textwrap.wrap(field.description, 70)
+                    bits.append("\n    ")
+                    bits.extend("\n    ".join(wrapped))
+                output += "".join(bits)
+            models_that_have_shown_options.add(model_with_aliases.model.__class__)
         click.echo(output)
 
 

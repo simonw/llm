@@ -190,7 +190,8 @@ Usage: llm models list [OPTIONS]
   List available models
 
 Options:
-  --help  Show this message and exit.
+  --options  Show options for each model, if available
+  --help     Show this message and exit.
 ```
 #### llm models default --help
 ```
