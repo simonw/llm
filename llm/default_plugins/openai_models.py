@@ -76,7 +76,7 @@ class Chat(Model):
             default=None,
         )
         max_tokens: Optional[int] = Field(
-            description="Maximum number of tokens to generate", default=None
+            description="Maximum number of tokens to generate.", default=None
         )
         top_p: Optional[float] = Field(
             description=(

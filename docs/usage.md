@@ -103,7 +103,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     0.8 will make the output more random, while lower values like 0.2 will
     make it more focused and deterministic.
   max_tokens: int
-    Maximum number of tokens to generate
+    Maximum number of tokens to generate.
   top_p: float
     An alternative to sampling with temperature, called nucleus sampling,
     where the model considers the results of the tokens with top_p
