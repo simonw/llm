@@ -122,6 +122,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     A string where the API will stop generating further tokens.
   logit_bias: dict, str
     Modify the likelihood of specified tokens appearing in the completion.
+    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   temperature: float
   max_tokens: int

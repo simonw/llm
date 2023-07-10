@@ -110,7 +110,8 @@ class Chat(Model):
         )
         logit_bias: Optional[Union[dict, str]] = Field(
             description=(
-                "Modify the likelihood of specified tokens appearing in the completion."
+                "Modify the likelihood of specified tokens appearing in the completion. "
+                'Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
             ),
             default=None,
         )
