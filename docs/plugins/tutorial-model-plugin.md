@@ -1,3 +1,4 @@
+(tutorial-model-plugin)=
 # Tutorial: Writing a plugin to support a new model
 
 This tutorial will walk you through developing a new plugin for LLM that adds support for a new Large Language Model.
@@ -5,10 +6,6 @@ This tutorial will walk you through developing a new plugin for LLM that adds su
 We will be developing a plugin that implements a simple [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) to generate words based on an input string. Markov chains are not technically large language models, but they provide a useful exercise for demonstrating how the LLM tool can be extended through plugins.
 
 ## The initial structure of the plugin
-
-<!-- [ You can use the llm-simple-plugin cookiecutter template to skip this step - follow instructions in the README.
-
-If you're not using cookiecutter, ]  -->
 
 First create a new directory with the name of your plugin - it should be called something like `llm-markov`.
 ```bash

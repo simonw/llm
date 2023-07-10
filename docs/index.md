@@ -32,8 +32,7 @@ usage
 python-api
 templates
 logging
-plugins
-tutorial-model-plugin
+plugins/index
 help
 contributing
 changelog
