@@ -29,5 +29,6 @@
   pipenv run black .
 
 # Run automatic fixes
-@fix: cog black
+@fix: cog
   pipenv run ruff . --fix
+  pipenv run black .
