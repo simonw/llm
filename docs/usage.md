@@ -120,7 +120,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     likelihood to talk about new topics.
   stop: str
     A string where the API will stop generating further tokens.
-  logit_bias: Union[dict, str, NoneType]
+  logit_bias: dict, str
     Modify the likelihood of specified tokens appearing in the completion.
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   temperature: float
@@ -129,7 +129,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   frequency_penalty: float
   presence_penalty: float
   stop: str
-  logit_bias: Union[dict, str, NoneType]
+  logit_bias: dict, str
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   temperature: float
   max_tokens: int
@@ -137,7 +137,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   frequency_penalty: float
   presence_penalty: float
   stop: str
-  logit_bias: Union[dict, str, NoneType]
+  logit_bias: dict, str
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   temperature: float
   max_tokens: int
@@ -145,7 +145,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   frequency_penalty: float
   presence_penalty: float
   stop: str
-  logit_bias: Union[dict, str, NoneType]
+  logit_bias: dict, str
 
 ```
 <!-- [[[end]]] -->

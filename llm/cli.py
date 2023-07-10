@@ -382,6 +382,8 @@ def models_list(options):
                 type_info = str(field.annotation).replace("typing.", "")
                 if type_info.startswith("Optional["):
                     type_info = type_info[9:-1]
+                if type_info.startswith("Union[") and type_info.endswith(", NoneType]"):
+                    type_info = type_info[6:-11]
                 bits = ["\n  ", name, ": ", type_info]
                 if field.description and (
                     model_with_aliases.model.__class__
