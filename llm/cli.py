@@ -178,6 +178,9 @@ def prompt(
             model_id = template_obj.model
 
     history_model = None
+
+    if _continue or chat_id:
+        raise click.ClickException("--continue mode is not yet implemented")
     # TODO: Re-introduce --continue mode
     # messages = []
     # if _continue:
@@ -253,42 +256,6 @@ def prompt(
     response.log_to_db(db)
 
     # TODO: Figure out OpenAI exception handling
-
-    return
-    # Original code:
-    # try:
-    #     debug = {}
-    #     if no_stream:
-    #         start = time.time()
-    #         response = openai.ChatCompletion.create(
-    #             model=model,
-    #             messages=messages,
-    #         )
-    #         debug["model"] = response.model
-    #         debug["usage"] = response.usage
-    #         content = response.choices[0].message.content
-    #         log(no_log, system, prompt, content, model, chat_id, debug, start)
-    #         print(content)
-    #     else:
-    #         start = time.time()
-    #         response = []
-    #         for chunk in openai.ChatCompletion.create(
-    #             model=model,
-    #             messages=messages,
-    #             stream=True,
-    #         ):
-    #             debug["model"] = chunk.model
-    #             content = chunk["choices"][0].get("delta", {}).get("content")
-    #             if content is not None:
-    #                 response.append(content)
-    #                 print(content, end="")
-    #                 sys.stdout.flush()
-    #         print("")
-    #         log(no_log, system, prompt, "".join(response), model, chat_id, debug, start)
-    # except openai.error.AuthenticationError as ex:
-    #     raise click.ClickException("{}: {}".format(ex.error.type, ex.error.code))
-    # except openai.error.OpenAIError as ex:
-    #     raise click.ClickException(str(ex))
 
 
 @cli.command()
