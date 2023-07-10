@@ -27,6 +27,7 @@ jobs:
         pytest
     - name: Check if cog needs to be run
       run: |
+        cog docs/usage.md
         cog --check docs/*.md
     - name: Run Black
       run: |
