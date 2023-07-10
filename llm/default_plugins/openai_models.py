@@ -105,42 +105,42 @@ class Chat(Model):
             super().__init__(prompt, model, stream)
             self.key = key
 
-        def iter_prompt(self, prompt):
-            messages = []
-            if prompt.system:
-                messages.append({"role": "system", "content": prompt.system})
-            messages.append({"role": "user", "content": prompt.prompt})
-            openai.api_key = self.key
-            self._prompt_json = {"messages": messages}
-            if self.stream:
-                completion = openai.ChatCompletion.create(
-                    model=prompt.model.model_id,
-                    messages=messages,
-                    stream=True,
-                    **not_nulls(prompt.options),
-                )
-                chunks = []
-                for chunk in completion:
-                    chunks.append(chunk)
-                    content = chunk["choices"][0].get("delta", {}).get("content")
-                    if content is not None:
-                        yield content
-                self._response_json = combine_chunks(chunks)
-            else:
-                response = openai.ChatCompletion.create(
-                    model=prompt.model.model_id,
-                    messages=messages,
-                    stream=False,
-                )
-                self._response_json = response.to_dict_recursive()
-                yield response.choices[0].message.content
-
     def __init__(self, model_id, key=None):
         self.model_id = model_id
         self.key = key
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
+
+    def iter_prompt(self, prompt, stream, response):
+        messages = []
+        if prompt.system:
+            messages.append({"role": "system", "content": prompt.system})
+        messages.append({"role": "user", "content": prompt.prompt})
+        openai.api_key = self.key
+        response._prompt_json = {"messages": messages}
+        if stream:
+            completion = openai.ChatCompletion.create(
+                model=prompt.model.model_id,
+                messages=messages,
+                stream=True,
+                **not_nulls(prompt.options),
+            )
+            chunks = []
+            for chunk in completion:
+                chunks.append(chunk)
+                content = chunk["choices"][0].get("delta", {}).get("content")
+                if content is not None:
+                    yield content
+            response._response_json = combine_chunks(chunks)
+        else:
+            completion = openai.ChatCompletion.create(
+                model=prompt.model.model_id,
+                messages=messages,
+                stream=False,
+            )
+            response._response_json = completion.to_dict_recursive()
+            yield completion.choices[0].message.content
 
 
 def not_nulls(data) -> dict:
