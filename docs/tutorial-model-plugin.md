@@ -534,15 +534,15 @@ A neat quick option for distributing a simple plugin is to host it in a GitHub G
 
 Here's an example Gist I created for this tutorial:
 
-[https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6](https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6)
+[https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d](https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d)
 
 You can turn a Gist into an installable `.zip` URL by right-clicking on the "Download ZIP" button and selecting "Copy Link". Here's that link for my example Gist:
 
-`https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6/archive/fe56f88f8d7927d2bad0edb9a520525cb3acd91b.zip`
+`https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/945a46fd05522a718eab79fa736a9105cb4c27c7.zip`
 
 The plugin can be installed using the `llm install` command like this:
 ```bash
-llm install 'https://gist.github.com/simonw/f3686efc447678d5eb5e98331e5f18e6/archive/fe56f88f8d7927d2bad0edb9a520525cb3acd91b.zip'
+llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/945a46fd05522a718eab79fa736a9105cb4c27c7.zip'
 ```
 
 ## GitHub repositories
