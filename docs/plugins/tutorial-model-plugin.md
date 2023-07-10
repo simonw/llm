@@ -308,14 +308,14 @@ llm -m gpt4 "ten pet pelican names" -o temperature 1.5
 ```
 We're going to add two options to our Markov chain model:
 
-- `length`: the number of words to generate
-- `delay`: a floating point number of seconds to delay in between each output token
+- `length`: Number of words to generate
+- `delay`: a floating point number of Delay in between output token
 
 The `delay` token will let us simulate a streaming language model, where tokens take time to generate and are returned by the `execute()` function as they become ready.
 
 Options are defined using an inner class on the model, called `Options`. It should extend the `llm.Options` class.
 
-First, add this import to the top of your 'llm_markov.py' file:
+First, add this import to the top of your `llm_markov.py` file:
 ```python
 from typing import Optional
 ```
@@ -327,24 +327,30 @@ class Markov(Model):
     class Options(llm.Options):
         length: Optional[int] = None
         delay: Optional[float] = None
-
 ```
-
 Let's add extra validation rules to our options. Length must be at least 2. Duration must be between 0 and 10.
 
 The `Options` class uses [Pydantic 2](https://pydantic.org/), which can support all sorts of advanced validation rules.
 
-Add this import to the top of your 'llm_markov.py' file:
+We can also add inline documentation, which can then be displayed by the `llm models list --options` command.
+
+Add these imports to the top of `llm_markov.py`:
 ```python
-from pydantic import field_validator
+from pydantic import field_validator, Field
 ```
 
-We can add a Pydantic field validator for our two new rules:
+We can now add Pydantic field validators for our two new rules, plus inline documentation:
 
 ```python
     class Options(llm.Options):
-        length: Optional[int] = None
-        delay: Optional[float] = None
+        length: Optional[int] = Field(
+            description="Number of words to generate",
+            default=None
+        )
+        delay: Optional[float] = Field(
+            description="Seconds to delay between each token",
+            default=None
+        )
 
         @field_validator("length")
         def validate_length(cls, length):
@@ -394,7 +400,7 @@ import llm
 import random
 import time
 from typing import Optional
-from pydantic import field_validator
+from pydantic import field_validator, Field
 
 @llm.hookimpl
 def register_models(register):
@@ -423,8 +429,14 @@ class Markov(llm.Model):
     can_stream = True
 
     class Options(llm.Options):
-        length: Optional[int] = None
-        delay: Optional[float] = None
+        length: Optional[int] = Field(
+            description="Number of words to generate",
+            default=None
+        )
+        delay: Optional[float] = Field(
+            description="Seconds to delay between each token",
+            default=None
+        )
 
         @field_validator("length")
         def validate_length(cls, length):
@@ -535,11 +547,11 @@ Here's an example Gist I created for this tutorial:
 
 You can turn a Gist into an installable `.zip` URL by right-clicking on the "Download ZIP" button and selecting "Copy Link". Here's that link for my example Gist:
 
-`https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/945a46fd05522a718eab79fa736a9105cb4c27c7.zip`
+`https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/c7faa326fe19d1082cba13e28a4f4d9c1303e487.zip`
 
 The plugin can be installed using the `llm install` command like this:
 ```bash
-llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/945a46fd05522a718eab79fa736a9105cb4c27c7.zip'
+llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/c7faa326fe19d1082cba13e28a4f4d9c1303e487.zip'
 ```
 
 ## GitHub repositories
