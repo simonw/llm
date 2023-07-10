@@ -27,16 +27,16 @@ import yaml
         ),
     ),
 )
-def test_template_execute(
+def test_template_evaluate(
     prompt, system, defaults, params, expected_prompt, expected_system, expected_error
 ):
     t = Template(name="t", prompt=prompt, system=system, defaults=defaults)
     if expected_error:
         with pytest.raises(Template.MissingVariables) as ex:
-            prompt, system = t.execute("input", params)
+            prompt, system = t.evaluate("input", params)
         assert ex.value.args[0] == expected_error
     else:
-        prompt, system = t.execute("input", params)
+        prompt, system = t.evaluate("input", params)
         assert prompt == expected_prompt
         assert system == expected_system
 

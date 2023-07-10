@@ -171,7 +171,7 @@ def prompt(
         template_obj = load_template(template)
         prompt = read_prompt()
         try:
-            prompt, system = template_obj.execute(prompt, params)
+            prompt, system = template_obj.evaluate(prompt, params)
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
