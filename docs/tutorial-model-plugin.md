@@ -27,16 +27,15 @@ def register_models(register):
 class Markov(llm.Model):
     model_id = "markov"
 
-    class Response(llm.Response):
-        def iter_prompt(self, prompt):
-            return ["hello world"]
+    def execute(self, prompt, stream, response):
+        return ["hello world"]
 ```
 
 The `def register_models()` function here is called by the plugin system (thanks to the `@hookimpl` decorator). It uses the `register()` function passed to it to register an instance of the new model.
 
 The `Markov` class implements the model. It sets a `model_id` - an identifier that can be passed to `ll -m` in order to identify the model to be executed.
 
-That inner class, `Markov.Response`, implements the logic of the model inside the `iter_prompt()` method. We'll extend this to do something more useful in a later step.
+The logic for executing the model goes in the `execute()` method. We'll extend this to do something more useful in a later step.
 
 Next, create a `pyproject.toml` file. This is necessary to tell LLM how to load your plugin:
 
@@ -175,7 +174,7 @@ sentence = " ".join(generate(transitions, 20))
 ```
 ## Adding that to the plugin
 
-Our `iter_prompt()` from earlier currently returns the list `["hello world"]`.
+Our `execute()` method from earlier currently returns the list `["hello world"]`.
 
 Update that to use our new Markov chain generator instead. Here's the full text of the new `llm_markov.py` file:
 
@@ -208,14 +207,13 @@ def generate(transitions, length, start_word=None):
 class Markov(llm.Model):
     model_id = "markov"
 
-    class Response(llm.Response):
-        def iter_prompt(self, prompt):
-            text = prompt.prompt
-            transitions = build_markov_table(text)
-            for word in generate(transitions, 20):
-                yield word + ' '
+    def execute(self, prompt, stream, response):
+        text = prompt.prompt
+        transitions = build_markov_table(text)
+        for word in generate(transitions, 20):
+            yield word + ' '
 ```
-The `iter_prompt()` method can access the prompt that the user provided using` self.prompt.prompt` - `self.prompt` is a `Prompt` object that might include other more advanced input details as well.
+The `execute()` method can access the text prompt that the user provided using` prompt.prompt` - `prompt` is a `Prompt` object that might include other more advanced input details as well.
 
 Now when you run this you should see the output of the Markov chain!
 ```bash
@@ -251,17 +249,16 @@ The output should look something like this:
 ]
 ```
 
-Plugins can log additional information to the database by assigning a dictionary to the `._response_json` property during the `iter_prompt()` method.
+Plugins can log additional information to the database by assigning a dictionary to the `response._response_json` property during the `execute()` method.
 
 Here's how to include that full `transitions` table in the `response_json` in the log:
 ```python
-    class Response(llm.Response):
-        def iter_prompt(self, prompt):
-            text = self.prompt.prompt
-            transitions = build_markov_table(text)
-            for word in generate(transitions, 20):
-                yield word + ' '
-            self._response_json = {"transitions": transitions}
+    def execute(self, prompt, stream, response):
+        text = self.prompt.prompt
+        transitions = build_markov_table(text)
+        for word in generate(transitions, 20):
+            yield word + ' '
+        response._response_json = {"transitions": transitions}
 ```
 
 Now when you run the logs command you'll see that too:
@@ -317,7 +314,7 @@ We're going to add two options to our Markov chain model:
 - `length`: the number of words to generate
 - `delay`: a floating point number of seconds to delay in between each output token
 
-The `delay` token will let us simulate a streaming language model, where tokens take time to generate and are returned by the `iter_prompt()` function as they become ready.
+The `delay` token will let us simulate a streaming language model, where tokens take time to generate and are returned by the `execute()` function as they become ready.
 
 Options are defined using an inner class on the model, called `Options`. It should extend the `llm.Options` class.
 
@@ -377,20 +374,20 @@ Error: length
   Value error, length must be >= 2
 ```
 
-Next, we will modify our `iter_prompt()` method to handle those options. Add this to the beginning of `llm_markov.py`:
+Next, we will modify our `execute()` method to handle those options. Add this to the beginning of `llm_markov.py`:
 ```python
 import time
 ```
-Then replace the `iter_prompt()` method with this one:
+Then replace the `execute()` method with this one:
 ```python
-        def iter_prompt(self, prompt):
-            text = prompt.prompt
-            transitions = build_markov_table(text)
-            length = prompt.options.length or 10
-            for word in generate(transitions, length):
-                yield word + ' '
-                if prompt.options.delay:
-                    time.sleep(prompt.options.delay)
+    def execute(self, prompt, stream, response):
+        text = prompt.prompt
+        transitions = build_markov_table(text)
+        length = prompt.options.length or 10
+        for word in generate(transitions, length):
+            yield word + ' '
+            if prompt.options.delay:
+                time.sleep(prompt.options.delay)
 ```
 Add `can_stream = True` to the top of the `Markov` model class, on the line below `model_id = "markov". This tells LLM that the model is able to stream content to the console.
 
@@ -448,15 +445,14 @@ class Markov(llm.Model):
                 raise ValueError("delay must be between 0 and 10")
             return delay
 
-    class Response(llm.Response):
-        def iter_prompt(self, prompt):
-            text = prompt.prompt
-            transitions = build_markov_table(text)
-            length = prompt.options.length or 10
-            for word in generate(transitions, length):
-                yield word + ' '
-                if prompt.options.delay:
-                    time.sleep(prompt.options.delay)
+    def execute(self, prompt, stream, response):
+        text = prompt.prompt
+        transitions = build_markov_table(text)
+        length = prompt.options.length or 10
+        for word in generate(transitions, length):
+            yield word + ' '
+            if prompt.options.delay:
+                time.sleep(prompt.options.delay)
 ```
 Now we can request a 20 word completion with a 0.1s delay between tokens like this:
 ```bash
@@ -469,6 +465,8 @@ llm -m markov "the cat sat on the mat" \
   -o length 20 -o delay 0.1 --no-stream
 ```
 In this case it will still delay for 2s total while it gathers the tokens, then output them all at once.
+
+That `--no-stream` option causes the `stream` argument passed to `execute()` to be false. Your `execute()` method can then behave differently depending on whether it is streaming or not.
 
 Options are also logged to the database. You can see those here:
 ```bash

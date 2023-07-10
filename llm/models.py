@@ -55,7 +55,7 @@ class Response(ABC):
 
     def reply(self, prompt, system=None, **options):
         new_prompt = [self.prompt.prompt, self.text(), prompt]
-        return self.model.execute(
+        return self.model.response(
             Prompt(
                 "\n".join(new_prompt),
                 system=system or self.prompt.system or None,
@@ -70,9 +70,7 @@ class Response(ABC):
         self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
             return self._chunks
-        for chunk in self.model.iter_prompt(
-            self.prompt, stream=self.stream, response=self
-        ):
+        for chunk in self.model.execute(self.prompt, stream=self.stream, response=self):
             yield chunk
             self._chunks.append(chunk)
         self._end = time.monotonic()
@@ -158,7 +156,7 @@ class Model(ABC):
         raise NeedsKeyException(message)
 
     @abstractmethod
-    def iter_prompt(
+    def execute(
         self, prompt: Prompt, stream: bool, response: Response
     ) -> Iterator[str]:
         """
@@ -174,7 +172,7 @@ class Model(ABC):
         stream: bool = True,
         **options
     ):
-        return self.execute(
+        return self.response(
             Prompt(prompt, system=system, model=self, options=self.Options(**options)),
             stream=stream,
         )
@@ -197,7 +195,7 @@ class Model(ABC):
                 prompt = Prompt(
                     prompt, model=self, system=system, options=self.Options(**options)
                 )
-            response = self.execute(
+            response = self.response(
                 prompt,
                 stream=stream,
             )
@@ -207,7 +205,7 @@ class Model(ABC):
                 break
             prompt = next_prompt
 
-    def execute(self, prompt: Prompt, stream: bool = True) -> Response:
+    def response(self, prompt: Prompt, stream: bool = True) -> Response:
         return Response(prompt, self, stream)
 
     def __str__(self) -> str:
