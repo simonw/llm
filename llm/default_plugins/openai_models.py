@@ -112,7 +112,7 @@ class Chat(Model):
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def iter_prompt(self, prompt, stream, response):
+    def execute(self, prompt, stream, response):
         messages = []
         if prompt.system:
             messages.append({"role": "system", "content": prompt.system})
