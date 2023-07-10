@@ -585,7 +585,7 @@ dependencies = [
 requires-python = ">3.7"
 
 [project.urls]
-homepage = "https://github.com/simonw/llm-markov"
+Homepage = "https://github.com/simonw/llm-markov"
 Changelog = "https://github.com/simonw/llm-markov/releases"
 Issues = "https://github.com/simonw/llm-markov/issues"
 
