@@ -214,34 +214,6 @@ class Model(ABC):
             stream=stream,
         )
 
-    def chain(
-        self,
-        prompt: Union[Prompt, str],
-        system: Optional[str] = None,
-        stream: bool = True,
-        proceed: Optional[Callable] = None,
-        **options
-    ):
-        if proceed is None:
-
-            def proceed(response):
-                return None
-
-        while True:
-            if isinstance(prompt, str):
-                prompt = Prompt(
-                    prompt, model=self, system=system, options=self.Options(**options)
-                )
-            response = self.response(
-                prompt,
-                stream=stream,
-            )
-            yield response
-            next_prompt = proceed(response)
-            if not next_prompt:
-                break
-            prompt = next_prompt
-
     def response(self, prompt: Prompt, stream: bool = True) -> Response:
         return Response(prompt, self, stream)
 
