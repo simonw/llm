@@ -19,3 +19,14 @@ plugin_dir = data_path = user_dir / "my-plugin"
 plugin_dir.mkdir(exist_ok=True)
 data_path = plugin_dir / "plugin-data.db"
 ```
+
+## llm.ModelError
+
+If your model encounters an error that should be reported to the user you can raise this exception. For example:
+
+```python
+import llm
+
+raise ModelError("MPT model not installed - try running 'llm mpt30b download'")
+```
+This will be caught by the CLI layer and displayed to the user as an error message.
