@@ -81,7 +81,7 @@ class Response(ABC):
         self.stream = stream
         self._chunks: List[str] = []
         self._done = False
-        self._response_json = None
+        self.response_json = None
         self.conversation = conversation
 
     def __iter__(self) -> Iterator[str]:
@@ -112,7 +112,7 @@ class Response(ABC):
 
     def json(self) -> Optional[Dict[str, Any]]:
         self._force()
-        return self._response_json
+        return self.response_json
 
     def duration_ms(self) -> int:
         self._force()
@@ -171,7 +171,7 @@ class Response(ABC):
         )
         response.id = row["id"]
         response._prompt_json = json.loads(row["prompt_json"])
-        response._response_json = json.loads(row["response_json"])
+        response.response_json = json.loads(row["response_json"])
         response._done = True
         response._chunks = [row["response"]]
         return response

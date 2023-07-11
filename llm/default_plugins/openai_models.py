@@ -183,14 +183,14 @@ class Chat(Model):
                 content = chunk["choices"][0].get("delta", {}).get("content")
                 if content is not None:
                     yield content
-            response._response_json = combine_chunks(chunks)
+            response.response_json = combine_chunks(chunks)
         else:
             completion = openai.ChatCompletion.create(
                 model=prompt.model.model_id,
                 messages=messages,
                 stream=False,
             )
-            response._response_json = completion.to_dict_recursive()
+            response.response_json = completion.to_dict_recursive()
             yield completion.choices[0].message.content
 
 
