@@ -2,6 +2,8 @@ import click
 from click_default_group import DefaultGroup
 import json
 from llm import (
+    Conversation,
+    Response,
     Template,
     get_key,
     get_plugins,
@@ -20,6 +22,7 @@ import shutil
 import sqlite_utils
 import sys
 import textwrap
+from typing import Optional
 import warnings
 import yaml
 
@@ -85,10 +88,10 @@ def cli():
     help="Continue the most recent conversation.",
 )
 @click.option(
-    "chat_id",
-    "--chat",
-    help="Continue the conversation with the given chat ID.",
-    type=int,
+    "conversation_id",
+    "--cid",
+    "--conversation",
+    help="Continue the conversation with the given ID.",
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
@@ -102,7 +105,7 @@ def prompt(
     no_stream,
     no_log,
     _continue,
-    chat_id,
+    conversation_id,
     key,
     save,
 ):
@@ -132,7 +135,7 @@ def prompt(
         for option, var in (
             ("--template", template),
             ("--continue", _continue),
-            ("--chat", chat_id),
+            ("--cid", conversation_id),
         ):
             if var:
                 disallowed_options.append(option)
@@ -178,31 +181,17 @@ def prompt(
         if model_id is None and template_obj.model:
             model_id = template_obj.model
 
-    history_model = None
-
-    if _continue or chat_id:
-        raise click.ClickException("--continue mode is not yet implemented")
-    # TODO: Re-introduce --continue mode
-    # messages = []
-    # if _continue:
-    #     _continue = -1
-    #     if chat_id:
-    #         raise click.ClickException("Cannot use --continue and --chat together")
-    # else:
-    #     _continue = chat_id
-    # chat_id, history = get_history(_continue)
-    # history_model = None
-    # if history:
-    #     for entry in history:
-    #         if entry.get("system"):
-    #             messages.append({"role": "system", "content": entry["system"]})
-    #         messages.append({"role": "user", "content": entry["prompt"]})
-    #         messages.append({"role": "assistant", "content": entry["response"]})
-    #         history_model = entry["model"]
+    conversation = None
+    if conversation_id or _continue:
+        # Load the conversation - loads most recent if no ID provided
+        conversation = load_conversation(conversation_id)
 
     # Figure out which model we are using
     if model_id is None:
-        model_id = history_model or get_default_model()
+        if conversation:
+            model_id = conversation.model.model_id
+        else:
+            model_id = get_default_model()
 
     # Now resolve the model
     try:
@@ -213,6 +202,10 @@ def prompt(
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
+
+    if conversation:
+        # To ensure it can see the key
+        conversation.model = model
 
     # Validate options
     validated_options = {}
@@ -233,8 +226,12 @@ def prompt(
 
     prompt = read_prompt()
 
+    prompt_method = model.prompt
+    if conversation:
+        prompt_method = conversation.prompt
+
     try:
-        response = model.prompt(prompt, system, **validated_options)
+        response = prompt_method(prompt, system, **validated_options)
         if should_stream:
             for chunk in response:
                 print(chunk, end="")
@@ -248,15 +245,38 @@ def prompt(
     # Log to the database
     if no_log:
         return
+
     log_path = logs_db_path()
     if not log_path.exists():
         return
     db = sqlite_utils.Database(log_path)
     migrate(db)
-
     response.log_to_db(db)
 
-    # TODO: Figure out OpenAI exception handling
+
+def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    if conversation_id is None:
+        # Return the most recent conversation, or None if there are none
+        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
+        if matches:
+            conversation_id = matches[0]["id"]
+        else:
+            return None
+    try:
+        row = db["conversations"].get(conversation_id)
+    except sqlite_utils.db.NotFoundError:
+        raise click.ClickException(
+            "No conversation found with id={}".format(conversation_id)
+        )
+    # Inflate that conversation
+    conversation = Conversation.from_row(row)
+    for response in db["responses"].rows_where(
+        "conversation_id = ?", [conversation_id]
+    ):
+        conversation.responses.append(Response.from_row(response))
+    return conversation
 
 
 @cli.command()

@@ -158,3 +158,40 @@ def m008_fix_column_order_in_logs(db):
             "timestamp_utc",
         ),
     )
+
+
+@migration
+def m009_delete_logs_table_if_empty(db):
+    # We moved to a new table design, but we don't delete the table
+    # if someone has put data in it
+    if not db["logs"].count:
+        db["logs"].drop()
+
+
+@migration
+def m010_create_new_log_tables(db):
+    db["conversations"].create(
+        {
+            "id": str,
+            "name": str,
+            "model": str,
+        },
+        pk="id",
+    )
+    db["responses"].create(
+        {
+            "id": str,
+            "model": str,
+            "prompt": str,
+            "system": str,
+            "prompt_json": str,
+            "options_json": str,
+            "response": str,
+            "response_json": str,
+            "conversation_id": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+        },
+        pk="id",
+        foreign_keys=(("conversation_id", "conversations", "id"),),
+    )
