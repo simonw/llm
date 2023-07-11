@@ -150,7 +150,7 @@ class Response(ABC):
         db["responses"].insert(response)
 
     @classmethod
-    def fake(cls, model, prompt, system, response):
+    def fake(cls, model: "Model", prompt: str, system: str, response: str):
         "Utility method to help with writing tests"
         response_obj = cls(
             model=model,
@@ -182,11 +182,16 @@ class Response(ABC):
             stream=False,
         )
         response.id = row["id"]
-        response._prompt_json = json.loads(row["prompt_json"])
-        response.response_json = json.loads(row["response_json"])
+        response._prompt_json = json.loads(row["prompt_json"] or "null")
+        response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
         response._chunks = [row["response"]]
         return response
+
+    def __repr__(self):
+        return "<Response prompt='{}' text='{}'>".format(
+            self.prompt.prompt, self.text()
+        )
 
 
 class Options(BaseModel):
@@ -257,6 +262,9 @@ class Model(ABC):
 
     def __str__(self) -> str:
         return "{}: {}".format(self.__class__.__name__, self.model_id)
+
+    def __repr__(self):
+        return "<Model '{}'>".format(self.model_id)
 
 
 @dataclass
