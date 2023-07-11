@@ -150,6 +150,22 @@ class Response(ABC):
         db["responses"].insert(response)
 
     @classmethod
+    def fake(cls, model, prompt, system, response):
+        "Utility method to help with writing tests"
+        response_obj = cls(
+            model=model,
+            prompt=Prompt(
+                prompt,
+                system=system,
+                model=model,
+            ),
+            stream=False,
+        )
+        response_obj._done = True
+        response_obj._chunks = [response]
+        return response_obj
+
+    @classmethod
     def from_row(cls, row):
         from llm import get_model
 
