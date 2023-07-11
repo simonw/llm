@@ -26,10 +26,6 @@ class Prompt:
         self.options = options or {}
 
 
-class OptionsError(Exception):
-    pass
-
-
 @dataclass
 class Conversation:
     model: "Model"
