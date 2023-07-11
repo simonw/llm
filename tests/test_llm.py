@@ -5,6 +5,7 @@ import json
 import os
 import pytest
 import sqlite_utils
+from ulid import ULID
 from unittest import mock
 
 
@@ -18,11 +19,13 @@ def test_version():
 
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs(n, user_path):
+    "Test that logs command correctly returns requested -n records"
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
-    db["logs"].insert_all(
+    db["responses"].insert_all(
         {
+            "id": str(ULID()).lower(),
             "system": "system",
             "prompt": "prompt",
             "response": "response",
@@ -66,7 +69,7 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["logs"].delete_where()
+    log_db["responses"].delete_where()
     runner = CliRunner()
     prompt = "three names for a pet pelican"
     input = None
@@ -81,23 +84,14 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     assert mocked_openai.last_request.headers["Authorization"] == "Bearer X"
 
     # Was it logged?
-    rows = list(log_db["logs"].rows)
+    rows = list(log_db["responses"].rows)
     assert len(rows) == 1
-    expected = {
-        "model": "gpt-3.5-turbo",
-        "prompt": "three names for a pet pelican",
-        "system": None,
-        "response": "Bob, Alice, Eve",
-        "chat_id": None,
-    }
     expected = {
         "model": "gpt-3.5-turbo",
         "prompt": "three names for a pet pelican",
         "system": None,
         "options_json": "{}",
         "response": "Bob, Alice, Eve",
-        "reply_to_id": None,
-        "chat_id": None,
     }
     row = rows[0]
     assert expected.items() <= row.items()
@@ -133,7 +127,5 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
                 "usage": {},
                 "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
             },
-            "reply_to_id": None,
-            "chat_id": None,
         }.items()
     )
