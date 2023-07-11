@@ -22,7 +22,7 @@ import shutil
 import sqlite_utils
 import sys
 import textwrap
-from typing import Optional
+from typing import cast, Optional
 import warnings
 import yaml
 
@@ -265,7 +265,7 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
         else:
             return None
     try:
-        row = db["conversations"].get(conversation_id)
+        row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
         raise click.ClickException(
             "No conversation found with id={}".format(conversation_id)
@@ -368,15 +368,44 @@ def logs_list(count, path, truncate):
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
-    rows = list(db["logs"].rows_where(order_by="-id", limit=count or None))
+    rows = list(
+        db.query(
+            """
+        select
+            responses.id,
+            responses.model,
+            responses.prompt,
+            responses.system,
+            responses.prompt_json,
+            responses.options_json,
+            responses.response,
+            responses.response_json,
+            responses.conversation_id,
+            responses.duration_ms,
+            responses.datetime_utc,
+            conversations.name as conversation_name,
+            conversations.model as conversation_model
+        from
+            responses
+        left join conversations on responses.conversation_id = conversations.id
+        order by responses.id desc{}
+    """.format(
+                " limit {}".format(count) if count else ""
+            )
+        )
+    )
     for row in rows:
         if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
             row["response"] = _truncate_string(row["response"])
-        # Decode all JSON keys
-        for key in row:
+        # Either decode or remove all JSON keys
+        keys = list(row.keys())
+        for key in keys:
             if key.endswith("_json") and row[key] is not None:
-                row[key] = json.loads(row[key])
+                if truncate:
+                    del row[key]
+                else:
+                    row[key] = json.loads(row[key])
     click.echo(json.dumps(list(rows), indent=2))
 
 

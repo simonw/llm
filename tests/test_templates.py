@@ -82,7 +82,8 @@ def test_templates_list(templates_path):
         (["--system", "system"], {"system": "system"}, None),
         (["-t", "template"], None, "--save cannot be used with --template"),
         (["--continue"], None, "--save cannot be used with --continue"),
-        (["--chat", "123"], None, "--save cannot be used with --chat"),
+        (["--cid", "123"], None, "--save cannot be used with --cid"),
+        (["--conversation", "123"], None, "--save cannot be used with --cid"),
         (
             ["Say hello as $name", "-p", "name", "default-name"],
             {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
