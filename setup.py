@@ -40,6 +40,7 @@ setup(
         "pydantic>=2.0.0",
         "PyYAML",
         "pluggy",
+        "python-ulid",
     ],
     extras_require={
         "test": [

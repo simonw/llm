@@ -148,9 +148,24 @@ class Chat(Model):
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation=None):
         messages = []
-        if prompt.system:
+        current_system = None
+        if conversation is not None:
+            for prev_response in conversation.responses:
+                if (
+                    prev_response.prompt.system
+                    and prev_response.prompt.system != current_system
+                ):
+                    messages.append(
+                        {"role": "system", "content": prev_response.prompt.system}
+                    )
+                    current_system = prev_response.prompt.system
+                messages.append(
+                    {"role": "user", "content": prev_response.prompt.prompt}
+                )
+                messages.append({"role": "assistant", "content": prev_response.text()})
+        if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
         openai.api_key = self.key

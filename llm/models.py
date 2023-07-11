@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 import datetime
 from .errors import NeedsKeyException
 import time
@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Union
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
+from ulid import ULID
 
 
 @dataclass
@@ -43,8 +44,41 @@ class LogMessage:
     ]  # ID of chat this is a part of (ID of first message in thread)
 
 
+@dataclass
+class Conversation:
+    model: "Model"
+    id: str = field(default_factory=lambda: str(ULID()).lower())
+    name: Optional[str] = None
+    responses: List["Response"] = field(default_factory=list)
+
+    def prompt(
+        self,
+        prompt: Optional[str],
+        system: Optional[str] = None,
+        stream: bool = True,
+        **options
+    ):
+        return Response(
+            Prompt(
+                prompt,
+                system=system,
+                model=self.model,
+                options=self.model.Options(**options),
+            ),
+            self.model,
+            stream,
+            conversation=self,
+        )
+
+
 class Response(ABC):
-    def __init__(self, prompt: Prompt, model: "Model", stream: bool):
+    def __init__(
+        self,
+        prompt: Prompt,
+        model: "Model",
+        stream: bool,
+        conversation: Optional[Conversation] = None,
+    ):
         self.prompt = prompt
         self._prompt_json = None
         self.model = model
@@ -52,27 +86,23 @@ class Response(ABC):
         self._chunks: List[str] = []
         self._done = False
         self._response_json = None
-
-    def reply(self, prompt, system=None, **options):
-        new_prompt = [self.prompt.prompt, self.text(), prompt]
-        return self.model.response(
-            Prompt(
-                "\n".join(new_prompt),
-                system=system or self.prompt.system or None,
-                model=self.model,
-                options=options,
-            ),
-            stream=self.stream,
-        )
+        self.conversation = conversation
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
             return self._chunks
-        for chunk in self.model.execute(self.prompt, stream=self.stream, response=self):
+        for chunk in self.model.execute(
+            self.prompt,
+            stream=self.stream,
+            response=self,
+            conversation=self.conversation,
+        ):
             yield chunk
             self._chunks.append(chunk)
+        if self.conversation:
+            self.conversation.responses.append(self)
         self._end = time.monotonic()
         self._done = True
 
@@ -155,9 +185,16 @@ class Model(ABC):
             message += " or set the {} environment variable".format(self.key_env_var)
         raise NeedsKeyException(message)
 
+    def conversation(self):
+        return Conversation(model=self)
+
     @abstractmethod
     def execute(
-        self, prompt: Prompt, stream: bool, response: Response
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: Response,
+        conversation: Optional[Conversation],
     ) -> Iterator[str]:
         """
         Execute a prompt and yield chunks of text, or yield a single big chunk.
