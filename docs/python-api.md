@@ -4,7 +4,7 @@ LLM provides a Python API for executing prompts, in addition to the command-line
 
 Understanding this API is also important for writing plugins.
 
-## Basic usage
+## Basic prompt execution
 
 To run a prompt against the `gpt-3.5-turbo` model, run this:
 
@@ -43,36 +43,41 @@ print(response.text())
 ```
 You can omit the `model.key = ` line for models that do not use an API key
 
-## Concepts
+## Streaming responses
 
-The API consists of the following key concepts:
+For models that support it you can stream responses as they are generated, like this:
 
-- `Model` - represents a language model against which prompts can be executed
-- `Prompt` - a prompt that can be prepared and then executed against a model
-- `Response` - the response executing a prompt against a model
-- `Template` - a reusable template for generating prompts
+```python
+response = model.prompt("Five diabolical names for a pet goat")
+for chunk in response:
+    print(chunk, end="")
+```
+The `response.text()` method described earlier does this for you - it runs through the iterator and gathers the results into a string.
 
-### Prompt
+If a response has been evaluated, `response.text()` will continue to return the same string.
 
-A prompt object represents all of the information needed to be passed to the LLM. This could be a single prompt string, but it might also include a separate system prompt, various settings (for temperature etc) or even a JSON array of previous messages.
+## Conversations
 
-### Model
+LLM supports *conversations*, where you ask follow-up questions of a model as part of an ongoing conversation.
 
-The `Model` class is an abstract base class that needs to be subclassed to provide a concrete implementation. Different LLMs will use different implementations of this class.
+To start a new conversation, use the `model.conversation()` method:
 
-Model instances provide the following methods:
+```python
+model = llm.get_model("gpt-3.5-turbo")
+model.key = 'YOUR_API_KEY_HERE'
+conversation = model.conversation()
+```
+You can then use the `conversation.prompt()` method to execute prompts against this conversation:
 
-- `prompt(prompt: str, stream: bool, ...options) -> Response` - a convenience wrapper which creates a `Prompt` instance and then executes it. This is the most common way to use LLM models.
-- `response(prompt: Prompt, stream: bool) -> Response` - execute a prepared Prompt instance against the model and return a `Response`.
+```python
+response = conversation.prompt("Five fun facts about pelicans")
+print(response.text())
+```
+This works exactly the same as the `model.prompt()` method, except that the conversation will be maintained across multiple prompts. So if you run this next:
+```python
+response2 = conversation.prompt("Now do skunks")
+print(response2.text())
+```
+You will get back five fun facts about skunks.
 
-Models usually return subclasses of `Response` that are specific to that model.
-
-### Response
-
-The response from an LLM. This could encapusulate a string of text, but for streaming APIs this class will be iterable, with each iteration yielding a short string of text as it is generated.
-
-Calling `.text()` will return the full text of the response, waiting for the stream to stop executing if necessary.
-
-### Template
-
-Templates are reusable objects that can be used to generate prompts. They are used  by the {ref}`prompt-templates` feature.
+Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
