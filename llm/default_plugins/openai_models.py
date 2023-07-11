@@ -141,11 +141,6 @@ class Chat(Model):
 
             return validated_logit_bias
 
-    class Response(llm.Response):
-        def __init__(self, prompt, model, stream, key):
-            super().__init__(prompt, model, stream)
-            self.key = key
-
     def __init__(self, model_id, key=None):
         self.model_id = model_id
         self.key = key
