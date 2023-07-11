@@ -2,7 +2,7 @@ from dataclasses import dataclass, asdict, field
 import datetime
 from .errors import NeedsKeyException
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Union
+from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
 from pydantic import ConfigDict, BaseModel
