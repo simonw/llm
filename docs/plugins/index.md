@@ -1,3 +1,4 @@
+(plugins)=
 # Plugins
 
 LLM plugins can enhance LLM by making alternative Large Language Models available, either via API or by running the models locally on your machine.
@@ -15,4 +16,5 @@ maxdepth: 3
 installing-plugins
 plugin-hooks
 tutorial-model-plugin
+plugin-utilities
 ```

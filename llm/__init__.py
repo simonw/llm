@@ -20,6 +20,7 @@ __all__ = [
     "hookimpl",
     "get_model",
     "get_key",
+    "user_dir",
     "Conversation",
     "Model",
     "Options",

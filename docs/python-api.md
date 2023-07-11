@@ -2,7 +2,7 @@
 
 LLM provides a Python API for executing prompts, in addition to the command-line interface.
 
-Understanding this API is also important for writing plugins.
+Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
