@@ -62,7 +62,6 @@ import sqlite_utils
 import re
 db = sqlite_utils.Database(memory=True)
 migrate(db)
-schema = db["responses"].schema
 
 def cleanup_sql(sql):
     first_line = sql.split('(')[0]
@@ -70,11 +69,19 @@ def cleanup_sql(sql):
     columns = [l.strip() for l in inner.split(',')]
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
-cog.out(
-    "```sql\n{}\n```\n".format(cleanup_sql(schema))
-)
+cog.out("```sql\n")
+for table in ("conversations", "responses"):
+    schema = db[table].schema
+    cog.out(format(cleanup_sql(schema)))
+    cog.out("\n")
+cog.out("```\n")
 ]]] -->
 ```sql
+CREATE TABLE [conversations] (
+  [id] TEXT PRIMARY KEY,
+  [name] TEXT,
+  [model] TEXT
+);
 CREATE TABLE [responses] (
   [id] TEXT PRIMARY KEY,
   [model] TEXT,
