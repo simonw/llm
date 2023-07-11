@@ -1,7 +1,6 @@
 from .hookspecs import hookimpl
 from .models import (
     Conversation,
-    LogMessage,
     Model,
     ModelWithAliases,
     Options,
@@ -22,7 +21,6 @@ __all__ = [
     "get_model",
     "get_key",
     "Conversation",
-    "LogMessage",
     "Model",
     "Options",
     "OptionsError",

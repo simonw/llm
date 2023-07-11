@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
+import json
 from pydantic import ConfigDict, BaseModel
 from ulid import ULID
 
@@ -27,21 +28,6 @@ class Prompt:
 
 class OptionsError(Exception):
     pass
-
-
-@dataclass
-class LogMessage:
-    model: str  # Actually the model.model_id string
-    prompt: str  # Simplified string version of prompt
-    system: Optional[str]  # Simplified string of system prompt
-    prompt_json: Optional[Dict[str, Any]]  # Detailed JSON of prompt
-    options_json: Dict[str, Any]  # Any options e.g. temperature
-    response: str  # Simplified string version of response
-    response_json: Optional[Dict[str, Any]]  # Detailed JSON of response
-    reply_to_id: Optional[int]  # ID of message this is a reply to
-    chat_id: Optional[
-        int
-    ]  # ID of chat this is a part of (ID of first message in thread)
 
 
 @dataclass
@@ -68,6 +54,16 @@ class Conversation:
             self.model,
             stream,
             conversation=self,
+        )
+
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_model
+
+        return cls(
+            model=get_model(row["model"]),
+            id=row["id"],
+            name=row["name"],
         )
 
 
@@ -126,29 +122,59 @@ class Response(ABC):
         self._force()
         return self._start_utcnow.isoformat()
 
-    def log_message(self) -> LogMessage:
-        return LogMessage(
-            model=self.prompt.model.model_id,
-            prompt=self.prompt.prompt,
-            system=self.prompt.system,
-            prompt_json=self._prompt_json,
-            options_json={
+    def log_to_db(self, db):
+        conversation = self.conversation
+        if not conversation:
+            conversation = Conversation(model=self.model)
+        db["conversations"].insert(
+            {
+                "id": conversation.id,
+                "name": _truncated(self.prompt.prompt or self.prompt.system or "", 32),
+                "model": conversation.model.model_id,
+            },
+            ignore=True,
+        )
+        response = {
+            "id": str(ULID()).lower(),
+            "model": self.model.model_id,
+            "prompt": self.prompt.prompt,
+            "system": self.prompt.system,
+            "prompt_json": self._prompt_json,
+            "options_json": {
                 key: value
                 for key, value in self.prompt.options.model_dump().items()
                 if value is not None
             },
-            response=self.text(),
-            response_json=self.json(),
-            reply_to_id=None,  # TODO
-            chat_id=None,  # TODO
-        )
+            "response": self.text(),
+            "response_json": self.json(),
+            "conversation_id": conversation.id,
+            "duration_ms": self.duration_ms(),
+            "datetime_utc": self.datetime_utc(),
+        }
+        db["responses"].insert(response)
 
-    def log_to_db(self, db):
-        message = self.log_message()
-        message_dict = asdict(message)
-        message_dict["duration_ms"] = self.duration_ms()
-        message_dict["datetime_utc"] = self.datetime_utc()
-        db["logs"].insert(message_dict, pk="id")
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_model
+
+        model = get_model(row["model"])
+
+        response = cls(
+            model=model,
+            prompt=Prompt(
+                prompt=row["prompt"],
+                system=row["system"],
+                model=model,
+                options=model.Options(**json.loads(row["options_json"])),
+            ),
+            stream=False,
+        )
+        response.id = row["id"]
+        response._prompt_json = json.loads(row["prompt_json"])
+        response._response_json = json.loads(row["response_json"])
+        response._done = True
+        response._chunks = [row["response"]]
+        return response
 
 
 class Options(BaseModel):
@@ -225,3 +251,9 @@ class Model(ABC):
 class ModelWithAliases:
     model: Model
     aliases: Set[str]
+
+
+def _truncated(text, length):
+    if len(text) <= length:
+        return text
+    return text[: length - 1] + "…"
