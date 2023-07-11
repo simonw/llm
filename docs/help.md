@@ -83,7 +83,7 @@ Options:
   --no-stream                  Do not stream output
   -n, --no-log                 Don't log to database
   -c, --continue               Continue the most recent conversation.
-  --chat INTEGER               Continue the conversation with the given chat ID.
+  --cid, --conversation TEXT   Continue the conversation with the given ID.
   --key TEXT                   API key to use
   --save TEXT                  Save prompt with this template name
   --help                       Show this message and exit.
