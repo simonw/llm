@@ -1,4 +1,8 @@
 from .hookspecs import hookimpl
+from .errors import (
+    ModelError,
+    NeedsKeyException,
+)
 from .models import (
     Conversation,
     Model,
@@ -6,7 +10,6 @@ from .models import (
     Options,
     Prompt,
     Response,
-    OptionsError,
 )
 from .templates import Template
 from .plugins import pm
@@ -24,10 +27,11 @@ __all__ = [
     "Conversation",
     "Model",
     "Options",
-    "OptionsError",
     "Prompt",
     "Response",
     "Template",
+    "ModelError",
+    "NeedsKeyException",
 ]
 
 
