@@ -24,7 +24,7 @@ def register_models(register):
 class Markov(llm.Model):
     model_id = "markov"
 
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation):
         return ["hello world"]
 ```
 
@@ -204,7 +204,7 @@ def generate(transitions, length, start_word=None):
 class Markov(llm.Model):
     model_id = "markov"
 
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation):
         text = prompt.prompt
         transitions = build_markov_table(text)
         for word in generate(transitions, 20):
@@ -220,6 +220,20 @@ llm -m markov "the cat sat on the mat"
 the mat the cat sat on the cat sat on the mat cat sat on the mat cat sat on
 ```
 
+## Understanding execute()
+
+The full signature of the `execute()` method is:
+```python
+def execute(self, prompt, stream, response, conversation):
+```
+The `prompt` argument is a `Prompt` object that contains the text that the user provided, the system prompt and the provided options.
+
+`stream` is a boolean that says if the model is being run in streaming mode.
+
+`response` is the `Response` object that is being created by the model. This is provided so you can write additional information to `response.response_json`, which may be logged to the database.
+
+`conversation` is the `Conversation` that the prompt is a part of - or `None` if no conversation was provided. Some models may use `conversation.responses` to access previous prompts and responses in the conversation and use them to construct a call to the LLM that includes previous context.
+
 ## Prompts and responses are logged to the database
 
 The prompt and the response will be logged to a SQLite database automatically by LLM. You can see the single most recent addition to the logs using:
@@ -230,32 +244,32 @@ The output should look something like this:
 ```json
 [
   {
-    "id": 621,
+    "id": "01h52s4yez2bd1qk2deq49wk8h",
     "model": "markov",
     "prompt": "the cat sat on the mat",
     "system": null,
     "prompt_json": null,
     "options_json": {},
-    "response": "on the cat sat on the cat sat on the mat on the mat sat on the mat on the ",
+    "response": "on the cat sat on the cat sat on the mat cat sat on the cat sat on the cat ",
     "response_json": null,
-    "reply_to_id": null,
-    "chat_id": null,
+    "conversation_id": "01h52s4yey7zc5rjmczy3ft75g",
     "duration_ms": 0,
-    "datetime_utc": "2023-07-06T01:31:48.074373"
+    "datetime_utc": "2023-07-11T15:29:34.685868",
+    "conversation_name": "the cat sat on the mat",
+    "conversation_model": "markov"
   }
 ]
 ```
-
-Plugins can log additional information to the database by assigning a dictionary to the `response._response_json` property during the `execute()` method.
+Plugins can log additional information to the database by assigning a dictionary to the `response.response_json` property during the `execute()` method.
 
 Here's how to include that full `transitions` table in the `response_json` in the log:
 ```python
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation):
         text = self.prompt.prompt
         transitions = build_markov_table(text)
         for word in generate(transitions, 20):
             yield word + ' '
-        response._response_json = {"transitions": transitions}
+        response.response_json = {"transitions": transitions}
 ```
 
 Now when you run the logs command you'll see that too:
@@ -383,10 +397,10 @@ import time
 ```
 Then replace the `execute()` method with this one:
 ```python
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation):
         text = prompt.prompt
         transitions = build_markov_table(text)
-        length = prompt.options.length or 10
+        length = prompt.options.length or 20
         for word in generate(transitions, length):
             yield word + ' '
             if prompt.options.delay:
@@ -395,74 +409,11 @@ Then replace the `execute()` method with this one:
 Add `can_stream = True` to the top of the `Markov` model class, on the line below `model_id = "markov". This tells LLM that the model is able to stream content to the console.
 
 The full `llm_markov.py` file should now look like this:
-```python
-import llm
-import random
-import time
-from typing import Optional
-from pydantic import field_validator, Field
 
-@llm.hookimpl
-def register_models(register):
-    register(Markov())
-
-def build_markov_table(text):
-    words = text.split()
-    transitions = {}
-    # Loop through all but the last word
-    for i in range(len(words) - 1):
-        word = words[i]
-        next_word = words[i + 1]
-        transitions.setdefault(word, []).append(next_word)
-    return transitions
-
-def generate(transitions, length, start_word=None):
-    all_words = list(transitions.keys())
-    next_word = start_word or random.choice(all_words)
-    for i in range(length):
-        yield next_word
-        options = transitions.get(next_word) or all_words
-        next_word = random.choice(options)
-
-class Markov(llm.Model):
-    model_id = "markov"
-    can_stream = True
-
-    class Options(llm.Options):
-        length: Optional[int] = Field(
-            description="Number of words to generate",
-            default=None
-        )
-        delay: Optional[float] = Field(
-            description="Seconds to delay between each token",
-            default=None
-        )
-
-        @field_validator("length")
-        def validate_length(cls, length):
-            if length is None:
-                return None
-            if length < 2:
-                raise ValueError("length must be >= 2")
-            return length
-
-        @field_validator("delay")
-        def validate_delay(cls, delay):
-            if delay is None:
-                return None
-            if not 0 <= delay <= 10:
-                raise ValueError("delay must be between 0 and 10")
-            return delay
-
-    def execute(self, prompt, stream, response):
-        text = prompt.prompt
-        transitions = build_markov_table(text)
-        length = prompt.options.length or 10
-        for word in generate(transitions, length):
-            yield word + ' '
-            if prompt.options.delay:
-                time.sleep(prompt.options.delay)
+```{literalinclude} llm-markov/llm_markov.py
+:language: python
 ```
+
 Now we can request a 20 word completion with a 0.1s delay between tokens like this:
 ```bash
 llm -m markov "the cat sat on the mat" \
