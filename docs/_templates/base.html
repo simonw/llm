@@ -1,5 +1,15 @@
 {%- extends "!base.html" %}
 
+{%- block htmltitle -%}
+{% if not docstitle %}
+  <title>{{ title|striptags|e }}</title>
+{% elif pagename == master_doc %}
+  <title>LLM: A CLI utility and Python library for interacting with Large Language Models</title>
+{% else %}
+  <title>{{ title|striptags|e }} - {{ docstitle|striptags|e }}</title>
+{% endif %}
+{%- endblock -%}
+
 {% block site_meta %}
 {{ super() }}
 <script defer data-domain="llm.datasette.io" src="https://plausible.io/js/plausible.js"></script>
