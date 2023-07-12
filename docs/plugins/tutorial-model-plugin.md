@@ -498,11 +498,11 @@ Here's an example Gist I created for this tutorial:
 
 You can turn a Gist into an installable `.zip` URL by right-clicking on the "Download ZIP" button and selecting "Copy Link". Here's that link for my example Gist:
 
-`https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/c7faa326fe19d1082cba13e28a4f4d9c1303e487.zip`
+`https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/cc50c854414cb4deab3e3ab17e7e1e07d45cba0c.zip`
 
 The plugin can be installed using the `llm install` command like this:
 ```bash
-llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/c7faa326fe19d1082cba13e28a4f4d9c1303e487.zip'
+llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/cc50c854414cb4deab3e3ab17e7e1e07d45cba0c.zip'
 ```
 
 ## GitHub repositories
