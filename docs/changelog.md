@@ -2,11 +2,21 @@
 
 ## Unreleased
 
+LLM now supports multiple language models, thanks to a new {ref}`plugins` hook for registering additional models.
+
+Plugins are available for 19 models in addition to the default OpenAI ones.
+
+- [llm-gpt4all](https://github.com/simonw/llm-gpt4all) adds support for 17 models that can download and run on your own device, including Vicuna, Falcon and wizardLM.
+- [llm-mpt30b](https://github.com/simonw/llm-mpt30b) adds support for the MPT-30B model, a 19GB download.
+- [llm-palm](https://github.com/simonw/llm-palm) adds support for Google's PaLM 2 via the Google API.
+
+A comprehensive tutorial, {ref}`writing a plugin to support a new model <tutorial-model-plugin>` describes how to add new models by building plugins in detail.
+
 - `llm "prompt" --save template` option for saving a prompt directly to a template. [#55](https://github.com/simonw/llm/issues/55)
 - Prompt templates can now specify {ref}`default values <prompt-default-parameters>` for parameters. Thanks,  Chris Mungall. [#57](https://github.com/simonw/llm/pull/57)
 - New `-o/--option name value` syntax for setting options for models, such as temperature. Available options differ for different models. [#63](https://github.com/simonw/llm/issues/63)
 - `llm models list --options` command for viewing all available model options. [#82](https://github.com/simonw/llm/issues/82)
-- `-m 4-32k` alias for `gpt-4-32k`.
+- `llm -m 4-32k` alias for `gpt-4-32k`.
 - `llm openai models` command to list all available OpenAI models from their API. [#70](https://github.com/simonw/llm/issues/70)
 - `llm -s` is now a shortcut for `llm --system`. [#69](https://github.com/simonw/llm/issues/69)
 - `llm models default MODEL_ID` to set a different model as the default to be used when `llm` is run without the `-m/--model` option. [#31](https://github.com/simonw/llm/issues/31)
