@@ -247,15 +247,11 @@ def prompt(
         raise click.ClickException(str(ex))
 
     # Log to the database
-    if no_log:
-        return
-
-    log_path = logs_db_path()
-    if not log_path.exists():
-        return
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    response.log_to_db(db)
+    if logs_on():
+        log_path = logs_db_path()
+        db = sqlite_utils.Database(log_path)
+        migrate(db)
+        response.log_to_db(db)
 
 
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
@@ -358,6 +354,10 @@ def logs_status():
     if not path.exists():
         click.echo("No log database found at {}".format(path))
         return
+    if logs_on():
+        click.echo("Logging is ON for all prompts".format())
+    else:
+        click.echo("Logging is OFF".format())
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo("Found log database at {}".format(path))
@@ -366,6 +366,21 @@ def logs_status():
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
+
+
+@logs.command(name="on")
+def logs_turn_on():
+    "Turn on logging for all prompts"
+    path = user_dir() / "logs-off"
+    if path.exists():
+        path.unlink()
+
+
+@logs.command(name="off")
+def logs_turn_off():
+    "Turn off logging for all prompts"
+    path = user_dir() / "logs-off"
+    path.touch()
 
 
 @logs.command(name="list")
@@ -687,3 +702,7 @@ def _human_readable_size(size_bytes):
         i += 1
 
     return "{:.2f}{}".format(size_bytes, size_name[i])
+
+
+def logs_on():
+    return not (user_dir() / "logs-off").exists()

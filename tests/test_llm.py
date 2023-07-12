@@ -65,11 +65,25 @@ def test_logs_path(monkeypatch, env, user_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
-def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
+@pytest.mark.parametrize("logs_off", (True, False))
+def test_llm_default_prompt(mocked_openai, use_stdin, user_path, logs_off):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
     log_db["responses"].delete_where()
+
+    logs_off_path = user_path / "logs-off"
+    if logs_off:
+        # Turn off logging
+        assert not logs_off_path.exists()
+        CliRunner().invoke(cli, ["logs", "off"])
+        assert logs_off_path.exists()
+    else:
+        # Turn on logging
+        CliRunner().invoke(cli, ["logs", "on"])
+        assert not logs_off_path.exists()
+
+    # Run the prompt
     runner = CliRunner()
     prompt = "three names for a pet pelican"
     input = None
@@ -85,6 +99,11 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
 
     # Was it logged?
     rows = list(log_db["responses"].rows)
+
+    if logs_off:
+        assert len(rows) == 0
+        return
+
     assert len(rows) == 1
     expected = {
         "model": "gpt-3.5-turbo",
@@ -109,6 +128,8 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path):
     # Test "llm logs"
     log_result = runner.invoke(cli, ["logs", "-n", "1"], catch_exceptions=False)
     log_json = json.loads(log_result.output)
+
+    # Should have logged correctly:
     assert (
         log_json[0].items()
         >= {

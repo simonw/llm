@@ -147,6 +147,8 @@ Options:
 
 Commands:
   list*   Show recent logged prompts and their responses
+  off     Turn off logging for all prompts
+  on      Turn on logging for all prompts
   path    Output the path to the logs.db file
   status  Show current status of database logging
 ```
@@ -164,6 +166,24 @@ Options:
 Usage: llm logs status [OPTIONS]
 
   Show current status of database logging
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm logs on --help
+```
+Usage: llm logs on [OPTIONS]
+
+  Turn on logging for all prompts
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm logs off --help
+```
+Usage: llm logs off [OPTIONS]
+
+  Turn off logging for all prompts
 
 Options:
   --help  Show this message and exit.
