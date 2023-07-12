@@ -38,15 +38,15 @@ You can opt to continue the previous conversation by passing the `-c/--continue`
 
     llm 'More names' --continue
 
-This will re-send the prompts and responses for the previous conversation. Note that this can add up quickly in terms of tokens, especially if you are using more expensive models.
+This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
 
-To continue a conversation that is not the most recent one, use the `--chat <id>` option:
+`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
 
-    llm 'More names' --chat 2
+To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
 
-You can find these chat IDs using the `llm logs` command.
+    llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
 
-Note that this feature only works if you have been logging your previous conversations to a database, having run the `llm init-db` command described below.
+You can find these conversation IDs using the `llm logs` command.
 
 ## Using with a shell
 
