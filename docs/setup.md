@@ -31,6 +31,14 @@ brew tap --repair simonw/llm
 brew upgrade simonw/llm/llm
 ```
 
+## Installing plugins
+
+{ref}`plugins` can be used to add support for other language models, including models that can run on your own device.
+
+For example, the [llm-gpt4all](https://github.com/simonw/llm-gpt4all) plugin adds support for 17 new models that can be installed on your own machine. You can install that like so:
+```bash
+llm install llm-gpt4all
+```
 ## Authentication
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.

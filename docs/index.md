@@ -10,6 +10,8 @@ A command-line utility for interacting with Large Language Models, such as OpenA
 
 ## Quick start
 
+You'll need an [OpenAI API key](https://platform.openai.com/account/api-keys) for this:
+
 ```bash
 # Install LLM
 pip install llm
@@ -20,7 +22,13 @@ llm keys set openai
 
 # Run a prompt
 llm "Ten fun names for a pet pelican"
+
+# Run a system prompt against a file
+cat myfile.py | llm -s "Explain this code"
 ```
+
+You can also [install plugins](https://github.com/simonw/llm-plugins) to access models by other providers, including models that can be installed and run on your own device.
+
 
 ## Contents
 
