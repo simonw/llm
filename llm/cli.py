@@ -5,6 +5,7 @@ from llm import (
     Conversation,
     Response,
     Template,
+    UnknownModelError,
     get_key,
     get_plugins,
     get_model,
@@ -184,7 +185,10 @@ def prompt(
     conversation = None
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
-        conversation = load_conversation(conversation_id)
+        try:
+            conversation = load_conversation(conversation_id)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
 
     # Figure out which model we are using
     if model_id is None:

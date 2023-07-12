@@ -79,7 +79,7 @@ def get_model(name):
     try:
         return aliases[name]
     except KeyError:
-        raise UnknownModelError(name)
+        raise UnknownModelError("Unknown model: " + name)
 
 
 def get_key(key_arg, default_key, env_var=None):
