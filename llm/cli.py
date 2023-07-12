@@ -351,6 +351,23 @@ def logs_path():
     click.echo(logs_db_path())
 
 
+@logs.command(name="status")
+def logs_status():
+    "Show current status of database logging"
+    path = logs_db_path()
+    if not path.exists():
+        click.echo("No log database found at {}".format(path))
+        return
+    db = sqlite_utils.Database(path)
+    migrate(db)
+    click.echo("Found log database at {}".format(path))
+    click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
+    click.echo("Number of responses logged:\t{}".format(db["responses"].count))
+    click.echo(
+        "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
+    )
+
+
 @logs.command(name="list")
 @click.option(
     "-n",
@@ -656,3 +673,17 @@ def render_errors(errors):
 
 
 pm.hook.register_commands(cli=cli)
+
+
+def _human_readable_size(size_bytes):
+    if size_bytes == 0:
+        return "0B"
+
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = 0
+
+    while size_bytes >= 1024 and i < len(size_name) - 1:
+        size_bytes /= 1024.0
+        i += 1
+
+    return "{:.2f}{}".format(size_bytes, size_name[i])

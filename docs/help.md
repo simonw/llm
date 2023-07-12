@@ -146,14 +146,24 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  Show recent logged prompts and their responses
-  path   Output the path to the logs.db file
+  list*   Show recent logged prompts and their responses
+  path    Output the path to the logs.db file
+  status  Show current status of database logging
 ```
 #### llm logs path --help
 ```
 Usage: llm logs path [OPTIONS]
 
   Output the path to the logs.db file
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm logs status --help
+```
+Usage: llm logs status [OPTIONS]
+
+  Show current status of database logging
 
 Options:
   --help  Show this message and exit.
