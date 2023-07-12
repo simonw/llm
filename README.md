@@ -16,31 +16,35 @@ See [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLM
 ## Installation
 
 Install this tool using `pip`:
-
-    pip install llm
-
+```bash
+pip install llm
+```
 Or using [Homebrew](https://brew.sh/):
-
-    brew install simonw/llm/llm
-
+```bash
+brew install simonw/llm/llm
+```
 [Detailed installation instructions](https://llm.datasette.io/en/stable/setup.html).
 
 ## Getting started
 
-First, create an OpenAI API key and save it to the tool like this:
+If you have an [OpenAI API key](https://platform.openai.com/account/api-keys) you can get started using the OpenAI models right away.
 
-```
+(You can [install plugins](https://github.com/simonw/llm-plugins) to access models by other providers, including models that can be installed and run on your own device.)
+
+Save your OpenAI API key like this:
+
+```bash
 llm keys set openai
 ```
 This will prompt you for your key like so:
+```bash
+llm keys set openai
 ```
-$ llm keys set openai
-Enter key:
 ```
-
+Enter key: <paste here>
+```
 Now that you've saved a key you can run a prompt like this:
-
-```
+```bash
 llm "Five cute names for a pet penguin"
 ```
 ```
@@ -51,6 +55,17 @@ llm "Five cute names for a pet penguin"
 5. Chilly
 ```
 Read the [usage instructions](https://llm.datasette.io/en/stable/usage.html) for more.
+
+## Using a system prompt
+
+You can use the `-s/--system` option to set a system prompt, providing instructions for processing other input to the tool.
+
+To describe how the code a file works, try this:
+
+```bash
+cat mycode.py | llm -s "Explain this code"
+```
+
 
 ## Help
 
