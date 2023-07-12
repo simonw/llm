@@ -4,6 +4,20 @@
 
 - `llm "prompt" --save template` option for saving a prompt directly to a template. [#55](https://github.com/simonw/llm/issues/55)
 - Prompt templates can now specify {ref}`default values <prompt-default-parameters>` for parameters. Thanks,  Chris Mungall. [#57](https://github.com/simonw/llm/pull/57)
+- New `-o/--option name value` syntax for setting options for models, such as temperature. Available options differ for different models. [#63](https://github.com/simonw/llm/issues/63)
+- `llm models list --options` command for viewing all available model options. [#82](https://github.com/simonw/llm/issues/82)
+- `-m 4-32k` alias for `gpt-4-32k`.
+- `llm openai models` command to list all available OpenAI models from their API. [#70](https://github.com/simonw/llm/issues/70)
+- `llm -s` is now a shortcut for `llm --system`. [#69](https://github.com/simonw/llm/issues/69)
+- `llm models default MODEL_ID` to set a different model as the default to be used when `llm` is run without the `-m/--model` option. [#31](https://github.com/simonw/llm/issues/31)
+- [Python API](https://llm.datasette.io/en/stable/python-api.html) documentation for using LLM models, including models from plugins, directly from Python. [#75](https://github.com/simonw/llm/issues/75)
+- Messages are now logged to the database by default - no need to run the `llm init-db` command any more, which has been removed. Instead, you can toggle this behavior off using `llm logs off` or turn it on again using `llm logs on`. The `llm logs status` command shows the current status of the log database. If logging is turned off, passing `--log` to the `llm prompt` command will cause that prompt to be logged anyway. [#98](https://github.com/simonw/llm/issues/98)
+- New database schema for logged messages, with `conversations` and `responses` tables. If you have previously used the old `logs` table it will continue to exist but will no longer be written to. [#91](https://github.com/simonw/llm/issues/91)
+- `llm install -e directory` command for installing a plugin from a local directory.
+- [Comprehensive tutorial](https://llm.datasette.io/en/stable/plugins/tutorial-model-plugin.html) on writing plugins that implement new models.
+- The `LLM_USER_PATH` environment variable now controls the location of the directory in which LLM stores its data. This replaces the old `LLM_KEYS_PATH` and `LLM_LOG_PATH` and `LLM_TEMPLATES_PATH` variables. [#76](https://github.com/simonw/llm/issues/76)
+- Documentation site now uses Plausible for analytics. [#79](https://github.com/simonw/llm/issues/79)
+- Documentation covering [utility functions for plugins](https://llm.datasette.io/en/latest/plugins/plugin-utilities.html).
 
 (v0_4_1)=
 ## 0.4.1 (2023-06-17)
