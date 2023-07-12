@@ -10,7 +10,7 @@ Or using [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
-Or using [Homebrew](https://brew.sh/):
+Or using [Homebrew](https://brew.sh/) (much slower):
 ```bash
 brew install simonw/llm/llm
 ```

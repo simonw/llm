@@ -21,7 +21,7 @@ Install this tool using `pip`:
 ```bash
 pip install llm
 ```
-Or using [Homebrew](https://brew.sh/):
+Or using [Homebrew](https://brew.sh/) (much slower):
 ```bash
 brew install simonw/llm/llm
 ```
