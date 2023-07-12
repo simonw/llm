@@ -1,3 +1,4 @@
+(plugin-utilities)=
 # Utility functions for plugins
 
 LLM provides some utility functions that may be useful to plugins.

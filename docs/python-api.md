@@ -1,3 +1,4 @@
+(python-api)=
 # Python API
 
 LLM provides a Python API for executing prompts, in addition to the command-line interface.
