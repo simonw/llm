@@ -1,13 +1,9 @@
+(logging)=
 # Logging to SQLite
 
-`llm` can log all prompts and responses to a SQLite database.
+`llm` defaults to logging all prompts and responses to a SQLite database.
 
-First, create a database in the correct location. You can do that using the `llm init-db` command:
-
-```bash
-llm init-db
-```
-This creates a database in a directory on your computer. You can find the location of that database using the `llm logs path` command:
+You can find the location of that database using the `llm logs path` command:
 
 ```bash
 llm logs path
@@ -18,12 +14,35 @@ On my Mac that outputs:
 ```
 This will differ for other operating systems.
 
-Once that SQLite database has been created any prompts you run will be logged to that database.
-
-To avoid logging a prompt, pass `--no-log` or `-n` to the command:
+To avoid logging an individual prompt, pass `--no-log` or `-n` to the command:
 ```bash
 llm 'Ten names for cheesecakes' -n
 ```
+
+To turn logging by default off:
+
+```bash
+llm logs off
+```
+To turn it back on again:
+
+```bash
+llm logs on
+```
+
+To see the status of that database, run this:
+```bash
+llm logs status
+```
+Example output:
+```
+Logging is ON for all prompts
+Found log database at /Users/simon/Library/Application Support/io.datasette.llm/logs.db
+Number of conversations logged: 32
+Number of responses logged:     47
+Database file size:             19.96MB
+```
+
 ## Viewing the logs
 
 You can view the logs using the `llm logs` command:

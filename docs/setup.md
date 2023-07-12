@@ -98,7 +98,26 @@ If no environment variable is found, the tool will fall back to checking `keys.j
 
 You can force the tool to use the key from `keys.json` even if an environment variable has also been set using `llm "prompt" --key openai`.
 
-## Custom directory location
+## Configuration
+
+You can configure LLM in a number of different ways.
+
+### Setting a custom default model
+
+The model used when calling `llm` without the `-m/--model` option defaults to `gpt-3.5-turbo` - the fastest and least expensive OpenAI model, and the same model family that powers ChatGPT.
+
+You can use the `llm models default` command to set a different default model. For GPT-4 (slower and more expensive, but more capable) run this:
+
+```bash
+llm models default gpt-4
+```
+You can view the current model by running this:
+```
+llm models default
+```
+Any of the supported aliases for a model can be passed to this command.
+
+### Setting a custom directory location
 
 This tool stores various files - prompt templates, stored keys, preferences, a database of logs - in a directory on your computer.
 
@@ -111,3 +130,16 @@ You can set a custom location for this directory by setting the `LLM_USER_PATH` 
 ```bash
 export LLM_USER_PATH=/path/to/my/custom/directory
 ```
+### Turning SQLite logging on and off
+
+By default, LLM will log every prompt and response you make to a SQLite database - see {ref}`logging` for more details.
+
+You can turn this behavior off by default by running:
+```bash
+llm logs off
+```
+Or turn it back on again with:
+```
+llm logs on
+```
+Run `llm logs status` to see the current states of the setting.
