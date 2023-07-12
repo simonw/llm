@@ -14,7 +14,10 @@ def get_long_description():
 
 setup(
     name="llm",
-    description="Access large language models from the command-line",
+    description=(
+        "A CLI utility and Python library for interacting with Large Language Models, "
+        "including OpenAI, PaLM and local models installed on your own machine.",
+    ),
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
     author="Simon Willison",
