@@ -29,7 +29,7 @@ brew install simonw/llm/llm
 
 If you have an [OpenAI API key](https://platform.openai.com/account/api-keys) you can get started using the OpenAI models right away.
 
-(You can [install plugins](https://github.com/simonw/llm-plugins) to access models by other providers, including models that can be installed and run on your own device.)
+As an alternative to OpenAI, you can [install plugins](https://llm.datasette.io/en/stable/plugins/installing-plugins.html) to access models by other providers, including models that can be installed and run on your own device.
 
 Save your OpenAI API key like this:
 

@@ -2,7 +2,7 @@
 
 The default command for this is `llm prompt` - you can use `llm` instead if you prefer.
 
-## Executing a prompt
+## Executing a prompt against OpenAI
 
 To run a prompt, streaming tokens as they come in:
 ```bash
@@ -30,49 +30,66 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
+## Installing and using a local model
+
+{ref}`LLM plugins <plugins>` can provide local models that run on your machine.
+
+To install [llm-gpt4all](https://github.com/simonw/llm-gpt4all), providing 17 models from the [GPT4All](https://gpt4all.io/) project, run this:
+
+```bash
+llm install llm-gpt4all
+```
+Run `llm models list` to see the expanded list of available models.
+
+To run a prompt through one of the models from GPT4All specify it using `-m/--model`:
+```bash
+llm -m ggml-vicuna-7b-1 'What is the capital of France?'
+```
+The model will be downloaded and cached the first time you use it.
+
 ## Continuing a conversation
 
 By default, the tool will start a new conversation each time you run it.
 
 You can opt to continue the previous conversation by passing the `-c/--continue` option:
-
-    llm 'More names' --continue
-
+```bash
+llm 'More names' --continue
+```
 This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
 
 `--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
 
 To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
-
-    llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
-
+```bash
+llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
+```
 You can find these conversation IDs using the `llm logs` command.
 
 ## Using with a shell
 
 To generate a description of changes made to a Git repository since the last commit:
-
-    llm "Describe these changes: $(git diff)"
-
+```bash
+llm "Describe these changes: $(git diff)"
+```
 This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
 
 ## System prompts
 
 You can use `-s/--system '...'` to set a system prompt.
-
-    llm 'SQL to calculate total sales by month' \
-      --system 'You are an exaggerated sentient cheesecake that knows SQL and talks about cheesecake a lot'
-
+```bash
+llm 'SQL to calculate total sales by month' \
+  --system 'You are an exaggerated sentient cheesecake that knows SQL and talks about cheesecake a lot'
+```
 This is useful for piping content to standard input, for example:
-
-    curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
-      llm -s 'Suggest topics for this post as a JSON array'
-
+```bash
+curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
+  llm -s 'Suggest topics for this post as a JSON array'
+```
 ## Listing available models
 
 The `llm models list` command lists every model that can be used with LLM, along with any aliases:
 
-```
+```bash
 llm models list
 ```
 Example output:

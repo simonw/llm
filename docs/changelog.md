@@ -3,7 +3,7 @@
 (v0_5)=
 ## Unreleased
 
-LLM now supports **additional language models**, thanks to a new {ref}`plugins` mechanism for registering additional models.
+LLM now supports **additional language models**, thanks to a new {ref}`plugins mechanism <installing-plugins>` for installing additional models.
 
 Plugins are available for 19 models in addition to the default OpenAI ones:
 
