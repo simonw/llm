@@ -284,22 +284,6 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     return conversation
 
 
-@cli.command()
-def init_db():
-    """
-    Ensure the logs.db SQLite database exists
-
-    All subsequent prompts will be logged to this database.
-    """
-    path = logs_db_path()
-    if path.exists():
-        return
-    # Ensure directory exists
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(path)
-    db.vacuum()
-
-
 @cli.group()
 def keys():
     "Manage stored API keys for different models"
@@ -665,10 +649,6 @@ def get_history(chat_id):
     if chat_id is None:
         return None, []
     log_path = logs_db_path()
-    if not log_path.exists():
-        raise click.ClickException(
-            "This feature requires logging. Run `llm init-db` to create logs.db"
-        )
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if chat_id == -1:

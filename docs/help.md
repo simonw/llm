@@ -56,7 +56,6 @@ Options:
 
 Commands:
   prompt*    Execute a prompt
-  init-db    Ensure the logs.db SQLite database exists
   install    Install packages from PyPI into the same environment as LLM
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
@@ -88,17 +87,6 @@ Options:
   --key TEXT                   API key to use
   --save TEXT                  Save prompt with this template name
   --help                       Show this message and exit.
-```
-### llm init-db --help
-```
-Usage: llm init-db [OPTIONS]
-
-  Ensure the logs.db SQLite database exists
-
-  All subsequent prompts will be logged to this database.
-
-Options:
-  --help  Show this message and exit.
 ```
 ### llm keys --help
 ```
