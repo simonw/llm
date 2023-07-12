@@ -65,8 +65,20 @@ def test_logs_path(monkeypatch, env, user_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
-@pytest.mark.parametrize("logs_off", (True, False))
-def test_llm_default_prompt(mocked_openai, use_stdin, user_path, logs_off):
+@pytest.mark.parametrize(
+    "logs_off,logs_args,should_log",
+    (
+        (True, [], False),
+        (False, [], True),
+        (False, ["--no-log"], False),
+        (False, ["--log"], True),
+        (True, ["-n"], False),  # Short for --no-log
+        (True, ["--log"], True),
+    ),
+)
+def test_llm_default_prompt(
+    mocked_openai, use_stdin, user_path, logs_off, logs_args, should_log
+):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
@@ -92,6 +104,7 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path, logs_off):
         input = prompt
     else:
         args.append(prompt)
+    args += logs_args
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
@@ -100,7 +113,7 @@ def test_llm_default_prompt(mocked_openai, use_stdin, user_path, logs_off):
     # Was it logged?
     rows = list(log_db["responses"].rows)
 
-    if logs_off:
+    if not should_log:
         assert len(rows) == 0
         return
 

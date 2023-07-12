@@ -80,6 +80,7 @@ def cli():
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
+@click.option("--log", is_flag=True, help="Log prompt and response to the database")
 @click.option(
     "_continue",
     "-c",
@@ -105,6 +106,7 @@ def prompt(
     param,
     no_stream,
     no_log,
+    log,
     _continue,
     conversation_id,
     key,
@@ -115,6 +117,9 @@ def prompt(
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
     """
+    if log and no_log:
+        raise click.ClickException("--log and --no-log are mutually exclusive")
+
     model_aliases = get_model_aliases()
 
     def read_prompt():
@@ -247,7 +252,7 @@ def prompt(
         raise click.ClickException(str(ex))
 
     # Log to the database
-    if logs_on():
+    if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
         db = sqlite_utils.Database(log_path)
         migrate(db)

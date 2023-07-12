@@ -82,6 +82,7 @@ Options:
   -p, --param <TEXT TEXT>...   Parameters for template
   --no-stream                  Do not stream output
   -n, --no-log                 Don't log to database
+  --log                        Log prompt and response to the database
   -c, --continue               Continue the most recent conversation.
   --cid, --conversation TEXT   Continue the conversation with the given ID.
   --key TEXT                   API key to use

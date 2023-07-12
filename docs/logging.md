@@ -24,13 +24,16 @@ To turn logging by default off:
 ```bash
 llm logs off
 ```
-To turn it back on again:
+If you've turned off logging you can still log an individual prompt and response by adding `--log`:
+```bash
+llm 'Five ambitious names for a pet pterodactyl' --log
+```
+To turn logging by default back on again:
 
 ```bash
 llm logs on
 ```
-
-To see the status of that database, run this:
+To see the status of the logs database, run this:
 ```bash
 llm logs status
 ```
@@ -38,8 +41,8 @@ Example output:
 ```
 Logging is ON for all prompts
 Found log database at /Users/simon/Library/Application Support/io.datasette.llm/logs.db
-Number of conversations logged: 32
-Number of responses logged:     47
+Number of conversations logged: 33
+Number of responses logged:     48
 Database file size:             19.96MB
 ```
 
