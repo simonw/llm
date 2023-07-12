@@ -1,7 +1,7 @@
 # Changelog
 
 (v0_5)=
-## Unreleased
+## 0.5 (2023-07-12)
 
 LLM now supports **additional language models**, thanks to a new {ref}`plugins mechanism <installing-plugins>` for installing additional models.
 
