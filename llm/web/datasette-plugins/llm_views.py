@@ -1,4 +1,3 @@
-import asyncio
 from datasette import hookimpl, Response
 import openai
 
