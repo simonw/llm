@@ -632,6 +632,39 @@ def uninstall(packages, yes):
     run_module("pip", run_name="__main__")
 
 
+@cli.command()
+def web():
+    try:
+        from datasette.app import Datasette
+    except ImportError:
+        raise click.ClickException(
+            "datasette is not installed - run: llm install datasette"
+        )
+    try:
+        import uvicorn
+    except ImportError:
+        raise click.ClickException(
+            "uvicorn is not installed - run: llm install uvicorn"
+        )
+    path = logs_db_path()
+    ds = Datasette(
+        [path],
+        plugins_dir=str(pathlib.Path(__file__).parent / "web" / "datasette-plugins"),
+        metadata={
+            "databases": {
+                "log": {
+                    "tables": {
+                        "log": {
+                            "sort_desc": "id",
+                        }
+                    }
+                }
+            }
+        },
+    )
+    uvicorn.run(ds.app(), host="0.0.0.0", port=8302)
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
