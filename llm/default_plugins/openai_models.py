@@ -168,13 +168,13 @@ class Chat(Model):
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
-        openai.api_key = self.key
         response._prompt_json = {"messages": messages}
         if stream:
             completion = openai.ChatCompletion.create(
                 model=prompt.model.model_id,
                 messages=messages,
                 stream=True,
+                api_key=self.key,
                 **not_nulls(prompt.options),
             )
             chunks = []
@@ -188,6 +188,7 @@ class Chat(Model):
             completion = openai.ChatCompletion.create(
                 model=prompt.model.model_id,
                 messages=messages,
+                api_key=self.key,
                 stream=False,
             )
             response.response_json = completion.to_dict_recursive()

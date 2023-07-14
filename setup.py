@@ -45,7 +45,7 @@ setup(
         "pluggy",
         "python-ulid",
         "setuptools",
-        "pip"
+        "pip",
     ],
     extras_require={
         "test": [
