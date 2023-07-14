@@ -44,6 +44,8 @@ setup(
         "PyYAML",
         "pluggy",
         "python-ulid",
+        "setuptools",
+        "pip"
     ],
     extras_require={
         "test": [
