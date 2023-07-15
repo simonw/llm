@@ -96,7 +96,7 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses"):
+for table in ("conversations", "responses", "responses_fts"):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -121,5 +121,11 @@ CREATE TABLE [responses] (
   [duration_ms] INTEGER,
   [datetime_utc] TEXT
 );
+CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
+  [prompt],
+  [response],
+  content=[responses]
+);
 ```
 <!-- [[[end]]] -->
+`responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table.

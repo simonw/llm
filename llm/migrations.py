@@ -195,3 +195,8 @@ def m010_create_new_log_tables(db):
         pk="id",
         foreign_keys=(("conversation_id", "conversations", "id"),),
     )
+
+
+@migration
+def m011_fts_for_responses(db):
+    db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
