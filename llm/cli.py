@@ -372,6 +372,40 @@ def logs_turn_off():
     path.touch()
 
 
+LOGS_COLUMNS = """    responses.id,
+    responses.model,
+    responses.prompt,
+    responses.system,
+    responses.prompt_json,
+    responses.options_json,
+    responses.response,
+    responses.response_json,
+    responses.conversation_id,
+    responses.duration_ms,
+    responses.datetime_utc,
+    conversations.name as conversation_name,
+    conversations.model as conversation_model"""
+
+LOGS_SQL = """
+select
+{columns}
+from
+    responses
+left join conversations on responses.conversation_id = conversations.id{where}
+order by responses.id desc{limit}
+"""
+LOGS_SQL_SEARCH = """
+select
+{columns}
+from
+    responses
+left join conversations on responses.conversation_id = conversations.id
+join responses_fts on responses_fts.rowid = responses.rowid
+where responses_fts match :query{extra_where}
+order by responses_fts.rank desc{limit}
+"""
+
+
 @logs.command(name="list")
 @click.option(
     "-n",
@@ -386,8 +420,9 @@ def logs_turn_off():
     help="Path to log database",
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
+@click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
-def logs_list(count, path, model, truncate):
+def logs_list(count, path, model, query, truncate):
     "Show recent logged prompts and their responses"
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
@@ -404,33 +439,21 @@ def logs_list(count, path, model, truncate):
             # Maybe they uninstalled a model, use the -m option as-is
             model_id = model
 
-    rows = list(
-        db.query(
-            """
-        select
-            responses.id,
-            responses.model,
-            responses.prompt,
-            responses.system,
-            responses.prompt_json,
-            responses.options_json,
-            responses.response,
-            responses.response_json,
-            responses.conversation_id,
-            responses.duration_ms,
-            responses.datetime_utc,
-            conversations.name as conversation_name,
-            conversations.model as conversation_model
-        from
-            responses
-        left join conversations on responses.conversation_id = conversations.id{where}
-        order by responses.id desc{limit}
-    """.format(
-                where=" where responses.model = :model" if model_id else "",
-                limit=" limit {}".format(count) if count else "",
-            ),
-            {"model": model_id},
+    sql = LOGS_SQL
+    format_kwargs = {
+        "limit": " limit {}".format(count) if count else "",
+        "columns": LOGS_COLUMNS,
+    }
+    if query:
+        sql = LOGS_SQL_SEARCH
+        format_kwargs["extra_where"] = (
+            " and responses.model = :model" if model_id else ""
         )
+    else:
+        format_kwargs["where"] = " where responses.model = :model" if model_id else ""
+
+    rows = list(
+        db.query(sql.format(**format_kwargs), {"model": model_id, "query": query})
     )
     for row in rows:
         if truncate:

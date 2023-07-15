@@ -85,6 +85,40 @@ def test_logs_filtered(user_path, model):
     assert all(record["model"] == model for record in records)
 
 
+@pytest.mark.parametrize(
+    "query,expected",
+    (
+        ("", ["doc3", "doc2", "doc1"]),
+        ("llama", ["doc1", "doc3"]),
+        ("alpaca", ["doc2"]),
+    ),
+)
+def test_logs_search(user_path, query, expected):
+    log_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    def _insert(id, text):
+        db["responses"].insert(
+            {
+                "id": id,
+                "system": "system",
+                "prompt": text,
+                "response": "response",
+                "model": "davinci",
+            }
+        )
+
+    _insert("doc1", "llama")
+    _insert("doc2", "alpaca")
+    _insert("doc3", "llama llama")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "list", "-q", query])
+    assert result.exit_code == 0
+    records = json.loads(result.output.strip())
+    assert [record["id"] for record in records] == expected
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
 @pytest.mark.parametrize(

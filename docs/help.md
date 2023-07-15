@@ -187,6 +187,7 @@ Options:
   -n, --count INTEGER  Number of entries to show - 0 for all
   -p, --path FILE      Path to log database
   -m, --model TEXT     Filter by model or model alias
+  -q, --query TEXT     Search for logs matching this string
   -t, --truncate       Truncate long strings in output
   --help               Show this message and exit.
 ```

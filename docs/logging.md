@@ -62,6 +62,10 @@ Or `-n 0` to see everything that has ever been logged:
 ```bash
 llm logs -n 0
 ```
+You can search the logs for a search term in the `prompt` or the `response` columns:
+```bash
+llm logs -q 'cheesecake'
+```
 You can filter to logs just for a specific model (or model alias) using `-m/--model`:
 ```bash
 llm logs -m chatgpt
