@@ -84,3 +84,13 @@ To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](http
 If the `api_base` is set, the existing configured `openai` API key will not be sent by default.
 
 You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
+
+Having configured the model like this, run `llm models list` to check that it installed correctly. You can then run prompts against it like so:
+
+```bash
+llm -m orca-openai-compat 'What is the capital of France?'
+```
+And confirm they were logged correctly with:
+```bash
+llm logs -n 1
+```
