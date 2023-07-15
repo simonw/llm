@@ -385,14 +385,25 @@ def logs_turn_off():
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
 )
+@click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
-def logs_list(count, path, truncate):
+def logs_list(count, path, model, truncate):
     "Show recent logged prompts and their responses"
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    model_id = None
+    if model:
+        # Resolve alias, if any
+        try:
+            model_id = get_model(model).model_id
+        except UnknownModelError:
+            # Maybe they uninstalled a model, use the -m option as-is
+            model_id = model
+
     rows = list(
         db.query(
             """
@@ -412,11 +423,13 @@ def logs_list(count, path, truncate):
             conversations.model as conversation_model
         from
             responses
-        left join conversations on responses.conversation_id = conversations.id
-        order by responses.id desc{}
+        left join conversations on responses.conversation_id = conversations.id{where}
+        order by responses.id desc{limit}
     """.format(
-                " limit {}".format(count) if count else ""
-            )
+                where=" where responses.model = :model" if model_id else "",
+                limit=" limit {}".format(count) if count else "",
+            ),
+            {"model": model_id},
         )
     )
     for row in rows:

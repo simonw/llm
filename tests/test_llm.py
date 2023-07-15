@@ -63,6 +63,28 @@ def test_logs_path(monkeypatch, env, user_path):
     assert result.output.strip() == expected
 
 
+@pytest.mark.parametrize("model", ("davinci", "curie"))
+def test_logs_filtered(user_path, model):
+    log_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert_all(
+        {
+            "id": str(ULID()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci" if i % 2 == 0 else "curie",
+        }
+        for i in range(100)
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "list", "-m", model])
+    assert result.exit_code == 0
+    records = json.loads(result.output.strip())
+    assert all(record["model"] == model for record in records)
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False))
 @pytest.mark.parametrize(
