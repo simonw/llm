@@ -30,23 +30,6 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
-## Installing and using a local model
-
-{ref}`LLM plugins <plugins>` can provide local models that run on your machine.
-
-To install [llm-gpt4all](https://github.com/simonw/llm-gpt4all), providing 17 models from the [GPT4All](https://gpt4all.io/) project, run this:
-
-```bash
-llm install llm-gpt4all
-```
-Run `llm models list` to see the expanded list of available models.
-
-To run a prompt through one of the models from GPT4All specify it using `-m/--model`:
-```bash
-llm -m ggml-vicuna-7b-1 'What is the capital of France?'
-```
-The model will be downloaded and cached the first time you use it.
-
 ## Continuing a conversation
 
 By default, the tool will start a new conversation each time you run it.
@@ -107,10 +90,12 @@ llm models list --options
 Output:
 <!-- [[[cog
 from click.testing import CliRunner
-import sys
+import os, sys
 sys._called_from_test = True
 from llm.cli import cli
+os.environ["LLM_USER_PATH"] = "/tmp"
 result = CliRunner().invoke(cli, ["models", "list", "--options"])
+del os.environ["LLM_USER_PATH"]
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```

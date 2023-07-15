@@ -39,7 +39,9 @@ For example, the [llm-gpt4all](https://github.com/simonw/llm-gpt4all) plugin add
 ```bash
 llm install llm-gpt4all
 ```
-## Authentication
+
+(api-keys)=
+## API key management
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.
 

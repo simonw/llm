@@ -37,3 +37,16 @@ def mocked_openai(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+
+
+@pytest.fixture
+def mocked_localai(requests_mock):
+    return requests_mock.post(
+        "http://localai.localhost/chat/completions",
+        json={
+            "model": "orca",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )

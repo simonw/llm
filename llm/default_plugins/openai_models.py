@@ -8,6 +8,7 @@ from pydantic import field_validator, Field
 import requests
 from typing import List, Optional, Union
 import json
+import yaml
 
 
 @hookimpl
@@ -16,6 +17,26 @@ def register_models(register):
     register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
+    # Load extra models
+    extra_path = llm.user_dir() / "extra-openai-models.yaml"
+    if not extra_path.exists():
+        return
+    with open(extra_path) as f:
+        extra_models = yaml.safe_load(f)
+    for model in extra_models:
+        model_id = model["model_id"]
+        aliases = model.get("aliases", [])
+        model_name = model["model_name"]
+        api_base = model.get("api_base")
+        chat_model = Chat(model_id, model_name=model_name, api_base=api_base)
+        if api_base:
+            chat_model.needs_key = None
+        if model.get("api_key_name"):
+            chat_model.needs_key = model["api_key_name"]
+        register(
+            chat_model,
+            aliases=aliases,
+        )
 
 
 @hookimpl
@@ -141,9 +162,11 @@ class Chat(Model):
 
             return validated_logit_bias
 
-    def __init__(self, model_id, key=None):
+    def __init__(self, model_id, key=None, model_name=None, api_base=None):
         self.model_id = model_id
         self.key = key
+        self.model_name = model_name
+        self.api_base = api_base
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
@@ -169,13 +192,22 @@ class Chat(Model):
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
         response._prompt_json = {"messages": messages}
+        kwargs = dict(not_nulls(prompt.options))
+        if self.api_base:
+            kwargs["api_base"] = self.api_base
+        if self.needs_key:
+            if self.key:
+                kwargs["api_key"] = self.key
+        else:
+            # OpenAI-compatible models don't need a key, but the
+            # openai client library requires one
+            kwargs["api_key"] = "DUMMY_KEY"
         if stream:
             completion = openai.ChatCompletion.create(
-                model=prompt.model.model_id,
+                model=self.model_name or self.model_id,
                 messages=messages,
                 stream=True,
-                api_key=self.key,
-                **not_nulls(prompt.options),
+                **kwargs,
             )
             chunks = []
             for chunk in completion:
@@ -186,10 +218,10 @@ class Chat(Model):
             response.response_json = combine_chunks(chunks)
         else:
             completion = openai.ChatCompletion.create(
-                model=prompt.model.model_id,
+                model=self.model_name or self.model_id,
                 messages=messages,
-                api_key=self.key,
                 stream=False,
+                **kwargs,
             )
             response.response_json = completion.to_dict_recursive()
             yield completion.choices[0].message.content
@@ -202,6 +234,7 @@ def not_nulls(data) -> dict:
 def combine_chunks(chunks: List[dict]) -> dict:
     content = ""
     role = None
+    finish_reason = None
 
     for item in chunks:
         for choice in item["choices"]:
@@ -209,16 +242,17 @@ def combine_chunks(chunks: List[dict]) -> dict:
                 role = choice["delta"]["role"]
             if "content" in choice["delta"]:
                 content += choice["delta"]["content"]
-            if choice["finish_reason"] is not None:
+            if choice.get("finish_reason") is not None:
                 finish_reason = choice["finish_reason"]
 
-    return {
-        "id": chunks[0]["id"],
-        "object": chunks[0]["object"],
-        "model": chunks[0]["model"],
-        "created": chunks[0]["created"],
-        "index": chunks[0]["choices"][0]["index"],
-        "role": role,
+    # Imitations of the OpenAI API may be missing some of these fields
+    combined = {
         "content": content,
+        "role": role,
         "finish_reason": finish_reason,
     }
+    for key in ("id", "object", "model", "created", "index"):
+        if key in chunks[0]:
+            combined[key] = chunks[0][key]
+
+    return combined

@@ -163,3 +163,29 @@ def test_llm_default_prompt(
             },
         }.items()
     )
+
+
+EXTRA_MODELS_YAML = """
+- model_id: orca
+  model_name: orca-mini-3b
+  api_base: "http://localai.localhost"
+"""
+
+
+def test_openai_localai_configuration(mocked_localai, user_path):
+    log_path = user_path / "logs.db"
+    sqlite_utils.Database(str(log_path))
+    # Write the configuration file
+    config_path = user_path / "extra-openai-models.yaml"
+    config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
+    # Run the prompt
+    runner = CliRunner()
+    prompt = "three names for a pet pelican"
+    result = runner.invoke(cli, ["--no-stream", "--model", "orca", prompt])
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+    assert json.loads(mocked_localai.last_request.text) == {
+        "model": "orca-mini-3b",
+        "messages": [{"role": "user", "content": "three names for a pet pelican"}],
+        "stream": False,
+    }
