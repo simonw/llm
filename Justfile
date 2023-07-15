@@ -11,9 +11,14 @@
 
 # Run linters
 @lint:
+  echo "Linters..."
+  echo "  Black"
   pipenv run black . --check
+  echo "  cog"
   pipenv run cog --check README.md docs/*.md
+  echo "  mypy"
   pipenv run mypy llm
+  echo "  ruff"
   pipenv run ruff .
 
 # Rebuild docs with cog
