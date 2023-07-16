@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
+import re
 import time
 from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
@@ -8,6 +9,8 @@ import os
 import json
 from pydantic import ConfigDict, BaseModel
 from ulid import ULID
+
+CONVERSATION_NAME_LENGTH = 32
 
 
 @dataclass
@@ -125,7 +128,9 @@ class Response(ABC):
         db["conversations"].insert(
             {
                 "id": conversation.id,
-                "name": _truncated(self.prompt.prompt or self.prompt.system or "", 32),
+                "name": _conversation_name(
+                    self.prompt.prompt or self.prompt.system or ""
+                ),
                 "model": conversation.model.model_id,
             },
             ignore=True,
@@ -273,7 +278,9 @@ class ModelWithAliases:
     aliases: Set[str]
 
 
-def _truncated(text, length):
-    if len(text) <= length:
+def _conversation_name(text):
+    # Collapse whitespace, including newlines
+    text = re.sub(r"\s+", " ", text)
+    if len(text) <= CONVERSATION_NAME_LENGTH:
         return text
-    return text[: length - 1] + "…"
+    return text[: CONVERSATION_NAME_LENGTH - 1] + "…"
