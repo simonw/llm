@@ -4,7 +4,7 @@ from llm.utils import dicts_to_table_string
 import click
 import datetime
 import openai
-from pydantic import field_validator, Field
+from pydantic import field_validator, Field, confloat
 import requests
 from typing import List, Optional, Union
 import json
@@ -88,7 +88,7 @@ class Chat(Model):
     can_stream: bool = True
 
     class Options(llm.Options):
-        temperature: Optional[float] = Field(
+        temperature: Optional[confloat(ge=0, le=2)] = Field(
             description=(
                 "What sampling temperature to use, between 0 and 2. Higher values like "
                 "0.8 will make the output more random, while lower values like 0.2 will "
@@ -99,7 +99,7 @@ class Chat(Model):
         max_tokens: Optional[int] = Field(
             description="Maximum number of tokens to generate.", default=None
         )
-        top_p: Optional[float] = Field(
+        top_p: Optional[confloat(ge=0, le=1)] = Field(
             description=(
                 "An alternative to sampling with temperature, called nucleus sampling, "
                 "where the model considers the results of the tokens with top_p "
@@ -109,7 +109,7 @@ class Chat(Model):
             ),
             default=None,
         )
-        frequency_penalty: Optional[float] = Field(
+        frequency_penalty: Optional[confloat(ge=-2, le=2)] = Field(
             description=(
                 "Number between -2.0 and 2.0. Positive values penalize new tokens based "
                 "on their existing frequency in the text so far, decreasing the model's "
@@ -117,7 +117,7 @@ class Chat(Model):
             ),
             default=None,
         )
-        presence_penalty: Optional[float] = Field(
+        presence_penalty: Optional[confloat(ge=-2, le=2)] = Field(
             description=(
                 "Number between -2.0 and 2.0. Positive values penalize new tokens based "
                 "on whether they appear in the text so far, increasing the model's "

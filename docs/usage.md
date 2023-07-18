@@ -100,23 +100,23 @@ cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  temperature: float
+  temperature: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=2), None, None]
     What sampling temperature to use, between 0 and 2. Higher values like
     0.8 will make the output more random, while lower values like 0.2 will
     make it more focused and deterministic.
   max_tokens: int
     Maximum number of tokens to generate.
-  top_p: float
+  top_p: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=1), None, None]
     An alternative to sampling with temperature, called nucleus sampling,
     where the model considers the results of the tokens with top_p
     probability mass. So 0.1 means only the tokens comprising the top 10%
     probability mass are considered. Recommended to use top_p or
     temperature but not both.
-  frequency_penalty: float
+  frequency_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
     Number between -2.0 and 2.0. Positive values penalize new tokens based
     on their existing frequency in the text so far, decreasing the model's
     likelihood to repeat the same line verbatim.
-  presence_penalty: float
+  presence_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
     Number between -2.0 and 2.0. Positive values penalize new tokens based
     on whether they appear in the text so far, increasing the model's
     likelihood to talk about new topics.
@@ -126,27 +126,27 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     Modify the likelihood of specified tokens appearing in the completion.
     Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-  temperature: float
+  temperature: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=2), None, None]
   max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
+  top_p: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=1), None, None]
+  frequency_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
+  presence_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
   stop: str
   logit_bias: dict, str
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-  temperature: float
+  temperature: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=2), None, None]
   max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
+  top_p: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=1), None, None]
+  frequency_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
+  presence_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
   stop: str
   logit_bias: dict, str
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-  temperature: float
+  temperature: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=2), None, None]
   max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
+  top_p: Annotated[float, None, Interval(gt=None, ge=0, lt=None, le=1), None, None]
+  frequency_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
+  presence_penalty: Annotated[float, None, Interval(gt=None, ge=-2, lt=None, le=2), None, None]
   stop: str
   logit_bias: dict, str
 
