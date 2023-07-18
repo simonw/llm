@@ -14,6 +14,7 @@ Full documentation: **[llm.datasette.io](https://llm.datasette.io/)**
 Background on this project:
 - [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
 - [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
+- [Accessing Llama 2 from the command-line with the llm-replicate plugin](https://simonwillison.net/2023/Jul/18/accessing-llama-2/)
 
 ## Installation
 
@@ -67,7 +68,6 @@ To describe how the code a file works, try this:
 ```bash
 cat mycode.py | llm -s "Explain this code"
 ```
-
 
 ## Help
 
