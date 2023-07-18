@@ -46,6 +46,8 @@ Number of responses logged:     48
 Database file size:             19.96MB
 ```
 
+(viewing-logs)=
+
 ## Viewing the logs
 
 You can view the logs using the `llm logs` command:

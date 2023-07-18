@@ -66,6 +66,8 @@ OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
 ```
 Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.
 
+(openai-compatible-models)=
+
 ## OpenAI-compatible models
 
 Projects such as [LocalAI](https://localai.io/) offer a REST API that imitates the OpenAI API but can be used to run other models, including models that can be installed on your own machine. These can be added using the same configuration mechanism.

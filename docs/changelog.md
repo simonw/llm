@@ -1,5 +1,14 @@
 # Changelog
 
+(v0_6)=
+## 0.6 (2023-07-18)
+
+- Models hosted on [Replicate](https://replicate.com/) can now be accessed using the [llm-replicate](https://github.com/simonw/llm-replicate) plugin, including the new Llama 2 model from Meta AI. More details here: [Accessing Llama 2 from the command-line with the llm-replicate plugin](https://simonwillison.net/2023/Jul/18/accessing-llama-2/).
+- Model providers that expose an API that is compatible with the OpenAPI API format, including self-hosted model servers such as [LocalAI](https://github.com/go-skynet/LocalAI), can now be accessed using {ref}`additional configuration <openai-compatible-models>` for the default OpenAI plugin. [#106](https://github.com/simonw/llm/issues/106)
+- OpenAI models that are not yet supported by LLM can also {ref}`be configured <openai-extra-models>} using the new `extra-openai-models.yaml` configuration file. [#107](https://github.com/simonw/llm/issues/107)
+- The {ref}`llm logs command <viewing-logs>` now accepts a `-m model_id` option to filter logs to a specific model. Aliases can be used here in addition to model IDs. [#108](https://github.com/simonw/llm/issues/108)
+- Logs now have a SQLite full-text search index against their prompts and responses, and the `llm logs -q SEARCH` option can be used to return logs that match a search term. [#109](https://github.com/simonw/llm/issues/109)
+
 (v0_5)=
 ## 0.5 (2023-07-12)
 
