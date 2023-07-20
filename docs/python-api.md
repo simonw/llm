@@ -24,8 +24,18 @@ Run this command to see a list of available models and their aliases:
 ```bash
 llm models list
 ```
-
 If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.key = ` line.
+
+### System prompts
+
+For models that accept a system prompt, pass it as `system="..."`:
+
+```python
+response = model.prompt(
+    "Five surprising names for a pet pelican",
+    system="Answer like GlaDOS"
+)
+```
 
 ### Models from plugins
 
