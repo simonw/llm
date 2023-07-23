@@ -32,13 +32,13 @@ llm --system 'Summarize this text in the voice of $voice' \
 You can execute a named template using the `-t/--template` option:
 
 ```bash
-curl -s https://example.com/ | llm -t summary
+curl -s https://example.com/ | llm -t summarize
 ```
 
 This can be combined with the `-m` option to specify a different model:
 ```bash
 curl -s https://llm.datasette.io/en/latest/ | \
-  llm -t summary -m gpt-3.5-turbo-16k
+  llm -t summarize -m gpt-3.5-turbo-16k
 ```
 
 ## Templates as YAML files
