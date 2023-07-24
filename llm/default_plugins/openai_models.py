@@ -94,6 +94,8 @@ class Chat(Model):
                 "0.8 will make the output more random, while lower values like 0.2 will "
                 "make it more focused and deterministic."
             ),
+            ge=0,
+            le=2,
             default=None,
         )
         max_tokens: Optional[int] = Field(
@@ -107,6 +109,8 @@ class Chat(Model):
                 "10% probability mass are considered. Recommended to use top_p or "
                 "temperature but not both."
             ),
+            ge=0,
+            le=1,
             default=None,
         )
         frequency_penalty: Optional[float] = Field(
@@ -115,6 +119,8 @@ class Chat(Model):
                 "on their existing frequency in the text so far, decreasing the model's "
                 "likelihood to repeat the same line verbatim."
             ),
+            ge=-2,
+            le=2,
             default=None,
         )
         presence_penalty: Optional[float] = Field(
@@ -123,6 +129,8 @@ class Chat(Model):
                 "on whether they appear in the text so far, increasing the model's "
                 "likelihood to talk about new topics."
             ),
+            ge=-2,
+            le=2,
             default=None,
         )
         stop: Optional[str] = Field(
