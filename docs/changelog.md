@@ -5,6 +5,7 @@
 
 - LLM can now be installed directly from Homebrew core: `brew install llm`. [#124](https://github.com/simonw/llm/issues/124)
 - Python API documentation now covers {ref}`python-api-system-prompts`.
+- Fixed incorrect example in the {ref}`prompt-templates` documentation. Thanks, Jorge Cabello. [#125](https://github.com/simonw/llm/pull/125)
 
 (v0_6)=
 ## 0.6 (2023-07-18)
