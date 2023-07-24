@@ -22,9 +22,9 @@ Install this tool using `pip`:
 ```bash
 pip install llm
 ```
-Or using [Homebrew](https://brew.sh/) (much slower):
+Or using [Homebrew](https://brew.sh/):
 ```bash
-brew install simonw/llm/llm
+brew install llm
 ```
 [Detailed installation instructions](https://llm.datasette.io/en/stable/setup.html).
 

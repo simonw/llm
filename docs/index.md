@@ -18,9 +18,11 @@ Background on this project:
 First, install LLM using `pip` or Homebrew:
 
 ```bash
-# Install LLM
 pip install llm
-# Or use: brew install simonw/llm/llm
+```
+Or with Homebrew:
+```bash
+brew install llm
 ```
 If you have an [OpenAI API key](https://platform.openai.com/account/api-keys) key you can run this:
 ```bash
