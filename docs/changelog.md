@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_6_1)=
+## 0.6.1 (2023-07-24)
+
+- LLM can now be installed directly from Homebrew core: `brew install llm`. [#124](https://github.com/simonw/llm/issues/124)
+- Python API documentation now covers {ref}`python-api-system-prompts`.
+
 (v0_6)=
 ## 0.6 (2023-07-18)
 

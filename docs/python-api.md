@@ -26,6 +26,8 @@ llm models list
 ```
 If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.key = ` line.
 
+(python-api-system-prompts)=
+
 ### System prompts
 
 For models that accept a system prompt, pass it as `system="..."`:
