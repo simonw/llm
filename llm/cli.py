@@ -541,7 +541,7 @@ def templates_list():
             if template.prompt:
                 text.append(f" prompt: {template.prompt}")
         else:
-            text = [template.prompt]
+            text = [template.prompt if template.prompt else ""]
         pairs.append((name, "".join(text).replace("\n", " ")))
     try:
         max_name_len = max(len(p[0]) for p in pairs)
