@@ -44,16 +44,21 @@ def test_openai_options_min_max(mocked_models):
         "temperature": [0, 2],
         "top_p": [0, 1],
         "frequency_penalty": [-2, 2],
-        "presence_penalty": [-2, 2]
+        "presence_penalty": [-2, 2],
     }
     runner = CliRunner()
 
     for option, [min_val, max_val] in options.items():
-
         result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "-10"])
         assert result.exit_code == 1
-        assert result.output == f"Error: {option}\n  Input should be greater than or equal to {min_val}\n"
+        assert (
+            result.output
+            == f"Error: {option}\n  Input should be greater than or equal to {min_val}\n"
+        )
 
         result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
         assert result.exit_code == 1
-        assert result.output == f"Error: {option}\n  Input should be less than or equal to {max_val}\n"
+        assert (
+            result.output
+            == f"Error: {option}\n  Input should be less than or equal to {max_val}\n"
+        )
