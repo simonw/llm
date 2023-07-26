@@ -609,7 +609,6 @@ def templates_path():
 @click.option(
     "-e",
     "--editable",
-    type=click.Path(readable=True, exists=True, dir_okay=True, file_okay=False),
     help="Install a project in editable mode from this path",
 )
 def install(packages, upgrade, editable):
@@ -618,7 +617,7 @@ def install(packages, upgrade, editable):
     if upgrade:
         args += ["--upgrade"]
     if editable:
-        args += ["--editable", str(editable)]
+        args += ["--editable", editable]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
