@@ -634,6 +634,11 @@ def uninstall(packages, yes):
 
 @cli.command()
 def web():
+    """
+    Start a local web server
+
+    Includes an interface for chatting with the models and exploring the logs.
+    """
     try:
         from datasette.app import Datasette
     except ImportError:

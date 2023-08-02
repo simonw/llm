@@ -64,6 +64,7 @@ Commands:
   plugins    List installed plugins
   templates  Manage stored prompt templates
   uninstall  Uninstall Python packages from the LLM environment
+  web        Start a local web server
 ```
 ### llm prompt --help
 ```
@@ -303,6 +304,17 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
 Options:
   -y, --yes  Don't ask for confirmation
   --help     Show this message and exit.
+```
+### llm web --help
+```
+Usage: llm web [OPTIONS]
+
+  Start a local web server
+
+  Includes an interface for chatting with the models and exploring the logs.
+
+Options:
+  --help  Show this message and exit.
 ```
 ### llm openai --help
 ```
