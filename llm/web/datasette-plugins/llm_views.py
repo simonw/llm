@@ -40,7 +40,10 @@ CHAT = """
 </head>
 <body>
     <h1>WebSocket Client</h1>
-    <p><label>Model</label> <select id="model">OPTIONS</select></p>
+    <p><label for="model">Model</label> <select id="model">OPTIONS</select></p>
+    <p><label for="system_prompt">System prompt</label></p>
+    <p><textarea id="system_prompt" rows="2" cols="50"></textarea></p>
+    <p><label for="message">Message</label></p>
     <textarea id="message" rows="4" cols="50"></textarea><br>
     <button onclick="sendMessage()">Send Message</button> <button onclick="clearLog()">Clear</button>
     <div id="log" style="margin-top: 1em; white-space: pre-wrap;"></div>
@@ -57,8 +60,9 @@ CHAT = """
         function sendMessage() {
             const message = document.getElementById('message').value;
             const model = document.getElementById('model').value;
+            const system = document.getElementById('system_prompt').value;
             console.log({message, model, ws});
-            ws.send(JSON.stringify({message, model}));
+            ws.send(JSON.stringify({message, system, model}));
         }
 
         function clearLog() {
@@ -87,12 +91,13 @@ async def websocket_application(scope, receive, send, datasette):
             decoded = json.loads(message)
             model_id = decoded["model"]
             message = decoded["message"]
+            system = decoded["system"]
             model = llm.get_model(model_id)
             if model.needs_key:
                 model.key = llm.get_key(None, model.needs_key, model.key_env_var)
 
             def run_in_thread(message):
-                response = model.prompt(message)
+                response = model.prompt(message, system=system)
                 for chunk in response:
                     yield chunk
                 yield {"end": response}
