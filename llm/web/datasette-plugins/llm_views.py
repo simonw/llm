@@ -37,7 +37,7 @@ CHAT = """
     <h1>WebSocket Client</h1>
     <p><label>Model</label> <select id="model">OPTIONS</select></p>
     <textarea id="message" rows="4" cols="50"></textarea><br>
-    <button onclick="sendMessage()">Send Message</button>
+    <button onclick="sendMessage()">Send Message</button> <button onclick="clearLog()">Clear</button>
     <div id="log" style="margin-top: 1em; white-space: pre-wrap;"></div>
 
     <script>
@@ -54,6 +54,11 @@ CHAT = """
             const model = document.getElementById('model').value;
             console.log({message, model, ws});
             ws.send(JSON.stringify({message, model}));
+        }
+
+        function clearLog() {
+            const log = document.getElementById('log');
+            log.textContent = '';
         }
     </script>
 </body>
