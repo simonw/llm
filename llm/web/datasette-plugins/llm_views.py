@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datasette import hookimpl, Response
 import json
 import llm
+from sqlite_utils import Database
 
 END_SIGNAL = object()
 
@@ -19,10 +20,14 @@ def async_wrap(generator_func, *args, **kwargs):
         generator = iter(generator_func(*args, **kwargs))
         with ThreadPoolExecutor() as executor:
             while True:
-                item = await loop.run_in_executor(executor, next_item, generator)
-                if item is END_SIGNAL:
+                try:
+                    item = await loop.run_in_executor(executor, next_item, generator)
+                    if item is END_SIGNAL:
+                        break
+                    yield {"item": item}
+                except Exception as ex:
+                    yield {"error": str(ex)}
                     break
-                yield item
 
     return async_generator
 
@@ -66,9 +71,12 @@ CHAT = """
 """.strip()
 
 
-async def websocket_application(scope, receive, send):
+async def websocket_application(scope, receive, send, datasette):
     if scope["type"] != "websocket":
         return Response.text("ws only", status=400)
+
+    db = datasette.get_database("logs")
+
     while True:
         event = await receive()
         if event["type"] == "websocket.connect":
@@ -80,8 +88,29 @@ async def websocket_application(scope, receive, send):
             model_id = decoded["model"]
             message = decoded["message"]
             model = llm.get_model(model_id)
-            async for chunk in async_wrap(model.prompt, message)():
-                await send({"type": "websocket.send", "text": chunk})
+            if model.needs_key:
+                model.key = llm.get_key(None, model.needs_key, model.key_env_var)
+
+            def run_in_thread(message):
+                response = model.prompt(message)
+                for chunk in response:
+                    yield chunk
+                yield {"end": response}
+
+            async for item in async_wrap(run_in_thread, message)():
+                if "error" in item:
+                    await send({"type": "websocket.send", "text": item["error"]})
+                else:
+                    # It might be the 'end'
+                    if isinstance(item["item"], dict) and "end" in item["item"]:
+                        # Log to the DB
+                        response = item["item"]["end"]
+                        await db.execute_write_fn(
+                            lambda conn: response.log_to_db(Database(conn)), block=False
+                        )
+                    else:
+                        # Send the message to the client
+                        await send({"type": "websocket.send", "text": item["item"]})
             await send({"type": "websocket.send", "text": "\n\n"})
 
         elif event["type"] == "websocket.disconnect":
