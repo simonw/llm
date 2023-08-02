@@ -93,8 +93,9 @@ def chat():
         CHAT.replace(
             "OPTIONS",
             "\n".join(
-                '<option value="{model}">{model}</option>'.format(
-                    model=model_with_alias.model.model_id
+                '<option value="{model}">{name}</option>'.format(
+                    model=model_with_alias.model.model_id,
+                    name=str(model_with_alias.model),
                 )
                 for model_with_alias in llm.get_models_with_aliases()
             ),
