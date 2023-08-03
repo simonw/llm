@@ -9,6 +9,7 @@ import requests
 from typing import List, Optional, Union
 import json
 import yaml
+import litellm
 
 
 @hookimpl
@@ -211,7 +212,7 @@ class Chat(Model):
             # openai client library requires one
             kwargs["api_key"] = "DUMMY_KEY"
         if stream:
-            completion = openai.ChatCompletion.create(
+            completion = litellm.completion(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=True,
@@ -225,7 +226,7 @@ class Chat(Model):
                     yield content
             response.response_json = combine_chunks(chunks)
         else:
-            completion = openai.ChatCompletion.create(
+            completion = litellm.completion(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=False,

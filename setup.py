@@ -38,6 +38,7 @@ setup(
     install_requires=[
         "click",
         "openai",
+        "litellm",
         "click-default-group-wheel",
         "sqlite-utils",
         "pydantic>=2.0.0",
