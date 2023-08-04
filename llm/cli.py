@@ -611,13 +611,27 @@ def templates_path():
     "--editable",
     help="Install a project in editable mode from this path",
 )
-def install(packages, upgrade, editable):
+@click.option(
+    "--force-reinstall",
+    is_flag=True,
+    help="Reinstall all packages even if they are already up-to-date",
+)
+@click.option(
+    "--no-cache-dir",
+    is_flag=True,
+    help="Disable the cache",
+)
+def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
         args += ["--upgrade"]
     if editable:
         args += ["--editable", editable]
+    if force_reinstall:
+        args += ["--force-reinstall"]
+    if no_cache_dir:
+        args += ["--no-cache-dir"]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")

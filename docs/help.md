@@ -292,6 +292,9 @@ Usage: llm install [OPTIONS] [PACKAGES]...
 Options:
   -U, --upgrade        Upgrade packages to latest version
   -e, --editable TEXT  Install a project in editable mode from this path
+  --force-reinstall    Reinstall all packages even if they are already up-to-
+                       date
+  --no-cache-dir       Disable the cache
   --help               Show this message and exit.
 ```
 ### llm uninstall --help
