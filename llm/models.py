@@ -200,7 +200,11 @@ class Response(ABC):
 
 
 class Options(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+
+    # Note: using pydantic v1 style Configs,
+    # these are also compatible with pydantic v2
+    class Config:
+        extra = "forbid"
 
 
 _Options = Options
