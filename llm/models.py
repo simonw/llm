@@ -200,7 +200,6 @@ class Response(ABC):
 
 
 class Options(BaseModel):
-
     # Note: using pydantic v1 style Configs,
     # these are also compatible with pydantic v2
     class Config:
