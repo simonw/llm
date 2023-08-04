@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
 import json
-from pydantic import ConfigDict, BaseModel
+from pydantic import BaseModel
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
