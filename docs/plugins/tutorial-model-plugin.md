@@ -30,7 +30,7 @@ class Markov(llm.Model):
 
 The `def register_models()` function here is called by the plugin system (thanks to the `@hookimpl` decorator). It uses the `register()` function passed to it to register an instance of the new model.
 
-The `Markov` class implements the model. It sets a `model_id` - an identifier that can be passed to `ll -m` in order to identify the model to be executed.
+The `Markov` class implements the model. It sets a `model_id` - an identifier that can be passed to `llm -m` in order to identify the model to be executed.
 
 The logic for executing the model goes in the `execute()` method. We'll extend this to do something more useful in a later step.
 
