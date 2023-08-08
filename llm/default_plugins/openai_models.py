@@ -4,6 +4,7 @@ from llm.utils import dicts_to_table_string
 import click
 import datetime
 import openai
+
 try:
     from pydantic import field_validator, Field
 except ImportError:
