@@ -9,7 +9,7 @@ try:
     from pydantic import field_validator, Field
 except ImportError:
     from pydantic.fields import Field
-    from pydantic.class_validators import validator as field_validator # type: ignore [no-redef]
+    from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
 import requests
 from typing import List, Optional, Union
 import json
