@@ -560,12 +560,16 @@ def aliases():
 
 
 @aliases.command(name="list")
-def aliases_list():
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def aliases_list(json_):
     "List current aliases"
     to_output = []
     for alias, model in get_model_aliases().items():
         if alias != model.model_id:
             to_output.append((alias, model.model_id))
+    if json_:
+        click.echo(json.dumps({key: value for key, value in to_output}, indent=4))
+        return
     max_alias_length = max(len(a) for a, _ in to_output)
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}"
     for alias, model_id in to_output:
