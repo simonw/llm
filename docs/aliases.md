@@ -67,7 +67,6 @@ The `llm aliases remove <alias>` command will remove the specified alias:
 ```bash
 llm aliases remove turbo
 ```
-This can also be used for aliases that were introduced by other plugins as opposed to the `llm aliases set` command.
 
 ## Viewing the aliases file
 
