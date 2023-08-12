@@ -31,3 +31,13 @@ def test_aliases_list_json():
         "gpt4": "gpt-4",
         "4-32k": "gpt-4-32k",
     }
+
+
+def test_aliases_set(user_path):
+    # Should be not aliases.json at start
+    assert not (user_path / "aliases.json").exists()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "set", "foo", "bar"])
+    assert result.exit_code == 0
+    assert (user_path / "aliases.json").exists()
+    assert json.loads((user_path / "aliases.json").read_text("utf-8")) == {"foo": "bar"}

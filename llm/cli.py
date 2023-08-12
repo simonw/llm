@@ -298,7 +298,7 @@ def keys_path_command():
 @keys.command(name="set")
 @click.argument("name")
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
-def set_(name, value):
+def keys_set(name, value):
     """
     Save a key in the keys.json file
 
@@ -574,6 +574,30 @@ def aliases_list(json_):
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}"
     for alias, model_id in to_output:
         click.echo(fmt.format(alias=alias, model_id=model_id))
+
+
+@aliases.command(name="set")
+@click.argument("alias")
+@click.argument("model_id")
+def aliases_set(alias, model_id):
+    """
+    Set an alias for a model
+
+    Example usage:
+
+    \b
+        $ llm aliases set turbo gpt-3.5-turbo
+    """
+    path = user_dir() / "aliases.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("{}\n")
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError as ex:
+        raise click.ClickException("aliases.json is invalid: {}".format(ex))
+    current[alias] = model_id
+    path.write_text(json.dumps(current, indent=4) + "\n")
 
 
 @cli.command(name="plugins")

@@ -46,3 +46,16 @@ Example output:
     "4-32k": "gpt-4-32k"
 }
 ```
+
+## Adding a new alias
+
+The `llm aliases set <alias> <model-id>` command can be used to add a new alias:
+
+```bash
+llm aliases set turbo gpt-3.5-turbo-16k
+```
+Now you can run the `gpt-3.5-turbo-16k` model using the `turbo` alias like this:
+
+```bash
+llm -m turbo 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
+```
