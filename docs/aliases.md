@@ -12,7 +12,8 @@ Example output:
 
 <!-- [[[cog
 from click.testing import CliRunner
-import sys
+import sys, os
+os.environ["LLM_USER_PATH"] = "/tmp"
 sys._called_from_test = True
 from llm.cli import cli
 result = CliRunner().invoke(cli, ["aliases", "list"])
@@ -26,7 +27,5 @@ chatgpt-16k : gpt-3.5-turbo-16k
 4           : gpt-4
 gpt4        : gpt-4
 4-32k       : gpt-4-32k
-orca        : orca-openai-compat
-0613        : gpt-3.5-turbo-0613
 ```
 <!-- [[[end]]] -->
