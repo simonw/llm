@@ -15,7 +15,9 @@
   echo "  Black"
   pipenv run black . --check
   echo "  cog"
-  pipenv run cog --check README.md docs/*.md
+  pipenv run cog --check \
+    -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
+    README.md docs/*.md
   echo "  mypy"
   pipenv run mypy llm
   echo "  ruff"
