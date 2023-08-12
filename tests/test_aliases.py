@@ -48,3 +48,11 @@ def test_aliases_path(user_path):
     result = runner.invoke(cli, ["aliases", "path"])
     assert result.exit_code == 0
     assert result.output.strip() == str(user_path / "aliases.json")
+
+
+def test_aliases_remove(user_path):
+    (user_path / "aliases.json").write_text(json.dumps({"foo": "bar"}), "utf-8")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "remove", "foo"])
+    assert result.exit_code == 0
+    assert json.loads((user_path / "aliases.json").read_text("utf-8")) == {}
