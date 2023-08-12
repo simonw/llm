@@ -56,7 +56,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
 
     # Include aliases from aliases.json
     aliases_path = user_dir() / "aliases.json"
-    extra_model_aliases = {}
+    extra_model_aliases: Dict[str, list] = {}
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
         for alias, model_id in configured_aliases.items():
