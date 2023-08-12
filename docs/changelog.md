@@ -1,5 +1,32 @@
 # Changelog
 
+(v0_7)=
+## 0.7 (2023-08-12)
+
+The new {ref}`aliases` commands can be used to configure additional aliases for models, for example:
+
+```bash
+llm aliases set turbo gpt-3.5-turbo-16k
+```
+Now you can run the 16,000 token `gpt-3.5-turbo-16k` model like this:
+
+```bash
+llm -m turbo 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
+```
+Use `llm aliases list` to see a list of aliases and `llm aliases remove turbo` to remove one again. [#151](https://github.com/simonw/llm/issues/151)
+
+### Notable new plugins
+
+- **[llm-mlc](https://github.com/simonw/llm-mlc)** can run local models released by the [MLC project](https://mlc.ai/mlc-llm/), including models that can take advantage of the GPU on Apple Silicon M1/M2 devices.
+- **[llm-llama-cpp](https://github.com/simonw/llm-llama-cpp)** uses [llama.cpp](https://github.com/ggerganov/llama.cpp) to run models published in the GGML format. See [Run Llama 2 on your own Mac using LLM and Homebrew](https://simonwillison.net/2023/Aug/1/llama-2-mac/) for more details.
+
+### Also in this release
+
+- OpenAI models now have min and max validation on their floating point options. Thanks, Pavel Král. [#115](https://github.com/simonw/llm/issues/115)
+- Fix for bug where `llm templates list` raised an error if a template had an empty prompt. Thanks, Sherwin Daganato. [#132](https://github.com/simonw/llm/pull/132)
+- Fixed bug in `llm install --editable` option which prevented installation of `.[test]`. [#136](https://github.com/simonw/llm/issues/136)
+- `llm install install --no-cache-dir` and `--force-reinstall` options. [#146](https://github.com/simonw/llm/issues/146)
+
 (v0_6_1)=
 ## 0.6.1 (2023-07-24)
 
