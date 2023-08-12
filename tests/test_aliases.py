@@ -41,3 +41,10 @@ def test_aliases_set(user_path):
     assert result.exit_code == 0
     assert (user_path / "aliases.json").exists()
     assert json.loads((user_path / "aliases.json").read_text("utf-8")) == {"foo": "bar"}
+
+
+def test_aliases_path(user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "path"])
+    assert result.exit_code == 0
+    assert result.output.strip() == str(user_path / "aliases.json")

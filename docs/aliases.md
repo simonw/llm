@@ -59,3 +59,18 @@ Now you can run the `gpt-3.5-turbo-16k` model using the `turbo` alias like this:
 ```bash
 llm -m turbo 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
 ```
+
+## Viewing the aliases file
+
+Aliases are stored in an `aliases.json` file in the LLM configuration directory.
+
+To see the path to that file, run this:
+
+```bash
+llm aliases path
+```
+To view the content of that file, run this:
+
+```bash
+cat "$(llm aliases path)"
+```

@@ -600,6 +600,12 @@ def aliases_set(alias, model_id):
     path.write_text(json.dumps(current, indent=4) + "\n")
 
 
+@aliases.command(name="path")
+def aliases_path():
+    "Output the path to the aliases.json file"
+    click.echo(user_dir() / "aliases.json")
+
+
 @cli.command(name="plugins")
 def plugins_list():
     "List installed plugins"
