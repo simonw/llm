@@ -27,8 +27,9 @@ jobs:
         pytest
     - name: Check if cog needs to be run
       run: |
-        cog docs/usage.md
-        cog --check docs/*.md
+        cog --check \
+          -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
+          docs/*.md
     - name: Run Black
       run: |
         black --check .

@@ -4,8 +4,6 @@ This page lists the `--help` output for all of the `llm` commands.
 
 <!-- [[[cog
 from click.testing import CliRunner
-import sys
-sys._called_from_test = True
 from llm.cli import cli
 def all_help(cli):
     "Return all help for Click command and its subcommands"

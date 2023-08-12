@@ -12,9 +12,6 @@ Example output:
 
 <!-- [[[cog
 from click.testing import CliRunner
-import sys, os
-os.environ["LLM_USER_PATH"] = "/tmp"
-sys._called_from_test = True
 from llm.cli import cli
 result = CliRunner().invoke(cli, ["aliases", "list"])
 cog.out("```\n{}```".format(result.output))

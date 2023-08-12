@@ -23,7 +23,7 @@
 
 # Rebuild docs with cog
 @cog:
-  pipenv run cog -r docs/*.md
+  pipenv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/*.md
 
 # Serve live docs on localhost:8000
 @docs: cog

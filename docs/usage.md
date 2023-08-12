@@ -90,12 +90,8 @@ llm models list --options
 Output:
 <!-- [[[cog
 from click.testing import CliRunner
-import os, sys
-sys._called_from_test = True
 from llm.cli import cli
-os.environ["LLM_USER_PATH"] = "/tmp"
 result = CliRunner().invoke(cli, ["models", "list", "--options"])
-del os.environ["LLM_USER_PATH"]
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
