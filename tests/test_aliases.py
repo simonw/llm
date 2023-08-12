@@ -56,3 +56,11 @@ def test_aliases_remove(user_path):
     result = runner.invoke(cli, ["aliases", "remove", "foo"])
     assert result.exit_code == 0
     assert json.loads((user_path / "aliases.json").read_text("utf-8")) == {}
+
+
+def test_aliases_remove_invalid(user_path):
+    (user_path / "aliases.json").write_text(json.dumps({"foo": "bar"}), "utf-8")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "remove", "invalid"])
+    assert result.exit_code == 1
+    assert result.output == "Error: Alias not found: invalid\n"
