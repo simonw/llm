@@ -53,6 +53,7 @@ maxdepth: 3
 setup
 usage
 other-models
+aliases
 python-api
 templates
 logging
