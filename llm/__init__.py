@@ -54,10 +54,22 @@ def get_plugins():
 def get_models_with_aliases() -> List["ModelWithAliases"]:
     model_aliases = []
 
+    # Include aliases from aliases.json
+    aliases_path = user_dir() / "aliases.json"
+    extra_model_aliases = {}
+    if aliases_path.exists():
+        configured_aliases = json.loads(aliases_path.read_text())
+        for alias, model_id in configured_aliases.items():
+            extra_model_aliases.setdefault(model_id, []).append(alias)
+
     def register(model, aliases=None):
-        model_aliases.append(ModelWithAliases(model, aliases or set()))
+        alias_list = list(aliases or [])
+        if model.model_id in extra_model_aliases:
+            alias_list.extend(extra_model_aliases[model.model_id])
+        model_aliases.append(ModelWithAliases(model, alias_list))
 
     pm.hook.register_models(register=register)
+
     return model_aliases
 
 

@@ -64,3 +64,13 @@ def test_aliases_remove_invalid(user_path):
     result = runner.invoke(cli, ["aliases", "remove", "invalid"])
     assert result.exit_code == 1
     assert result.output == "Error: Alias not found: invalid\n"
+
+
+def test_aliases_are_registered(user_path):
+    (user_path / "aliases.json").write_text(
+        json.dumps({"foo": "bar", "turbo": "gpt-3.5-turbo"}), "utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "list"])
+    assert result.exit_code == 0
+    assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
