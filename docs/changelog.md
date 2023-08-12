@@ -25,7 +25,7 @@ Use `llm aliases list` to see a list of aliases and `llm aliases remove turbo` t
 - OpenAI models now have min and max validation on their floating point options. Thanks, Pavel Král. [#115](https://github.com/simonw/llm/issues/115)
 - Fix for bug where `llm templates list` raised an error if a template had an empty prompt. Thanks, Sherwin Daganato. [#132](https://github.com/simonw/llm/pull/132)
 - Fixed bug in `llm install --editable` option which prevented installation of `.[test]`. [#136](https://github.com/simonw/llm/issues/136)
-- `llm install install --no-cache-dir` and `--force-reinstall` options. [#146](https://github.com/simonw/llm/issues/146)
+- `llm install --no-cache-dir` and `--force-reinstall` options. [#146](https://github.com/simonw/llm/issues/146)
 
 (v0_6_1)=
 ## 0.6.1 (2023-07-24)
