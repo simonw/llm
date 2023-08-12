@@ -283,13 +283,52 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list  List current aliases
+  list    List current aliases
+  path    Output the path to the aliases.json file
+  remove  Remove an alias
+  set     Set an alias for a model
 ```
 #### llm aliases list --help
 ```
 Usage: llm aliases list [OPTIONS]
 
   List current aliases
+
+Options:
+  --json  Output as JSON
+  --help  Show this message and exit.
+```
+#### llm aliases set --help
+```
+Usage: llm aliases set [OPTIONS] ALIAS MODEL_ID
+
+  Set an alias for a model
+
+  Example usage:
+
+      $ llm aliases set turbo gpt-3.5-turbo
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm aliases remove --help
+```
+Usage: llm aliases remove [OPTIONS] ALIAS
+
+  Remove an alias
+
+  Example usage:
+
+      $ llm aliases remove turbo
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm aliases path --help
+```
+Usage: llm aliases path [OPTIONS]
+
+  Output the path to the aliases.json file
 
 Options:
   --help  Show this message and exit.
