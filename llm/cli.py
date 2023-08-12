@@ -554,6 +554,24 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
+@cli.group()
+def aliases():
+    "Manage model aliases"
+
+
+@aliases.command(name="list")
+def aliases_list():
+    "List current aliases"
+    to_output = []
+    for alias, model in get_model_aliases().items():
+        if alias != model.model_id:
+            to_output.append((alias, model.model_id))
+    max_alias_length = max(len(a) for a, _ in to_output)
+    fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}"
+    for alias, model_id in to_output:
+        click.echo(fmt.format(alias=alias, model_id=model_id))
+
+
 @cli.command(name="plugins")
 def plugins_list():
     "List installed plugins"

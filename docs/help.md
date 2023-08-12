@@ -56,6 +56,7 @@ Options:
 
 Commands:
   prompt*    Execute a prompt
+  aliases    Manage model aliases
   install    Install packages from PyPI into the same environment as LLM
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
@@ -270,6 +271,27 @@ Options:
 Usage: llm templates path [OPTIONS]
 
   Output the path to the templates directory
+
+Options:
+  --help  Show this message and exit.
+```
+### llm aliases --help
+```
+Usage: llm aliases [OPTIONS] COMMAND [ARGS]...
+
+  Manage model aliases
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list  List current aliases
+```
+#### llm aliases list --help
+```
+Usage: llm aliases list [OPTIONS]
+
+  List current aliases
 
 Options:
   --help  Show this message and exit.
