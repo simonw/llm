@@ -26,6 +26,8 @@ llm models list
 ```
 If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.key = ` line.
 
+Calling `llm.get_model()` with an invalid model name will raise a `llm.UnknownModelError` exception.
+
 (python-api-system-prompts)=
 
 ### System prompts
