@@ -1,9 +1,11 @@
 from click.testing import CliRunner
+import datetime
 from llm.cli import cli
 from llm.migrations import migrate
 import json
 import os
 import pytest
+import re
 import sqlite_utils
 from ulid import ULID
 from unittest import mock
@@ -17,12 +19,12 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
-@pytest.mark.parametrize("n", (None, 0, 2))
-def test_logs(n, user_path):
-    "Test that logs command correctly returns requested -n records"
+@pytest.fixture
+def log_path(user_path):
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
+    start = datetime.datetime.utcnow()
     db["responses"].insert_all(
         {
             "id": str(ULID()).lower(),
@@ -30,11 +32,52 @@ def test_logs(n, user_path):
             "prompt": "prompt",
             "response": "response",
             "model": "davinci",
+            "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
+            "conversation_id": "abc123",
         }
         for i in range(100)
     )
+    return log_path
+
+
+datetime_re = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def test_logs_text(log_path):
     runner = CliRunner()
     args = ["logs", "-p", str(log_path)]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    # Replace 2023-08-17T20:53:58 with YYYY-MM-DDTHH:MM:SS
+    output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
+
+    assert output == (
+        "YYYY-MM-DDTHH:MM:SS    davinci    conversation: abc123\n\n"
+        "  Prompt:\n"
+        "    prompt\n\n"
+        "  System:\n"
+        "    system\n\n"
+        "  Response:\n"
+        "    response\n\n"
+        "YYYY-MM-DDTHH:MM:SS    davinci    conversation: abc123\n\n"
+        "  Prompt:\n"
+        "    prompt\n\n"
+        "  Response:\n"
+        "    response\n\n"
+        "YYYY-MM-DDTHH:MM:SS    davinci    conversation: abc123\n\n"
+        "  Prompt:\n"
+        "    prompt\n\n"
+        "  Response:\n"
+        "    response\n\n"
+    )
+
+
+@pytest.mark.parametrize("n", (None, 0, 2))
+def test_logs_json(n, log_path):
+    "Test that logs command correctly returns requested -n records"
+    runner = CliRunner()
+    args = ["logs", "-p", str(log_path), "--json"]
     if n is not None:
         args.extend(["-n", str(n)])
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -79,7 +122,7 @@ def test_logs_filtered(user_path, model):
         for i in range(100)
     )
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-m", model])
+    result = runner.invoke(cli, ["logs", "list", "-m", model, "--json"])
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert all(record["model"] == model for record in records)
@@ -88,7 +131,9 @@ def test_logs_filtered(user_path, model):
 @pytest.mark.parametrize(
     "query,expected",
     (
-        ("", ["doc3", "doc2", "doc1"]),
+        # With no search term order should be by datetime
+        ("", ["doc1", "doc2", "doc3"]),
+        # With a search it's order by rank instead
         ("llama", ["doc1", "doc3"]),
         ("alpaca", ["doc2"]),
     ),
@@ -113,7 +158,7 @@ def test_logs_search(user_path, query, expected):
     _insert("doc2", "alpaca")
     _insert("doc3", "llama llama")
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-q", query])
+    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"])
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert [record["id"] for record in records] == expected
@@ -195,7 +240,9 @@ def test_llm_default_prompt(
     }
 
     # Test "llm logs"
-    log_result = runner.invoke(cli, ["logs", "-n", "1"], catch_exceptions=False)
+    log_result = runner.invoke(
+        cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
+    )
     log_json = json.loads(log_result.output)
 
     # Should have logged correctly:

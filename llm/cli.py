@@ -391,7 +391,7 @@ select
 {columns}
 from
     responses
-left join conversations on responses.conversation_id = conversations.id{where}
+left join conversations on responses.conversation_id = conversations.id{extra_where}
 order by responses.id desc{limit}
 """
 LOGS_SQL_SEARCH = """
@@ -410,8 +410,9 @@ order by responses_fts.rank desc{limit}
 @click.option(
     "-n",
     "--count",
-    default=3,
-    help="Number of entries to show - 0 for all",
+    type=int,
+    default=None,
+    help="Number of entries to show - defaults to 3, use 0 for all",
 )
 @click.option(
     "-p",
@@ -422,13 +423,31 @@ order by responses_fts.rank desc{limit}
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
-def logs_list(count, path, model, query, truncate):
+@click.option(
+    "-c",
+    "--conversation",
+    help="Show logs for this conversation ID",
+)
+@click.option(
+    "json_output",
+    "--json",
+    is_flag=True,
+    help="Output logs as JSON",
+)
+def logs_list(count, path, model, query, truncate, conversation, json_output):
     "Show recent logged prompts and their responses"
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    # For --conversation set limit 0, if not explicitly set
+    if count is None:
+        if conversation:
+            count = 0
+        else:
+            count = 3
 
     model_id = None
     if model:
@@ -440,21 +459,38 @@ def logs_list(count, path, model, query, truncate):
             model_id = model
 
     sql = LOGS_SQL
-    format_kwargs = {
-        "limit": " limit {}".format(count) if count else "",
-        "columns": LOGS_COLUMNS,
-    }
     if query:
         sql = LOGS_SQL_SEARCH
-        format_kwargs["extra_where"] = (
-            " and responses.model = :model" if model_id else ""
-        )
-    else:
-        format_kwargs["where"] = " where responses.model = :model" if model_id else ""
 
+    limit = ""
+    if count is not None and count > 0:
+        limit = " limit {}".format(count)
+
+    sql_format = {
+        "limit": limit,
+        "columns": LOGS_COLUMNS,
+        "extra_where": "",
+    }
+    where_bits = []
+    if model_id:
+        where_bits.append("responses.model = :model")
+    if conversation:
+        where_bits.append("responses.conversation_id = :conversation")
+    if where_bits:
+        sql_format["extra_where"] = " where " + " and ".join(where_bits)
+
+    final_sql = sql.format(**sql_format)
     rows = list(
-        db.query(sql.format(**format_kwargs), {"model": model_id, "query": query})
+        db.query(
+            final_sql,
+            {"model": model_id, "query": query, "conversation": conversation},
+        )
     )
+    # Reverse the order - we do this because we 'order by id desc limit 3' to get the
+    # 3 most recent results, but we still want to display them in chronological order
+    # ... except for searches where we don't do this
+    if not query:
+        rows.reverse()
     for row in rows:
         if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
@@ -467,7 +503,37 @@ def logs_list(count, path, model, query, truncate):
                     del row[key]
                 else:
                     row[key] = json.loads(row[key])
-    click.echo(json.dumps(list(rows), indent=2))
+
+    # Output as JSON if request
+    if json_output:
+        click.echo(json.dumps(list(rows), indent=2))
+    else:
+        # Output neatly formatted human-readable logs
+        current_system = None
+        should_show_conversation = True
+        for row in rows:
+            click.echo(
+                "{}{}{}\n".format(
+                    row["datetime_utc"].split(".")[0],
+                    "    {}".format(row["model"]) if should_show_conversation else "",
+                    "    conversation: {}".format(row["conversation_id"])
+                    if should_show_conversation
+                    else "",
+                )
+            )
+            # In conversation log mode only show it for the first one
+            if conversation:
+                should_show_conversation = False
+            click.echo("  Prompt:\n{}".format(textwrap.indent(row["prompt"], "    ")))
+            if row["system"] != current_system:
+                if row["system"] is not None:
+                    click.echo(
+                        "\n  System:\n{}".format(textwrap.indent(row["system"], "    "))
+                    )
+                current_system = row["system"]
+            click.echo(
+                "\n  Response:\n{}\n".format(textwrap.indent(row["response"], "    "))
+            )
 
 
 @cli.group()
