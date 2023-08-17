@@ -526,12 +526,12 @@ def logs_list(count, path, model, query, truncate, conversation, json_output):
             # In conversation log mode only show it for the first one
             if conversation:
                 should_show_conversation = False
-            click.echo("## Prompt:\n\n{}".format(row["prompt"], "    "))
+            click.echo("## Prompt:\n\n{}".format(row["prompt"]))
             if row["system"] != current_system:
                 if row["system"] is not None:
-                    click.echo("\n## System:\n\n{}".format(row["system"], "    "))
+                    click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
-            click.echo("\n## Response:\n\n{}\n".format(row["response"], "    "))
+            click.echo("\n## Response:\n\n{}\n".format(row["response"]))
 
 
 @cli.group()
