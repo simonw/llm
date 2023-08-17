@@ -30,6 +30,7 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
+(conversation)=
 ## Continuing a conversation
 
 By default, the tool will start a new conversation each time you run it.

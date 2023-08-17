@@ -424,7 +424,16 @@ order by responses_fts.rank desc{limit}
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
+    "current_conversation",
     "-c",
+    "--current",
+    is_flag=True,
+    flag_value=-1,
+    help="Show logs from the current conversation",
+)
+@click.option(
+    "conversation_id",
+    "--cid",
     "--conversation",
     help="Show logs for this conversation ID",
 )
@@ -434,7 +443,16 @@ order by responses_fts.rank desc{limit}
     is_flag=True,
     help="Output logs as JSON",
 )
-def logs_list(count, path, model, query, truncate, conversation, json_output):
+def logs_list(
+    count,
+    path,
+    model,
+    query,
+    truncate,
+    current_conversation,
+    conversation_id,
+    json_output,
+):
     "Show recent logged prompts and their responses"
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
@@ -442,9 +460,20 @@ def logs_list(count, path, model, query, truncate, conversation, json_output):
     db = sqlite_utils.Database(path)
     migrate(db)
 
+    if current_conversation:
+        try:
+            conversation_id = next(
+                db.query(
+                    "select conversation_id from responses order by id desc limit 1"
+                )
+            )["conversation_id"]
+        except StopIteration:
+            # No conversations yet
+            raise click.ClickException("No conversations found")
+
     # For --conversation set limit 0, if not explicitly set
     if count is None:
-        if conversation:
+        if conversation_id:
             count = 0
         else:
             count = 3
@@ -474,8 +503,8 @@ def logs_list(count, path, model, query, truncate, conversation, json_output):
     where_bits = []
     if model_id:
         where_bits.append("responses.model = :model")
-    if conversation:
-        where_bits.append("responses.conversation_id = :conversation")
+    if conversation_id:
+        where_bits.append("responses.conversation_id = :conversation_id")
     if where_bits:
         sql_format["extra_where"] = " where " + " and ".join(where_bits)
 
@@ -483,7 +512,7 @@ def logs_list(count, path, model, query, truncate, conversation, json_output):
     rows = list(
         db.query(
             final_sql,
-            {"model": model_id, "query": query, "conversation": conversation},
+            {"model": model_id, "query": query, "conversation_id": conversation_id},
         )
     )
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
@@ -524,7 +553,7 @@ def logs_list(count, path, model, query, truncate, conversation, json_output):
                 )
             )
             # In conversation log mode only show it for the first one
-            if conversation:
+            if conversation_id:
                 should_show_conversation = False
             click.echo("## Prompt:\n\n{}".format(row["prompt"]))
             if row["system"] != current_system:

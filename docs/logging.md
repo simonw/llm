@@ -54,7 +54,13 @@ You can view the logs using the `llm logs` command:
 ```bash
 llm logs
 ```
-This will output the three most recent logged items as a JSON array of objects.
+This will output the three most recent logged items in Markdown format
+
+Add `--json` to get the log messages in JSON instead:
+
+```bash
+llm logs --json
+```
 
 Add `-n 10` to see the ten most recent items:
 ```bash
@@ -64,19 +70,39 @@ Or `-n 0` to see everything that has ever been logged:
 ```bash
 llm logs -n 0
 ```
-You can search the logs for a search term in the `prompt` or the `response` columns:
+You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable:
+```bash
+llm logs -n 5 -t --json
+```
+### Logs for a conversation
+
+To view the logs for the most recent {ref}`conversation <conversation>` you have had with a model, use `-c`:
+
+```bash
+llm logs -c
+```
+To see logs for a specific conversation based on its ID, use `--cid ID` or `--conversation ID`:
+
+```bash
+llm logs --cid 01h82n0q9crqtnzmf13gkyxawg
+```
+
+### Searching the logs
+
+You can search the logs for a search term in the `prompt` or the `response` columns.
 ```bash
 llm logs -q 'cheesecake'
 ```
+The most relevant terms will be shown at the bottom of the output.
+
+### Filtering by model
+
 You can filter to logs just for a specific model (or model alias) using `-m/--model`:
 ```bash
 llm logs -m chatgpt
 ```
-You can truncate the display of the prompts and responses using the `-t/--truncate` option:
-```bash
-llm logs -n 5 -t
-```
-This is useful for finding a conversation that you would like to continue.
+
+### Browsing logs using Datasette
 
 You can also use [Datasette](https://datasette.io/) to browse your logs like this:
 
