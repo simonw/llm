@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_7_1)=
+## 0.7.1 (2023-08-19)
+
+- Fixed a bug where some users would see an `AlterError: No such column: log.id` error when attempting to use this tool, after upgrading to the latest [sqlite-utils 3.35 release](https://sqlite-utils.datasette.io/en/stable/changelog.html#v3-35). [#162](https://github.com/simonw/llm/issues/162)
+
 (v0_7)=
 ## 0.7 (2023-08-12)
 
