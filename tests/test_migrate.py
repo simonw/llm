@@ -71,3 +71,10 @@ def test_migrate_from_original_schema(has_record):
     if has_record:
         expected_tables.add("logs")
     assert set(db.table_names()).issuperset(expected_tables)
+
+
+def test_migrations_with_legacy_alter_table():
+    # https://github.com/simonw/llm/issues/162
+    db = sqlite_utils.Database(memory=True)
+    db.execute("pragma legacy_alter_table=on")
+    migrate(db)
