@@ -130,14 +130,15 @@ def m007_finish_logs_table(db):
         drop={"debug"},
         rename={"timestamp_utc": "datetime_utc"},
     )
-    db["log"].transform(drop_foreign_keys=("chat_id",))
     with db.conn:
         db.execute("alter table log rename to logs")
-    db["logs"].add_foreign_key("chat_id", "logs", "id")
 
 
 @migration
 def m008_reply_to_id_foreign_key(db):
+    # Drop, then re-add chat_id foreign key after table name change
+    db["logs"].transform(drop_foreign_keys=("chat_id",))
+    db["logs"].add_foreign_key("chat_id", "logs", "id")
     db["logs"].add_foreign_key("reply_to_id", "logs", "id")
 
 
