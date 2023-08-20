@@ -114,7 +114,7 @@ The second argument can be a model identifier or another alias, in which case th
 
 If the `aliases.json` file does not exist or contains invalid JSON it will be created or overwritten.
 
-## remove_alias(alias)
+### remove_alias(alias)
 
 Removes the alias with the given name from the `aliases.json` file.
 
