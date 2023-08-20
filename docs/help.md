@@ -287,7 +287,7 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list    List current aliases
+  list*   List current aliases
   path    Output the path to the aliases.json file
   remove  Remove an alias
   set     Set an alias for a model

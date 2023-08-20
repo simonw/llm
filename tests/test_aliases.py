@@ -4,9 +4,10 @@ import json
 import pytest
 
 
-def test_aliases_list():
+@pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
+def test_aliases_list(args):
     runner = CliRunner()
-    result = runner.invoke(cli, ["aliases", "list"])
+    result = runner.invoke(cli, args)
     assert result.exit_code == 0
     assert result.output == (
         "3.5         : gpt-3.5-turbo\n"
@@ -19,9 +20,10 @@ def test_aliases_list():
     )
 
 
-def test_aliases_list_json():
+@pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
+def test_aliases_list_json(args):
     runner = CliRunner()
-    result = runner.invoke(cli, ["aliases", "list", "--json"])
+    result = runner.invoke(cli, args + ["--json"])
     assert result.exit_code == 0
     assert json.loads(result.output) == {
         "3.5": "gpt-3.5-turbo",

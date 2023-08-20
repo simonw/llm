@@ -674,7 +674,11 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
-@cli.group()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
 def aliases():
     "Manage model aliases"
 
