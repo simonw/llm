@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import os
 import json
-from pydantic import ConfigDict, BaseModel
+from pydantic import BaseModel
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
@@ -200,7 +200,10 @@ class Response(ABC):
 
 
 class Options(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Note: using pydantic v1 style Configs,
+    # these are also compatible with pydantic v2
+    class Config:
+        extra = "forbid"
 
 
 _Options = Options
