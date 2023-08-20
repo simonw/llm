@@ -113,3 +113,15 @@ llm.set_alias("turbo", "gpt-3.5-turbo")
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
 If the `aliases.json` file does not exist or contains invalid JSON it will be created or overwritten.
+
+## remove_alias(alias)
+
+Removes the alias with the given name from the `aliases.json` file.
+
+Raises `KeyError` if the alias does not exist.
+
+```python
+import llm
+
+llm.remove_alias("turbo")
+```

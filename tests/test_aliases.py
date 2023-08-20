@@ -13,6 +13,16 @@ def test_set_alias(model_id_or_alias):
     assert llm.get_model("this-is-a-new-alias").model_id == "gpt-3.5-turbo"
 
 
+def test_remove_alias():
+    with pytest.raises(KeyError):
+        llm.remove_alias("some-other-alias")
+    llm.set_alias("some-other-alias", "gpt-3.5-turbo")
+    assert llm.get_model("some-other-alias").model_id == "gpt-3.5-turbo"
+    llm.remove_alias("some-other-alias")
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_model("some-other-alias")
+
+
 @pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
 def test_cli_aliases_list(args):
     runner = CliRunner()

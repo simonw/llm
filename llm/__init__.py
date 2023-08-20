@@ -155,3 +155,20 @@ def set_alias(alias, model_id_or_alias):
         model_id = model_id_or_alias
     current[alias] = model_id
     path.write_text(json.dumps(current, indent=4) + "\n")
+
+
+def remove_alias(alias):
+    """
+    Remove an alias.
+    """
+    path = user_dir() / "aliases.json"
+    if not path.exists():
+        raise KeyError("No aliases.json file exists")
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        raise KeyError("aliases.json file is not valid JSON")
+    if alias not in current:
+        raise KeyError("No such alias: {}".format(alias))
+    del current[alias]
+    path.write_text(json.dumps(current, indent=4) + "\n")
