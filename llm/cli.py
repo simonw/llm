@@ -599,10 +599,13 @@ def models_list(options):
             for name, field in model_with_aliases.model.Options.schema()[
                 "properties"
             ].items():
+                any_of = field.get("anyOf")
+                if any_of is None:
+                    any_of = [{"type": field["type"]}]
                 types = ", ".join(
                     [
                         _type_lookup.get(item["type"], item["type"])
-                        for item in field["anyOf"]
+                        for item in any_of
                         if item["type"] != "null"
                     ]
                 )
