@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-        pydantic: ["1.10.2", ">=2.0.0"]
+        pydantic: ["==1.10.2", ">=2.0.0"]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -23,7 +23,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -e '.[test]'
-        pip install pydantic==${{ matrix.pydantic }}
+        pip install pydantic${{ matrix.pydantic }}
     - name: Run tests
       run: |
         pytest
