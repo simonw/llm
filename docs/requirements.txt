@@ -1,4 +1,5 @@
-furo==2023.7.26
+sphinx==7.2.2
+furo==2023.8.17
 sphinx-autobuild
 sphinx-copybutton
 myst-parser
