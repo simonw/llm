@@ -575,6 +575,14 @@ def models():
     "Manage available models"
 
 
+_type_lookup = {
+    "number": "float",
+    "integer": "int",
+    "string": "str",
+    "object": "dict",
+}
+
+
 @models.command(name="list")
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
@@ -587,19 +595,24 @@ def models_list(options):
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         output = str(model_with_aliases.model) + extra
-        if options and model_with_aliases.model.Options.model_fields:
-            for name, field in model_with_aliases.model.Options.model_fields.items():
-                type_info = str(field.annotation).replace("typing.", "")
-                if type_info.startswith("Optional["):
-                    type_info = type_info[9:-1]
-                if type_info.startswith("Union[") and type_info.endswith(", NoneType]"):
-                    type_info = type_info[6:-11]
-                bits = ["\n  ", name, ": ", type_info]
-                if field.description and (
+        if options and model_with_aliases.model.Options.schema()["properties"]:
+            for name, field in model_with_aliases.model.Options.schema()[
+                "properties"
+            ].items():
+                types = ", ".join(
+                    [
+                        _type_lookup.get(item["type"], item["type"])
+                        for item in field["anyOf"]
+                        if item["type"] != "null"
+                    ]
+                )
+                bits = ["\n  ", name, ": ", types]
+                description = field.get("description", "")
+                if description and (
                     model_with_aliases.model.__class__
                     not in models_that_have_shown_options
                 ):
-                    wrapped = textwrap.wrap(field.description, 70)
+                    wrapped = textwrap.wrap(description, 70)
                     bits.append("\n    ")
                     bits.extend("\n    ".join(wrapped))
                 output += "".join(bits)
