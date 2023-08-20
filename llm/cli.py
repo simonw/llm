@@ -12,6 +12,8 @@ from llm import (
     get_model_aliases,
     get_models_with_aliases,
     user_dir,
+    set_alias,
+    remove_alias,
 )
 
 from .migrations import migrate
@@ -712,16 +714,7 @@ def aliases_set(alias, model_id):
     \b
         $ llm aliases set turbo gpt-3.5-turbo
     """
-    path = user_dir() / "aliases.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text("{}\n")
-    try:
-        current = json.loads(path.read_text())
-    except json.decoder.JSONDecodeError as ex:
-        raise click.ClickException("aliases.json is invalid: {}".format(ex))
-    current[alias] = model_id
-    path.write_text(json.dumps(current, indent=4) + "\n")
+    set_alias(alias, model_id)
 
 
 @aliases.command(name="remove")
@@ -735,18 +728,10 @@ def aliases_remove(alias):
     \b
         $ llm aliases remove turbo
     """
-    path = user_dir() / "aliases.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text("{}\n")
     try:
-        current = json.loads(path.read_text())
-    except json.decoder.JSONDecodeError as ex:
-        raise click.ClickException("aliases.json is invalid: {}".format(ex))
-    if alias not in current:
-        raise click.ClickException("Alias not found: {}".format(alias))
-    del current[alias]
-    path.write_text(json.dumps(current, indent=4) + "\n")
+        remove_alias(alias)
+    except KeyError as ex:
+        raise click.ClickException(ex.args[0])
 
 
 @aliases.command(name="path")

@@ -85,7 +85,7 @@ def test_cli_aliases_remove_invalid(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["aliases", "remove", "invalid"])
     assert result.exit_code == 1
-    assert result.output == "Error: Alias not found: invalid\n"
+    assert result.output == "Error: No such alias: invalid\n"
 
 
 @pytest.mark.parametrize("args", (["models"], ["models", "list"]))
