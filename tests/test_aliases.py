@@ -5,10 +5,11 @@ import json
 import pytest
 
 
-def test_set_alias():
+@pytest.mark.parametrize("model_id_or_alias", ("gpt-3.5-turbo", "chatgpt"))
+def test_set_alias(model_id_or_alias):
     with pytest.raises(llm.UnknownModelError):
         llm.get_model("this-is-a-new-alias")
-    llm.set_alias("this-is-a-new-alias", "gpt-3.5-turbo")
+    llm.set_alias("this-is-a-new-alias", model_id_or_alias)
     assert llm.get_model("this-is-a-new-alias").model_id == "gpt-3.5-turbo"
 
 
