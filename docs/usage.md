@@ -69,6 +69,23 @@ This is useful for piping content to standard input, for example:
 curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
   llm -s 'Suggest topics for this post as a JSON array'
 ```
+Different models support system prompts in different ways.
+
+The OpenAI models are particularly good at using system prompts as instructions for how they should process additional input sent as part of the regular prompt.
+
+Other models might use system prompts change the default voice and attitude of the model.
+
+System prompts can be saved as {ref}`templates <prompt-templates>` to create reusable tools. For example, you can create a template called `pytest` like this:
+
+```bash
+llm -s 'write pytest tests for this code' --save pytest
+```
+And then use the new template like this:
+```bash
+cat llm/utils.py | llm -t pytest
+```
+See {ref}`prompt templates <prompt-templates>` for more.
+
 ## Listing available models
 
 The `llm models` command lists every model that can be used with LLM, along with any aliases:
