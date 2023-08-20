@@ -6,7 +6,7 @@ import datetime
 import openai
 
 try:
-    from pydantic import field_validator, Field
+    from pydantic import field_validator, Field  # type: ignore
 except ImportError:
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
