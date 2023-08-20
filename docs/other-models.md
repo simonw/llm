@@ -96,3 +96,17 @@ And confirm they were logged correctly with:
 ```bash
 llm logs -n 1
 ```
+
+### Extra HTTP headers
+
+Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require the setting of additional HTTP headers. You can set those using the `headers:` key like this:
+
+```yaml
+- model_id: claude
+  model_name: anthropic/claude-2
+  api_base: "https://openrouter.ai/api/v1"
+  api_key_name: openrouter
+  headers:
+    HTTP-Referer: "https://llm.datasette.io/"
+    X-Title: LLM
+```

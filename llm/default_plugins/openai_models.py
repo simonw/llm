@@ -23,16 +23,19 @@ def register_models(register):
         return
     with open(extra_path) as f:
         extra_models = yaml.safe_load(f)
-    for model in extra_models:
-        model_id = model["model_id"]
-        aliases = model.get("aliases", [])
-        model_name = model["model_name"]
-        api_base = model.get("api_base")
-        chat_model = Chat(model_id, model_name=model_name, api_base=api_base)
+    for extra_model in extra_models:
+        model_id = extra_model["model_id"]
+        aliases = extra_model.get("aliases", [])
+        model_name = extra_model["model_name"]
+        api_base = extra_model.get("api_base")
+        headers = extra_model.get("headers")
+        chat_model = Chat(
+            model_id, model_name=model_name, api_base=api_base, headers=headers
+        )
         if api_base:
             chat_model.needs_key = None
-        if model.get("api_key_name"):
-            chat_model.needs_key = model["api_key_name"]
+        if extra_model.get("api_key_name"):
+            chat_model.needs_key = extra_model["api_key_name"]
         register(
             chat_model,
             aliases=aliases,
@@ -170,11 +173,14 @@ class Chat(Model):
 
             return validated_logit_bias
 
-    def __init__(self, model_id, key=None, model_name=None, api_base=None):
+    def __init__(
+        self, model_id, key=None, model_name=None, api_base=None, headers=None
+    ):
         self.model_id = model_id
         self.key = key
         self.model_name = model_name
         self.api_base = api_base
+        self.headers = headers
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
@@ -210,6 +216,8 @@ class Chat(Model):
             # OpenAI-compatible models don't need a key, but the
             # openai client library requires one
             kwargs["api_key"] = "DUMMY_KEY"
+        if self.headers:
+            kwargs["headers"] = self.headers
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
