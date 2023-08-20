@@ -131,3 +131,27 @@ def user_dir():
     if llm_user_path:
         return pathlib.Path(llm_user_path)
     return pathlib.Path(click.get_app_dir("io.datasette.llm"))
+
+
+def set_alias(alias, model_id_or_alias):
+    """
+    Set an alias to point to the specified model.
+    """
+    path = user_dir() / "aliases.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("{}\n")
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        # We're going to write a valid JSON file in a moment:
+        current = {}
+    # Resolve model_id_or_alias to a model_id
+    try:
+        model = get_model(model_id_or_alias)
+        model_id = model.model_id
+    except UnknownModelError:
+        # Set the alias to the exact string they provided instead
+        model_id = model_id_or_alias
+    current[alias] = model_id
+    path.write_text(json.dumps(current, indent=4) + "\n")

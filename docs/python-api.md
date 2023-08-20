@@ -96,3 +96,20 @@ print(response2.text())
 You will get back five fun facts about skunks.
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+## Other functions
+
+The `llm` top level package includes some useful utility functions.
+
+### set_alias(alias, model_id)
+
+The `llm.set_alias()` function can be used to define a new alias:
+
+```python
+import llm
+
+llm.set_alias("turbo", "gpt-3.5-turbo")
+```
+The second argument can be a model identifier or another alias, in which case that alias will be resolved.
+
+If the `aliases.json` file does not exist or contains invalid JSON it will be created or overwritten.
