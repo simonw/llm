@@ -26,7 +26,6 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
-
 ## Using a template
 
 You can execute a named template using the `-t/--template` option:
@@ -39,6 +38,17 @@ This can be combined with the `-m` option to specify a different model:
 ```bash
 curl -s https://llm.datasette.io/en/latest/ | \
   llm -t summarize -m gpt-3.5-turbo-16k
+```
+## Listing available templates
+
+This command lists all available templates:
+```bash
+llm templates
+```
+The output looks something like this:
+```
+cmd        : system: reply with macos terminal commands only, no extra information
+glados     : system: You are GlaDOS prompt: Summarize this: $input
 ```
 
 ## Templates as YAML files

@@ -17,11 +17,11 @@ The `-y` flag skips asking for confirmation.
 
 You can see additional models that have been added by plugins by running:
 ```bash
-llm models list
+llm models
 ```
 Or add `--options` to include details of the options available for each model:
 ```bash
-llm models list --options
+llm models --options
 ```
 To run a prompt against a newly installed model, pass its name as the `-m/--model` option:
 ```bash

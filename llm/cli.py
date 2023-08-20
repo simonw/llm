@@ -249,6 +249,9 @@ def prompt(
         else:
             print(response.text())
     except Exception as ex:
+        import pdb
+
+        pdb.set_trace()
         raise click.ClickException(str(ex))
 
     # Log to the database
@@ -563,7 +566,11 @@ def logs_list(
             click.echo("\n## Response:\n\n{}\n".format(row["response"]))
 
 
-@cli.group()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
 def models():
     "Manage available models"
 
@@ -615,7 +622,11 @@ def models_default(model):
         raise click.ClickException("Unknown model: {}".format(model))
 
 
-@cli.group()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
 def templates():
     "Manage stored prompt templates"
 

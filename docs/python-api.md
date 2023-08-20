@@ -22,7 +22,7 @@ The `llm.get_model()` function accepts model names or aliases - so `chatgpt` wou
 Run this command to see a list of available models and their aliases:
 
 ```bash
-llm models list
+llm models
 ```
 If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.key = ` line.
 

@@ -12,7 +12,7 @@ To install **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)**, providing 1
 ```bash
 llm install llm-gpt4all
 ```
-Run `llm models list` to see the expanded list of available models.
+Run `llm models` to see the expanded list of available models.
 
 To run a prompt through one of the models from GPT4All specify it using `-m/--model`:
 ```bash
@@ -52,9 +52,9 @@ With this configuration in place, the following command should run a prompt agai
 ```bash
 llm -m 0613 'What is the capital of France?'
 ```
-Run `llm models list` to confirm that the new model is now available:
+Run `llm models` to confirm that the new model is now available:
 ```bash
-llm models list
+llm models
 ```
 Example output:
 ```
@@ -87,7 +87,7 @@ If the `api_base` is set, the existing configured `openai` API key will not be s
 
 You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
 
-Having configured the model like this, run `llm models list` to check that it installed correctly. You can then run prompts against it like so:
+Having configured the model like this, run `llm models` to check that it installed correctly. You can then run prompts against it like so:
 
 ```bash
 llm -m orca-openai-compat 'What is the capital of France?'

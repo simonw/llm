@@ -204,8 +204,8 @@ Options:
   --help  Show this message and exit.
 
 Commands:
+  list*    List available models
   default  Show or set the default model
-  list     List available models
 ```
 #### llm models list --help
 ```
@@ -236,10 +236,10 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  edit  Edit the specified prompt template using the default $EDITOR
-  list  List available prompt templates
-  path  Output the path to the templates directory
-  show  Show the specified prompt template
+  list*  List available prompt templates
+  edit   Edit the specified prompt template using the default $EDITOR
+  path   Output the path to the templates directory
+  show   Show the specified prompt template
 ```
 #### llm templates list --help
 ```

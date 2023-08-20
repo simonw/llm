@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from llm.cli import cli
 import json
+import pytest
 
 
 def test_aliases_list():
@@ -66,11 +67,12 @@ def test_aliases_remove_invalid(user_path):
     assert result.output == "Error: Alias not found: invalid\n"
 
 
-def test_aliases_are_registered(user_path):
+@pytest.mark.parametrize("args", (["models"], ["models", "list"]))
+def test_aliases_are_registered(user_path, args):
     (user_path / "aliases.json").write_text(
         json.dumps({"foo": "bar", "turbo": "gpt-3.5-turbo"}), "utf-8"
     )
     runner = CliRunner()
-    result = runner.invoke(cli, ["models", "list"])
+    result = runner.invoke(cli, args)
     assert result.exit_code == 0
     assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output

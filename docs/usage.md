@@ -71,10 +71,10 @@ curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
 ```
 ## Listing available models
 
-The `llm models list` command lists every model that can be used with LLM, along with any aliases:
+The `llm models` command lists every model that can be used with LLM, along with any aliases:
 
 ```bash
-llm models list
+llm models
 ```
 Example output:
 ```
@@ -86,7 +86,7 @@ PaLM 2: chat-bison-001 (aliases: palm, palm2)
 ```
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
-llm models list --options
+llm models --options
 ```
 Output:
 <!-- [[[cog

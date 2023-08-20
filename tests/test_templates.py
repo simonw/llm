@@ -48,7 +48,8 @@ def test_templates_list_no_templates_found():
     assert result.output == ""
 
 
-def test_templates_list(templates_path):
+@pytest.mark.parametrize("args", (["templates", "list"], ["templates"]))
+def test_templates_list(templates_path, args):
     (templates_path / "one.yaml").write_text("template one", "utf-8")
     (templates_path / "two.yaml").write_text("template two", "utf-8")
     (templates_path / "three.yaml").write_text(
@@ -62,7 +63,7 @@ def test_templates_list(templates_path):
     )
     (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
     runner = CliRunner()
-    result = runner.invoke(cli, ["templates", "list"])
+    result = runner.invoke(cli, args)
     assert result.exit_code == 0
     assert result.output == (
         "both  : system: summarize this prompt: $input\n"

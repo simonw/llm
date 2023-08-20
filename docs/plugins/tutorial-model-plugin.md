@@ -346,7 +346,7 @@ Let's add extra validation rules to our options. Length must be at least 2. Dura
 
 The `Options` class uses [Pydantic 2](https://pydantic.org/), which can support all sorts of advanced validation rules.
 
-We can also add inline documentation, which can then be displayed by the `llm models list --options` command.
+We can also add inline documentation, which can then be displayed by the `llm models --options` command.
 
 Add these imports to the top of `llm_markov.py`:
 ```python
