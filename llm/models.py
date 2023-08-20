@@ -143,7 +143,7 @@ class Response(ABC):
             "prompt_json": self._prompt_json,
             "options_json": {
                 key: value
-                for key, value in self.prompt.options.model_dump().items()
+                for key, value in dict(self.prompt.options).items()
                 if value is not None
             },
             "response": self.text(),

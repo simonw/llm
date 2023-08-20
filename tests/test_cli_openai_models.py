@@ -51,14 +51,7 @@ def test_openai_options_min_max(mocked_models):
     for option, [min_val, max_val] in options.items():
         result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "-10"])
         assert result.exit_code == 1
-        assert (
-            result.output
-            == f"Error: {option}\n  Input should be greater than or equal to {min_val}\n"
-        )
-
-        result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
-        assert result.exit_code == 1
-        assert (
-            result.output
-            == f"Error: {option}\n  Input should be less than or equal to {max_val}\n"
-        )
+        assert f"greater than or equal to {min_val}" in result.output
+        result2 = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
+        assert result2.exit_code == 1
+        assert f"less than or equal to {max_val}" in result2.output

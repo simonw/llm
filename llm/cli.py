@@ -868,7 +868,7 @@ def load_template(name):
         return Template(name=name, prompt=loaded)
     loaded["name"] = name
     try:
-        return Template.model_validate(loaded)
+        return Template(**loaded)
     except pydantic.ValidationError as ex:
         msg = "A validation error occurred:\n"
         msg += render_errors(ex.errors())
