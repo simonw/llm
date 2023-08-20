@@ -10,6 +10,9 @@ class Template(BaseModel):
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
 
+    class Config:
+        extra = "forbid"
+
     class MissingVariables(Exception):
         pass
 
