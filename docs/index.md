@@ -62,6 +62,7 @@ aliases
 python-api
 templates
 logging
+related-tools
 help
 contributing
 changelog
