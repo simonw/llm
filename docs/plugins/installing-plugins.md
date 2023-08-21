@@ -3,7 +3,7 @@
 
 Plugins must be installed in the same virtual environment as LLM itself.
 
-You can find names of plugins to install in the [llm-plugins](https://github.com/simonw/llm-plugins) repository.
+You can find names of plugins to install in the {ref}`plugin directory <plugin-directory>`
 
 Use the `llm install` command (a thin wrapper around `pip install`) to install plugins in the correct environment:
 ```bash

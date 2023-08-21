@@ -20,7 +20,7 @@ llm -m ggml-vicuna-7b-1 'What is the capital of France?'
 ```
 The model will be downloaded and cached the first time you use it.
 
-Check the **[llm-plugins](https://github.com/simonw/llm-plugins)** repository for the latest list of available plugins for other models.
+Check the {ref}`plugin directory <plugin-directory>` for the latest list of available plugins for other models.
 
 (openai-extra-models)=
 

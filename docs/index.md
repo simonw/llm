@@ -57,11 +57,11 @@ maxdepth: 3
 setup
 usage
 other-models
+plugins/index
 aliases
 python-api
 templates
 logging
-plugins/index
 help
 contributing
 changelog
