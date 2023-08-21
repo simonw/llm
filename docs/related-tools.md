@@ -1,3 +1,4 @@
+(related-tools)=
 # Related tools
 
 The following tools are designed to be used with LLM:

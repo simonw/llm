@@ -1,5 +1,22 @@
 # Changelog
 
+(v0_8)=
+## 0.8 (2023-08-20)
+
+- The output format for `llm logs` has changed. Previously it was JSON - it's now a much more readable Markdown format suitable for pasting into other documents. [#160](https://github.com/simonw/llm/issues/160)
+  - The new `llm logs --json` option can be used to get the old JSON format.
+  - Pass `llm logs --conversation ID` or `--cid ID` to see the full logs for a specific conversation.
+- You can now combine piped input and a prompt in a single command: `cat script.py | llm 'explain this code'`. This works even for models that do not support {ref}`system prompts <system-prompts>`. [#153](https://github.com/simonw/llm/issues/153)
+- Additional {ref}`openai-compatible-models` can now be configured with custom HTTP headers. This enables platforms such as [openrouter.ai](https://openrouter.ai/) to be used with LLM, which can provide Claude access even without an Anthropic API key.
+- Keys set in `keys.json` are now used in preference to environment variables. [#158](https://github.com/simonw/llm/issues/158)
+- The documentation now includes a {ref}`plugin directory <plugin-directory>` listing all available plugins for LLM. [#173](https://github.com/simonw/llm/issues/173)
+- New {ref}`related tools <related-tools>` section in the documentation describing `ttok`, `strip-tags` and `symbex`. [#111](https://github.com/simonw/llm/issues/111)
+- The `llm models`, `llm aliases` and `llm templates` commands now default to running the same command as `llm models list` and `llm aliases list` and `llm templates list`. [#167](https://github.com/simonw/llm/issues/167)
+- New `llm keys` (aka `llm keys list`) command for listing the names of all configured keys. [#174](https://github.com/simonw/llm/issues/174)
+- Two new Python API functions, `llm.set_alias(alias, model_id)` and `llm.remove_alias(alias)` can be used to configure aliases from within Python code. [#154](https://github.com/simonw/llm/pull/154)
+- LLM is now compatible with both Pydantic 1 and Pydantic 2. This means you can install `llm` as a Python dependency in a project that depends on Pydantic 1 without running into dependency conflicts. Thanks, [Chris Mungall](https://github.com/cmungall). [#147](https://github.com/simonw/llm/pull/147)
+- `llm.get_model(model_id)` is now documented as raising `llm.UnknownModelError` if the requested model does not exist. [#155](https://github.com/simonw/llm/issues/155)
+
 (v0_7_1)=
 ## 0.7.1 (2023-08-19)
 
