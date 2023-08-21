@@ -168,7 +168,7 @@ def test_logs_search(user_path, query, expected):
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
-@pytest.mark.parametrize("use_stdin", (True, False))
+@pytest.mark.parametrize("use_stdin", (True, False, "split"))
 @pytest.mark.parametrize(
     "logs_off,logs_args,should_log",
     (
@@ -201,10 +201,13 @@ def test_llm_default_prompt(
 
     # Run the prompt
     runner = CliRunner()
-    prompt = "three names\nfor a pet pelican"
+    prompt = "three names \nfor a pet pelican"
     input = None
     args = ["--no-stream"]
-    if use_stdin:
+    if use_stdin == "split":
+        input = "three names"
+        args.append("\nfor a pet pelican")
+    elif use_stdin:
         input = prompt
     else:
         args.append(prompt)
@@ -224,7 +227,7 @@ def test_llm_default_prompt(
     assert len(rows) == 1
     expected = {
         "model": "gpt-3.5-turbo",
-        "prompt": "three names\nfor a pet pelican",
+        "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
         "response": "Bob, Alice, Eve",
@@ -234,7 +237,7 @@ def test_llm_default_prompt(
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
     assert json.loads(row["prompt_json"]) == {
-        "messages": [{"role": "user", "content": "three names\nfor a pet pelican"}]
+        "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
         "model": "gpt-3.5-turbo",
@@ -253,11 +256,11 @@ def test_llm_default_prompt(
         log_json[0].items()
         >= {
             "model": "gpt-3.5-turbo",
-            "prompt": "three names\nfor a pet pelican",
+            "prompt": "three names \nfor a pet pelican",
             "system": None,
             "prompt_json": {
                 "messages": [
-                    {"role": "user", "content": "three names\nfor a pet pelican"}
+                    {"role": "user", "content": "three names \nfor a pet pelican"}
                 ]
             },
             "options_json": {},
@@ -289,13 +292,13 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
     # Run the prompt
     runner = CliRunner()
-    prompt = "three names\nfor a pet pelican"
+    prompt = "three names \nfor a pet pelican"
     result = runner.invoke(cli, ["--no-stream", "--model", "orca", prompt])
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
     assert json.loads(mocked_localai.last_request.text) == {
         "model": "orca-mini-3b",
-        "messages": [{"role": "user", "content": "three names\nfor a pet pelican"}],
+        "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}],
         "stream": False,
     }
 

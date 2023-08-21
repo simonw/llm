@@ -24,6 +24,16 @@ You can also send a prompt to standard input, for example:
 ```bash
 echo 'Ten names for cheesecakes' | llm
 ```
+If you send text to standard input and provide arguments, the resulting prompt will consist of the piped content followed by the arguments:
+```bash
+cat myscript.py | llm 'explain this code'
+```
+Will run a prompt of:
+```
+<contents of myscript.py> explain this code
+```
+For models that support them, {ref}`system prompts <system-prompts>` are a better tool for this kind of prompting.
+
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
 
 ```bash
@@ -57,6 +67,7 @@ llm "Describe these changes: $(git diff)"
 ```
 This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
 
+(system-prompts)=
 ## System prompts
 
 You can use `-s/--system '...'` to set a system prompt.

@@ -126,14 +126,21 @@ def prompt(
 
     def read_prompt():
         nonlocal prompt
-        if prompt is None:
-            if template:
-                # If running a template only consume from stdin if it has data
-                if not sys.stdin.isatty():
-                    prompt = sys.stdin.read()
-            elif not save:
-                # Hang waiting for input to stdin (unless --save)
-                prompt = sys.stdin.read()
+
+        # Is there extra prompt available on stdin?
+        stdin_prompt = None
+        if not sys.stdin.isatty():
+            stdin_prompt = sys.stdin.read()
+
+        if stdin_prompt:
+            bits = [stdin_prompt]
+            if prompt:
+                bits.append(prompt)
+            prompt = " ".join(bits)
+
+        if prompt is None and not save and sys.stdin.isatty():
+            # Hang waiting for input to stdin (unless --save)
+            prompt = sys.stdin.read()
         return prompt
 
     if save:
