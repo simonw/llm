@@ -258,9 +258,6 @@ def prompt(
         else:
             print(response.text())
     except Exception as ex:
-        import pdb
-
-        pdb.set_trace()
         raise click.ClickException(str(ex))
 
     # Log to the database
