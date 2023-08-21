@@ -22,10 +22,17 @@ jobs:
       run: |
         git config user.name "Automated"
         git config user.email "actions@users.noreply.github.com"
-    - name: Check if stable branch exists
+    - name: Create stable branch if it does not yet exist
       run: |
         if ! git ls-remote --heads origin stable | grep stable; then
           git checkout -b stable
+          # If there are any releases, copy docs/ in from most recent
+          LATEST_RELEASE=$(git tag | sort -Vr | head -n1)
+          if [ -n "$LATEST_RELEASE" ]; then
+            rm -rf docs/
+            git checkout $LATEST_RELEASE -- docs/
+          fi
+          git commit -m "Populate docs/ from $LATEST_RELEASE" || echo "No changes"
           git push -u origin stable
         fi
     - name: Handle Release
