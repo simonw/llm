@@ -48,15 +48,11 @@ def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
     user_dir = tmpdir / "user-dir"
     pathlib.Path(user_dir).mkdir()
     keys_path = user_dir / "keys.json"
-    keys_path.write_text(
-        json.dumps(
-            {
-                "openai": "from-keys-file",
-                "other": "other-key",
-            }
-        ),
-        "utf-8",
-    )
+    KEYS = {
+        "openai": "from-keys-file",
+        "other": "other-key",
+    }
+    keys_path.write_text(json.dumps(KEYS), "utf-8")
     monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
     monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
@@ -66,21 +62,26 @@ def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
         ] == "Bearer {}".format(key)
 
     runner = CliRunner()
-    # Called without --key uses environment variable
+
+    # Called without --key uses stored key
     result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert_key("from-env")
-    # Called without --key and with no environment variable uses keys.json
-    monkeypatch.setenv("OPENAI_API_KEY", "")
+    assert_key("from-keys-file")
+
+    # Called without --key and without keys.json uses environment variable
+    keys_path.write_text("{}", "utf-8")
     result2 = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result2.exit_code == 0
-    assert_key("from-keys-file")
+    assert_key("from-env")
+    keys_path.write_text(json.dumps(KEYS), "utf-8")
+
     # Called with --key name-in-keys.json uses that value
     result3 = runner.invoke(
         cli, ["hello", "--key", "other", "--no-stream"], catch_exceptions=False
     )
     assert result3.exit_code == 0
     assert_key("other-key")
+
     # Called with --key something-else uses exactly that
     result4 = runner.invoke(
         cli, ["hello", "--key", "custom-key", "--no-stream"], catch_exceptions=False

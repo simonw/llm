@@ -101,11 +101,12 @@ Keys can also be set using an environment variable. These are different for diff
 
 For OpenAI models the key will be read from the `OPENAI_API_KEY` environment variable.
 
-The environment variable will be used only if no `--key` option is passed to the command.
+The environment variable will be used if no `--key` option is passed to the command and there is not a key configured in `keys.json`
 
-If no environment variable is found, the tool will fall back to checking `keys.json`.
-
-You can force the tool to use the key from `keys.json` even if an environment variable has also been set using `llm "prompt" --key openai`.
+To use an environment variable in place of the `keys.json` key run the prompt like this:
+```bash
+llm 'my prompt' --key $OPENAI_API_KEY
+```
 
 ## Configuration
 

@@ -5,7 +5,6 @@ import re
 import time
 from typing import Any, Dict, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
-import os
 import json
 from pydantic import BaseModel
 from ulid import ULID
@@ -220,15 +219,24 @@ class Model(ABC):
         pass
 
     def get_key(self):
-        if self.needs_key is None:
-            return None
-        if self.key is not None:
-            return self.key
-        if self.key_env_var is not None:
-            key = os.environ.get(self.key_env_var)
-            if key:
-                return key
+        from llm import get_key
 
+        if self.needs_key is None:
+            # This model doesn't use an API key
+            return None
+
+        if self.key is not None:
+            # Someone already set model.key='...'
+            return self.key
+
+        # Attempt to load a key using llm.get_key()
+        key = get_key(
+            explicit_key=None, key_alias=self.needs_key, env_var=self.key_env_var
+        )
+        if key:
+            return key
+
+        # Show a useful error message
         message = "No key found - add one using 'llm keys set {}'".format(
             self.needs_key
         )
