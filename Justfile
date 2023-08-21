@@ -29,6 +29,7 @@
 
 # Serve live docs on localhost:8000
 @docs: cog
+  rm -rf docs/_build
   cd docs && pipenv run make livehtml
 
 # Apply Black
