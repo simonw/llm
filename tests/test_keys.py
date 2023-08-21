@@ -32,6 +32,18 @@ def test_keys_set(monkeypatch, tmpdir):
     }
 
 
+@pytest.mark.parametrize("args", (["keys", "list"], ["keys"]))
+def test_keys_list(monkeypatch, tmpdir, args):
+    user_path = str(tmpdir / "user/keys")
+    monkeypatch.setenv("LLM_USER_PATH", user_path)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["keys", "set", "openai"], input="foo")
+    assert result.exit_code == 0
+    result2 = runner.invoke(cli, args)
+    assert result2.exit_code == 0
+    assert result2.output.strip() == "openai"
+
+
 def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
     user_dir = tmpdir / "user-dir"
     pathlib.Path(user_dir).mkdir()

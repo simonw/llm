@@ -293,9 +293,26 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     return conversation
 
 
-@cli.group()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
 def keys():
     "Manage stored API keys for different models"
+
+
+@keys.command(name="list")
+def keys_list():
+    "List names of all stored keys"
+    path = user_dir() / "keys.json"
+    if not path.exists():
+        click.echo("No keys found")
+        return
+    keys = json.loads(path.read_text())
+    for key in sorted(keys.keys()):
+        if key != "// Note":
+            click.echo(key)
 
 
 @keys.command(name="path")

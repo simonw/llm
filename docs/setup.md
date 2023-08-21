@@ -63,11 +63,19 @@ Once stored, this key will be automatically used for subsequent calls to the API
 ```bash
 llm "Five ludicrous names for a pet lobster"
 ```
+
+You can list the names of keys that have been set using this command:
+
+```bash
+llm keys
+```
+
 Keys that are stored in this way live in a file called `keys.json`. This file is located at the path shown when you run the following command:
 
 ```bash
 llm keys path
 ```
+
 On macOS this will be `~/Library/Application Support/io.datasette.llm/keys.json`. On Linux it may be something like `~/.config/io.datasette.llm/keys.json`.
 
 ### Passing keys using the --key option

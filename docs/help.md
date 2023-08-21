@@ -97,8 +97,18 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  path  Output the path to the keys.json file
-  set   Save a key in the keys.json file
+  list*  List names of all stored keys
+  path   Output the path to the keys.json file
+  set    Save a key in the keys.json file
+```
+#### llm keys list --help
+```
+Usage: llm keys list [OPTIONS]
+
+  List names of all stored keys
+
+Options:
+  --help  Show this message and exit.
 ```
 #### llm keys path --help
 ```
