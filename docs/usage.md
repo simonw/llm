@@ -2,7 +2,11 @@
 
 The default command for this is `llm prompt` - you can use `llm` instead if you prefer.
 
-## Executing a prompt against OpenAI
+## Executing a prompt
+
+These examples use the default OpenAI `gpt-3.5-turbo` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
+
+You can {ref}`install LLM plugins <installing-plugins>` to use models from other providers, including openly licensed models you can run directly on your own computer.
 
 To run a prompt, streaming tokens as they come in:
 ```bash
