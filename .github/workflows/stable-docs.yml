@@ -1,0 +1,57 @@
+name: Update Stable Docs
+
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+    - main
+
+permissions:
+  contents: write
+
+jobs:
+  update_stable_docs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # We need all commits to find docs/ changes
+    - name: Set up Git user
+      run: |
+        git config user.name "Automated"
+        git config user.email "actions@users.noreply.github.com"
+    - name: Check if stable branch exists
+      run: |
+        if ! git ls-remote --heads origin stable | grep stable; then
+          git checkout -b stable
+          git push -u origin stable
+        fi
+    - name: Handle Release
+      if: github.event_name == 'release'
+      run: |
+        git fetch --all
+        git checkout stable
+        git reset --hard ${GITHUB_REF#refs/tags/}
+        git push origin stable --force
+    - name: Handle Commit to Main
+      if: contains(github.event.head_commit.message, '!stable-docs')
+      run: |
+        git fetch origin
+        git checkout -b stable origin/stable
+        # Get the list of modified files in docs/ from the current commit
+        FILES=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} -- docs/)
+        # Check if the list of files is non-empty
+        if [[ -n "$FILES" ]]; then
+          # Checkout those files to the stable branch to over-write with their contents
+          for FILE in $FILES; do
+            git checkout ${{ github.sha }} -- $FILE
+          done
+          git add docs/
+          git commit -m "Doc changes from ${{ github.sha }}"
+          git push origin stable
+        else
+          echo "No changes to docs/ in this commit."
+          exit 0
+        fi
