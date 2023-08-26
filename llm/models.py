@@ -3,7 +3,7 @@ import datetime
 from .errors import NeedsKeyException
 import re
 import time
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Union
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -302,7 +302,7 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
 @dataclass
 class ModelWithAliases:
-    model: Model
+    model: Union[Model, EmbeddingModel]
     aliases: Set[str]
 
 
