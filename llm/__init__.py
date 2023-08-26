@@ -6,8 +6,9 @@ from .errors import (
 from .models import (
     Conversation,
     Model,
-    EmbeddingModel,
     ModelWithAliases,
+    EmbeddingModel,
+    EmbeddingModelWithAliases,
     Options,
     Prompt,
     Response,
@@ -74,7 +75,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     return model_aliases
 
 
-def get_embedding_models_with_aliases() -> List["ModelWithAliases"]:
+def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
     model_aliases = []
 
     # Include aliases from aliases.json
@@ -89,7 +90,7 @@ def get_embedding_models_with_aliases() -> List["ModelWithAliases"]:
         alias_list = list(aliases or [])
         if model.model_id in extra_model_aliases:
             alias_list.extend(extra_model_aliases[model.model_id])
-        model_aliases.append(ModelWithAliases(model, alias_list))
+        model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
 
     pm.hook.register_embedding_models(register=register)
 
