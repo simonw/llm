@@ -6,6 +6,7 @@ from .errors import (
 from .models import (
     Conversation,
     Model,
+    EmbeddingModel,
     ModelWithAliases,
     Options,
     Prompt,
@@ -71,6 +72,16 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     pm.hook.register_models(register=register)
 
     return model_aliases
+
+
+def get_embedding_models():
+    models = []
+
+    def register(model, aliases=None):
+        models.append(model)
+
+    pm.hook.register_embedding_models(register=register)
+    return models
 
 
 def get_model_aliases() -> Dict[str, Model]:

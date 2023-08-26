@@ -1,4 +1,4 @@
-from llm import Model, hookimpl
+from llm import EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string
 import click
@@ -54,6 +54,23 @@ def register_models(register):
             chat_model,
             aliases=aliases,
         )
+
+
+@hookimpl
+def register_embedding_models(register):
+    register(Ada002(), aliases=("ada002",))
+
+
+class Ada002(EmbeddingModel):
+    model_id = "ada002"
+    embedding_size = 1536
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+
+    def embed(self, text):
+        return openai.Embedding.create(
+            input=text, model="text-embedding-ada-002", api_key=self.get_key()
+        )["data"][0]["embedding"]
 
 
 @hookimpl
