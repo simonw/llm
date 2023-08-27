@@ -55,6 +55,7 @@ Options:
 Commands:
   prompt*    Execute a prompt
   aliases    Manage model aliases
+  embed      Embed text and store or return the result
   install    Install packages from PyPI into the same environment as LLM
   keys       Manage stored API keys for different models
   logs       Tools for exploring logged prompts and responses
@@ -379,6 +380,22 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
 Options:
   -y, --yes  Don't ask for confirmation
   --help     Show this message and exit.
+```
+### llm embed --help
+```
+Usage: llm embed [OPTIONS] [COLLECTION] [ID]
+
+  Embed text and store or return the result
+
+Options:
+  -i, --input FILE                Content to embed
+  -m, --model TEXT                Embedding model to use
+  --store                         Store the text itself in the database
+  -d, --database FILE
+  -c, --content FILE
+  -f, --format [json|blob|base64|hex]
+                                  Output format
+  --help                          Show this message and exit.
 ```
 ### llm openai --help
 ```
