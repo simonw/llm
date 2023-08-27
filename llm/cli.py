@@ -6,6 +6,7 @@ from llm import (
     Response,
     Template,
     UnknownModelError,
+    get_embedding_model,
     get_key,
     get_plugins,
     get_model,
@@ -17,12 +18,16 @@ from llm import (
 )
 
 from .migrations import migrate
+from .embeddings_migrations import embeddings_migrations
 from .plugins import pm
+import base64
 import pathlib
 import pydantic
 from runpy import run_module
 import shutil
 import sqlite_utils
+from sqlite_utils.db import NotFoundError
+import struct
 import sys
 import textwrap
 from typing import cast, Optional
@@ -853,6 +858,138 @@ def uninstall(packages, yes):
     run_module("pip", run_name="__main__")
 
 
+@cli.command()
+@click.argument("collection", required=False)
+@click.argument("id", required=False)
+@click.option(
+    "-i",
+    "--input",
+    type=click.Path(file_okay=True, allow_dash=True, dir_okay=False),
+    help="Content to embed",
+)
+@click.option("-m", "--model", help="Embedding model to use")
+@click.option("--store", is_flag=True, help="Store the text itself in the database")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+)
+@click.option(
+    "-c",
+    "--content",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+)
+@click.option(
+    "format_",
+    "-f",
+    "--format",
+    type=click.Choice(["json", "blob", "base64", "hex"]),
+    help="Output format",
+)
+def embed(collection, id, input, model, store, database, content, format_):
+    """Embed text and store or return the result"""
+    if collection and not id:
+        raise click.ClickException("Must provide both collection and id")
+
+    db = None
+
+    def get_db():
+        if database:
+            return sqlite_utils.Database(database)
+        else:
+            return sqlite_utils.Database(user_dir() / "embeddings.db")
+
+    existing_collection = None
+    if collection:
+        db = get_db()
+        if db["collections"].exists():
+            try:
+                existing_collection = get_collection(db, collection)
+            except NotFoundError:
+                pass
+
+    if model is None:
+        # If collection exists, use that model
+        if existing_collection:
+            model = existing_collection["model"]
+        else:
+            # Use default model
+            model = "sentence-transformers/all-MiniLM-L6-v2"
+
+    if model and existing_collection and model != existing_collection["model"]:
+        raise click.ClickException(
+            "Model '{}' does not match '{}' collection model of '{}'".format(
+                model, collection, existing_collection["model"]
+            )
+        )
+
+    try:
+        model = get_embedding_model(model)
+    except UnknownModelError as ex:
+        raise click.ClickException(str(ex))
+
+    show_output = True
+    if collection and (format_ is None):
+        show_output = False
+
+    # Resolve input text
+    if not content:
+        if not input:
+            # Read from stdin
+            input = sys.stdin
+        content = input.read()
+    if not content:
+        raise click.ClickException("No content provided")
+
+    embedding = model.embed(content)
+
+    if collection:
+        # Store the embedding
+        if db is None:
+            db = get_db()
+
+        embeddings_migrations.apply(db)
+
+        if not existing_collection:
+            db["collections"].insert(
+                {
+                    "name": collection,
+                    "model": model.model_id,
+                }
+            )
+            existing_collection = get_collection(db, collection)
+
+        # Now store it
+        db["embeddings"].insert(
+            {
+                "collection_id": existing_collection["id"],
+                "id": id,
+                "content": content if store else None,
+                "embedding": encode(embedding),
+            },
+            replace=True,
+        )
+
+    if show_output:
+        if format_ == "json":
+            click.echo(json.dumps(embedding))
+        elif format_ == "blob":
+            click.echo(encode(embedding))
+        elif format_ == "base64":
+            click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
+        elif format_ == "hex":
+            click.echo(encode(embedding).hex())
+
+
+def get_collection(db, collection):
+    rows = db["collections"].rows_where("name = ?", [collection])
+    try:
+        return next(rows)
+    except StopIteration:
+        raise NotFoundError("Collection not found: {}".format(collection))
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
@@ -947,3 +1084,7 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def encode(values):
+    return struct.pack("f" * len(values), *values)
