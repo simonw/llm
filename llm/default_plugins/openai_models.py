@@ -58,11 +58,11 @@ def register_models(register):
 
 @hookimpl
 def register_embedding_models(register):
-    register(Ada002(), aliases=("ada002",))
+    register(Ada002(), aliases=("ada",))
 
 
 class Ada002(EmbeddingModel):
-    model_id = "ada002"
+    model_id = "ada-002"
     embedding_size = 1536
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"

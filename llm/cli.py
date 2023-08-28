@@ -6,6 +6,7 @@ from llm import (
     Response,
     Template,
     UnknownModelError,
+    get_embedding_models_with_aliases,
     get_embedding_model,
     get_key,
     get_plugins,
@@ -37,6 +38,7 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
+DEFAULT_EMBEDDING_MODEL = "ada-002"
 
 DEFAULT_TEMPLATE = "prompt: "
 
@@ -982,6 +984,42 @@ def embed(collection, id, input, model, store, database, content, format_):
             click.echo(encode(embedding).hex())
 
 
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def embed_models():
+    "Manage available embedding models"
+
+
+@embed_models.command(name="list")
+def embed_models_list():
+    "List available embedding models"
+    output = []
+    for model_with_aliases in get_embedding_models_with_aliases():
+        s = str(model_with_aliases.model.model_id)
+        if model_with_aliases.aliases:
+            s += " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+        output.append(s)
+    click.echo("\n".join(output))
+
+
+@embed_models.command(name="default")
+@click.argument("model", required=False)
+def embed_models_default(model):
+    "Show or set the default embedding model"
+    if not model:
+        click.echo(get_default_embedding_model())
+        return
+    # Validate it is a known model
+    try:
+        model = get_embedding_model(model)
+        set_default_embedding_model(model.model_id)
+    except KeyError:
+        raise click.ClickException("Unknown embedding model: {}".format(model))
+
+
 def get_collection(db, collection):
     rows = db["collections"].rows_where("name = ?", [collection])
     try:
@@ -1002,17 +1040,25 @@ def _truncate_string(s, max_length=100):
     return s
 
 
-def get_default_model():
-    path = user_dir() / "default_model.txt"
+def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    path = user_dir() / filename
     if path.exists():
         return path.read_text().strip()
     else:
-        return DEFAULT_MODEL
+        return default
 
 
-def set_default_model(model):
-    path = user_dir() / "default_model.txt"
+def set_default_model(model, filename="default_model.txt"):
+    path = user_dir() / filename
     path.write_text(model)
+
+
+def get_default_embedding_model():
+    return get_default_model("default_embedding_model.txt", DEFAULT_EMBEDDING_MODEL)
+
+
+def set_default_embedding_model(model):
+    set_default_model(model, "default_embedding_model.txt")
 
 
 def logs_db_path():
