@@ -917,7 +917,7 @@ def embed(collection, id, input, model, store, database, content, format_):
             model = existing_collection["model"]
         else:
             # Use default model
-            model = "sentence-transformers/all-MiniLM-L6-v2"
+            model = get_default_embedding_model()
 
     if model and existing_collection and model != existing_collection["model"]:
         raise click.ClickException(
@@ -974,7 +974,7 @@ def embed(collection, id, input, model, store, database, content, format_):
         )
 
     if show_output:
-        if format_ == "json":
+        if format_ == "json" or format_ is None:
             click.echo(json.dumps(embedding))
         elif format_ == "blob":
             click.echo(encode(embedding))
@@ -1018,6 +1018,57 @@ def embed_models_default(model):
         set_default_embedding_model(model.model_id)
     except KeyError:
         raise click.ClickException("Unknown embedding model: {}".format(model))
+
+
+@cli.group()
+def embed_db():
+    "Manage the embeddings database"
+
+
+@embed_db.command(name="path")
+def embed_db_path():
+    "Output the path to the embeddings database"
+    click.echo(user_dir() / "embeddings.db")
+
+
+@embed_db.command(name="collections")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+    help="Path to embeddings database",
+)
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def embed_db_collections(database, json_):
+    "Output the path to the embeddings database"
+    database = database or (user_dir() / "embeddings.db")
+    db = sqlite_utils.Database(str(database))
+    if not db["collections"].exists():
+        raise click.ClickException("No collections table found in {}".format(database))
+    rows = db.query(
+        """
+    select
+        collections.name,
+        collections.model,
+        count(embeddings.id) as num_embeddings
+    from
+        collections left join embeddings
+        on collections.id = embeddings.collection_id
+    group by
+        collections.name, collections.model
+    """
+    )
+    if json_:
+        click.echo(json.dumps(list(rows), indent=4))
+    else:
+        for row in rows:
+            click.echo("{}: {}".format(row["name"], row["model"]))
+            click.echo(
+                "  {} embedding{}".format(
+                    row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""
+                )
+            )
 
 
 def get_collection(db, collection):
@@ -1133,4 +1184,8 @@ def logs_on():
 
 
 def encode(values):
-    return struct.pack("f" * len(values), *values)
+    return struct.pack("<" + "f" * len(values), *values)
+
+
+def decode(binary):
+    return struct.unpack("<" + "f" * (len(binary) // 4), binary)

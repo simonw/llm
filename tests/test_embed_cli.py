@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 from llm.cli import cli
+import json
 import pytest
 import sqlite_utils
 
@@ -89,3 +90,16 @@ def test_embed_store(user_path):
             "metadata": None,
         }
     ]
+    # Should show up in 'llm embed-db collections'
+    for is_json in (False, True):
+        args = ["embed-db", "collections"]
+        if is_json:
+            args.extend(["--json"])
+        result2 = runner.invoke(cli, args)
+        assert result2.exit_code == 0
+        if is_json:
+            assert json.loads(result2.output) == [
+                {"name": "items", "model": "embed-demo", "num_embeddings": 1}
+            ]
+        else:
+            assert result2.output == "items: embed-demo\n  1 embedding\n"
