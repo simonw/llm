@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from llm.cli import cli
 import pytest
+import sqlite_utils
 
 
 @pytest.mark.parametrize(
@@ -41,3 +42,50 @@ def test_embed_output_format(format_, expected):
     )
     assert result.exit_code == 0
     assert result.output == expected
+
+
+@pytest.mark.parametrize(
+    "args,expected_error",
+    ((["-c", "Content", "stories"], "Must provide both collection and id"),),
+)
+def test_embed_errors(args, expected_error):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed"] + args)
+    assert result.exit_code == 1
+    assert expected_error in result.output
+
+
+def test_embed_store(user_path):
+    embeddings_db = user_path / "embeddings.db"
+    assert not embeddings_db.exists()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed", "-c", "hello", "-m", "embed-demo"])
+    assert result.exit_code == 0
+    # Should not have created the table
+    assert not embeddings_db.exists()
+    # Now run it to store
+    result = runner.invoke(
+        cli, ["embed", "-c", "hello", "-m", "embed-demo", "items", "1"]
+    )
+    assert result.exit_code == 0
+    assert embeddings_db.exists()
+    # Check the contents
+    db = sqlite_utils.Database(str(embeddings_db))
+    assert list(db["collections"].rows) == [
+        {"id": 1, "name": "items", "model": "embed-demo"}
+    ]
+    assert list(db["embeddings"].rows) == [
+        {
+            "collection_id": 1,
+            "id": "1",
+            "embedding": (
+                b"\x00\x00\xa0@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00"
+            ),
+            "content": None,
+            "metadata": None,
+        }
+    ]
