@@ -40,3 +40,7 @@
 @fix: cog
   pipenv run ruff . --fix
   pipenv run black .
+
+# Push commit if tests pass
+@push: test lint
+  git push
