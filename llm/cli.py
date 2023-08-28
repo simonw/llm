@@ -6,6 +6,8 @@ from llm import (
     Response,
     Template,
     UnknownModelError,
+    get_embedding_models_with_aliases,
+    get_embedding_model,
     get_key,
     get_plugins,
     get_model,
@@ -17,12 +19,16 @@ from llm import (
 )
 
 from .migrations import migrate
+from .embeddings_migrations import embeddings_migrations
 from .plugins import pm
+import base64
 import pathlib
 import pydantic
 from runpy import run_module
 import shutil
 import sqlite_utils
+from sqlite_utils.db import NotFoundError
+import struct
 import sys
 import textwrap
 from typing import cast, Optional
@@ -32,6 +38,7 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
+DEFAULT_EMBEDDING_MODEL = "ada-002"
 
 DEFAULT_TEMPLATE = "prompt: "
 
@@ -853,6 +860,225 @@ def uninstall(packages, yes):
     run_module("pip", run_name="__main__")
 
 
+@cli.command()
+@click.argument("collection", required=False)
+@click.argument("id", required=False)
+@click.option(
+    "-i",
+    "--input",
+    type=click.Path(file_okay=True, allow_dash=True, dir_okay=False),
+    help="Content to embed",
+)
+@click.option("-m", "--model", help="Embedding model to use")
+@click.option("--store", is_flag=True, help="Store the text itself in the database")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+)
+@click.option(
+    "-c",
+    "--content",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+)
+@click.option(
+    "format_",
+    "-f",
+    "--format",
+    type=click.Choice(["json", "blob", "base64", "hex"]),
+    help="Output format",
+)
+def embed(collection, id, input, model, store, database, content, format_):
+    """Embed text and store or return the result"""
+    if collection and not id:
+        raise click.ClickException("Must provide both collection and id")
+
+    db = None
+
+    def get_db():
+        if database:
+            return sqlite_utils.Database(database)
+        else:
+            return sqlite_utils.Database(user_dir() / "embeddings.db")
+
+    existing_collection = None
+    if collection:
+        db = get_db()
+        if db["collections"].exists():
+            try:
+                existing_collection = get_collection(db, collection)
+            except NotFoundError:
+                pass
+
+    if model is None:
+        # If collection exists, use that model
+        if existing_collection:
+            model = existing_collection["model"]
+        else:
+            # Use default model
+            model = get_default_embedding_model()
+
+    if model and existing_collection and model != existing_collection["model"]:
+        raise click.ClickException(
+            "Model '{}' does not match '{}' collection model of '{}'".format(
+                model, collection, existing_collection["model"]
+            )
+        )
+
+    try:
+        model = get_embedding_model(model)
+    except UnknownModelError as ex:
+        raise click.ClickException(str(ex))
+
+    show_output = True
+    if collection and (format_ is None):
+        show_output = False
+
+    # Resolve input text
+    if not content:
+        if not input:
+            # Read from stdin
+            input = sys.stdin
+        content = input.read()
+    if not content:
+        raise click.ClickException("No content provided")
+
+    embedding = model.embed(content)
+
+    if collection:
+        # Store the embedding
+        if db is None:
+            db = get_db()
+
+        embeddings_migrations.apply(db)
+
+        if not existing_collection:
+            db["collections"].insert(
+                {
+                    "name": collection,
+                    "model": model.model_id,
+                }
+            )
+            existing_collection = get_collection(db, collection)
+
+        # Now store it
+        db["embeddings"].insert(
+            {
+                "collection_id": existing_collection["id"],
+                "id": id,
+                "content": content if store else None,
+                "embedding": encode(embedding),
+            },
+            replace=True,
+        )
+
+    if show_output:
+        if format_ == "json" or format_ is None:
+            click.echo(json.dumps(embedding))
+        elif format_ == "blob":
+            click.echo(encode(embedding))
+        elif format_ == "base64":
+            click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
+        elif format_ == "hex":
+            click.echo(encode(embedding).hex())
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def embed_models():
+    "Manage available embedding models"
+
+
+@embed_models.command(name="list")
+def embed_models_list():
+    "List available embedding models"
+    output = []
+    for model_with_aliases in get_embedding_models_with_aliases():
+        s = str(model_with_aliases.model.model_id)
+        if model_with_aliases.aliases:
+            s += " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+        output.append(s)
+    click.echo("\n".join(output))
+
+
+@embed_models.command(name="default")
+@click.argument("model", required=False)
+def embed_models_default(model):
+    "Show or set the default embedding model"
+    if not model:
+        click.echo(get_default_embedding_model())
+        return
+    # Validate it is a known model
+    try:
+        model = get_embedding_model(model)
+        set_default_embedding_model(model.model_id)
+    except KeyError:
+        raise click.ClickException("Unknown embedding model: {}".format(model))
+
+
+@cli.group()
+def embed_db():
+    "Manage the embeddings database"
+
+
+@embed_db.command(name="path")
+def embed_db_path():
+    "Output the path to the embeddings database"
+    click.echo(user_dir() / "embeddings.db")
+
+
+@embed_db.command(name="collections")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+    help="Path to embeddings database",
+)
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def embed_db_collections(database, json_):
+    "Output the path to the embeddings database"
+    database = database or (user_dir() / "embeddings.db")
+    db = sqlite_utils.Database(str(database))
+    if not db["collections"].exists():
+        raise click.ClickException("No collections table found in {}".format(database))
+    rows = db.query(
+        """
+    select
+        collections.name,
+        collections.model,
+        count(embeddings.id) as num_embeddings
+    from
+        collections left join embeddings
+        on collections.id = embeddings.collection_id
+    group by
+        collections.name, collections.model
+    """
+    )
+    if json_:
+        click.echo(json.dumps(list(rows), indent=4))
+    else:
+        for row in rows:
+            click.echo("{}: {}".format(row["name"], row["model"]))
+            click.echo(
+                "  {} embedding{}".format(
+                    row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""
+                )
+            )
+
+
+def get_collection(db, collection):
+    rows = db["collections"].rows_where("name = ?", [collection])
+    try:
+        return next(rows)
+    except StopIteration:
+        raise NotFoundError("Collection not found: {}".format(collection))
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
@@ -865,17 +1091,25 @@ def _truncate_string(s, max_length=100):
     return s
 
 
-def get_default_model():
-    path = user_dir() / "default_model.txt"
+def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    path = user_dir() / filename
     if path.exists():
         return path.read_text().strip()
     else:
-        return DEFAULT_MODEL
+        return default
 
 
-def set_default_model(model):
-    path = user_dir() / "default_model.txt"
+def set_default_model(model, filename="default_model.txt"):
+    path = user_dir() / filename
     path.write_text(model)
+
+
+def get_default_embedding_model():
+    return get_default_model("default_embedding_model.txt", DEFAULT_EMBEDDING_MODEL)
+
+
+def set_default_embedding_model(model):
+    set_default_model(model, "default_embedding_model.txt")
 
 
 def logs_db_path():
@@ -947,3 +1181,11 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def encode(values):
+    return struct.pack("<" + "f" * len(values), *values)
+
+
+def decode(binary):
+    return struct.unpack("<" + "f" * (len(binary) // 4), binary)

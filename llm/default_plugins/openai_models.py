@@ -1,4 +1,4 @@
-from llm import Model, hookimpl
+from llm import EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string
 import click
@@ -33,9 +33,18 @@ def register_models(register):
         aliases = extra_model.get("aliases", [])
         model_name = extra_model["model_name"]
         api_base = extra_model.get("api_base")
+        api_type = extra_model.get("api_type")
+        api_version = extra_model.get("api_version")
+        api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
         chat_model = Chat(
-            model_id, model_name=model_name, api_base=api_base, headers=headers
+            model_id,
+            model_name=model_name,
+            api_base=api_base,
+            api_type=api_type,
+            api_version=api_version,
+            api_engine=api_engine,
+            headers=headers,
         )
         if api_base:
             chat_model.needs_key = None
@@ -45,6 +54,23 @@ def register_models(register):
             chat_model,
             aliases=aliases,
         )
+
+
+@hookimpl
+def register_embedding_models(register):
+    register(Ada002(), aliases=("ada",))
+
+
+class Ada002(EmbeddingModel):
+    model_id = "ada-002"
+    embedding_size = 1536
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+
+    def embed(self, text):
+        return openai.Embedding.create(
+            input=text, model="text-embedding-ada-002", api_key=self.get_key()
+        )["data"][0]["embedding"]
 
 
 @hookimpl
@@ -179,12 +205,23 @@ class Chat(Model):
             return validated_logit_bias
 
     def __init__(
-        self, model_id, key=None, model_name=None, api_base=None, headers=None
+        self,
+        model_id,
+        key=None,
+        model_name=None,
+        api_base=None,
+        api_type=None,
+        api_version=None,
+        api_engine=None,
+        headers=None,
     ):
         self.model_id = model_id
         self.key = key
         self.model_name = model_name
         self.api_base = api_base
+        self.api_type = api_type
+        self.api_version = api_version
+        self.api_engine = api_engine
         self.headers = headers
 
     def __str__(self):
@@ -214,6 +251,12 @@ class Chat(Model):
         kwargs = dict(not_nulls(prompt.options))
         if self.api_base:
             kwargs["api_base"] = self.api_base
+        if self.api_type:
+            kwargs["api_type"] = self.api_type
+        if self.api_version:
+            kwargs["api_version"] = self.api_version
+        if self.api_engine:
+            kwargs["engine"] = self.api_engine
         if self.needs_key:
             if self.key:
                 kwargs["api_key"] = self.key

@@ -208,16 +208,7 @@ class Options(BaseModel):
 _Options = Options
 
 
-class Model(ABC):
-    model_id: str
-    key: Optional[str] = None
-    needs_key: Optional[str] = None
-    key_env_var: Optional[str] = None
-    can_stream: bool = False
-
-    class Options(_Options):
-        pass
-
+class _get_key_mixin:
     def get_key(self):
         from llm import get_key
 
@@ -243,6 +234,17 @@ class Model(ABC):
         if self.key_env_var:
             message += " or set the {} environment variable".format(self.key_env_var)
         raise NeedsKeyException(message)
+
+
+class Model(ABC, _get_key_mixin):
+    model_id: str
+    key: Optional[str] = None
+    needs_key: Optional[str] = None
+    key_env_var: Optional[str] = None
+    can_stream: bool = False
+
+    class Options(_Options):
+        pass
 
     def conversation(self):
         return Conversation(model=self)
@@ -283,9 +285,30 @@ class Model(ABC):
         return "<Model '{}'>".format(self.model_id)
 
 
+class EmbeddingModel(ABC, _get_key_mixin):
+    model_id: str
+    embedding_size: int
+    key: Optional[str] = None
+    needs_key: Optional[str] = None
+    key_env_var: Optional[str] = None
+
+    @abstractmethod
+    def embed(self, text: str) -> List[float]:
+        """
+        Embed a some text as a list of floats
+        """
+        pass
+
+
 @dataclass
 class ModelWithAliases:
     model: Model
+    aliases: Set[str]
+
+
+@dataclass
+class EmbeddingModelWithAliases:
+    model: EmbeddingModel
     aliases: Set[str]
 
 

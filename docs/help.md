@@ -53,16 +53,19 @@ Options:
   --help     Show this message and exit.
 
 Commands:
-  prompt*    Execute a prompt
-  aliases    Manage model aliases
-  install    Install packages from PyPI into the same environment as LLM
-  keys       Manage stored API keys for different models
-  logs       Tools for exploring logged prompts and responses
-  models     Manage available models
-  openai     Commands for working directly with the OpenAI API
-  plugins    List installed plugins
-  templates  Manage stored prompt templates
-  uninstall  Uninstall Python packages from the LLM environment
+  prompt*       Execute a prompt
+  aliases       Manage model aliases
+  embed         Embed text and store or return the result
+  embed-db      Manage the embeddings database
+  embed-models  Manage available embedding models
+  install       Install packages from PyPI into the same environment as LLM
+  keys          Manage stored API keys for different models
+  logs          Tools for exploring logged prompts and responses
+  models        Manage available models
+  openai        Commands for working directly with the OpenAI API
+  plugins       List installed plugins
+  templates     Manage stored prompt templates
+  uninstall     Uninstall Python packages from the LLM environment
 ```
 ### llm prompt --help
 ```
@@ -379,6 +382,86 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
 Options:
   -y, --yes  Don't ask for confirmation
   --help     Show this message and exit.
+```
+### llm embed --help
+```
+Usage: llm embed [OPTIONS] [COLLECTION] [ID]
+
+  Embed text and store or return the result
+
+Options:
+  -i, --input FILE                Content to embed
+  -m, --model TEXT                Embedding model to use
+  --store                         Store the text itself in the database
+  -d, --database FILE
+  -c, --content FILE
+  -f, --format [json|blob|base64|hex]
+                                  Output format
+  --help                          Show this message and exit.
+```
+### llm embed-models --help
+```
+Usage: llm embed-models [OPTIONS] COMMAND [ARGS]...
+
+  Manage available embedding models
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*    List available embedding models
+  default  Show or set the default embedding model
+```
+#### llm embed-models list --help
+```
+Usage: llm embed-models list [OPTIONS]
+
+  List available embedding models
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm embed-models default --help
+```
+Usage: llm embed-models default [OPTIONS] [MODEL]
+
+  Show or set the default embedding model
+
+Options:
+  --help  Show this message and exit.
+```
+### llm embed-db --help
+```
+Usage: llm embed-db [OPTIONS] COMMAND [ARGS]...
+
+  Manage the embeddings database
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  collections  Output the path to the embeddings database
+  path         Output the path to the embeddings database
+```
+#### llm embed-db path --help
+```
+Usage: llm embed-db path [OPTIONS]
+
+  Output the path to the embeddings database
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm embed-db collections --help
+```
+Usage: llm embed-db collections [OPTIONS]
+
+  Output the path to the embeddings database
+
+Options:
+  -d, --database FILE  Path to embeddings database
+  --json               Output as JSON
+  --help               Show this message and exit.
 ```
 ### llm openai --help
 ```

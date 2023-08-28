@@ -7,6 +7,8 @@ from .models import (
     Conversation,
     Model,
     ModelWithAliases,
+    EmbeddingModel,
+    EmbeddingModelWithAliases,
     Options,
     Prompt,
     Response,
@@ -70,6 +72,55 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
 
     pm.hook.register_models(register=register)
 
+    return model_aliases
+
+
+def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
+    model_aliases = []
+
+    # Include aliases from aliases.json
+    aliases_path = user_dir() / "aliases.json"
+    extra_model_aliases: Dict[str, list] = {}
+    if aliases_path.exists():
+        configured_aliases = json.loads(aliases_path.read_text())
+        for alias, model_id in configured_aliases.items():
+            extra_model_aliases.setdefault(model_id, []).append(alias)
+
+    def register(model, aliases=None):
+        alias_list = list(aliases or [])
+        if model.model_id in extra_model_aliases:
+            alias_list.extend(extra_model_aliases[model.model_id])
+        model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
+
+    pm.hook.register_embedding_models(register=register)
+
+    return model_aliases
+
+
+def get_embedding_models():
+    models = []
+
+    def register(model, aliases=None):
+        models.append(model)
+
+    pm.hook.register_embedding_models(register=register)
+    return models
+
+
+def get_embedding_model(name):
+    aliases = get_embedding_model_aliases()
+    try:
+        return aliases[name]
+    except KeyError:
+        raise UnknownModelError("Unknown model: " + name)
+
+
+def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
+    model_aliases = {}
+    for model_with_aliases in get_embedding_models_with_aliases():
+        for alias in model_with_aliases.aliases:
+            model_aliases[alias] = model_with_aliases.model
+        model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
 
 
