@@ -56,6 +56,7 @@ Commands:
   prompt*       Execute a prompt
   aliases       Manage model aliases
   embed         Embed text and store or return the result
+  embed-db      Manage the embeddings database
   embed-models  Manage available embedding models
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
@@ -428,6 +429,39 @@ Usage: llm embed-models default [OPTIONS] [MODEL]
 
 Options:
   --help  Show this message and exit.
+```
+### llm embed-db --help
+```
+Usage: llm embed-db [OPTIONS] COMMAND [ARGS]...
+
+  Manage the embeddings database
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  collections  Output the path to the embeddings database
+  path         Output the path to the embeddings database
+```
+#### llm embed-db path --help
+```
+Usage: llm embed-db path [OPTIONS]
+
+  Output the path to the embeddings database
+
+Options:
+  --help  Show this message and exit.
+```
+#### llm embed-db collections --help
+```
+Usage: llm embed-db collections [OPTIONS]
+
+  Output the path to the embeddings database
+
+Options:
+  -d, --database FILE  Path to embeddings database
+  --json               Output as JSON
+  --help               Show this message and exit.
 ```
 ### llm openai --help
 ```

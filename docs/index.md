@@ -57,6 +57,7 @@ maxdepth: 3
 setup
 usage
 other-models
+embeddings/index
 plugins/index
 aliases
 python-api
