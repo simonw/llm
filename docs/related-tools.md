@@ -19,7 +19,7 @@ curl -s https://www.nytimes.com/ \
 
 ## ttok
 
-[ttok](https://github.com/simon/ttok) is a command-line tool for counting OpenAI tokens. You can use it to check if input is likely to fit in the token limit for GPT 3.5 or GPT4:
+[ttok](https://github.com/simonw/ttok) is a command-line tool for counting OpenAI tokens. You can use it to check if input is likely to fit in the token limit for GPT 3.5 or GPT4:
 
 ```bash
 cat my-file.txt | ttok
