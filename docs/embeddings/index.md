@@ -1,7 +1,7 @@
 (embeddings)=
 # Embeddings
 
-Embedding models allow you to take a piece of text - a word, sentence, paragraph or even a whole articles, and convert that into an array of floating point numbers.
+Embedding models allow you to take a piece of text - a word, sentence, paragraph or even a whole article, and convert that into an array of floating point numbers.
 
 This floating point array is called an "embedding vector", and works as a numerical representation of the semantic meaning of the content in a many-multi-dimensional space.
 
