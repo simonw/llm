@@ -11,7 +11,7 @@ except ImportError:
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
 import requests
-from typing import List, Optional, Union
+from typing import List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
@@ -66,12 +66,13 @@ class Ada002(EmbeddingModel):
     embedding_size = 1536
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
+    batch_size = 100  # Maybe this should be 2048
 
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def embed_batch(self, texts: Iterable[str]) -> Iterator[List[float]]:
         results = openai.Embedding.create(
             input=texts, model="text-embedding-ada-002", api_key=self.get_key()
         )["data"]
-        return [result["embedding"] for result in results]
+        return ([float(r) for r in result["embedding"]] for result in results)
 
 
 @hookimpl

@@ -36,7 +36,7 @@ class SentenceTransformerModel(llm.EmbeddingModel):
         if self._model is None:
             self._model = SentenceTransformer(self.model_name)
         results = self._model.encode(texts)
-        return [list(map(float, result)) for result in results]
+        return (list(map(float, result)) for result in results)
 ```
 Once installed, the model provided by this plugin can be used with the {ref}`llm embed <embeddings-llm-embed>` command like this:
 

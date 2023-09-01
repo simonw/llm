@@ -2,7 +2,8 @@ from .models import EmbeddingModel
 from .embeddings_migrations import embeddings_migrations
 import json
 from sqlite_utils import Database
-from typing import Any, Dict, List, Tuple, Optional, Union
+from sqlite_utils.db import Table
+from typing import cast, Any, Dict, List, Tuple, Optional, Union
 
 
 class Collection:
@@ -23,7 +24,7 @@ class Collection:
         if model_id and not model:
             model = get_embedding_model(model_id)
         self.model = model
-        self._id = None
+        self._id: Optional[int] = None
 
     def id(self) -> int:
         """
@@ -43,16 +44,16 @@ class Collection:
         except StopIteration:
             # Create it
             self._id = (
-                self.db["collections"]
+                cast(Table, self.db["collections"])
                 .insert(
                     {
                         "name": self.name,
-                        "model": self.model.model_id,
+                        "model": cast(EmbeddingModel, self.model).model_id,
                     }
                 )
                 .last_pk
             )
-        return self._id
+        return cast(int, self._id)
 
     def exists(self) -> bool:
         """
@@ -102,8 +103,8 @@ class Collection:
         """
         from llm import encode
 
-        embedding = self.model.embed(text)
-        self.db["embeddings"].insert(
+        embedding = cast(EmbeddingModel, self.model).embed(text)
+        cast(Table, self.db["embeddings"]).insert(
             {
                 "collection_id": self.id(),
                 "id": id,
