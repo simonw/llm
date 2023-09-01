@@ -64,6 +64,7 @@ Commands:
   models        Manage available models
   openai        Commands for working directly with the OpenAI API
   plugins       List installed plugins
+  similar       Return top N similar IDs from a collection
   templates     Manage stored prompt templates
   uninstall     Uninstall Python packages from the LLM environment
 ```
@@ -398,6 +399,19 @@ Options:
   -f, --format [json|blob|base64|hex]
                                   Output format
   --help                          Show this message and exit.
+```
+### llm similar --help
+```
+Usage: llm similar [OPTIONS] COLLECTION [ID]
+
+  Return top N similar IDs from a collection
+
+Options:
+  -i, --input FILE      Content to embed for comparison
+  -c, --content FILE
+  -n, --number INTEGER  Number of results to return
+  -d, --database FILE
+  --help                Show this message and exit.
 ```
 ### llm embed-models --help
 ```
