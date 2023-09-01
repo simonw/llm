@@ -920,12 +920,18 @@ def embed(collection, id, input, model, store, database, content, format_):
             # Use default model
             model = get_default_embedding_model()
 
-    if model and existing_collection and model != existing_collection["model"]:
-        raise click.ClickException(
-            "Model '{}' does not match '{}' collection model of '{}'".format(
-                model, collection, existing_collection["model"]
+    if model and existing_collection:
+        # Resolve aliases before comparison
+        model_resolved = get_embedding_model(model).model_id
+        collection_model_resolved = get_embedding_model(
+            existing_collection["model"]
+        ).model_id
+        if model_resolved != collection_model_resolved:
+            raise click.ClickException(
+                "Model '{}' does not match '{}' collection model of '{}'".format(
+                    model, collection, existing_collection["model"]
+                )
             )
-        )
 
     try:
         model = get_embedding_model(model)
@@ -983,6 +989,99 @@ def embed(collection, id, input, model, store, database, content, format_):
             click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
         elif format_ == "hex":
             click.echo(encode(embedding).hex())
+
+
+@cli.command()
+@click.argument("collection")
+@click.argument("id", required=False)
+@click.option(
+    "-i",
+    "--input",
+    type=click.Path(file_okay=True, allow_dash=True, dir_okay=False),
+    help="Content to embed for comparison",
+)
+@click.option(
+    "-c",
+    "--content",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+)
+@click.option(
+    "-n", "--number", type=int, default=10, help="Number of results to return"
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+)
+def similar(collection, id, input, content, number, database):
+    """Return top N similar IDs from a collection"""
+    if not id and not content and not input:
+        raise click.ClickException("Must provide content or an ID for the comparison")
+
+    if database:
+        db = sqlite_utils.Database(database)
+    else:
+        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+
+    if not db["embeddings"].exists():
+        raise click.ClickException("No embeddings table found in database")
+
+    try:
+        collection_row = get_collection(db, collection)
+    except NotFoundError:
+        raise click.ClickException("Collection does not exist")
+
+    # If id was provided, we compare against that
+    if id:
+        matches = list(
+            db["embeddings"].rows_where(
+                "collection_id = ? and id = ?", (collection_row["id"], id)
+            )
+        )
+        if not matches:
+            raise click.ClickException("No match found for id: {}".format(id))
+        embedding = matches[0]["embedding"]
+    else:
+        # Embed the content that was provided instead
+        if not content:
+            if not input:
+                # Read from stdin
+                input = sys.stdin
+            content = input.read()
+        if not content:
+            raise click.ClickException("No content provided")
+        model = collection_row["model"]
+        try:
+            model = get_embedding_model(model)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
+        embedding = model.embed(content)
+
+    # Now we have as embedding for the comparison
+    comparison_vector = decode(embedding)
+
+    def distance_score(other_encoded):
+        other_vector = decode(other_encoded)
+        return cosine_similarity(other_vector, comparison_vector)
+
+    db.register_function(distance_score)
+
+    results = db.query(
+        """
+        select id, distance_score(embedding) as score
+        from embeddings
+        where collection_id = ?
+        and id != ?
+        order by score desc limit {}
+    """.format(
+            number
+        ),
+        [collection_row["id"], id],
+    )
+
+    for result in results:
+        click.echo(json.dumps(result))
 
 
 @cli.group(
@@ -1190,3 +1289,10 @@ def encode(values):
 
 def decode(binary):
     return struct.unpack("<" + "f" * (len(binary) // 4), binary)
+
+
+def cosine_similarity(a, b):
+    dot_product = sum(x * y for x, y in zip(a, b))
+    magnitude_a = sum(x * x for x in a) ** 0.5
+    magnitude_b = sum(x * x for x in b) ** 0.5
+    return dot_product / (magnitude_a * magnitude_b)
