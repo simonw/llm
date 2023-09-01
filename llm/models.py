@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
+from itertools import islice
 import re
 import time
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -292,10 +293,28 @@ class EmbeddingModel(ABC, _get_key_mixin):
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
 
-    @abstractmethod
+    batch_size: Optional[int] = None
+
     def embed(self, text: str) -> List[float]:
+        "Embed a single text string, return a list of floats"
+        return next(self.embed_batch([text]))
+
+    def embed_multi(self, texts: Iterable[str]) -> Iterator[List[float]]:
+        "Embed multiple texts in batches according to the model batch_size"
+        iter_texts = iter(texts)
+        if self.batch_size is None:
+            yield from self.embed_batch(iter_texts)
+            return
+        while True:
+            batch_texts = list(islice(iter_texts, self.batch_size))
+            if not batch_texts:
+                break
+            yield from self.embed_batch(batch_texts)
+
+    @abstractmethod
+    def embed_batch(self, texts: Iterable[str]) -> Iterator[List[float]]:
         """
-        Embed a some text as a list of floats
+        Embed a batch of text strings, return a list of lists of floats
         """
         pass
 

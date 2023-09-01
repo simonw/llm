@@ -30,13 +30,18 @@ def env_setup(monkeypatch, user_path):
 
 class EmbedDemo(llm.EmbeddingModel):
     model_id = "embed-demo"
+    batch_size = 10
 
-    def embed(self, text):
-        words = text.split()[:16]
-        embedding = [len(word) for word in words]
-        # Pad with 0 up to 16 words
-        embedding += [0] * (16 - len(embedding))
-        return embedding
+    def embed_batch(self, texts):
+        if not hasattr(self, "batch_count"):
+            self.batch_count = 0
+        self.batch_count += 1
+        for text in texts:
+            words = text.split()[:16]
+            embedding = [len(word) for word in words]
+            # Pad with 0 up to 16 words
+            embedding += [0] * (16 - len(embedding))
+            yield embedding
 
 
 @pytest.fixture(autouse=True)

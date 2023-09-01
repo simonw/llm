@@ -67,10 +67,11 @@ class Ada002(EmbeddingModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
 
-    def embed(self, text):
-        return openai.Embedding.create(
-            input=text, model="text-embedding-ada-002", api_key=self.get_key()
-        )["data"][0]["embedding"]
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        results = openai.Embedding.create(
+            input=texts, model="text-embedding-ada-002", api_key=self.get_key()
+        )["data"]
+        return [result["embedding"] for result in results]
 
 
 @hookimpl
