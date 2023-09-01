@@ -34,14 +34,21 @@ See {ref}`embeddings-binary` for options to get back embeddings in formats other
 
 Embeddings are much more useful if you store them somewhere, so you can calculate similarity scores between different embeddings later on.
 
-LLM includes a concept of a "collection" of embeddings. This is a named object where multiple pieces of content can be stored, each with a unique ID.
+LLM includes the concept of a "collection" of embeddings. A collection groups together a set of stored embeddings created using the same model, each with a unique ID within that collection.
 
 The `llm embed` command can store results directly in a named collection like this:
 
 ```bash
-cat one.txt | llm embed my-files one
+llm embed quotations philkarlton-1 -c \
+  'There are only two hard things in Computer Science: cache invalidation and naming things'
 ```
-This will store the embedding for the contents of `one.txt` in the `my-files` collection under the key `one`.
+This stores the given text in the `quotations` collection under the key `philkarlton-1`.
+
+You can also pipe content to standard input, like this:
+```bash
+cat one.txt | llm embed files one
+```
+This will store the embedding for the contents of `one.txt` in the `files` collection under the key `one`.
 
 A collection will be created the first time you mention it.
 
@@ -49,7 +56,7 @@ Collections have a fixed embedding model, which is the model that was used for t
 
 In the above example this would have been the default embedding model at the time that the command was run.
 
-This example stores the embedding of the string "my happy hound" in a collection called `phrases` under the key `hound` and using the model `ada-002`:
+The following example stores the embedding for the string "my happy hound" in a collection called `phrases` under the key `hound` and using the model `ada-002`:
 
 ```bash
 llm embed -m ada-002 -c 'my happy hound' phrases hound
