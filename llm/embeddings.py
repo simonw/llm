@@ -15,16 +15,25 @@ class Collection:
         model: Optional[EmbeddingModel] = None,
         model_id: Optional[str] = None,
     ) -> None:
-        from llm import get_embedding_model
-
         self.db = db
         self.name = name
         if model and model_id and model.model_id != model_id:
             raise ValueError("model_id does not match model.model_id")
-        if model_id and not model:
-            model = get_embedding_model(model_id)
-        self.model = model
-        self._id: Optional[int] = None
+        self._model = model
+        self._model_id = model_id
+        self._id = None
+        self._id = self.id()
+
+    def model(self) -> EmbeddingModel:
+        import llm
+
+        if self._model:
+            return self._model
+        try:
+            self._model = llm.get_embedding_model(self._model_id)
+        except llm.UnknownModelError:
+            raise ValueError("No model_id specified and no model found with that name")
+        return cast(EmbeddingModel, self._model)
 
     def id(self) -> int:
         """
@@ -41,6 +50,8 @@ class Collection:
         try:
             row = next(rows)
             self._id = row["id"]
+            if self._model_id is None:
+                self._model_id = row["model"]
         except StopIteration:
             # Create it
             self._id = (
@@ -48,7 +59,7 @@ class Collection:
                 .insert(
                     {
                         "name": self.name,
-                        "model": cast(EmbeddingModel, self.model).model_id,
+                        "model": self.model().model_id,
                     }
                 )
                 .last_pk
@@ -103,7 +114,7 @@ class Collection:
         """
         from llm import encode
 
-        embedding = cast(EmbeddingModel, self.model).embed(text)
+        embedding = self.model().embed(text)
         cast(Table, self.db["embeddings"]).insert(
             {
                 "collection_id": self.id(),
@@ -136,6 +147,50 @@ class Collection:
         """
         raise NotImplementedError
 
+    def similar_by_vector(
+        self, vector: List[float], number: int = 5, skip_id: Optional[str] = None
+    ) -> List[Tuple[str, float]]:
+        """
+        Find similar items in the collection by a given vector.
+
+        Args:
+            vector (list): Vector to search by
+            number (int, optional): Number of similar items to return
+
+        Returns:
+            list: List of (id, score) tuples
+        """
+        import llm
+
+        def distance_score(other_encoded):
+            other_vector = llm.decode(other_encoded)
+            return llm.cosine_similarity(other_vector, vector)
+
+        self.db.register_function(distance_score, replace=True)
+
+        where_bits = ["collection_id = ?"]
+        where_args = [str(self.id())]
+
+        if skip_id:
+            where_bits.append("id != ?")
+            where_args.append(skip_id)
+
+        return [
+            (row["id"], row["score"])
+            for row in self.db.query(
+                """
+            select id, distance_score(embedding) as score
+            from embeddings
+            where {where}
+            order by score desc limit {number}
+        """.format(
+                    where=" and ".join(where_bits),
+                    number=number,
+                ),
+                where_args,
+            )
+        ]
+
     def similar_by_id(self, id: str, number: int = 5) -> List[Tuple[str, float]]:
         """
         Find similar items in the collection by a given ID.
@@ -147,7 +202,18 @@ class Collection:
         Returns:
             list: List of (id, score) tuples
         """
-        raise NotImplementedError
+        import llm
+
+        matches = list(
+            self.db["embeddings"].rows_where(
+                "collection_id = ? and id = ?", (self.id(), id)
+            )
+        )
+        if not matches:
+            raise ValueError("ID not found")
+        embedding = matches[0]["embedding"]
+        comparison_vector = llm.decode(embedding)
+        return self.similar_by_vector(comparison_vector, number, skip_id=id)
 
     def similar(self, text: str, number: int = 5) -> List[Tuple[str, float]]:
         """
@@ -160,4 +226,5 @@ class Collection:
         Returns:
             list: List of (id, score) tuples
         """
-        raise NotImplementedError
+        comparison_vector = self.model().embed(text)
+        return self.similar_by_vector(comparison_vector, number)

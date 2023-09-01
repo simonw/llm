@@ -2,11 +2,11 @@ import click
 from click_default_group import DefaultGroup
 import json
 from llm import (
+    Collection,
     Conversation,
     Response,
     Template,
     UnknownModelError,
-    decode,
     encode,
     get_embedding_models_with_aliases,
     get_embedding_model,
@@ -1028,24 +1028,13 @@ def similar(collection, id, input, content, number, database):
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
 
-    try:
-        collection_row = get_collection(db, collection)
-    except NotFoundError:
+    collection_obj = Collection(db, collection)
+    if not collection_obj.exists():
         raise click.ClickException("Collection does not exist")
 
-    # If id was provided, we compare against that
     if id:
-        matches = list(
-            db["embeddings"].rows_where(
-                "collection_id = ? and id = ?", (collection_row["id"], id)
-            )
-        )
-        if not matches:
-            raise click.ClickException("No match found for id: {}".format(id))
-        embedding = matches[0]["embedding"]
-        comparison_vector = decode(embedding)
+        results = collection_obj.similar_by_id(id, number)
     else:
-        # Embed the content that was provided instead
         if not content:
             if not input:
                 # Read from stdin
@@ -1053,38 +1042,7 @@ def similar(collection, id, input, content, number, database):
             content = input.read()
         if not content:
             raise click.ClickException("No content provided")
-        model = collection_row["model"]
-        try:
-            model = get_embedding_model(model)
-        except UnknownModelError as ex:
-            raise click.ClickException(str(ex))
-        comparison_vector = model.embed(content)
-
-    def distance_score(other_encoded):
-        other_vector = decode(other_encoded)
-        return cosine_similarity(other_vector, comparison_vector)
-
-    db.register_function(distance_score)
-
-    where_bits = ["collection_id = ?"]
-    where_args = [collection_row["id"]]
-
-    if id:
-        where_bits.append("id != ?")
-        where_args.append(id)
-
-    results = db.query(
-        """
-        select id, distance_score(embedding) as score
-        from embeddings
-        where {where}
-        order by score desc limit {number}
-    """.format(
-            where=" and ".join(where_bits),
-            number=number,
-        ),
-        where_args,
-    )
+        results = collection_obj.similar_by_content(content, number)
 
     for result in results:
         click.echo(json.dumps(result))
@@ -1287,10 +1245,3 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
-
-
-def cosine_similarity(a, b):
-    dot_product = sum(x * y for x, y in zip(a, b))
-    magnitude_a = sum(x * x for x in a) ** 0.5
-    magnitude_b = sum(x * x for x in b) ** 0.5
-    return dot_product / (magnitude_a * magnitude_b)

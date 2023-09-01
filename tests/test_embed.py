@@ -1,5 +1,15 @@
 import llm
 import sqlite_utils
+import pytest
+
+
+@pytest.fixture
+def collection():
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection(db, "test", model_id="embed-demo")
+    collection.embed(1, "hello world")
+    collection.embed(2, "goodbye world")
+    return collection
 
 
 def test_demo_plugin():
@@ -21,17 +31,11 @@ def test_embed_huge_list():
     assert model.batch_count == 100
 
 
-def test_collection():
-    db = sqlite_utils.Database(memory=True)
-    collection = llm.Collection(db, "test", model_id="embed-demo")
+def test_collection(collection):
     assert collection.id() == 1
-    assert collection.count() == 0
-    # Embed some stuff
-    collection.embed(1, "hello world")
-    collection.embed(2, "goodbye world")
     assert collection.count() == 2
     # Check that the embeddings are there
-    rows = list(db["embeddings"].rows)
+    rows = list(collection.db["embeddings"].rows)
     assert rows == [
         {
             "collection_id": 1,
@@ -47,4 +51,19 @@ def test_collection():
             "content": None,
             "metadata": None,
         },
+    ]
+
+
+def test_similar(collection):
+    results = list(collection.similar("hello world"))
+    assert results == [
+        {"id": "1", "score": pytest.approx(0.9999999999999999)},
+        {"id": "2", "score": pytest.approx(0.9863939238321437)},
+    ]
+
+
+def test_similar_by_id(collection):
+    results = list(collection.similar_by_id("1"))
+    assert results == [
+        {"id": "2", "score": pytest.approx(0.9863939238321437)},
     ]
