@@ -13,6 +13,7 @@ from .models import (
     Prompt,
     Response,
 )
+from .embeddings import Collection
 from .templates import Template
 from .plugins import pm
 import click
@@ -20,12 +21,14 @@ from typing import Dict, List, Optional
 import json
 import os
 import pathlib
+import struct
 
 __all__ = [
     "hookimpl",
     "get_model",
     "get_key",
     "user_dir",
+    "Collection",
     "Conversation",
     "Model",
     "Options",
@@ -226,3 +229,11 @@ def remove_alias(alias):
         raise KeyError("No such alias: {}".format(alias))
     del current[alias]
     path.write_text(json.dumps(current, indent=4) + "\n")
+
+
+def encode(values):
+    return struct.pack("<" + "f" * len(values), *values)
+
+
+def decode(binary):
+    return struct.unpack("<" + "f" * (len(binary) // 4), binary)

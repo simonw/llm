@@ -6,6 +6,8 @@ from llm import (
     Response,
     Template,
     UnknownModelError,
+    decode,
+    encode,
     get_embedding_models_with_aliases,
     get_embedding_model,
     get_key,
@@ -28,7 +30,6 @@ from runpy import run_module
 import shutil
 import sqlite_utils
 from sqlite_utils.db import NotFoundError
-import struct
 import sys
 import textwrap
 from typing import cast, Optional
@@ -1286,14 +1287,6 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
-
-
-def encode(values):
-    return struct.pack("<" + "f" * len(values), *values)
-
-
-def decode(binary):
-    return struct.unpack("<" + "f" * (len(binary) // 4), binary)
 
 
 def cosine_similarity(a, b):
