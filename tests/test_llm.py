@@ -167,6 +167,22 @@ def test_logs_search(user_path, query, expected):
     assert [record["id"] for record in records] == expected
 
 
+def test_llm_prompt_creates_log_database(mocked_openai, tmpdir, monkeypatch):
+    user_path = tmpdir / "user"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["three names \nfor a pet pelican", "--no-stream", "--key", "x"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+    # Should have created user_path and put a logs.db in it
+    assert (user_path / "logs.db").exists()
+    assert sqlite_utils.Database(str(user_path / "logs.db"))["responses"].count == 1
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("use_stdin", (True, False, "split"))
 @pytest.mark.parametrize(

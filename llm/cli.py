@@ -270,6 +270,7 @@ def prompt(
     # Log to the database
     if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
+        (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
         migrate(db)
         response.log_to_db(db)
