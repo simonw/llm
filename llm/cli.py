@@ -1042,6 +1042,7 @@ def similar(collection, id, input, content, number, database):
         if not matches:
             raise click.ClickException("No match found for id: {}".format(id))
         embedding = matches[0]["embedding"]
+        comparison_vector = decode(embedding)
     else:
         # Embed the content that was provided instead
         if not content:
@@ -1056,10 +1057,7 @@ def similar(collection, id, input, content, number, database):
             model = get_embedding_model(model)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
-        embedding = model.embed(content)
-
-    # Now we have as embedding for the comparison
-    comparison_vector = decode(embedding)
+        comparison_vector = model.embed(content)
 
     def distance_score(other_encoded):
         other_vector = decode(other_encoded)
@@ -1067,17 +1065,24 @@ def similar(collection, id, input, content, number, database):
 
     db.register_function(distance_score)
 
+    where_bits = ["collection_id = ?"]
+    where_args = [collection_row["id"]]
+
+    if id:
+        where_bits.append("id != ?")
+        where_args.append(id)
+
     results = db.query(
         """
         select id, distance_score(embedding) as score
         from embeddings
-        where collection_id = ?
-        and id != ?
-        order by score desc limit {}
+        where {where}
+        order by score desc limit {number}
     """.format(
-            number
+            where=" and ".join(where_bits),
+            number=number,
         ),
-        [collection_row["id"], id],
+        where_args,
     )
 
     for result in results:
