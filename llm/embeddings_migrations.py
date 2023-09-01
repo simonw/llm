@@ -17,3 +17,8 @@ def m001_create_tables(db):
         },
         pk=("collection_id", "id"),
     )
+
+
+@embeddings_migrations()
+def m002_foreign_key(db):
+    db["embeddings"].add_foreign_key("collection_id", "collections", "id")

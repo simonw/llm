@@ -1,4 +1,5 @@
 from llm.migrations import migrate
+from llm.embeddings_migrations import embeddings_migrations
 import pytest
 import sqlite_utils
 
@@ -78,3 +79,18 @@ def test_migrations_with_legacy_alter_table():
     db = sqlite_utils.Database(memory=True)
     db.execute("pragma legacy_alter_table=on")
     migrate(db)
+
+
+def test_migrations_for_embeddings():
+    db = sqlite_utils.Database(memory=True)
+    embeddings_migrations.apply(db)
+    assert db["collections"].columns_dict == {"id": int, "name": str, "model": str}
+    assert db["embeddings"].columns_dict == {
+        "collection_id": int,
+        "id": str,
+        "embedding": bytes,
+        "content": str,
+        "metadata": str,
+    }
+    assert db["embeddings"].foreign_keys[0].column == "collection_id"
+    assert db["embeddings"].foreign_keys[0].other_table == "collections"
