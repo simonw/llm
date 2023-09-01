@@ -57,13 +57,13 @@ def test_collection(collection):
 def test_similar(collection):
     results = list(collection.similar("hello world"))
     assert results == [
-        {"id": "1", "score": pytest.approx(0.9999999999999999)},
-        {"id": "2", "score": pytest.approx(0.9863939238321437)},
+        ("1", pytest.approx(0.9999999999999999)),
+        ("2", pytest.approx(0.9863939238321437)),
     ]
 
 
 def test_similar_by_id(collection):
     results = list(collection.similar_by_id("1"))
     assert results == [
-        {"id": "2", "score": pytest.approx(0.9863939238321437)},
+        ("2", pytest.approx(0.9863939238321437)),
     ]
