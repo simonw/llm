@@ -297,7 +297,7 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
     def embed(self, text: str) -> List[float]:
         "Embed a single text string, return a list of floats"
-        return next(self.embed_batch([text]))
+        return next(iter(self.embed_batch([text])))
 
     def embed_multi(self, texts: Iterable[str]) -> Iterator[List[float]]:
         "Embed multiple texts in batches according to the model batch_size"
