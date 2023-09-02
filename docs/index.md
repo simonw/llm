@@ -44,8 +44,8 @@ Or you can {ref}`install a plugin <installing-plugins>` and use models that can 
 # Install the plugin
 llm install llm-gpt4all
 
-# Download and run a prompt against the Vicuna model
-llm -m ggml-vicuna-7b-1 'What is the capital of France?'
+# Download and run a prompt against the Orca Mini 7B model
+llm -m orca-mini-7b 'What is the capital of France?'
 ```
 
 ## Contents
