@@ -55,7 +55,7 @@ def test_embed_metadata(collection):
 
 
 def test_collection(collection):
-    assert collection.id() == 1
+    assert collection.id == 1
     assert collection.count() == 2
     # Check that the embeddings are there
     rows = list(collection.db["embeddings"].rows)

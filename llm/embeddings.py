@@ -19,6 +19,9 @@ class Entry:
 class Collection:
     max_batch_size: int = 100
 
+    class DoesNotExist(Exception):
+        pass
+
     def __init__(
         self,
         db: Database,
@@ -26,71 +29,65 @@ class Collection:
         *,
         model: Optional[EmbeddingModel] = None,
         model_id: Optional[str] = None,
+        create: bool = True,
     ) -> None:
-        self.db = db
-        self.name = name
-        if model and model_id and model.model_id != model_id:
-            raise ValueError("model_id does not match model.model_id")
-        self._model = model
-        self._model_id = model_id
-        self._id = None
-        self._id = self.id()
+        """
+        A collection of embeddings
 
-    def model(self) -> EmbeddingModel:
+        Returns the collection with the given name, creating it if it does not exist.
+
+        If you set create=False a Collection.DoesNotExist exception will be raised if the
+        collection does not already exist.
+
+        Args:
+            db (sqlite_utils.Database): Database to store the collection in
+            name (str): Name of the collection
+            model (llm.models.EmbeddingModel, optional): Embedding model to use
+            model_id (str, optional): Alternatively, ID of the embedding model to use
+            create (bool, optional): Whether to create the collection if it does not exist
+        """
         import llm
 
-        if self._model:
-            return self._model
-        try:
-            if not self._model_id:
-                raise ValueError("No model_id specified")
-            self._model = llm.get_embedding_model(self._model_id)
-        except llm.UnknownModelError:
-            raise ValueError("No model_id specified and no model found with that name")
-        return cast(EmbeddingModel, self._model)
+        self.db = db
+        self.name = name
+        self._model = model
 
-    def id(self) -> int:
-        """
-        Get the ID of the collection, creating it in the DB if necessary.
+        embeddings_migrations.apply(self.db)
 
-        Returns:
-            int: ID of the collection
-        """
-        if self._id is not None:
-            return self._id
-        if not self.db["collections"].exists():
-            embeddings_migrations.apply(self.db)
-        rows = self.db["collections"].rows_where("name = ?", [self.name])
-        try:
-            row = next(rows)
-            self._id = row["id"]
-            if self._model_id is None:
-                self._model_id = row["model"]
-        except StopIteration:
-            # Create it
-            self._id = (
-                cast(Table, self.db["collections"])
-                .insert(
-                    {
-                        "name": self.name,
-                        "model": self.model().model_id,
-                    }
+        rows = list(self.db["collections"].rows_where("name = ?", [self.name]))
+        if rows:
+            row = rows[0]
+            self.id = row["id"]
+            self.model_id = row["model"]
+        else:
+            if create:
+                # Create it
+                if model_id:
+                    # Resolve alias
+                    model = llm.get_embedding_model(model_id)
+                    self._model = model
+                model_id = cast(EmbeddingModel, model).model_id
+                self.id = (
+                    cast(Table, self.db["collections"])
+                    .insert(
+                        {
+                            "name": self.name,
+                            "model": model_id,
+                        }
+                    )
+                    .last_pk
                 )
-                .last_pk
-            )
-        return cast(int, self._id)
+            else:
+                raise self.DoesNotExist(f"Collection '{name}' does not exist")
 
-    def exists(self) -> bool:
-        """
-        Check if the collection exists in the DB.
+    def model(self) -> EmbeddingModel:
+        "Return the embedding model used by this collection"
+        import llm
 
-        Returns:
-            bool: True if exists, False otherwise
-        """
-        matches = list(
-            self.db.query("select 1 from collections where name = ?", (self.name,))
-        )
-        return bool(matches)
+        if self._model is None:
+            self._model = llm.get_embedding_model(self.model_id)
+
+        return cast(EmbeddingModel, self._model)
 
     def count(self) -> int:
         """
@@ -118,7 +115,7 @@ class Collection:
         store: bool = False,
     ) -> None:
         """
-        Embed a text and store it in the collection with a given ID.
+        Embed text and store it in the collection with a given ID.
 
         Args:
             id (str): ID for the text
@@ -131,12 +128,13 @@ class Collection:
         embedding = self.model().embed(text)
         cast(Table, self.db["embeddings"]).insert(
             {
-                "collection_id": self.id(),
+                "collection_id": self.id,
                 "id": id,
                 "embedding": encode(embedding),
                 "content": text if store else None,
                 "metadata": json.dumps(metadata) if metadata else None,
-            }
+            },
+            replace=True,
         )
 
     def embed_multi(
@@ -171,7 +169,7 @@ class Collection:
             self.max_batch_size, (self.model().batch_size or self.max_batch_size)
         )
         iterator = iter(entries)
-        collection_id = self.id()
+        collection_id = self.id
         while True:
             batch = list(islice(iterator, batch_size))
             if not batch:
@@ -188,7 +186,8 @@ class Collection:
                             "metadata": json.dumps(metadata) if metadata else None,
                         }
                         for (embedding, (id, text, metadata)) in zip(embeddings, batch)
-                    )
+                    ),
+                    replace=True,
                 )
 
     def similar_by_vector(
@@ -213,7 +212,7 @@ class Collection:
         self.db.register_function(distance_score, replace=True)
 
         where_bits = ["collection_id = ?"]
-        where_args = [str(self.id())]
+        where_args = [str(self.id)]
 
         if skip_id:
             where_bits.append("id != ?")
@@ -255,11 +254,11 @@ class Collection:
 
         matches = list(
             self.db["embeddings"].rows_where(
-                "collection_id = ? and id = ?", (self.id(), id)
+                "collection_id = ? and id = ?", (self.id, id)
             )
         )
         if not matches:
-            raise ValueError("ID not found")
+            raise self.DoesNotExist("ID not found")
         embedding = matches[0]["embedding"]
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(comparison_vector, number, skip_id=id)

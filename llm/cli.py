@@ -22,7 +22,6 @@ from llm import (
 )
 
 from .migrations import migrate
-from .embeddings_migrations import embeddings_migrations
 from .plugins import pm
 import base64
 import pathlib
@@ -30,7 +29,6 @@ import pydantic
 from runpy import run_module
 import shutil
 import sqlite_utils
-from sqlite_utils.db import NotFoundError
 import sys
 import textwrap
 from typing import cast, Optional
@@ -901,8 +899,6 @@ def embed(collection, id, input, model, store, database, content, format_):
     if store and not collection:
         raise click.ClickException("Must provide collection when using --store")
 
-    db = None
-
     # Lazy load this because we do not need it for -c or -i versions
     def get_db():
         if database:
@@ -910,40 +906,20 @@ def embed(collection, id, input, model, store, database, content, format_):
         else:
             return sqlite_utils.Database(user_dir() / "embeddings.db")
 
-    existing_collection = None
+    collection_obj = None
+    model_obj = None
     if collection:
         db = get_db()
-        if db["collections"].exists():
-            try:
-                existing_collection = get_collection(db, collection)
-            except NotFoundError:
-                pass
+        collection_obj = Collection(db, collection, model_id=model)
+        model_obj = collection_obj.model()
 
-    if model is None:
-        # If collection exists, use that model
-        if existing_collection:
-            model = existing_collection["model"]
-        else:
-            # Use default model
+    if model_obj is None:
+        if not model:
             model = get_default_embedding_model()
-
-    if model and existing_collection:
-        # Resolve aliases before comparison
-        model_resolved = get_embedding_model(model).model_id
-        collection_model_resolved = get_embedding_model(
-            existing_collection["model"]
-        ).model_id
-        if model_resolved != collection_model_resolved:
-            raise click.ClickException(
-                "Model '{}' does not match '{}' collection model of '{}'".format(
-                    model, collection, existing_collection["model"]
-                )
-            )
-
-    try:
-        model = get_embedding_model(model)
-    except UnknownModelError as ex:
-        raise click.ClickException(str(ex))
+        try:
+            model_obj = get_embedding_model(model)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
 
     show_output = True
     if collection and (format_ is None):
@@ -958,34 +934,10 @@ def embed(collection, id, input, model, store, database, content, format_):
     if not content:
         raise click.ClickException("No content provided")
 
-    embedding = model.embed(content)
-
-    if collection:
-        # Store the embedding
-        if db is None:
-            db = get_db()
-
-        embeddings_migrations.apply(db)
-
-        if not existing_collection:
-            db["collections"].insert(
-                {
-                    "name": collection,
-                    "model": model.model_id,
-                }
-            )
-            existing_collection = get_collection(db, collection)
-
-        # Now store it
-        db["embeddings"].insert(
-            {
-                "collection_id": existing_collection["id"],
-                "id": id,
-                "content": content if store else None,
-                "embedding": encode(embedding),
-            },
-            replace=True,
-        )
+    if collection_obj:
+        embedding = collection_obj.embed(id, content, store=store)
+    else:
+        embedding = model_obj.embed(content)
 
     if show_output:
         if format_ == "json" or format_ is None:
@@ -1042,19 +994,15 @@ def similar(collection, id, input, content, number, database):
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
 
-    collection_exists = False
     try:
-        collection_obj = Collection(db, collection)
-        collection_exists = collection_obj.exists()
-    except ValueError:
-        collection_exists = False
-    if not collection_exists:
+        collection_obj = Collection(db, collection, create=False)
+    except Collection.DoesNotExist:
         raise click.ClickException("Collection does not exist")
 
     if id:
         try:
             results = collection_obj.similar_by_id(id, number)
-        except ValueError:
+        except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
         if not content:
@@ -1155,14 +1103,6 @@ def embed_db_collections(database, json_):
                     row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""
                 )
             )
-
-
-def get_collection(db, collection):
-    rows = db["collections"].rows_where("name = ?", [collection])
-    try:
-        return next(rows)
-    except StopIteration:
-        raise NotFoundError("Collection not found: {}".format(collection))
 
 
 def template_dir():

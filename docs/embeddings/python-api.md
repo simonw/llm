@@ -84,6 +84,23 @@ collection.embed_multi_with_metadata(
 )
 ```
 
+(embeddings-python-collection-class)=
+### Collection class reference
+
+A collection instance has the following properties and methods:
+
+- `id` - the integer ID of the collection in the database
+- `name` - the string name of the collection (unique in the database)
+- `model_id` - the string ID of the embedding model used for this collection
+- `model()` - returns the `EmbeddingModel` instance, based on that `model_id`
+- `count()` - returns the integer number of items in the collection
+- `embed(id: str, text: str, metadata: dict=None, store: bool=False)` - embeds the given string and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON) and store the text content itself in the database table.
+- `embed_multi(entries: Iterable, store: bool=False)` - see above
+- `embed_multi_with_metadata(entries: Iterable, store: bool=False)` - see above
+- `similar(query: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the given query string
+- `similar_by_id(id: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the item with the given ID
+- `similar_by_vector(vector: List[float], number: int=10, skip_id: str=None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
+
 (embeddings-python-similar)=
 ## Retrieving similar items
 
