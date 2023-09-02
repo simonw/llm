@@ -22,14 +22,13 @@ from sentence_transformers import SentenceTransformer
 @llm.hookimpl
 def register_embedding_models(register):
     model_id = "sentence-transformers/all-MiniLM-L6-v2"
-    register(SentenceTransformerModel(model_id, model_id, 384), aliases=("all-MiniLM-L6-v2",))
+    register(SentenceTransformerModel(model_id, model_id), aliases=("all-MiniLM-L6-v2",))
 
 
 class SentenceTransformerModel(llm.EmbeddingModel):
-    def __init__(self, model_id, model_name, embedding_size):
+    def __init__(self, model_id, model_name):
         self.model_id = model_id
         self.model_name = model_name
-        self.embedding_size = embedding_size
         self._model = None
 
     def embed_batch(self, texts):

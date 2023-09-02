@@ -63,7 +63,6 @@ def register_embedding_models(register):
 
 class Ada002(EmbeddingModel):
     model_id = "ada-002"
-    embedding_size = 1536
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     batch_size = 100  # Maybe this should be 2048

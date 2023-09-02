@@ -288,7 +288,6 @@ class Model(ABC, _get_key_mixin):
 
 class EmbeddingModel(ABC, _get_key_mixin):
     model_id: str
-    embedding_size: int
     key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
