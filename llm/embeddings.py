@@ -1,9 +1,18 @@
 from .models import EmbeddingModel
 from .embeddings_migrations import embeddings_migrations
+from dataclasses import dataclass
 import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 from typing import cast, Any, Dict, List, Tuple, Optional, Union
+
+
+@dataclass
+class Entry:
+    id: str
+    score: Optional[float]
+    content: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class Collection:
@@ -149,7 +158,7 @@ class Collection:
 
     def similar_by_vector(
         self, vector: List[float], number: int = 10, skip_id: Optional[str] = None
-    ) -> List[Tuple[str, float]]:
+    ) -> List[Entry]:
         """
         Find similar items in the collection by a given vector.
 
@@ -158,7 +167,7 @@ class Collection:
             number (int, optional): Number of similar items to return
 
         Returns:
-            list: List of (id, score) tuples
+            list: List of Entry objects
         """
         import llm
 
@@ -176,10 +185,15 @@ class Collection:
             where_args.append(skip_id)
 
         return [
-            (row["id"], row["score"])
+            Entry(
+                id=row["id"],
+                score=row["score"],
+                content=row["content"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+            )
             for row in self.db.query(
                 """
-            select id, distance_score(embedding) as score
+            select id, content, metadata, distance_score(embedding) as score
             from embeddings
             where {where}
             order by score desc limit {number}
@@ -191,7 +205,7 @@ class Collection:
             )
         ]
 
-    def similar_by_id(self, id: str, number: int = 10) -> List[Tuple[str, float]]:
+    def similar_by_id(self, id: str, number: int = 10) -> List[Entry]:
         """
         Find similar items in the collection by a given ID.
 
@@ -200,7 +214,7 @@ class Collection:
             number (int, optional): Number of similar items to return
 
         Returns:
-            list: List of (id, score) tuples
+            list: List of Entry objects
         """
         import llm
 
@@ -215,7 +229,7 @@ class Collection:
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(comparison_vector, number, skip_id=id)
 
-    def similar(self, text: str, number: int = 10) -> List[Tuple[str, float]]:
+    def similar(self, text: str, number: int = 10) -> List[Entry]:
         """
         Find similar items in the collection by a given text.
 
@@ -224,7 +238,7 @@ class Collection:
             number (int, optional): Number of similar items to return
 
         Returns:
-            list: List of (id, score) tuples
+            list: List of Entry objects
         """
         comparison_vector = self.model().embed(text)
         return self.similar_by_vector(comparison_vector, number)

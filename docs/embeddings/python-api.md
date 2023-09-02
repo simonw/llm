@@ -59,13 +59,20 @@ This additional metadata will be stored as JSON in the `metadata` column of the 
 (embeddings-python-similar)=
 ## Retrieving similar items
 
-Once you have populated a collection of embeddings you can retrieve the IDs of the most similar items to a given string using the `similar()` method:
+Once you have populated a collection of embeddings you can retrieve the entries that are most similar to a given string using the `similar()` method:
 
 ```python
-for id, score in collection.similar("hound"):
-    print(id, score)
+for entry in collection.similar("hound"):
+    print(entry.id, entry.score)
 ```
 The string will first by embedded using the model for the collection.
+
+The `entry` object returned is an object with the following properties:
+
+- `id` - the string ID of the item
+- `score` - the floating point similarity score between the item and the query string
+- `content` - the string text content of the item, if it was stored - or `None`
+- `metadata` - the dictionary (from JSON) metadata for the item, if it was stored - or `None`
 
 This defaults to returning the 10 most similar items. You can change this by passing a different `number=` argument:
 ```python

@@ -1,5 +1,6 @@
 import json
 import llm
+from llm.embeddings import Entry
 import sqlite_utils
 import pytest
 
@@ -42,11 +43,15 @@ def test_embed_store(collection):
 
 
 def test_embed_metadata(collection):
-    collection.embed("3", "hello world", metadata={"foo": "bar"})
+    collection.embed("3", "hello yet again", metadata={"foo": "bar"}, store=True)
     assert collection.db["embeddings"].count == 3
     assert json.loads(
         next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["metadata"]
     ) == {"foo": "bar"}
+    entry = collection.similar("hello yet again")[0]
+    assert entry.id == "3"
+    assert entry.metadata == {"foo": "bar"}
+    assert entry.content == "hello yet again"
 
 
 def test_collection(collection):
@@ -75,13 +80,13 @@ def test_collection(collection):
 def test_similar(collection):
     results = list(collection.similar("hello world"))
     assert results == [
-        ("1", pytest.approx(0.9999999999999999)),
-        ("2", pytest.approx(0.9863939238321437)),
+        Entry(id="1", score=pytest.approx(0.9999999999999999)),
+        Entry(id="2", score=pytest.approx(0.9863939238321437)),
     ]
 
 
 def test_similar_by_id(collection):
     results = list(collection.similar_by_id("1"))
     assert results == [
-        ("2", pytest.approx(0.9863939238321437)),
+        Entry(id="2", score=pytest.approx(0.9863939238321437)),
     ]
