@@ -1,3 +1,4 @@
+import json
 import llm
 import sqlite_utils
 import pytest
@@ -38,6 +39,14 @@ def test_embed_store(collection):
         next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["content"]
         == "hello world"
     )
+
+
+def test_embed_metadata(collection):
+    collection.embed("3", "hello world", metadata={"foo": "bar"})
+    assert collection.db["embeddings"].count == 3
+    assert json.loads(
+        next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["metadata"]
+    ) == {"foo": "bar"}
 
 
 def test_collection(collection):

@@ -49,14 +49,12 @@ This stores the embedding for the string "my happy hound" in the `entries` colle
 
 Add `store=True` to store the text content itself in the database table along with the embedding vector.
 
-You can embed multiple ID and string pairs at once using the `embed_multi()` method:
+To attach additional metadata to an item, pass a JSON-compatible dictionary as the `metadata=` argument:
 
 ```python
-collection.embed_multi({
-    "hound": "my happy hound",
-    "cat": "my dissatisfied cat"
-})
+collection.embed("hound", "my happy hound", metadata={"name": "Hound"}, store=True)
 ```
+This additional metadata will be stored as JSON in the `metadata` column of the embeddings database table.
 
 (embeddings-python-similar)=
 ## Retrieving similar items
