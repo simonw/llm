@@ -16,6 +16,7 @@ LLM supports multiple embedding models through {ref}`plugins <plugins>`. Once in
 maxdepth: 3
 ---
 cli
+python-api
 writing-plugins
 binary
 ```

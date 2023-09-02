@@ -148,7 +148,7 @@ class Collection:
         raise NotImplementedError
 
     def similar_by_vector(
-        self, vector: List[float], number: int = 5, skip_id: Optional[str] = None
+        self, vector: List[float], number: int = 10, skip_id: Optional[str] = None
     ) -> List[Tuple[str, float]]:
         """
         Find similar items in the collection by a given vector.
@@ -191,7 +191,7 @@ class Collection:
             )
         ]
 
-    def similar_by_id(self, id: str, number: int = 5) -> List[Tuple[str, float]]:
+    def similar_by_id(self, id: str, number: int = 10) -> List[Tuple[str, float]]:
         """
         Find similar items in the collection by a given ID.
 
@@ -215,7 +215,7 @@ class Collection:
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(comparison_vector, number, skip_id=id)
 
-    def similar(self, text: str, number: int = 5) -> List[Tuple[str, float]]:
+    def similar(self, text: str, number: int = 10) -> List[Tuple[str, float]]:
         """
         Find similar items in the collection by a given text.
 

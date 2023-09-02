@@ -30,6 +30,7 @@ llm -m sentence-transformers/all-MiniLM-L6-v2 \
 ```
 See {ref}`embeddings-binary` for options to get back embeddings in formats other than JSON.
 
+(embeddings-collections)=
 ### Storing embeddings in SQLite
 
 Embeddings are much more useful if you store them somewhere, so you can calculate similarity scores between different embeddings later on.
