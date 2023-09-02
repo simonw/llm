@@ -90,3 +90,26 @@ def test_similar_by_id(collection):
     assert results == [
         Entry(id="2", score=pytest.approx(0.9863939238321437)),
     ]
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+def test_embed_multi(with_metadata):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection(db, "test", model_id="embed-demo")
+    ids_and_texts = ((str(i), "hello {}".format(i)) for i in range(1000))
+    if with_metadata:
+        ids_and_texts = ((id, text, {"meta": id}) for id, text in ids_and_texts)
+        collection.embed_multi_with_metadata(ids_and_texts)
+    else:
+        # Exercise store=True here too
+        collection.embed_multi(ids_and_texts, store=True)
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 1000
+    rows_with_metadata = [row for row in rows if row["metadata"] is not None]
+    rows_with_content = [row for row in rows if row["content"] is not None]
+    if with_metadata:
+        assert len(rows_with_metadata) == 1000
+        assert len(rows_with_content) == 0
+    else:
+        assert len(rows_with_metadata) == 0
+        assert len(rows_with_content) == 1000

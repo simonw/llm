@@ -56,6 +56,34 @@ collection.embed("hound", "my happy hound", metadata={"name": "Hound"}, store=Tr
 ```
 This additional metadata will be stored as JSON in the `metadata` column of the embeddings database table.
 
+(embeddings-python-bulk)=
+### Storing embeddings in bulk
+
+The `collection.embed_multi()` method can be used to store embeddings for multiple strings at once. This can be more efficient for some embedding models.
+
+```python
+collection.embed_multi(
+    [
+        ("hound", "my happy hound"),
+        ("cat", "my dissatisfied cat"),
+    ],
+    # Add this to store the strings in the content column:
+    store=True,
+)
+```
+To include metadata to be stored with each item, call `embed_multi_with_metadata()`:
+
+```python
+collection.embed_multi_with_metadata(
+    [
+        ("hound", "my happy hound", {"name": "Hound"}),
+        ("cat", "my dissatisfied cat", {"name": "Cat"}),
+    ],
+    # This can also take the store=True argument:
+    store=True,
+)
+```
+
 (embeddings-python-similar)=
 ## Retrieving similar items
 

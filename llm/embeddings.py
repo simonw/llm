@@ -1,10 +1,11 @@
 from .models import EmbeddingModel
 from .embeddings_migrations import embeddings_migrations
 from dataclasses import dataclass
+from itertools import islice
 import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
-from typing import cast, Any, Dict, List, Tuple, Optional, Union
+from typing import cast, Any, Dict, Iterable, List, Tuple, Optional, Union
 
 
 @dataclass
@@ -16,6 +17,8 @@ class Entry:
 
 
 class Collection:
+    max_batch_size: int = 100
+
     def __init__(
         self,
         db: Database,
@@ -136,27 +139,57 @@ class Collection:
             }
         )
 
-    def embed_multi(self, id_text_map: Dict[str, str], store: bool = False) -> None:
+    def embed_multi(
+        self, entries: Iterable[Union[str, str]], store: bool = False
+    ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
 
         Args:
-            id_text_map (dict): Dictionary mapping IDs to texts
+            entries (iterable): Iterable of (id: str, text: str) tuples
             store (bool, optional): Whether to store the text in the content column
         """
-        raise NotImplementedError
+        self.embed_multi_with_metadata(
+            ((id, text, None) for id, text in entries), store=store
+        )
 
     def embed_multi_with_metadata(
         self,
-        id_text_metadata_map: Dict[str, Tuple[str, Dict[str, Union[str, int, float]]]],
+        entries: Iterable[Union[str, str, Optional[Dict[str, Any]]]],
+        store: bool = False,
     ) -> None:
         """
         Embed multiple texts along with metadata and store them in the collection with given IDs.
 
         Args:
-            id_text_metadata_map (dict): Dictionary mapping IDs to (text, metadata) tuples
+            entries (iterable): Iterable of (id: str, text: str, metadata: None or dict)
+            store (bool, optional): Whether to store the text in the content column
         """
-        raise NotImplementedError
+        import llm
+
+        batch_size = min(
+            self.max_batch_size, (self.model().batch_size or self.max_batch_size)
+        )
+        iterator = iter(entries)
+        collection_id = self.id()
+        while True:
+            batch = list(islice(iterator, batch_size))
+            if not batch:
+                break
+            embeddings = list(self.model().embed_multi(item[1] for item in batch))
+            with self.db.conn:
+                cast(Table, self.db["embeddings"]).insert_all(
+                    (
+                        {
+                            "collection_id": collection_id,
+                            "id": id,
+                            "embedding": llm.encode(embedding),
+                            "content": text if store else None,
+                            "metadata": json.dumps(metadata) if metadata else None,
+                        }
+                        for (embedding, (id, text, metadata)) in zip(embeddings, batch)
+                    )
+                )
 
     def similar_by_vector(
         self, vector: List[float], number: int = 10, skip_id: Optional[str] = None
