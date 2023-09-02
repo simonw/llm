@@ -73,8 +73,45 @@ llm embed -d my-embeddings.db -c 'my happy hound' phrases hound
 ```
 This creates a database file called `my-embeddings.db` in the current directory.
 
+(embeddings-cli-similar)=
+## llm similar
+
+The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID.
+
+To search the `quotations` collection for items that are semantically similar to `'computer science'`:
+
+```bash
+llm similar quotations -c 'computer science'
+```
+This embeds the provided string and returns a newline-delimited list of JSON objects like this:
+```json
+{"id": "philkarlton-1", "score": 0.8323904531677017, "content": null, "metadata": null}
+```
+You can compare against text stored in a file using `-i filename`:
+```bash
+llm similar quotations -i one.txt
+```
+Or feed text to standard input using `-i -`:
+```bash
+cat one.txt | llm similar quotations -i -
+```
+
+(embeddings-cli-embed-models)=
+## llm embed-models
+
+To list all available embedding models, including those provided by plugins, run this command:
+
+```bash
+llm embed-models
+```
+The output should look something like this:
+```
+ada-002 (aliases: ada)
+sentence-transformers/all-MiniLM-L6-v2 (aliases: all-MiniLM-L6-v2)
+```
+
 (embeddings-cli-embed-models-default)=
-## llm embed-models default
+### llm embed-models default
 
 This command can be used to get and set the default embedding model.
 

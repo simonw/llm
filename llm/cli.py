@@ -1,5 +1,6 @@
 import click
 from click_default_group import DefaultGroup
+from dataclasses import asdict
 import json
 from llm import (
     Collection,
@@ -998,14 +999,10 @@ def embed(collection, id, input, model, store, database, content, format_):
 @click.option(
     "-i",
     "--input",
-    type=click.Path(file_okay=True, allow_dash=True, dir_okay=False),
-    help="Content to embed for comparison",
+    type=click.File("r"),
+    help="File to embed for comparison",
 )
-@click.option(
-    "-c",
-    "--content",
-    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
-)
+@click.option("-c", "--content", help="Content to embed for comparison")
 @click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
@@ -1016,7 +1013,19 @@ def embed(collection, id, input, model, store, database, content, format_):
     envvar="LLM_EMBEDDINGS_DB",
 )
 def similar(collection, id, input, content, number, database):
-    """Return top N similar IDs from a collection"""
+    """
+    Return top N similar IDs from a collection
+
+    Example usage:
+
+    \b
+        llm similar my-collection -c "I like cats"
+
+    Or to find content similar to a specific stored ID:
+
+    \b
+        llm similar my-collection 1234
+    """
     if not id and not content and not input:
         raise click.ClickException("Must provide content or an ID for the comparison")
 
@@ -1050,10 +1059,10 @@ def similar(collection, id, input, content, number, database):
             content = input.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar_by_content(content, number)
+        results = collection_obj.similar(content, number)
 
     for result in results:
-        click.echo(json.dumps(result))
+        click.echo(json.dumps(asdict(result)))
 
 
 @cli.group(

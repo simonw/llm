@@ -406,9 +406,17 @@ Usage: llm similar [OPTIONS] COLLECTION [ID]
 
   Return top N similar IDs from a collection
 
+  Example usage:
+
+      llm similar my-collection -c "I like cats"
+
+  Or to find content similar to a specific stored ID:
+
+      llm similar my-collection 1234
+
 Options:
-  -i, --input FILE      Content to embed for comparison
-  -c, --content FILE
+  -i, --input FILENAME  File to embed for comparison
+  -c, --content TEXT    Content to embed for comparison
   -n, --number INTEGER  Number of results to return
   -d, --database FILE
   --help                Show this message and exit.

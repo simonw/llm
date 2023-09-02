@@ -23,6 +23,7 @@ def user_path_with_embeddings(user_path):
     db = sqlite_utils.Database(path)
     collection = llm.Collection(db, "demo", model_id="embed-demo")
     collection.embed("1", "hello world")
+    collection.embed("2", "goodbye world")
 
 
 @pytest.fixture

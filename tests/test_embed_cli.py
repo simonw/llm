@@ -110,7 +110,7 @@ def test_embed_store(user_path):
     (
         ([], "Missing argument 'COLLECTION'"),
         (["badcollection", "-c", "content"], "Collection does not exist"),
-        (["demo", "2"], "ID not found in collection"),
+        (["demo", "bad-id"], "ID not found in collection"),
     ),
 )
 def test_similar_errors(args, expected_error, user_path_with_embeddings):
@@ -118,3 +118,47 @@ def test_similar_errors(args, expected_error, user_path_with_embeddings):
     result = runner.invoke(cli, ["similar"] + args, catch_exceptions=False)
     assert result.exit_code != 0
     assert expected_error in result.output
+
+
+def test_similar_by_id_cli(user_path_with_embeddings):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["similar", "demo", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "id": "2",
+        "score": pytest.approx(0.9863939238321437),
+        "content": None,
+        "metadata": None,
+    }
+
+
+@pytest.mark.parametrize("scenario", ("argument", "file", "stdin"))
+def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
+    runner = CliRunner()
+    args = ["similar", "demo"]
+    input = None
+    if scenario == "argument":
+        args.extend(["-c", "hello world"])
+    elif scenario == "file":
+        path = tmpdir / "content.txt"
+        path.write_text("hello world", "utf-8")
+        args.extend(["-i", str(path)])
+    elif scenario == "stdin":
+        input = "hello world"
+        args.extend(["-i", "-"])
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
+    assert result.exit_code == 0
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {
+        "id": "1",
+        "score": pytest.approx(0.9999999999999999),
+        "content": None,
+        "metadata": None,
+    }
+    assert json.loads(lines[1]) == {
+        "id": "2",
+        "score": pytest.approx(0.9863939238321437),
+        "content": None,
+        "metadata": None,
+    }
