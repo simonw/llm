@@ -36,11 +36,21 @@ import sqlite_utils
         ),
     ),
 )
-def test_embed_output_format(format_, expected):
+@pytest.mark.parametrize("scenario", ("argument", "file", "stdin"))
+def test_embed_output_format(tmpdir, format_, expected, scenario):
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["embed", "--format", format_, "-c", "hello world", "-m", "embed-demo"]
-    )
+    args = ["embed", "--format", format_, "-m", "embed-demo"]
+    input = None
+    if scenario == "argument":
+        args.extend(["-c", "hello world"])
+    elif scenario == "file":
+        path = tmpdir / "input.txt"
+        path.write_text("hello world", "utf-8")
+        args.extend(["-i", str(path)])
+    elif scenario == "stdin":
+        input = "hello world"
+        args.extend(["-i", "-"])
+    result = runner.invoke(cli, args, input=input)
     assert result.exit_code == 0
     assert result.output == expected
 

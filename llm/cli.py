@@ -869,8 +869,8 @@ def uninstall(packages, yes):
 @click.option(
     "-i",
     "--input",
-    type=click.Path(file_okay=True, allow_dash=True, dir_okay=False),
-    help="Content to embed",
+    type=click.File("r"),
+    help="File to embed",
 )
 @click.option("-m", "--model", help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
@@ -883,6 +883,7 @@ def uninstall(packages, yes):
 @click.option(
     "-c",
     "--content",
+    help="Content to embed",
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
 )
 @click.option(
@@ -897,8 +898,12 @@ def embed(collection, id, input, model, store, database, content, format_):
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
 
+    if store and not collection:
+        raise click.ClickException("Must provide collection when using --store")
+
     db = None
 
+    # Lazy load this because we do not need it for -c or -i versions
     def get_db():
         if database:
             return sqlite_utils.Database(database)

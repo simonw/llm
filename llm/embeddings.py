@@ -5,7 +5,7 @@ from itertools import islice
 import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
-from typing import cast, Any, Dict, Iterable, List, Tuple, Optional, Union
+from typing import cast, Any, Dict, Iterable, List, Optional, Union
 
 
 @dataclass

@@ -391,11 +391,11 @@ Usage: llm embed [OPTIONS] [COLLECTION] [ID]
   Embed text and store or return the result
 
 Options:
-  -i, --input FILE                Content to embed
+  -i, --input FILENAME            File to embed
   -m, --model TEXT                Embedding model to use
   --store                         Store the text itself in the database
   -d, --database FILE
-  -c, --content FILE
+  -c, --content FILE              Content to embed
   -f, --format [json|blob|base64|hex]
                                   Output format
   --help                          Show this message and exit.
