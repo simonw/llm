@@ -1028,12 +1028,20 @@ def similar(collection, id, input, content, number, database):
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
 
-    collection_obj = Collection(db, collection)
-    if not collection_obj.exists():
+    collection_exists = False
+    try:
+        collection_obj = Collection(db, collection)
+        collection_exists = collection_obj.exists()
+    except ValueError:
+        collection_exists = False
+    if not collection_exists:
         raise click.ClickException("Collection does not exist")
 
     if id:
-        results = collection_obj.similar_by_id(id, number)
+        try:
+            results = collection_obj.similar_by_id(id, number)
+        except ValueError:
+            raise click.ClickException("ID not found in collection")
     else:
         if not content:
             if not input:

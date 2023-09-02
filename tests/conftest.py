@@ -1,4 +1,5 @@
 import pytest
+import sqlite_utils
 import llm
 from llm.plugins import pm
 
@@ -14,6 +15,14 @@ def user_path(tmpdir):
     dir = tmpdir / "llm.datasette.io"
     dir.mkdir()
     return dir
+
+
+@pytest.fixture
+def user_path_with_embeddings(user_path):
+    path = str(user_path / "embeddings.db")
+    db = sqlite_utils.Database(path)
+    collection = llm.Collection(db, "demo", model_id="embed-demo")
+    collection.embed("1", "hello world")
 
 
 @pytest.fixture

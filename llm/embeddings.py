@@ -39,6 +39,8 @@ class Collection:
         if self._model:
             return self._model
         try:
+            if not self._model_id:
+                raise ValueError("No model_id specified")
             self._model = llm.get_embedding_model(self._model_id)
         except llm.UnknownModelError:
             raise ValueError("No model_id specified and no model found with that name")

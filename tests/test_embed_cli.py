@@ -103,3 +103,18 @@ def test_embed_store(user_path):
             ]
         else:
             assert result2.output == "items: embed-demo\n  1 embedding\n"
+
+
+@pytest.mark.parametrize(
+    "args,expected_error",
+    (
+        ([], "Missing argument 'COLLECTION'"),
+        (["badcollection", "-c", "content"], "Collection does not exist"),
+        (["demo", "2"], "ID not found in collection"),
+    ),
+)
+def test_similar_errors(args, expected_error, user_path_with_embeddings):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["similar"] + args, catch_exceptions=False)
+    assert result.exit_code != 0
+    assert expected_error in result.output
