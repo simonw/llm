@@ -30,8 +30,15 @@ from subprocess import PIPE, Popen
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["myst_parser", "sphinx_copybutton"]
-myst_enable_extensions = ["colon_fence"]
+extensions = ["myst_parser", "sphinx_copybutton", "autodoc2"]
+myst_enable_extensions = ["colon_fence", "fieldlist"]
+
+autodoc2_packages = [
+    {
+        "path": "../llm",
+        "auto_mode": False,
+    },
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

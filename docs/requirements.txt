@@ -4,3 +4,4 @@ sphinx-autobuild
 sphinx-copybutton
 myst-parser
 cogapp
+sphinx-autodoc2

@@ -45,7 +45,7 @@ Or you can {ref}`install a plugin <installing-plugins>` and use models that can 
 llm install llm-gpt4all
 
 # Download and run a prompt against the Vicuna model
-llm -m ggml-vicuna-7b-1 'What is the capital of France?'
+llm -m orca-mini-7b 'What is the capital of France?'
 ```
 
 ## Contents
@@ -61,6 +61,7 @@ embeddings/index
 plugins/index
 aliases
 python-api
+reference
 templates
 logging
 related-tools

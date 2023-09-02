@@ -15,6 +15,16 @@ class Collection:
         model: Optional[EmbeddingModel] = None,
         model_id: Optional[str] = None,
     ) -> None:
+        """
+        Initialization for the Collection Class.
+
+        :param db: The input database
+        :param name: Name of the collection.
+        :param model: The embedding model. Defaults to None.
+        :param model_id: ID of the model. Defaults to None.
+
+        :exception ValueError: Raises ValueError if `model_id` does not match `model.model_id`.
+        """
         self.db = db
         self.name = name
         if model and model_id and model.model_id != model_id:
@@ -25,6 +35,13 @@ class Collection:
         self._id = self.id()
 
     def model(self) -> EmbeddingModel:
+        """
+        Returns the model of the collection.
+
+        :exception ValueError: Raises ValueError if no model_id specified and no model found with that name.
+
+        :returns: The collection's model.
+        """
         import llm
 
         if self._model:
@@ -37,10 +54,9 @@ class Collection:
 
     def id(self) -> int:
         """
-        Get the ID of the collection, creating it in the DB if necessary.
+        Returns the collection's ID, creating it in the database if necessary.
 
-        Returns:
-            int: ID of the collection
+        :returns: ID of the collection.
         """
         if self._id is not None:
             return self._id
@@ -68,10 +84,9 @@ class Collection:
 
     def exists(self) -> bool:
         """
-        Check if the collection exists in the DB.
+        Checks if the collection exists in the database.
 
-        Returns:
-            bool: True if exists, False otherwise
+        :returns: True if exists, False otherwise.
         """
         matches = list(
             self.db.query("select 1 from collections where name = ?", (self.name,))
@@ -80,10 +95,9 @@ class Collection:
 
     def count(self) -> int:
         """
-        Count the number of items in the collection.
+        Counts the number of items in the collection.
 
-        Returns:
-            int: Number of items in the collection
+        :returns: Number of items in the collection.
         """
         return next(
             self.db.query(
@@ -106,11 +120,10 @@ class Collection:
         """
         Embed a text and store it in the collection with a given ID.
 
-        Args:
-            id (str): ID for the text
-            text (str): Text to be embedded
-            metadata (dict, optional): Metadata to be stored
-            store (bool, optional): Whether to store the text in the content column
+        :param id: ID for the text.
+        :param text: Text to be embedded.
+        :param metadata: Metadata to be stored. Defaults to None.
+        :param store: Whether to store the text in the content column. Defaults to False.
         """
         from llm import encode
 
@@ -129,9 +142,8 @@ class Collection:
         """
         Embed multiple texts and store them in the collection with given IDs.
 
-        Args:
-            id_text_map (dict): Dictionary mapping IDs to texts
-            store (bool, optional): Whether to store the text in the content column
+        :param id_text_map: Dictionary mapping IDs to texts.
+        :param store: Whether to store the text in the content column. Defaults to False.
         """
         raise NotImplementedError
 
@@ -142,8 +154,7 @@ class Collection:
         """
         Embed multiple texts along with metadata and store them in the collection with given IDs.
 
-        Args:
-            id_text_metadata_map (dict): Dictionary mapping IDs to (text, metadata) tuples
+        :param id_text_metadata_map: Dictionary mapping IDs to (text, metadata) tuples.
         """
         raise NotImplementedError
 
@@ -151,14 +162,13 @@ class Collection:
         self, vector: List[float], number: int = 5, skip_id: Optional[str] = None
     ) -> List[Tuple[str, float]]:
         """
-        Find similar items in the collection by a given vector.
+        Finds similar items in the collection by a given vector.
 
-        Args:
-            vector (list): Vector to search by
-            number (int, optional): Number of similar items to return
+        :param vector: Vector to search by.
+        :param number: Number of similar items to return. Defaults to 5.
+        :param skip_id: ID to be skipped. Defaults to None.
 
-        Returns:
-            list: List of (id, score) tuples
+        :returns: List of (id, score) tuples.
         """
         import llm
 
@@ -193,14 +203,14 @@ class Collection:
 
     def similar_by_id(self, id: str, number: int = 5) -> List[Tuple[str, float]]:
         """
-        Find similar items in the collection by a given ID.
+        Finds similar items in the collection by a given ID.
 
-        Args:
-            id (str): ID to search by
-            number (int, optional): Number of similar items to return
+        :param id: ID to search by.
+        :param number: Number of similar items to return. Defaults to 5.
 
-        Returns:
-            list: List of (id, score) tuples
+        :exception ValueError: Raises ValueError if ID not found.
+
+        :returns: List of (id, score) tuples.
         """
         import llm
 
@@ -217,14 +227,12 @@ class Collection:
 
     def similar(self, text: str, number: int = 5) -> List[Tuple[str, float]]:
         """
-        Find similar items in the collection by a given text.
+        Finds similar items in the collection by a given text.
 
-        Args:
-            text (str): Text to search by
-            number (int, optional): Number of similar items to return
+        :param text: Text to search by.
+        :param number: Number of similar items to return. Defaults to 5.
 
-        Returns:
-            list: List of (id, score) tuples
+        :returns: List of (id, score) tuples.
         """
         comparison_vector = self.model().embed(text)
         return self.similar_by_vector(comparison_vector, number)

@@ -140,7 +140,16 @@ class UnknownModelError(KeyError):
     pass
 
 
-def get_model(name):
+def get_model(name: str) -> Model:
+    """
+    Return a model by name or alias.
+
+    :param name: Name or alias of the model.
+
+    :exception `llm.UnknownModelError`: If the model cannot be resolved.
+
+    :returns: Instance of a `Model` subclass.
+    """
     aliases = get_model_aliases()
     try:
         return aliases[name]
