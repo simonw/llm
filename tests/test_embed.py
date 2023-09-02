@@ -31,6 +31,15 @@ def test_embed_huge_list():
     assert model.batch_count == 100
 
 
+def test_embed_store(collection):
+    collection.embed("3", "hello world", store=True)
+    assert collection.db["embeddings"].count == 3
+    assert (
+        next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["content"]
+        == "hello world"
+    )
+
+
 def test_collection(collection):
     assert collection.id() == 1
     assert collection.count() == 2

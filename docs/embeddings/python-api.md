@@ -47,6 +47,8 @@ collection.embed("hound", "my happy hound")
 ```
 This stores the embedding for the string "my happy hound" in the `entries` collection under the key `hound`.
 
+Add `store=True` to store the text content itself in the database table along with the embedding vector.
+
 You can embed multiple ID and string pairs at once using the `embed_multi()` method:
 
 ```python
