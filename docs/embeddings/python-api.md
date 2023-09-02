@@ -30,13 +30,17 @@ To work with embeddings in this way you will need an instance of a [sqlite-utils
 import sqlite_utils
 import llm
 
-db = sqlite_utils.Database("my-embeddings.db")
-# Pass model_id= to specify a model for the collection
-collection = llm.Collection(db, "entries", model_id="ada-002")
+# This collection will use an in-memory database that will be
+# discarded when the Python process exits
+collection = llm.Collection("entries", model_id="ada-002")
 
-# Or you can pass a model directly using model=
+# Or you can persist the database to disk like this:
+db = sqlite_utils.Database("my-embeddings.db")
+collection = llm.Collection("entries", db, model_id="ada-002")
+
+# You can pass a model directly using model= instead of model_id=
 embedding_model = llm.get_embedding_model("ada-002")
-collection = llm.Collection(db, "entries", model=embedding_model)
+collection = llm.Collection("entries", db, model=embedding_model)
 ```
 If the collection already exists in the database you can omit the `model` or `model_id` argument - the model ID will be read from the `collections` table.
 

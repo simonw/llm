@@ -7,8 +7,7 @@ import pytest
 
 @pytest.fixture
 def collection():
-    db = sqlite_utils.Database(memory=True)
-    collection = llm.Collection(db, "test", model_id="embed-demo")
+    collection = llm.Collection("test", model_id="embed-demo")
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
@@ -95,7 +94,7 @@ def test_similar_by_id(collection):
 @pytest.mark.parametrize("with_metadata", (False, True))
 def test_embed_multi(with_metadata):
     db = sqlite_utils.Database(memory=True)
-    collection = llm.Collection(db, "test", model_id="embed-demo")
+    collection = llm.Collection("test", db, model_id="embed-demo")
     ids_and_texts = ((str(i), "hello {}".format(i)) for i in range(1000))
     if with_metadata:
         ids_and_texts = ((id, text, {"meta": id}) for id, text in ids_and_texts)

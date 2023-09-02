@@ -24,8 +24,8 @@ class Collection:
 
     def __init__(
         self,
-        db: Database,
         name: str,
+        db: Optional[Database] = None,
         *,
         model: Optional[EmbeddingModel] = None,
         model_id: Optional[str] = None,
@@ -48,7 +48,7 @@ class Collection:
         """
         import llm
 
-        self.db = db
+        self.db = db or Database(memory=True)
         self.name = name
         self._model = model
 

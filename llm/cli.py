@@ -910,7 +910,7 @@ def embed(collection, id, input, model, store, database, content, format_):
     model_obj = None
     if collection:
         db = get_db()
-        collection_obj = Collection(db, collection, model_id=model)
+        collection_obj = Collection(collection, db, model_id=model)
         model_obj = collection_obj.model()
 
     if model_obj is None:
@@ -995,7 +995,7 @@ def similar(collection, id, input, content, number, database):
         raise click.ClickException("No embeddings table found in database")
 
     try:
-        collection_obj = Collection(db, collection, create=False)
+        collection_obj = Collection(collection, db, create=False)
     except Collection.DoesNotExist:
         raise click.ClickException("Collection does not exist")
 
