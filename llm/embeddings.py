@@ -5,7 +5,7 @@ from itertools import islice
 import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
-from typing import cast, Any, Dict, Iterable, List, Optional, Union
+from typing import cast, Any, Dict, Iterable, List, Optional, Tuple
 
 
 @dataclass
@@ -140,7 +140,7 @@ class Collection:
         )
 
     def embed_multi(
-        self, entries: Iterable[Union[str, str]], store: bool = False
+        self, entries: Iterable[Tuple[str, str]], store: bool = False
     ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
@@ -155,7 +155,7 @@ class Collection:
 
     def embed_multi_with_metadata(
         self,
-        entries: Iterable[Union[str, str, Optional[Dict[str, Any]]]],
+        entries: Iterable[Tuple[str, str, Optional[Dict[str, Any]]]],
         store: bool = False,
     ) -> None:
         """
