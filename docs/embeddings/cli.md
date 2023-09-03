@@ -100,6 +100,176 @@ llm similar phrases -c 'hound'
 {"id": "hound", "score": 0.8484683588631485, "content": "my happy hound", "metadata": {"name": "Hound"}}
 ```
 
+(embeddings-llm-embed-multi)=
+## llm embed-multi
+
+The `llm embed` command embeds a single string at a time.
+
+`llm embed-multi` can be used to embed multiple strings at once, taking advantage of any efficiencies that the embedding model may provide when processing multiple strings.
+
+This command can be called in one of three ways:
+
+1. With a CSV, TSV, JSON or newline-delimited JSON file
+2. With a SQLite database and a SQL query
+3. With one or more paths to directories, each accompanied by a glob pattern
+
+All three mechanisms support these options:
+
+- `-m model_id` to specify the embedding model to use
+- `-d database.db` to specify a different database file to store the embeddings in
+- `--store` to store the original content in the embeddings table in addition to the embedding vector
+- `--prefix` to prepend a prefix to the stored ID of each item
+
+(embeddings-llm-embed-multi-csv-etc)=
+### Embedding data from a CSV, TSV or JSON file
+
+You can embed data from a CSV, TSV or JSON file using the `-i/--input` option.
+
+Your file must contain at least two columns. The first one is expected to contain the ID of the item, and any subsequent columns will be treated as containing content to be embedded.
+
+An example CSV file might look like this:
+
+```
+id,content
+one,This is the first item
+two,This is the second item
+```
+TSV would use tabs instead of commas.
+
+JSON files can be structured like this:
+
+```json
+[
+  {"id": "one", "content": "This is the first item"},
+  {"id": "two", "content": "This is the second item"}
+]
+```
+Or as newline-delimited JSON like this:
+```json
+{"id": "one", "content": "This is the first item"}
+{"id": "two", "content": "This is the second item"}
+```
+In each of these cases the file can be passed to `llm embed-multi` like this:
+```bash
+llm embed-multi items -i mydata.csv
+```
+The first argument is the name of the collection, then the `-i/--input` option is used to specify the file.
+
+You can also pipe content to standard input of the tool using `-i -`:
+
+```bash
+cat mydata.json | llm embed-multi items -i -
+```
+LLM will attempt to detect the format of your data automatically. If this doesn't work you can specify the format using the `--format` option. This is required if you are piping newline-delimited JSON to standard input.
+
+```bash
+cat mydata.json | llm embed-multi items -i - --format nl
+```
+Other supported `--format` options are `csv`, `tsv` and `json`.
+
+This example embeds the data from a JSON file in a collection called `items` in database called `docs.db` using the `ada-002` model and stores the original content in the `embeddings` table as well, adding a prefix of `my-items/` to each ID:
+
+```bash
+llm embed-multi items \
+  -d docs.db \
+  -i mydata.json \
+  -m ada-002 \
+  --prefix my-items/ \
+  --store
+```
+
+(embeddings-llm-embed-multi-sqlite)=
+### Embedding data from a SQLite database
+
+You can embed data from a SQLite database using `--sql`, optionally combined with `--attach` to attach an additional database.
+
+If you are storing embeddings in the same database as the source data, you can do this:
+
+```bash
+llm embed-multi docs \
+  -d docs.db \
+  --sql 'select id, title, content from documents' \
+  -m ada-002
+```
+The `docs.db` database here contains a `documents` table, and we want to embed the `title` and `content` columns from that table and store the results back in the same database.
+
+To load content from a database other than the one you are using to store embeddings, attach it with the `--attach` option and use `alias.table` in your SQLite query:
+
+```bash
+llm embed-multi docs \
+  -d embeddings.db \
+  --attach other other.db \
+  --sql 'select id, title, content from other.documents' \
+  -m ada-002
+```
+
+(embeddings-llm-embed-multi-directories)=
+### Embedding data from files in directories
+
+LLM can embed the content of every text file in a specified directory, using the file's path and name as the ID.
+
+Consider a directory structure like this:
+```
+docs/aliases.md
+docs/contributing.md
+docs/embeddings/binary.md
+docs/embeddings/cli.md
+docs/embeddings/index.md
+docs/index.md
+docs/logging.md
+docs/plugins/directory.md
+docs/plugins/index.md
+```
+To embed all of those documents, you can run the following:
+
+```bash
+llm embed-multi documentation \
+  -m ada-002 \
+  --files docs '**/*.md' \
+  -d documentation.db \
+  --store
+```
+Here `--files docs '**/*.md'` specifies that the `docs` directory should be scanned for files matching the `**/*.md` glob pattern - which will match Markdown files in any nested directory.
+
+The result of the above command is a `embeddings` table with the following IDs:
+
+```
+aliases.md
+contributing.md
+embeddings/binary.md
+embeddings/cli.md
+embeddings/index.md
+index.md
+logging.md
+plugins/directory.md
+plugins/index.md
+```
+Each corresponding to embedded content for the file in question.
+
+The `--prefix` option can be useful here to add a prefix to each ID:
+
+```bash
+llm embed-multi documentation \
+  -m ada-002 \
+  --files docs '**/*.md' \
+  -d documentation.db \
+  --store \
+  --prefix llm-docs/
+```
+This will result in the following IDs instead:
+
+```
+llm-docs/aliases.md
+llm-docs/contributing.md
+llm-docs/embeddings/binary.md
+llm-docs/embeddings/cli.md
+llm-docs/embeddings/index.md
+llm-docs/index.md
+llm-docs/logging.md
+llm-docs/plugins/directory.md
+llm-docs/plugins/index.md
+```
+
 (embeddings-cli-similar)=
 ## llm similar
 
