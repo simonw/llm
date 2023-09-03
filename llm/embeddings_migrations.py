@@ -61,9 +61,6 @@ def m004_store_content_hash(db):
     def random_md5():
         return hashlib.md5(str(time.time()).encode("utf8")).digest()
 
-    rows = list(db["embeddings"].rows)
-    print(rows)
-
     with db.conn:
         db.execute(
             """
@@ -79,5 +76,5 @@ def m004_store_content_hash(db):
             where content is null
         """
         )
-    # rows = list(db["embeddings"].rows)
+
     db["embeddings"].create_index(["content_hash"])
