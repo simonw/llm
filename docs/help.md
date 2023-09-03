@@ -427,6 +427,7 @@ Options:
   --sql TEXT                   Read input using this SQL query
   --attach <TEXT FILE>...      Additional databases to attach - specify alias
                                and file path
+  --prefix TEXT                Prefix to add to the IDs
   -m, --model TEXT             Embedding model to use
   --store                      Store the text itself in the database
   -d, --database FILE
