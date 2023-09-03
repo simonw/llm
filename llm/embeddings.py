@@ -282,6 +282,14 @@ class Collection:
         comparison_vector = self.model().embed(text)
         return self.similar_by_vector(comparison_vector, number)
 
+    def delete(self):
+        """
+        Delete the collection and its embeddings from the database
+        """
+        with self.db.conn:
+            self.db.execute("delete from embeddings where collection_id = ?", [self.id])
+            self.db.execute("delete from collections where id = ?", [self.id])
+
     @staticmethod
     def content_hash(text: str) -> bytes:
         "Hash content for deduplication. Override to change hashing behavior."

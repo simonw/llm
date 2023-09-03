@@ -139,6 +139,25 @@ def test_embed_store(user_path, metadata, metadata_error):
         else:
             assert result2.output == "items: embed-demo\n  1 embedding\n"
 
+    # And test deleting it too
+    result = runner.invoke(cli, ["embed-db", "delete-collection", "items"])
+    assert result.exit_code == 0
+    assert db["collections"].count == 0
+    assert db["embeddings"].count == 0
+
+
+def test_collection_delete_errors(user_path):
+    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    collection = Collection("items", db, model_id="embed-demo")
+    collection.embed("1", "hello")
+    assert db["collections"].count == 1
+    assert db["embeddings"].count == 1
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed-db", "delete-collection", "does-not-exist"])
+    assert result.exit_code == 1
+    assert "Collection does not exist" in result.output
+    assert db["collections"].count == 1
+
 
 @pytest.mark.parametrize(
     "args,expected_error",

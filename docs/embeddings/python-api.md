@@ -104,6 +104,7 @@ A collection instance has the following properties and methods:
 - `similar(query: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the given query string
 - `similar_by_id(id: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the item with the given ID
 - `similar_by_vector(vector: List[float], number: int=10, skip_id: str=None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
+- `delete()` - deletes the collection and its embeddings from the database
 
 (embeddings-python-similar)=
 ## Retrieving similar items

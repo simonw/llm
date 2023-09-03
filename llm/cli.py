@@ -1122,6 +1122,33 @@ def embed_db_collections(database, json_):
             )
 
 
+@embed_db.command(name="delete-collection")
+@click.argument("collection")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
+    envvar="LLM_EMBEDDINGS_DB",
+    help="Path to embeddings database",
+)
+def embed_db_delete_collection(collection, database):
+    """
+    Delete the specified collection
+
+    Example usage:
+
+    \b
+        llm embed-db delete-collection my-collection
+    """
+    database = database or (user_dir() / "embeddings.db")
+    db = sqlite_utils.Database(str(database))
+    try:
+        collection_obj = Collection(collection, db, create=False)
+    except Collection.DoesNotExist:
+        raise click.ClickException("Collection does not exist")
+    collection_obj.delete()
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)

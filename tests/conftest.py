@@ -94,3 +94,11 @@ def mocked_localai(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+
+
+@pytest.fixture
+def collection():
+    collection = llm.Collection("test", model_id="embed-demo")
+    collection.embed(1, "hello world")
+    collection.embed(2, "goodbye world")
+    return collection

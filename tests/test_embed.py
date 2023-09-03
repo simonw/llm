@@ -6,14 +6,6 @@ import sqlite_utils
 from unittest.mock import ANY
 
 
-@pytest.fixture
-def collection():
-    collection = llm.Collection("test", model_id="embed-demo")
-    collection.embed(1, "hello world")
-    collection.embed(2, "goodbye world")
-    return collection
-
-
 def test_demo_plugin():
     model = llm.get_embedding_model("embed-demo")
     assert model.embed("hello world") == [5, 5] + [0] * 14
@@ -118,3 +110,12 @@ def test_embed_multi(with_metadata):
     else:
         assert len(rows_with_metadata) == 0
         assert len(rows_with_content) == 1000
+
+
+def test_collection_delete(collection):
+    db = collection.db
+    assert db["embeddings"].count == 2
+    assert db["collections"].count == 1
+    collection.delete()
+    assert db["embeddings"].count == 0
+    assert db["collections"].count == 0

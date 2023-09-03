@@ -463,8 +463,9 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  collections  Output the path to the embeddings database
-  path         Output the path to the embeddings database
+  collections        Output the path to the embeddings database
+  delete-collection  Delete the specified collection
+  path               Output the path to the embeddings database
 ```
 #### llm embed-db path --help
 ```
@@ -484,6 +485,20 @@ Usage: llm embed-db collections [OPTIONS]
 Options:
   -d, --database FILE  Path to embeddings database
   --json               Output as JSON
+  --help               Show this message and exit.
+```
+#### llm embed-db delete-collection --help
+```
+Usage: llm embed-db delete-collection [OPTIONS] COLLECTION
+
+  Delete the specified collection
+
+  Example usage:
+
+      llm embed-db delete-collection my-collection
+
+Options:
+  -d, --database FILE  Path to embeddings database
   --help               Show this message and exit.
 ```
 ### llm openai --help

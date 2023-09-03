@@ -167,3 +167,13 @@ Add `-d/--database` to specify a different database file:
 ```bash
 llm embed-db collections -d my-embeddings.db
 ```
+## llm embed-db delete-collection
+
+To delete a collection from the database, run this:
+```bash
+llm embed-db delete-collection collection-name
+```
+Pass `-d` to specify a different database file:
+```bash
+llm embed-db delete-collection collection-name -d my-embeddings.db
+```
