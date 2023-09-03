@@ -1,4 +1,5 @@
 from sqlite_migrate import Migrations
+import hashlib
 import time
 
 embeddings_migrations = Migrations("llm.embeddings")
@@ -34,3 +35,49 @@ def m003_add_updated(db):
     db.query(
         "update embeddings set updated = ? where updated is null", [int(time.time())]
     )
+
+
+@embeddings_migrations()
+def m004_store_content_hash(db):
+    db["embeddings"].add_column("content_hash", bytes)
+    db["embeddings"].transform(
+        column_order=(
+            "collection_id",
+            "id",
+            "embedding",
+            "content",
+            "content_hash",
+            "metadata",
+            "updated",
+        )
+    )
+
+    # Backfill content_hash
+    @db.register_function
+    def md5(text):
+        return hashlib.md5(text.encode("utf8")).digest()
+
+    @db.register_function
+    def random_md5():
+        return hashlib.md5(str(time.time()).encode("utf8")).digest()
+
+    rows = list(db["embeddings"].rows)
+    print(rows)
+
+    with db.conn:
+        db.execute(
+            """
+            update embeddings
+            set content_hash = md5(content)
+            where content is not null
+        """
+        )
+        db.execute(
+            """
+            update embeddings
+            set content_hash = random_md5()
+            where content is null
+        """
+        )
+    # rows = list(db["embeddings"].rows)
+    db["embeddings"].create_index(["content_hash"])

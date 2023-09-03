@@ -1,6 +1,7 @@
 from .models import EmbeddingModel
 from .embeddings_migrations import embeddings_migrations
 from dataclasses import dataclass
+import hashlib
 from itertools import islice
 import json
 from sqlite_utils import Database
@@ -133,6 +134,7 @@ class Collection:
                 "id": id,
                 "embedding": encode(embedding),
                 "content": text if store else None,
+                "content_hash": self.content_hash(text),
                 "metadata": json.dumps(metadata) if metadata else None,
                 "updated": int(time.time()),
             },
@@ -279,3 +281,8 @@ class Collection:
         """
         comparison_vector = self.model().embed(text)
         return self.similar_by_vector(comparison_vector, number)
+
+    @staticmethod
+    def content_hash(text: str) -> bytes:
+        "Hash content for deduplication. Override to change hashing behavior."
+        return hashlib.md5(text.encode("utf8")).digest()

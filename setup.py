@@ -40,7 +40,7 @@ setup(
         "openai",
         "click-default-group-wheel",
         "sqlite-utils>=3.35.0",
-        "sqlite-migrate",
+        "sqlite-migrate>=0.1a2",
         "pydantic>=1.10.2",
         "PyYAML",
         "pluggy",

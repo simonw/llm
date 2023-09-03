@@ -167,6 +167,7 @@ CREATE TABLE "embeddings" (
    [id] TEXT,
    [embedding] BLOB,
    [content] TEXT,
+   [content_hash] BLOB,
    [metadata] TEXT,
    [updated] INTEGER,
    PRIMARY KEY ([collection_id], [id])

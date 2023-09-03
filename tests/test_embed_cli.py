@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 from llm.cli import cli
+from llm import Collection
 import json
 import pytest
 import sqlite_utils
@@ -119,6 +120,7 @@ def test_embed_store(user_path, metadata, metadata_error):
                 b"\x00\x00\x00\x00\x00\x00\x00"
             ),
             "content": None,
+            "content_hash": Collection.content_hash("hello"),
             "metadata": expected_metadata,
             "updated": ANY,
         }
