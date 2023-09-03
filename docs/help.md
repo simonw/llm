@@ -396,6 +396,7 @@ Options:
   --store                         Store the text itself in the database
   -d, --database FILE
   -c, --content FILE              Content to embed
+  --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
   --help                          Show this message and exit.

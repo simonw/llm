@@ -43,6 +43,18 @@ DEFAULT_EMBEDDING_MODEL = "ada-002"
 DEFAULT_TEMPLATE = "prompt: "
 
 
+def _validate_metadata_json(ctx, param, value):
+    if value is None:
+        return value
+    try:
+        obj = json.loads(value)
+        if not isinstance(obj, dict):
+            raise click.BadParameter("Metadata must be a JSON object")
+        return obj
+    except json.JSONDecodeError:
+        raise click.BadParameter("Metadata must be valid JSON")
+
+
 @click.group(
     cls=DefaultGroup,
     default="prompt",
@@ -885,13 +897,18 @@ def uninstall(packages, yes):
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
 )
 @click.option(
+    "--metadata",
+    help="JSON object metadata to store",
+    callback=_validate_metadata_json,
+)
+@click.option(
     "format_",
     "-f",
     "--format",
     type=click.Choice(["json", "blob", "base64", "hex"]),
     help="Output format",
 )
-def embed(collection, id, input, model, store, database, content, format_):
+def embed(collection, id, input, model, store, database, content, metadata, format_):
     """Embed text and store or return the result"""
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
@@ -935,7 +952,7 @@ def embed(collection, id, input, model, store, database, content, format_):
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(id, content, store=store)
+        embedding = collection_obj.embed(id, content, metadata=metadata, store=store)
     else:
         embedding = model_obj.embed(content)
 

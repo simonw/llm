@@ -67,7 +67,17 @@ def test_embed_errors(args, expected_error):
     assert expected_error in result.output
 
 
-def test_embed_store(user_path):
+@pytest.mark.parametrize(
+    "metadata,metadata_error",
+    (
+        (None, None),
+        ('{"foo": "bar"}', None),
+        ('{"foo": [1, 2, 3]}', None),
+        ("[1, 2, 3]", "Metadata must be a JSON object"),  # Must be a dictionary
+        ('{"foo": "incomplete}', "Metadata must be valid JSON"),
+    ),
+)
+def test_embed_store(user_path, metadata, metadata_error):
     embeddings_db = user_path / "embeddings.db"
     assert not embeddings_db.exists()
     runner = CliRunner()
@@ -76,9 +86,16 @@ def test_embed_store(user_path):
     # Should not have created the table
     assert not embeddings_db.exists()
     # Now run it to store
-    result = runner.invoke(
-        cli, ["embed", "-c", "hello", "-m", "embed-demo", "items", "1"]
-    )
+    args = ["embed", "-c", "hello", "-m", "embed-demo", "items", "1"]
+    if metadata is not None:
+        args.extend(("--metadata", metadata))
+    result = runner.invoke(cli, args)
+    if metadata_error:
+        # Should have returned an error message about invalid metadata
+        assert result.exit_code == 2
+        assert metadata_error in result.output
+        return
+    # No error, should have succeeded and stored the data
     assert result.exit_code == 0
     assert embeddings_db.exists()
     # Check the contents
@@ -86,7 +103,11 @@ def test_embed_store(user_path):
     assert list(db["collections"].rows) == [
         {"id": 1, "name": "items", "model": "embed-demo"}
     ]
-    assert list(db["embeddings"].rows) == [
+    expected_metadata = None
+    if metadata and not metadata_error:
+        expected_metadata = metadata
+    rows = list(db["embeddings"].rows)
+    assert rows == [
         {
             "collection_id": 1,
             "id": "1",
@@ -98,7 +119,7 @@ def test_embed_store(user_path):
                 b"\x00\x00\x00\x00\x00\x00\x00"
             ),
             "content": None,
-            "metadata": None,
+            "metadata": expected_metadata,
             "updated": ANY,
         }
     ]

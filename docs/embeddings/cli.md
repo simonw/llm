@@ -60,7 +60,7 @@ In the above example this would have been the default embedding model at the tim
 The following example stores the embedding for the string "my happy hound" in a collection called `phrases` under the key `hound` and using the model `ada-002`:
 
 ```bash
-llm embed -m ada-002 -c 'my happy hound' phrases hound
+llm embed phrases hound -m ada-002 -c 'my happy hound'
 ```
 By default, the SQLite database used to store embeddings is the `embeddings.db` in the user content directory managed by LLM.
 
@@ -69,9 +69,36 @@ You can see the path to this directory by running `llm embed-db path`.
 You can store embeddings in a different SQLite database by passing a path to it using the `-d/--database` option to `llm embed`. If this file does not exist yet the command will create it:
 
 ```bash
-llm embed -d my-embeddings.db -c 'my happy hound' phrases hound
+llm embed phrases hound -d my-embeddings.db -c 'my happy hound'
 ```
 This creates a database file called `my-embeddings.db` in the current directory.
+
+(embeddings-collections-content-metadata)=
+#### Storing content and metadata
+
+By default, only the entry ID and the embedding vector are stored in the database table.
+
+You can store a copy of the original text in the `content` column by passing the `--store` option:
+
+```bash
+llm embed phrases hound -c 'my happy hound' --store
+```
+You can also store a JSON object containing arbitrary metadata in the `metadata` column by passing the `--metadata` option. This example uses both `--store` and `--metadata` options:
+
+```bash
+llm embed phrases hound \
+  -m ada-002 \
+  -c 'my happy hound' \
+  --metadata '{"name": "Hound"}' \
+  --store
+```
+Data stored in this way will be returned by calls to `llm similar`, for example:
+```bash
+llm similar phrases -c 'hound'
+```
+```
+{"id": "hound", "score": 0.8484683588631485, "content": "my happy hound", "metadata": {"name": "Hound"}}
+```
 
 (embeddings-cli-similar)=
 ## llm similar
@@ -93,7 +120,7 @@ llm similar quotations -i one.txt
 ```
 Or feed text to standard input using `-i -`:
 ```bash
-cat one.txt | llm similar quotations -i -
+echo 'computer science' | llm similar quotations -i -
 ```
 
 (embeddings-cli-embed-models)=
