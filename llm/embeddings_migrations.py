@@ -52,29 +52,34 @@ def m004_store_content_hash(db):
         )
     )
 
-    # Backfill content_hash
-    @db.register_function
+    # Register functions manually so we can de-register later
     def md5(text):
         return hashlib.md5(text.encode("utf8")).digest()
 
-    @db.register_function
     def random_md5():
         return hashlib.md5(str(time.time()).encode("utf8")).digest()
+
+    db.conn.create_function("temp_md5", 1, md5)
+    db.conn.create_function("temp_random_md5", 0, random_md5)
 
     with db.conn:
         db.execute(
             """
             update embeddings
-            set content_hash = md5(content)
+            set content_hash = temp_md5(content)
             where content is not null
         """
         )
         db.execute(
             """
             update embeddings
-            set content_hash = random_md5()
+            set content_hash = temp_random_md5()
             where content is null
         """
         )
 
     db["embeddings"].create_index(["content_hash"])
+
+    # De-register functions
+    db.conn.create_function("temp_md5", 1, None)
+    db.conn.create_function("temp_random_md5", 0, None)
