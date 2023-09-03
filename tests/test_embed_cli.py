@@ -3,6 +3,7 @@ from llm.cli import cli
 import json
 import pytest
 import sqlite_utils
+from unittest.mock import ANY
 
 
 @pytest.mark.parametrize(
@@ -98,6 +99,7 @@ def test_embed_store(user_path):
             ),
             "content": None,
             "metadata": None,
+            "updated": ANY,
         }
     ]
     # Should show up in 'llm embed-db collections'

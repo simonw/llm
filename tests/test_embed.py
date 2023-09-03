@@ -1,8 +1,9 @@
 import json
 import llm
 from llm.embeddings import Entry
-import sqlite_utils
 import pytest
+import sqlite_utils
+from unittest.mock import ANY
 
 
 @pytest.fixture
@@ -65,6 +66,7 @@ def test_collection(collection):
             "embedding": llm.encode([5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "metadata": None,
+            "updated": ANY,
         },
         {
             "collection_id": 1,
@@ -72,8 +74,10 @@ def test_collection(collection):
             "embedding": llm.encode([7, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "metadata": None,
+            "updated": ANY,
         },
     ]
+    assert isinstance(rows[0]["updated"], int) and rows[0]["updated"] > 0
 
 
 def test_similar(collection):

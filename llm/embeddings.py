@@ -5,6 +5,7 @@ from itertools import islice
 import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
+import time
 from typing import cast, Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -133,6 +134,7 @@ class Collection:
                 "embedding": encode(embedding),
                 "content": text if store else None,
                 "metadata": json.dumps(metadata) if metadata else None,
+                "updated": int(time.time()),
             },
             replace=True,
         )
@@ -184,6 +186,7 @@ class Collection:
                             "embedding": llm.encode(embedding),
                             "content": text if store else None,
                             "metadata": json.dumps(metadata) if metadata else None,
+                            "updated": int(time.time()),
                         }
                         for (embedding, (id, text, metadata)) in zip(embeddings, batch)
                     ),

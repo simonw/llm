@@ -91,6 +91,7 @@ def test_migrations_for_embeddings():
         "embedding": bytes,
         "content": str,
         "metadata": str,
+        "updated": int,
     }
     assert db["embeddings"].foreign_keys[0].column == "collection_id"
     assert db["embeddings"].foreign_keys[0].other_table == "collections"
