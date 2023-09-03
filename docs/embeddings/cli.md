@@ -147,10 +147,19 @@ This will return the name of the current default model:
 llm embed-models default
 ```
 You can set a different default like this:
+```bash
+llm embed-models default ada-002
 ```
-llm embed-models default name-of-other-model
-```
+This will set the default model to OpenAI's `ada-002` model.
+
 Any of the supported aliases for a model can be passed to this command.
+
+You can unset the default model using `--remove-default`:
+
+```bash
+llm embed-models default --remove-default
+```
+When no default model is set, the `llm embed` and `llm embed-multi` commands will require that a model is specified using `-m/--model`.
 
 ## llm embed-db collections
 

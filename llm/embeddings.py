@@ -63,6 +63,11 @@ class Collection:
             self.model_id = row["model"]
         else:
             if create:
+                # Collection does not exist, so model or model_id is required
+                if not model and not model_id:
+                    raise ValueError(
+                        "Either model= or model_id= must be provided when creating a new collection"
+                    )
                 # Create it
                 if model_id:
                     # Resolve alias

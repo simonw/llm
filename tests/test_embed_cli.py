@@ -153,7 +153,9 @@ def test_collection_delete_errors(user_path):
     assert db["collections"].count == 1
     assert db["embeddings"].count == 1
     runner = CliRunner()
-    result = runner.invoke(cli, ["embed-db", "delete-collection", "does-not-exist"])
+    result = runner.invoke(
+        cli, ["embed-db", "delete-collection", "does-not-exist"], catch_exceptions=False
+    )
     assert result.exit_code == 1
     assert "Collection does not exist" in result.output
     assert db["collections"].count == 1
@@ -309,3 +311,20 @@ def test_sql(tmpdir, use_other_db, prefix):
         {"id": (prefix or "") + "1", "content": "cli Command line interface"},
         {"id": (prefix or "") + "2", "content": "sql Structured query language"},
     ]
+
+
+def test_default_embedding_model():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed-models", "default"])
+    assert result.exit_code == 0
+    assert result.output == "<No default embedding model set>\n"
+    result2 = runner.invoke(cli, ["embed-models", "default", "ada-002"])
+    assert result2.exit_code == 0
+    result3 = runner.invoke(cli, ["embed-models", "default"])
+    assert result3.exit_code == 0
+    assert result3.output == "ada-002\n"
+    result4 = runner.invoke(cli, ["embed-models", "default", "--remove-default"])
+    assert result4.exit_code == 0
+    result5 = runner.invoke(cli, ["embed-models", "default"])
+    assert result5.exit_code == 0
+    assert result5.output == "<No default embedding model set>\n"
