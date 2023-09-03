@@ -31,7 +31,7 @@ jobs:
       run: |
         cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
-          docs/**/*.md
+          docs/**/*.md docs/*.md
     - name: Run Black
       run: |
         black --check .
