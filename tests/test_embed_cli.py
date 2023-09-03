@@ -2,6 +2,7 @@ from click.testing import CliRunner
 from llm.cli import cli
 from llm import Collection
 import json
+import pathlib
 import pytest
 import sqlite_utils
 from unittest.mock import ANY
@@ -268,7 +269,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
 
 @pytest.mark.parametrize("use_other_db", (True, False))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
-def test_sql(tmpdir, use_other_db, prefix):
+def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     db_path = str(tmpdir / "embeddings.db")
     db = sqlite_utils.Database(db_path)
     extra_args = []
@@ -310,6 +311,50 @@ def test_sql(tmpdir, use_other_db, prefix):
     assert rows == [
         {"id": (prefix or "") + "1", "content": "cli Command line interface"},
         {"id": (prefix or "") + "2", "content": "sql Structured query language"},
+    ]
+
+
+def test_embed_multi_files(tmpdir):
+    db_path = str(tmpdir / "files.db")
+    files = tmpdir / "files"
+    for filename, content in (
+        ("file1.txt", "hello world"),
+        ("file2.txt", "goodbye world"),
+        ("nested/one.txt", "one"),
+        ("nested/two.txt", "two"),
+        ("nested/more/three.txt", "three"),
+        ("nested/more/ignored.ini", "Does not match glob"),
+    ):
+        path = pathlib.Path(files / filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, "utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "files",
+            "-d",
+            db_path,
+            "--files",
+            str(files),
+            "**/*.txt",
+            "-m",
+            "embed-demo",
+            "--store",
+        ],
+    )
+    assert result.exit_code == 0
+    embeddings_db = sqlite_utils.Database(db_path)
+    assert embeddings_db["embeddings"].count == 5
+    rows = list(embeddings_db.query("select id, content from embeddings"))
+    assert rows == [
+        {"id": "file2.txt", "content": "goodbye world"},
+        {"id": "file1.txt", "content": "hello world"},
+        {"id": "nested/two.txt", "content": "two"},
+        {"id": "nested/one.txt", "content": "one"},
+        {"id": "nested/more/three.txt", "content": "three"},
     ]
 
 
