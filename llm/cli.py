@@ -1013,6 +1013,13 @@ def embed_multi(
     The first column is treated as an ID - all other columns
     are assumed to be text that should be concatenated together
     in order to calculate the embeddings.
+
+    Input data can come from one of three sources:
+
+    \b
+    1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
+    2. A SQL query against a SQLite database
+    3. A directory of files
     """
     if not input_path and not sql and not files:
         raise click.UsageError("Either --sql or input path or --files is required")
