@@ -994,6 +994,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     multiple=True,
     help="Additional databases to attach - specify alias and file path",
 )
+@click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option("-m", "--model", help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
@@ -1003,7 +1004,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     envvar="LLM_EMBEDDINGS_DB",
 )
 def embed_multi(
-    collection, input_path, format, files, sql, attach, model, store, database
+    collection, input_path, format, files, sql, attach, prefix, model, store, database
 ):
     """
     Store embeddings for multiple strings at once
@@ -1092,7 +1093,7 @@ def embed_multi(
         def tuples():
             for row in rows:
                 values = list(row.values())
-                id = values[0]
+                id = prefix + str(values[0])
                 text = " ".join(v or "" for v in values[1:])
                 yield id, text
 

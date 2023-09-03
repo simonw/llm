@@ -219,6 +219,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
 
 
 @pytest.mark.parametrize("use_stdin", (False, True))
+@pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize(
     "filename,content",
     (
@@ -234,7 +235,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         ),
     ),
 )
-def test_embed_multi_file_input(tmpdir, use_stdin, filename, content):
+def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "phrases", "-d", str(db_path), "-m", "embed-demo"]
     input = None
@@ -245,6 +246,8 @@ def test_embed_multi_file_input(tmpdir, use_stdin, filename, content):
         path = tmpdir / filename
         path.write_text(content, "utf-8")
         args.append(str(path))
+    if prefix:
+        args.extend(("--prefix", prefix))
     # Auto-detection can't detect JSON-nl, so make that explicit
     if filename.endswith(".jsonl"):
         args.extend(("--format", "nl"))
@@ -254,10 +257,16 @@ def test_embed_multi_file_input(tmpdir, use_stdin, filename, content):
     # Check that everything was embedded correctly
     db = sqlite_utils.Database(str(db_path))
     assert db["embeddings"].count == 2
+    ids = [row["id"] for row in db["embeddings"].rows]
+    expected_ids = ["1", "2"]
+    if prefix:
+        expected_ids = ["prefix1", "prefix2"]
+    assert ids == expected_ids
 
 
 @pytest.mark.parametrize("use_other_db", (True, False))
-def test_sql(tmpdir, use_other_db):
+@pytest.mark.parametrize("prefix", (None, "prefix"))
+def test_sql(tmpdir, use_other_db, prefix):
     db_path = str(tmpdir / "embeddings.db")
     db = sqlite_utils.Database(db_path)
     extra_args = []
@@ -265,7 +274,9 @@ def test_sql(tmpdir, use_other_db):
         db_path2 = str(tmpdir / "other.db")
         db = sqlite_utils.Database(db_path2)
         extra_args = ["--attach", "other", db_path2]
-        other_table = "other.content"
+
+    if prefix:
+        extra_args.extend(("--prefix", prefix))
 
     db["content"].insert_all(
         [
@@ -295,6 +306,6 @@ def test_sql(tmpdir, use_other_db):
     assert embeddings_db["embeddings"].count == 2
     rows = list(embeddings_db.query("select id, content from embeddings"))
     assert rows == [
-        {"id": "1", "content": "cli Command line interface"},
-        {"id": "2", "content": "sql Structured query language"},
+        {"id": (prefix or "") + "1", "content": "cli Command line interface"},
+        {"id": (prefix or "") + "2", "content": "sql Structured query language"},
     ]
