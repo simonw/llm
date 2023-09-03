@@ -58,6 +58,7 @@ Commands:
   embed         Embed text and store or return the result
   embed-db      Manage the embeddings database
   embed-models  Manage available embedding models
+  embed-multi   Store embeddings for multiple strings at once
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -400,6 +401,36 @@ Options:
   -f, --format [json|blob|base64|hex]
                                   Output format
   --help                          Show this message and exit.
+```
+### llm embed-multi --help
+```
+Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
+
+  Store embeddings for multiple strings at once
+
+  Input can be CSV, TSV or a JSON list of objects.
+
+  The first column is treated as an ID - all other columns are assumed to be
+  text that should be concatenated together in order to calculate the
+  embeddings.
+
+  Input data can come from one of three sources:
+
+  1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
+  2. A SQL query against a SQLite database
+  3. A directory of files
+
+Options:
+  --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
+  --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
+                               and glob pattern
+  --sql TEXT                   Read input using this SQL query
+  --attach <TEXT FILE>...      Additional databases to attach - specify alias
+                               and file path
+  -m, --model TEXT             Embedding model to use
+  --store                      Store the text itself in the database
+  -d, --database FILE
+  --help                       Show this message and exit.
 ```
 ### llm similar --help
 ```
