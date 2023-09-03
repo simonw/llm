@@ -483,7 +483,8 @@ Usage: llm embed-models default [OPTIONS] [MODEL]
   Show or set the default embedding model
 
 Options:
-  --help  Show this message and exit.
+  --remove-default  Reset to specifying no default model
+  --help            Show this message and exit.
 ```
 ### llm embed-db --help
 ```

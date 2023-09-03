@@ -935,6 +935,10 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     if model_obj is None:
         if not model:
             model = get_default_embedding_model()
+            if model is None:
+                raise click.ClickException(
+                    "You need to specify a model (no default model is set)"
+                )
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError as ex:
@@ -1039,9 +1043,14 @@ def embed_multi(
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
 
-    collection_obj = Collection(
-        collection, db=db, model_id=model or get_default_embedding_model()
-    )
+    try:
+        collection_obj = Collection(
+            collection, db=db, model_id=model or get_default_embedding_model()
+        )
+    except ValueError:
+        raise click.ClickException(
+            "You need to specify a model (no default model is set)"
+        )
 
     expected_length = None
     if files:
@@ -1192,15 +1201,25 @@ def embed_models_list():
 
 @embed_models.command(name="default")
 @click.argument("model", required=False)
-def embed_models_default(model):
+@click.option(
+    "--remove-default", is_flag=True, help="Reset to specifying no default model"
+)
+def embed_models_default(model, remove_default):
     "Show or set the default embedding model"
-    if not model:
-        click.echo(get_default_embedding_model())
+    if not model and not remove_default:
+        default = get_default_embedding_model()
+        if default is None:
+            click.echo("<No default embedding model set>", err=True)
+        else:
+            click.echo(default)
         return
     # Validate it is a known model
     try:
-        model = get_embedding_model(model)
-        set_default_embedding_model(model.model_id)
+        if remove_default:
+            set_default_embedding_model(None)
+        else:
+            model = get_embedding_model(model)
+            set_default_embedding_model(model.model_id)
     except KeyError:
         raise click.ClickException("Unknown embedding model: {}".format(model))
 
@@ -1305,11 +1324,14 @@ def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
 
 def set_default_model(model, filename="default_model.txt"):
     path = user_dir() / filename
-    path.write_text(model)
+    if model is None and path.exists():
+        path.unlink()
+    else:
+        path.write_text(model)
 
 
 def get_default_embedding_model():
-    return get_default_model("default_embedding_model.txt", DEFAULT_EMBEDDING_MODEL)
+    return get_default_model("default_embedding_model.txt", None)
 
 
 def set_default_embedding_model(model):
