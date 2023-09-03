@@ -254,3 +254,47 @@ def test_embed_multi_file_input(tmpdir, use_stdin, filename, content):
     # Check that everything was embedded correctly
     db = sqlite_utils.Database(str(db_path))
     assert db["embeddings"].count == 2
+
+
+@pytest.mark.parametrize("use_other_db", (True, False))
+def test_sql(tmpdir, use_other_db):
+    db_path = str(tmpdir / "embeddings.db")
+    db = sqlite_utils.Database(db_path)
+    extra_args = []
+    if use_other_db:
+        db_path2 = str(tmpdir / "other.db")
+        db = sqlite_utils.Database(db_path2)
+        extra_args = ["--attach", "other", db_path2]
+        other_table = "other.content"
+
+    db["content"].insert_all(
+        [
+            {"id": 1, "name": "cli", "description": "Command line interface"},
+            {"id": 2, "name": "sql", "description": "Structured query language"},
+        ],
+        pk="id",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "stuff",
+            "-d",
+            db_path,
+            "--sql",
+            "select * from content",
+            "-m",
+            "embed-demo",
+            "--store",
+        ]
+        + extra_args,
+    )
+    assert result.exit_code == 0
+    embeddings_db = sqlite_utils.Database(db_path)
+    assert embeddings_db["embeddings"].count == 2
+    rows = list(embeddings_db.query("select id, content from embeddings"))
+    assert rows == [
+        {"id": "1", "content": "cli Command line interface"},
+        {"id": "2", "content": "sql Structured query language"},
+    ]
