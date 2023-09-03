@@ -32,7 +32,9 @@ This will start a live preview server, using [sphinx-autobuild](https://pypi.org
 
 The CLI `--help` examples in the documentation are managed using [Cog](https://github.com/nedbat/cog). Update those files like this:
 
-    cog -r docs/*.md
+    just cog
+
+You'll need [Just](https://github.com/casey/just) installed to run this command.
 
 ## Release process
 

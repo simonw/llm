@@ -135,3 +135,41 @@ for id, score in collection.similar_by_id("cat"):
     print(id, score)
 ```
 The item itself is excluded from the results.
+
+(embeddings-sql-schema)=
+## SQL schema
+
+Here's the SQL schema used by the embeddings database:
+
+<!-- [[[cog
+import cog
+from llm.embeddings_migrations import embeddings_migrations
+import sqlite_utils
+import re
+db = sqlite_utils.Database(memory=True)
+embeddings_migrations.apply(db)
+
+cog.out("```sql\n")
+for table in ("collections", "embeddings"):
+    schema = db[table].schema
+    cog.out(format(schema))
+    cog.out("\n")
+cog.out("```\n")
+]]] -->
+```sql
+CREATE TABLE [collections] (
+   [id] INTEGER PRIMARY KEY,
+   [name] TEXT,
+   [model] TEXT
+)
+CREATE TABLE "embeddings" (
+   [collection_id] INTEGER REFERENCES [collections]([id]),
+   [id] TEXT,
+   [embedding] BLOB,
+   [content] TEXT,
+   [metadata] TEXT,
+   [updated] INTEGER,
+   PRIMARY KEY ([collection_id], [id])
+)
+```
+<!-- [[[end]]] -->
