@@ -110,6 +110,8 @@ def test_embed_multi(with_metadata):
     else:
         assert len(rows_with_metadata) == 0
         assert len(rows_with_content) == 1000
+    # Every row should have content_hash set
+    assert all(row["content_hash"] is not None for row in rows)
 
 
 def test_collection_delete(collection):

@@ -187,6 +187,7 @@ class Collection:
                             "id": id,
                             "embedding": llm.encode(embedding),
                             "content": text if store else None,
+                            "content_hash": self.content_hash(text),
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
                         }
