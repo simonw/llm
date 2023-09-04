@@ -26,6 +26,7 @@ chatgpt-16k : gpt-3.5-turbo-16k
 4           : gpt-4
 gpt4        : gpt-4
 4-32k       : gpt-4-32k
+ada         : ada-002 (embedding)
 ```
 <!-- [[[end]]] -->
 

@@ -25,6 +25,7 @@ def test_remove_alias():
 
 @pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
 def test_cli_aliases_list(args):
+    llm.set_alias("e-demo", "embed-demo")
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
@@ -36,11 +37,14 @@ def test_cli_aliases_list(args):
         "4           : gpt-4\n"
         "gpt4        : gpt-4\n"
         "4-32k       : gpt-4-32k\n"
+        "e-demo      : embed-demo (embedding)\n"
+        "ada         : ada-002 (embedding)\n"
     )
 
 
 @pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
 def test_cli_aliases_list_json(args):
+    llm.set_alias("e-demo", "embed-demo")
     runner = CliRunner()
     result = runner.invoke(cli, args + ["--json"])
     assert result.exit_code == 0
@@ -52,6 +56,8 @@ def test_cli_aliases_list_json(args):
         "4": "gpt-4",
         "gpt4": "gpt-4",
         "4-32k": "gpt-4-32k",
+        "ada": "ada-002",
+        "e-demo": "embed-demo",
     }
 
 

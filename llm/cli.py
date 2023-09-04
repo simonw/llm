@@ -11,6 +11,7 @@ from llm import (
     UnknownModelError,
     encode,
     get_embedding_models_with_aliases,
+    get_embedding_model_aliases,
     get_embedding_model,
     get_key,
     get_plugins,
@@ -735,14 +736,23 @@ def aliases_list(json_):
     to_output = []
     for alias, model in get_model_aliases().items():
         if alias != model.model_id:
-            to_output.append((alias, model.model_id))
+            to_output.append((alias, model.model_id, ""))
+    for alias, embedding_model in get_embedding_model_aliases().items():
+        if alias != embedding_model.model_id:
+            to_output.append((alias, embedding_model.model_id, "embedding"))
     if json_:
-        click.echo(json.dumps({key: value for key, value in to_output}, indent=4))
+        click.echo(
+            json.dumps({key: value for key, value, type_ in to_output}, indent=4)
+        )
         return
-    max_alias_length = max(len(a) for a, _ in to_output)
-    fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}"
-    for alias, model_id in to_output:
-        click.echo(fmt.format(alias=alias, model_id=model_id))
+    max_alias_length = max(len(a) for a, _, _ in to_output)
+    fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}{type_}"
+    for alias, model_id, type_ in to_output:
+        click.echo(
+            fmt.format(
+                alias=alias, model_id=model_id, type_=f" ({type_})" if type_ else ""
+            )
+        )
 
 
 @aliases.command(name="set")
