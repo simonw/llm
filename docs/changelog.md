@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_8_1)=
+## 0.8.1 (2023-08-31)
+
+- Fixed bug where first prompt would show an error if the `io.datasette.llm` directory had not yet been created. [#193](https://github.com/simonw/llm/issues/193)
+- Updated documentation to recommend a different `llm-gpt4all` model since the one we were using is no longer available. [#195](https://github.com/simonw/llm/issues/195)
+
 (v0_8)=
 ## 0.8 (2023-08-20)
 
