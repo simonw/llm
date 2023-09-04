@@ -3,7 +3,7 @@
 (v0_9)=
 ## 0.9 (2023-09-03)
 
-The big new feature in this release is support for **embeddings**.
+The big new feature in this release is support for **embeddings**. See [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/) for additional details.
 
 {ref}`Embedding models <embeddings>` take a piece of text - a word, sentence, paragraph or even a whole article, and convert that into an array of floating point numbers. [#185](https://github.com/simonw/llm/issues/185)
 
