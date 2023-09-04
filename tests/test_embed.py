@@ -26,11 +26,11 @@ def test_embed_huge_list():
 
 
 def test_embed_store(collection):
-    collection.embed("3", "hello world", store=True)
+    collection.embed("3", "hello world again", store=True)
     assert collection.db["embeddings"].count == 3
     assert (
         next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["content"]
-        == "hello world"
+        == "hello world again"
     )
 
 
