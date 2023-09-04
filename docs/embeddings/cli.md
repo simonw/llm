@@ -3,7 +3,7 @@
 
 LLM provides command-line utilities for calculating and storing embeddings for pieces of content.
 
-(embeddings-llm-embed)=
+(embeddings-cli-embed)=
 ## llm embed
 
 The `llm embed` command can be used to calculate embedding vectors for a string of content. These can be returned directly to the terminal, stored in a SQLite database, or both.
@@ -110,7 +110,7 @@ llm similar phrases -c 'hound'
 {"id": "hound", "score": 0.8484683588631485, "content": "my happy hound", "metadata": {"name": "Hound"}}
 ```
 
-(embeddings-llm-embed-multi)=
+(embeddings-cli-embed-multi)=
 ## llm embed-multi
 
 The `llm embed` command embeds a single string at a time.
@@ -130,7 +130,7 @@ All three mechanisms support these options:
 - `--store` to store the original content in the embeddings table in addition to the embedding vector
 - `--prefix` to prepend a prefix to the stored ID of each item
 
-(embeddings-llm-embed-multi-csv-etc)=
+(embeddings-cli-embed-multi-csv-etc)=
 ### Embedding data from a CSV, TSV or JSON file
 
 You can embed data from a CSV, TSV or JSON file using the `-i/--input` option.
@@ -188,7 +188,7 @@ llm embed-multi items \
   --store
 ```
 
-(embeddings-llm-embed-multi-sqlite)=
+(embeddings-cli-embed-multi-sqlite)=
 ### Embedding data from a SQLite database
 
 You can embed data from a SQLite database using `--sql`, optionally combined with `--attach` to attach an additional database.
@@ -213,7 +213,7 @@ llm embed-multi docs \
   -m ada-002
 ```
 
-(embeddings-llm-embed-multi-directories)=
+(embeddings-cli-embed-multi-directories)=
 ### Embedding data from files in directories
 
 LLM can embed the content of every text file in a specified directory, using the file's path and name as the ID.

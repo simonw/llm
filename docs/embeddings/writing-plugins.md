@@ -37,7 +37,7 @@ class SentenceTransformerModel(llm.EmbeddingModel):
         results = self._model.encode(texts)
         return (list(map(float, result)) for result in results)
 ```
-Once installed, the model provided by this plugin can be used with the {ref}`llm embed <embeddings-llm-embed>` command like this:
+Once installed, the model provided by this plugin can be used with the {ref}`llm embed <embeddings-cli-embed>` command like this:
 
 ```bash
 cat file.txt | llm embed -m sentence-transformers/all-MiniLM-L6-v2

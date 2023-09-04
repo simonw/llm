@@ -1,5 +1,35 @@
 # Changelog
 
+(v0_9)=
+## 0.9 (2023-09-03)
+
+The big new feature in this release is support for **embeddings**.
+
+{ref}`Embedding models <embeddings>` take a piece of text - a word, sentence, paragraph or even a whole article, and convert that into an array of floating point numbers. [#185](https://github.com/simonw/llm/issues/185)
+
+This embedding vector can be thought of as representing a position in many-dimensional-space, where the distance between two vectors represents how semantically similar they are to each other within the content of a language model.
+
+Embeddings can be used to find **related documents**, and also to implement **semantic search** - where a user can search for a phrase and get back results that are semantically similar to that phrase even if they do not share any exact keywords.
+
+LLM now provides both CLI and Python APIs for working with embeddings. Embedding models are defined by plugins, so you can install additional models using the {ref}`plugins mechanism <installing-plugins>`.
+
+The first two embedding models supported by LLM are:
+
+- OpenAI's [ada-002](https://platform.openai.com/docs/guides/embeddings) embedding model, available via an inexpensive API if you set an OpenAI key using `llm keys set openai`.
+- The [sentence-transformers](https://www.sbert.net/) family of models, available via the new [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) plugin.
+
+See {ref}`embeddings-cli` for detailed instructions on working with embeddings using LLM.
+
+The new commands for working with embeddings are:
+
+- **{ref}`llm embed <embeddings-cli-embed>`** - calculate embeddings for content and return them to the console or store them in a SQLite database.
+- **{ref}`llm embed-multi <embeddings-cli-embed-multi>`** - run bulk embeddings for multiple strings, using input from a CSV, TSV or JSON file, data from a SQLite database or data found by scanning the filesystem. [#215](https://github.com/simonw/llm/issues/215)
+- **{ref}`llm similar <embeddings-cli-similar>`** - run similarity searches against your stored embeddings - starting with a search phrase or finding content related to a previously stored vector. [#190](https://github.com/simonw/llm/issues/190)
+- **{ref}`llm embed-models <embeddings-cli-embed-models>`** - list available embedding models.
+- **{ref}`llm embed-db <help-embed-db>`** - commands for inspecting and working with the default embeddings SQLite database.
+
+There's also a new {ref}`llm.Collection <embeddings-python-collections>` class for creating and searching collections of embedding from Python code, and a {ref}`llm.get_embedding_model() <embeddings-python-api>` interface for embedding strings directly. [#191](https://github.com/simonw/llm/issues/191)
+
 (v0_8_1)=
 ## 0.8.1 (2023-08-31)
 

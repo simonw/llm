@@ -24,6 +24,10 @@ def all_help(cli):
     for command in commands:
         heading_level = len(command) + 2
         result = CliRunner().invoke(cli, command + ["--help"])
+        hyphenated = "-".join(command)
+        if hyphenated:
+            hyphenated = "-" + hyphenated
+        output.append(f"(help{hyphenated})=")
         output.append("#" * heading_level + " llm " + " ".join(command) + " --help")
         output.append("```")
         output.append(result.output.replace("Usage: cli", "Usage: llm").strip())
@@ -31,6 +35,7 @@ def all_help(cli):
     return "\n".join(output)
 cog.out(all_help(cli))
 ]]] -->
+(help)=
 ## llm  --help
 ```
 Usage: llm [OPTIONS] COMMAND [ARGS]...
@@ -69,6 +74,7 @@ Commands:
   templates     Manage stored prompt templates
   uninstall     Uninstall Python packages from the LLM environment
 ```
+(help-prompt)=
 ### llm prompt --help
 ```
 Usage: llm prompt [OPTIONS] [PROMPT]
@@ -92,6 +98,7 @@ Options:
   --save TEXT                  Save prompt with this template name
   --help                       Show this message and exit.
 ```
+(help-keys)=
 ### llm keys --help
 ```
 Usage: llm keys [OPTIONS] COMMAND [ARGS]...
@@ -106,6 +113,7 @@ Commands:
   path   Output the path to the keys.json file
   set    Save a key in the keys.json file
 ```
+(help-keys-list)=
 #### llm keys list --help
 ```
 Usage: llm keys list [OPTIONS]
@@ -115,6 +123,7 @@ Usage: llm keys list [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-keys-path)=
 #### llm keys path --help
 ```
 Usage: llm keys path [OPTIONS]
@@ -124,6 +133,7 @@ Usage: llm keys path [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-keys-set)=
 #### llm keys set --help
 ```
 Usage: llm keys set [OPTIONS] NAME
@@ -139,6 +149,7 @@ Options:
   --value TEXT  Value to set
   --help        Show this message and exit.
 ```
+(help-logs)=
 ### llm logs --help
 ```
 Usage: llm logs [OPTIONS] COMMAND [ARGS]...
@@ -155,6 +166,7 @@ Commands:
   path    Output the path to the logs.db file
   status  Show current status of database logging
 ```
+(help-logs-path)=
 #### llm logs path --help
 ```
 Usage: llm logs path [OPTIONS]
@@ -164,6 +176,7 @@ Usage: llm logs path [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-logs-status)=
 #### llm logs status --help
 ```
 Usage: llm logs status [OPTIONS]
@@ -173,6 +186,7 @@ Usage: llm logs status [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-logs-on)=
 #### llm logs on --help
 ```
 Usage: llm logs on [OPTIONS]
@@ -182,6 +196,7 @@ Usage: llm logs on [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-logs-off)=
 #### llm logs off --help
 ```
 Usage: llm logs off [OPTIONS]
@@ -191,6 +206,7 @@ Usage: llm logs off [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-logs-list)=
 #### llm logs list --help
 ```
 Usage: llm logs list [OPTIONS]
@@ -209,6 +225,7 @@ Options:
   --json                      Output logs as JSON
   --help                      Show this message and exit.
 ```
+(help-models)=
 ### llm models --help
 ```
 Usage: llm models [OPTIONS] COMMAND [ARGS]...
@@ -222,6 +239,7 @@ Commands:
   list*    List available models
   default  Show or set the default model
 ```
+(help-models-list)=
 #### llm models list --help
 ```
 Usage: llm models list [OPTIONS]
@@ -232,6 +250,7 @@ Options:
   --options  Show options for each model, if available
   --help     Show this message and exit.
 ```
+(help-models-default)=
 #### llm models default --help
 ```
 Usage: llm models default [OPTIONS] [MODEL]
@@ -241,6 +260,7 @@ Usage: llm models default [OPTIONS] [MODEL]
 Options:
   --help  Show this message and exit.
 ```
+(help-templates)=
 ### llm templates --help
 ```
 Usage: llm templates [OPTIONS] COMMAND [ARGS]...
@@ -256,6 +276,7 @@ Commands:
   path   Output the path to the templates directory
   show   Show the specified prompt template
 ```
+(help-templates-list)=
 #### llm templates list --help
 ```
 Usage: llm templates list [OPTIONS]
@@ -265,6 +286,7 @@ Usage: llm templates list [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-templates-show)=
 #### llm templates show --help
 ```
 Usage: llm templates show [OPTIONS] NAME
@@ -274,6 +296,7 @@ Usage: llm templates show [OPTIONS] NAME
 Options:
   --help  Show this message and exit.
 ```
+(help-templates-edit)=
 #### llm templates edit --help
 ```
 Usage: llm templates edit [OPTIONS] NAME
@@ -283,6 +306,7 @@ Usage: llm templates edit [OPTIONS] NAME
 Options:
   --help  Show this message and exit.
 ```
+(help-templates-path)=
 #### llm templates path --help
 ```
 Usage: llm templates path [OPTIONS]
@@ -292,6 +316,7 @@ Usage: llm templates path [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-aliases)=
 ### llm aliases --help
 ```
 Usage: llm aliases [OPTIONS] COMMAND [ARGS]...
@@ -307,6 +332,7 @@ Commands:
   remove  Remove an alias
   set     Set an alias for a model
 ```
+(help-aliases-list)=
 #### llm aliases list --help
 ```
 Usage: llm aliases list [OPTIONS]
@@ -317,6 +343,7 @@ Options:
   --json  Output as JSON
   --help  Show this message and exit.
 ```
+(help-aliases-set)=
 #### llm aliases set --help
 ```
 Usage: llm aliases set [OPTIONS] ALIAS MODEL_ID
@@ -330,6 +357,7 @@ Usage: llm aliases set [OPTIONS] ALIAS MODEL_ID
 Options:
   --help  Show this message and exit.
 ```
+(help-aliases-remove)=
 #### llm aliases remove --help
 ```
 Usage: llm aliases remove [OPTIONS] ALIAS
@@ -343,6 +371,7 @@ Usage: llm aliases remove [OPTIONS] ALIAS
 Options:
   --help  Show this message and exit.
 ```
+(help-aliases-path)=
 #### llm aliases path --help
 ```
 Usage: llm aliases path [OPTIONS]
@@ -352,6 +381,7 @@ Usage: llm aliases path [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-plugins)=
 ### llm plugins --help
 ```
 Usage: llm plugins [OPTIONS]
@@ -361,6 +391,7 @@ Usage: llm plugins [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-install)=
 ### llm install --help
 ```
 Usage: llm install [OPTIONS] [PACKAGES]...
@@ -375,6 +406,7 @@ Options:
   --no-cache-dir       Disable the cache
   --help               Show this message and exit.
 ```
+(help-uninstall)=
 ### llm uninstall --help
 ```
 Usage: llm uninstall [OPTIONS] PACKAGES...
@@ -385,6 +417,7 @@ Options:
   -y, --yes  Don't ask for confirmation
   --help     Show this message and exit.
 ```
+(help-embed)=
 ### llm embed --help
 ```
 Usage: llm embed [OPTIONS] [COLLECTION] [ID]
@@ -402,6 +435,7 @@ Options:
                                   Output format
   --help                          Show this message and exit.
 ```
+(help-embed-multi)=
 ### llm embed-multi --help
 ```
 Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
@@ -433,6 +467,7 @@ Options:
   -d, --database FILE
   --help                       Show this message and exit.
 ```
+(help-similar)=
 ### llm similar --help
 ```
 Usage: llm similar [OPTIONS] COLLECTION [ID]
@@ -454,6 +489,7 @@ Options:
   -d, --database FILE
   --help                Show this message and exit.
 ```
+(help-embed-models)=
 ### llm embed-models --help
 ```
 Usage: llm embed-models [OPTIONS] COMMAND [ARGS]...
@@ -467,6 +503,7 @@ Commands:
   list*    List available embedding models
   default  Show or set the default embedding model
 ```
+(help-embed-models-list)=
 #### llm embed-models list --help
 ```
 Usage: llm embed-models list [OPTIONS]
@@ -476,6 +513,7 @@ Usage: llm embed-models list [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-embed-models-default)=
 #### llm embed-models default --help
 ```
 Usage: llm embed-models default [OPTIONS] [MODEL]
@@ -486,6 +524,7 @@ Options:
   --remove-default  Reset to specifying no default model
   --help            Show this message and exit.
 ```
+(help-embed-db)=
 ### llm embed-db --help
 ```
 Usage: llm embed-db [OPTIONS] COMMAND [ARGS]...
@@ -500,6 +539,7 @@ Commands:
   delete-collection  Delete the specified collection
   path               Output the path to the embeddings database
 ```
+(help-embed-db-path)=
 #### llm embed-db path --help
 ```
 Usage: llm embed-db path [OPTIONS]
@@ -509,6 +549,7 @@ Usage: llm embed-db path [OPTIONS]
 Options:
   --help  Show this message and exit.
 ```
+(help-embed-db-collections)=
 #### llm embed-db collections --help
 ```
 Usage: llm embed-db collections [OPTIONS]
@@ -520,6 +561,7 @@ Options:
   --json               Output as JSON
   --help               Show this message and exit.
 ```
+(help-embed-db-delete-collection)=
 #### llm embed-db delete-collection --help
 ```
 Usage: llm embed-db delete-collection [OPTIONS] COLLECTION
@@ -534,6 +576,7 @@ Options:
   -d, --database FILE  Path to embeddings database
   --help               Show this message and exit.
 ```
+(help-openai)=
 ### llm openai --help
 ```
 Usage: llm openai [OPTIONS] COMMAND [ARGS]...
@@ -546,6 +589,7 @@ Options:
 Commands:
   models  List models available to you from the OpenAI API
 ```
+(help-openai-models)=
 #### llm openai models --help
 ```
 Usage: llm openai models [OPTIONS]
