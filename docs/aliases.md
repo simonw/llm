@@ -44,7 +44,8 @@ Example output:
     "3.5-16k": "gpt-3.5-turbo-16k",
     "4": "gpt-4",
     "gpt4": "gpt-4",
-    "4-32k": "gpt-4-32k"
+    "4-32k": "gpt-4-32k",
+    "ada": "ada-002"
 }
 ```
 
@@ -59,6 +60,18 @@ Now you can run the `gpt-3.5-turbo-16k` model using the `turbo` alias like this:
 
 ```bash
 llm -m turbo 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
+```
+Aliases can be set for both regular models and {ref}`embedding models <embeddings>` using the same command. To set an alias of `oai` for the OpenAI `ada-002` embedding model use this:
+```bash
+llm aliases set oai ada-002
+```
+Now you can embed a string using that model like so:
+```bash
+llm embed -c 'hello world' -m oai
+```
+Output:
+```
+[-0.014945968054234982, 0.0014304015785455704, ...]
 ```
 
 ## Removing an alias
