@@ -458,6 +458,7 @@ Options:
   --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
   --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
                                and glob pattern
+  --encoding TEXT              Encoding to use when reading --files
   --sql TEXT                   Read input using this SQL query
   --attach <TEXT FILE>...      Additional databases to attach - specify alias
                                and file path

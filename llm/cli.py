@@ -1009,6 +1009,12 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     multiple=True,
     help="Embed files in this directory - specify directory and glob pattern",
 )
+@click.option(
+    "encodings",
+    "--encoding",
+    help="Encoding to use when reading --files",
+    multiple=True,
+)
 @click.option("--sql", help="Read input using this SQL query")
 @click.option(
     "--attach",
@@ -1026,7 +1032,17 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     envvar="LLM_EMBEDDINGS_DB",
 )
 def embed_multi(
-    collection, input_path, format, files, sql, attach, prefix, model, store, database
+    collection,
+    input_path,
+    format,
+    files,
+    encodings,
+    sql,
+    attach,
+    prefix,
+    model,
+    store,
+    database,
 ):
     """
     Store embeddings for multiple strings at once
@@ -1072,6 +1088,7 @@ def embed_multi(
 
     expected_length = None
     if files:
+        encodings = encodings or ("utf-8", "latin-1")
 
         def count_files():
             i = 0
@@ -1084,7 +1101,20 @@ def embed_multi(
             for directory, pattern in files:
                 for path in pathlib.Path(directory).glob(pattern):
                     relative = path.relative_to(directory)
-                    yield {"id": str(relative), "content": path.read_text()}
+                    content = None
+                    for encoding in encodings:
+                        try:
+                            content = path.read_text(encoding=encoding)
+                        except UnicodeDecodeError:
+                            continue
+                    if content is None:
+                        # Log to stderr
+                        click.echo(
+                            "Could not decode text in file {}".format(path),
+                            err=True,
+                        )
+                    else:
+                        yield {"id": str(relative), "content": content}
 
         expected_length = count_files()
         rows = iterate_files()

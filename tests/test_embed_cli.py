@@ -313,21 +313,40 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     ]
 
 
-@pytest.mark.parametrize("scenario", ("single", "multi"))
-def test_embed_multi_files(tmpdir, scenario):
+@pytest.fixture
+def multi_files(tmpdir):
     db_path = str(tmpdir / "files.db")
     files = tmpdir / "files"
     for filename, content in (
-        ("file1.txt", "hello world"),
-        ("file2.txt", "goodbye world"),
-        ("nested/one.txt", "one"),
-        ("nested/two.txt", "two"),
-        ("nested/more/three.txt", "three"),
-        ("nested/more/ignored.ini", "Does not match glob"),
+        ("file1.txt", b"hello world"),
+        ("file2.txt", b"goodbye world"),
+        ("nested/one.txt", b"one"),
+        ("nested/two.txt", b"two"),
+        ("nested/more/three.txt", b"three"),
+        # This tests the fallback to latin-1 encoding:
+        ("nested/more/ignored.ini", b"Has weird \x96 character"),
     ):
         path = pathlib.Path(files / filename)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, "utf-8")
+        path.write_bytes(content)
+    return db_path, tmpdir / "files"
+
+
+@pytest.mark.parametrize("scenario", ("single", "multi"))
+def test_embed_multi_files(multi_files, scenario):
+    db_path, files = multi_files
+    for filename, content in (
+        ("file1.txt", b"hello world"),
+        ("file2.txt", b"goodbye world"),
+        ("nested/one.txt", b"one"),
+        ("nested/two.txt", b"two"),
+        ("nested/more/three.txt", b"three"),
+        # This tests the fallback to latin-1 encoding:
+        ("nested/more/ignored.ini", b"Has weird \x96 character"),
+    ):
+        path = pathlib.Path(files / filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
 
     if scenario == "single":
         extra_args = ["--files", str(files), "**/*.txt"]
@@ -368,9 +387,53 @@ def test_embed_multi_files(tmpdir, scenario):
         ]
     else:
         assert rows == [
-            {"id": "ignored.ini", "content": "Does not match glob"},
+            {"id": "ignored.ini", "content": "Has weird \x96 character"},
             {"id": "two.txt", "content": "two"},
             {"id": "one.txt", "content": "one"},
+        ]
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_error",
+    (
+        # With no args default utf-8 with latin-1 fallback should work
+        ([], None),
+        (["--encoding", "utf-8"], "Could not decode text in file"),
+        (["--encoding", "latin-1"], None),
+        (["--encoding", "latin-1", "--encoding", "utf-8"], None),
+        (["--encoding", "utf-8", "--encoding", "latin-1"], None),
+    ),
+)
+def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
+    db_path, files = multi_files
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "files",
+            "-d",
+            db_path,
+            "-m",
+            "embed-demo",
+            "--files",
+            str(files / "nested" / "more"),
+            "*.ini",
+            "--store",
+        ]
+        + extra_args,
+    )
+    if expected_error:
+        # Should still succeed with 0, but show a warning
+        assert result.exit_code == 0
+        assert expected_error in result.stderr
+    else:
+        assert result.exit_code == 0
+        assert not result.stderr
+        embeddings_db = sqlite_utils.Database(db_path)
+        rows = list(embeddings_db.query("select id, content from embeddings"))
+        assert rows == [
+            {"id": "ignored.ini", "content": "Has weird \x96 character"},
         ]
 
 

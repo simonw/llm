@@ -256,7 +256,7 @@ plugins/index.md
 ```
 Each corresponding to embedded content for the file in question.
 
-The `--prefix` option can be useful here to add a prefix to each ID:
+The `--prefix` option can be used to add a prefix to each ID:
 
 ```bash
 llm embed-multi documentation \
@@ -279,6 +279,19 @@ llm-docs/logging.md
 llm-docs/plugins/directory.md
 llm-docs/plugins/index.md
 ```
+Files are assumed to be `utf-8`, but LLM will fall back to `latin-1` if it encounters an encoding error. You can specify a different set of encodings using the `--encoding` option.
+
+This example will try `utf-16` first and then `mac_roman` before falling back to `latin-1`:
+```
+llm embed-multi documentation \
+  -m ada-002 \
+  --files docs '**/*.md' \
+  -d documentation.db \
+  --encoding utf-16 \
+  --encoding mac_roman \
+  --encoding latin-1
+```
+If a file cannot be read it will be logged to standard error but the script will keep on running.
 
 (embeddings-cli-similar)=
 ## llm similar
