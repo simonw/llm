@@ -135,14 +135,14 @@ The `entry` object returned is an object with the following properties:
 
 This defaults to returning the 10 most similar items. You can change this by passing a different `number=` argument:
 ```python
-for id, score in collection.similar("hound", number=5):
-    print(id, score)
+for entry in collection.similar("hound", number=5):
+    print(entry.id, entry.score)
 ```
 The `similar_by_id()` method takes the ID of another item in the collection and returns the most similar items to that one, based on the embedding that has already been stored for it:
 
 ```python
-for id, score in collection.similar_by_id("cat"):
-    print(id, score)
+for entry in collection.similar_by_id("cat"):
+    print(entry.id, entry.score)
 ```
 The item itself is excluded from the results.
 
