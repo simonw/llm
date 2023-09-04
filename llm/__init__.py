@@ -115,7 +115,7 @@ def get_embedding_model(name):
     try:
         return aliases[name]
     except KeyError:
-        raise UnknownModelError("Unknown model: " + name)
+        raise UnknownModelError("Unknown model: " + str(name))
 
 
 def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:

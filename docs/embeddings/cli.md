@@ -13,21 +13,24 @@ The `llm embed` command can be used to calculate embedding vectors for a string 
 The simplest way to use this command is to pass content to it using the `-c/--content` option, like this:
 
 ```bash
-llm embed -c 'This is some content'
+llm embed -c 'This is some content' -m ada-002
 ```
-The command will return a JSON array of floating point numbers directly to the terminal:
+`-m ada-002` specifies the OpenAI `ada-002` model. You will need to have set an OpenAI API key using `llm keys set openai` for this to work.
+
+You can install plugins to access other models. The [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) plugin can be used to run models on your own laptop, such as the [MiniLM-L6](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) model:
+
+```bash
+llm install llm-sentence-transformers
+llm embed -c 'This is some content' -m sentence-transformers/all-MiniLM-L6-v2
+```
+
+The `llm embed` command returns a JSON array of floating point numbers directly to the terminal:
 
 ```json
 [0.123, 0.456, 0.789...]
 ```
-By default it uses the {ref}`default embedding model <embeddings-cli-embed-models-default>`.
+You can omit the `-m/--model` option if you set a {ref}`default embedding model <embeddings-cli-embed-models-default>`.
 
-Use the `-m/--model` option to specify a different model:
-
-```bash
-llm -m sentence-transformers/all-MiniLM-L6-v2 \
-  -c 'This is some content'
-```
 See {ref}`embeddings-binary` for options to get back embeddings in formats other than JSON.
 
 (embeddings-collections)=
@@ -36,6 +39,11 @@ See {ref}`embeddings-binary` for options to get back embeddings in formats other
 Embeddings are much more useful if you store them somewhere, so you can calculate similarity scores between different embeddings later on.
 
 LLM includes the concept of a "collection" of embeddings. A collection groups together a set of stored embeddings created using the same model, each with a unique ID within that collection.
+
+First, we'll set a default model so we don't have to keep repeating it:
+```bash
+llm embed-models default ada-002
+```
 
 The `llm embed` command can store results directly in a named collection like this:
 

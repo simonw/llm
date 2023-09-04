@@ -288,6 +288,17 @@ class Collection:
         comparison_vector = self.model().embed(text)
         return self.similar_by_vector(comparison_vector, number)
 
+    @classmethod
+    def exists(cls, db: Database, name: str) -> bool:
+        """
+        Does this collection exist in the database?
+
+        Args:
+            name (str): Name of the collection
+        """
+        rows = list(db["collections"].rows_where("name = ?", [name]))
+        return bool(rows)
+
     def delete(self):
         """
         Delete the collection and its embeddings from the database

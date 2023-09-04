@@ -102,9 +102,8 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert embeddings_db.exists()
     # Check the contents
     db = sqlite_utils.Database(str(embeddings_db))
-    assert list(db["collections"].rows) == [
-        {"id": 1, "name": "items", "model": "embed-demo"}
-    ]
+    rows = list(db["collections"].rows)
+    assert rows == [{"id": 1, "name": "items", "model": "embed-demo"}]
     expected_metadata = None
     if metadata and not metadata_error:
         expected_metadata = metadata
@@ -390,3 +389,34 @@ def test_default_embedding_model():
     result5 = runner.invoke(cli, ["embed-models", "default"])
     assert result5.exit_code == 0
     assert result5.output == "<No default embedding model set>\n"
+
+
+@pytest.mark.parametrize("default_is_set", (False, True))
+@pytest.mark.parametrize("command", ("embed", "embed-multi"))
+def test_default_embed_model_errors(user_path, default_is_set, command):
+    runner = CliRunner()
+    if default_is_set:
+        (user_path / "default_embedding_model.txt").write_text(
+            "embed-demo", encoding="utf8"
+        )
+    args = []
+    input = None
+    if command == "embed-multi":
+        args = ["embed-multi", "example", "-"]
+        input = "id,name\n1,hello"
+    else:
+        args = ["embed", "example", "1", "-c", "hello world"]
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
+    if default_is_set:
+        assert result.exit_code == 0
+    else:
+        assert result.exit_code == 1
+        assert "You need to specify a model (no default model is set)" in result.output
+        # Now set the default model and try again
+        result2 = runner.invoke(cli, ["embed-models", "default", "embed-demo"])
+        assert result2.exit_code == 0
+        result3 = runner.invoke(cli, args, input=input, catch_exceptions=False)
+        assert result3.exit_code == 0
+    # At the end of this, there should be 2 embeddings
+    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    assert db["embeddings"].count == 1

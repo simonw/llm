@@ -106,6 +106,13 @@ A collection instance has the following properties and methods:
 - `similar_by_vector(vector: List[float], number: int=10, skip_id: str=None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
 - `delete()` - deletes the collection and its embeddings from the database
 
+There is also a `Collection.exists(db, name)` class method which returns a boolean value and can be used to determine if a collection exists or not in a database:
+
+```python
+if Collection.exists(db, "entries"):
+    print("The entries collection exists")
+```
+
 (embeddings-python-similar)=
 ## Retrieving similar items
 

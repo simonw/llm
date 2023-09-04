@@ -929,20 +929,28 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     model_obj = None
     if collection:
         db = get_db()
-        collection_obj = Collection(collection, db, model_id=model)
-        model_obj = collection_obj.model()
+        if Collection.exists(db, collection):
+            # Load existing collection and use its model
+            collection_obj = Collection(collection, db)
+            model_obj = collection_obj.model()
+        else:
+            # We will create a new one, but that means model is required
+            if not model:
+                model = get_default_embedding_model()
+                if model is None:
+                    raise click.ClickException(
+                        "You need to specify a model (no default model is set)"
+                    )
+            collection_obj = Collection(collection, db=db, model_id=model)
+            model_obj = collection_obj.model()
 
     if model_obj is None:
-        if not model:
-            model = get_default_embedding_model()
-            if model is None:
-                raise click.ClickException(
-                    "You need to specify a model (no default model is set)"
-                )
         try:
             model_obj = get_embedding_model(model)
-        except UnknownModelError as ex:
-            raise click.ClickException(str(ex))
+        except UnknownModelError:
+            raise click.ClickException(
+                "You need to specify a model (no default model is set)"
+            )
 
     show_output = True
     if collection and (format_ is None):
