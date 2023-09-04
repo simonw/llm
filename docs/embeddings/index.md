@@ -11,6 +11,8 @@ This can be used to build features like related article lookups. It can also be 
 
 LLM supports multiple embedding models through {ref}`plugins <plugins>`. Once installed, an embedding model can be used on the command-line or via the Python API to calculate and store embeddings for content, and then to perform similarity searches against those embeddings.
 
+See [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/) for an extended explanation of embeddings, why they are useful and what you can do with them.
+
 ```{toctree}
 ---
 maxdepth: 3
