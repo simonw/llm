@@ -42,11 +42,15 @@ class EmbedDemo(llm.EmbeddingModel):
     model_id = "embed-demo"
     batch_size = 10
 
+    def __init__(self):
+        self.embedded_content = []
+
     def embed_batch(self, texts):
         if not hasattr(self, "batch_count"):
             self.batch_count = 0
         self.batch_count += 1
         for text in texts:
+            self.embedded_content.append(text)
             words = text.split()[:16]
             embedding = [len(word) for word in words]
             # Pad with 0 up to 16 words
@@ -54,14 +58,19 @@ class EmbedDemo(llm.EmbeddingModel):
             yield embedding
 
 
+@pytest.fixture
+def embed_demo():
+    return EmbedDemo()
+
+
 @pytest.fixture(autouse=True)
-def register_embed_demo_model():
+def register_embed_demo_model(embed_demo):
     class EmbedDemoPlugin:
         __name__ = "EmbedDemoPlugin"
 
         @llm.hookimpl
         def register_embedding_models(self, register):
-            register(EmbedDemo())
+            register(embed_demo)
 
     pm.register(EmbedDemoPlugin(), name="undo-embed-demo-plugin")
     try:

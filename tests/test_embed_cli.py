@@ -420,3 +420,32 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
     # At the end of this, there should be 2 embeddings
     db = sqlite_utils.Database(str(user_path / "embeddings.db"))
     assert db["embeddings"].count == 1
+
+
+def test_duplicate_content_embedded_only_once(embed_demo):
+    # content_hash should avoid embedding the same content twice
+    # per collection
+    db = sqlite_utils.Database(memory=True)
+    assert len(embed_demo.embedded_content) == 0
+    collection = Collection("test", db, model_id="embed-demo")
+    collection.embed("1", "hello world")
+    assert len(embed_demo.embedded_content) == 1
+    collection.embed("2", "goodbye world")
+    assert db["embeddings"].count == 2
+    assert len(embed_demo.embedded_content) == 2
+    collection.embed("1", "hello world")
+    assert db["embeddings"].count == 2
+    assert len(embed_demo.embedded_content) == 2
+    # The same string in another collection should be embedded
+    c2 = Collection("test2", db, model_id="embed-demo")
+    c2.embed("1", "hello world")
+    assert db["embeddings"].count == 3
+    assert len(embed_demo.embedded_content) == 3
+
+    # Same again for embed_multi
+    collection.embed_multi(
+        (("1", "hello world"), ("2", "goodbye world"), ("3", "this is new"))
+    )
+    # Should have only embedded one more thing
+    assert db["embeddings"].count == 4
+    assert len(embed_demo.embedded_content) == 4

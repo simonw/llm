@@ -40,6 +40,8 @@ Embeddings are much more useful if you store them somewhere, so you can calculat
 
 LLM includes the concept of a "collection" of embeddings. A collection groups together a set of stored embeddings created using the same model, each with a unique ID within that collection.
 
+Embeddings also store a hash of the content that was embedded. This hash is later used to avoid calculating duplicate embeddings for the same content.
+
 First, we'll set a default model so we don't have to keep repeating it:
 ```bash
 llm embed-models default ada-002
