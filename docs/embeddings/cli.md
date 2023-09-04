@@ -285,6 +285,8 @@ llm-docs/plugins/index.md
 
 The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID.
 
+This currently uses a slow brute-force approach which does not scale well to large collections. See [issue 216](https://github.com/simonw/llm/issues/216) for plans to add a more scalable approach via vector indexes provided by plugins.
+
 To search the `quotations` collection for items that are semantically similar to `'computer science'`:
 
 ```bash

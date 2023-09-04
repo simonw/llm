@@ -116,7 +116,9 @@ if Collection.exists(db, "entries"):
 (embeddings-python-similar)=
 ## Retrieving similar items
 
-Once you have populated a collection of embeddings you can retrieve the entries that are most similar to a given string using the `similar()` method:
+Once you have populated a collection of embeddings you can retrieve the entries that are most similar to a given string using the `similar()` method.
+
+This method uses a brute force approach, calculating distance scores against every document. This is fine for small collections, but will not scale to large collections. See [issue 216](https://github.com/simonw/llm/issues/216) for plans to add a more scalable approach via vector indexes provided by plugins.
 
 ```python
 for entry in collection.similar("hound"):
