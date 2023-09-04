@@ -208,8 +208,13 @@ def set_alias(alias, model_id_or_alias):
         model = get_model(model_id_or_alias)
         model_id = model.model_id
     except UnknownModelError:
-        # Set the alias to the exact string they provided instead
-        model_id = model_id_or_alias
+        # Try to resolve it to an embedding model
+        try:
+            model = get_embedding_model(model_id_or_alias)
+            model_id = model.model_id
+        except UnknownModelError:
+            # Set the alias to the exact string they provided instead
+            model_id = model_id_or_alias
     current[alias] = model_id
     path.write_text(json.dumps(current, indent=4) + "\n")
 
