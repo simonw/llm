@@ -7,7 +7,9 @@
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI utility and Python library for interacting with Large Language Models, including OpenAI, PaLM and local models installed on your own machine.
+A CLI utility and Python library for interacting with Large Language Models, both via remote APIs and models that can be installed and run on your own machine.
+
+{ref}`Run prompts from the command-line <usage-executing-prompts>`, {ref}`store the results in SQLite <logging>`, {ref}`generate embeddings <embeddings>` and more.
 
 Background on this project:
 - [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)

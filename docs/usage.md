@@ -1,7 +1,9 @@
+(usage)=
 # Usage
 
 The default command for this is `llm prompt` - you can use `llm` instead if you prefer.
 
+(usage-executing-prompts)=
 ## Executing a prompt
 
 These examples use the default OpenAI `gpt-3.5-turbo` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.

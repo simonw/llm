@@ -8,7 +8,9 @@
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI utility and Python library for interacting with Large Language Models, including OpenAI, PaLM and local models installed on your own machine.
+A CLI utility and Python library for interacting with Large Language Models, both via remote APIs and models that can be installed and run on your own machine.
+
+[Run prompts from the command-line](https://llm.datasette.io/en/stable/usage.html#executing-a-prompt), [store the results in SQLite](https://llm.datasette.io/en/stable/logging.html), [generate embeddings](https://llm.datasette.io/en/stable/embeddings/index.html) and more.
 
 Full documentation: **[llm.datasette.io](https://llm.datasette.io/)**
 
