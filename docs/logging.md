@@ -74,6 +74,8 @@ You can truncate the display of the prompts and responses using the `-t/--trunca
 ```bash
 llm logs -n 5 -t --json
 ```
+
+(logs-conversation)=
 ### Logs for a conversation
 
 To view the logs for the most recent {ref}`conversation <conversation>` you have had with a model, use `-c`:

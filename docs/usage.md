@@ -103,6 +103,49 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-chat)=
+
+## Starting an interactive chat
+
+The `llm chat` command starts an ongoing interactive chat with a model.
+
+This is particularly useful for models that run on your own machine, since it saves them from having to be loaded into memory each time a new prompt is added to a conversation.
+
+Run `llm chat`, optionally with a `-m model_id`, to start a chat conversation:
+
+```bash
+llm chat -m chatgpt
+```
+Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logs-conversation>`.
+
+You can pass a system prompt to be used for your chat conversation:
+
+```bash
+llm chat -m gpt-4 -s 'You are a sentient cheesecake'
+```
+You can also pass {ref}`a template <prompt-templates>` - useful for creating chat personas that you wish to return to.
+
+Here's how to create a template for your GPT-4 powered cheesecake:
+```bash
+llm --system 'You are a sentient cheesecake' -m gpt-4 --save cheesecake
+```
+Now you can start a new chat with your cheesecake any time you like using this:
+```bash
+llm chat -t cheesecake
+```
+```
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+> whe are you?
+I am a sentient cheesecake, meaning I am an artificial
+intelligence embodied in a dessert form, specifically a
+cheesecake. However, I don't consume or prepare foods
+like humans do, I communicate, learn and help answer
+your queries.
+```
+
+Type `quit` or `exit` to end a chat.
+
 ## Listing available models
 
 The `llm models` command lists every model that can be used with LLM, along with any aliases:
