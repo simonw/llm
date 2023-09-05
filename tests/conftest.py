@@ -18,6 +18,11 @@ def user_path(tmpdir):
 
 
 @pytest.fixture
+def logs_db(user_path):
+    return sqlite_utils.Database(str(user_path / "logs.db"))
+
+
+@pytest.fixture
 def user_path_with_embeddings(user_path):
     path = str(user_path / "embeddings.db")
     db = sqlite_utils.Database(path)
@@ -36,6 +41,28 @@ def templates_path(user_path):
 @pytest.fixture(autouse=True)
 def env_setup(monkeypatch, user_path):
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+
+
+class MockModel(llm.Model):
+    model_id = "mock"
+
+    def __init__(self):
+        self.history = []
+        self._queue = []
+
+    def enqueue(self, messages):
+        assert isinstance(messages, list)
+        self._queue.append(messages)
+
+    def execute(self, prompt, stream, response, conversation):
+        self.history.append((prompt, stream, response, conversation))
+        while True:
+            try:
+                messages = self._queue.pop(0)
+                yield from messages
+                break
+            except IndexError:
+                break
 
 
 class EmbedDemo(llm.EmbeddingModel):
@@ -63,20 +90,29 @@ def embed_demo():
     return EmbedDemo()
 
 
+@pytest.fixture
+def mock_model():
+    return MockModel()
+
+
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo):
-    class EmbedDemoPlugin:
-        __name__ = "EmbedDemoPlugin"
+def register_embed_demo_model(embed_demo, mock_model):
+    class MockModelsPlugin:
+        __name__ = "MockModelsPlugin"
 
         @llm.hookimpl
         def register_embedding_models(self, register):
             register(embed_demo)
 
-    pm.register(EmbedDemoPlugin(), name="undo-embed-demo-plugin")
+        @llm.hookimpl
+        def register_models(self, register):
+            register(mock_model)
+
+    pm.register(MockModelsPlugin(), name="undo-mock-models-plugin")
     try:
         yield
     finally:
-        pm.unregister(name="undo-embed-demo-plugin")
+        pm.unregister(name="undo-mock-models-plugin")
 
 
 @pytest.fixture
