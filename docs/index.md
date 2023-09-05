@@ -51,6 +51,19 @@ llm install llm-gpt4all
 # Download and run a prompt against the Orca Mini 7B model
 llm -m orca-mini-7b 'What is the capital of France?'
 ```
+To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
+```bash
+llm chat -m chatgpt
+```
+```
+Chatting with gpt-3.5-turbo
+Type 'exit' or 'quit' to exit
+> Tell me a joke about a pelican
+Why don't pelicans like to tip waiters?
+
+Because they always have a big bill!
+>
+```
 
 ## Contents
 
