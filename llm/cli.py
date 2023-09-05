@@ -291,6 +291,103 @@ def prompt(
         response.log_to_db(db)
 
 
+@cli.command()
+@click.option("-s", "--system", help="System prompt to use")
+@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option(
+    "_continue",
+    "-c",
+    "--continue",
+    is_flag=True,
+    flag_value=-1,
+    help="Continue the most recent conversation.",
+)
+@click.option(
+    "conversation_id",
+    "--cid",
+    "--conversation",
+    help="Continue the conversation with the given ID.",
+)
+@click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-p",
+    "--param",
+    multiple=True,
+    type=(str, str),
+    help="Parameters for template",
+)
+@click.option("--key", help="API key to use")
+def chat(system, model_id, _continue, conversation_id, template, param, key):
+    """
+    Hold an ongoing chat with a model.
+    """
+    log_path = logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    conversation = None
+    if conversation_id or _continue:
+        # Load the conversation - loads most recent if no ID provided
+        try:
+            conversation = load_conversation(conversation_id)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
+
+    template_obj = None
+    if template:
+        params = dict(param)
+        # Cannot be used with system
+        if system:
+            raise click.ClickException("Cannot use -t/--template and --system together")
+        template_obj = load_template(template)
+        if model_id is None and template_obj.model:
+            model_id = template_obj.model
+
+    # Figure out which model we are using
+    if model_id is None:
+        if conversation:
+            model_id = conversation.model.model_id
+        else:
+            model_id = get_default_model()
+
+    # Now resolve the model
+    try:
+        model = get_model(model_id)
+    except KeyError:
+        raise click.ClickException("'{}' is not a known model".format(model_id))
+
+    # Provide the API key, if one is needed and has been provided
+    if model.needs_key:
+        model.key = get_key(key, model.needs_key, model.key_env_var)
+
+    if conversation is None:
+        # Start a fresh conversation for this chat
+        conversation = Conversation(
+            model=model, name="Chat with {}".format(model.model_id)
+        )
+
+    click.echo("Chatting with {}".format(model.model_id))
+    click.echo("Type 'exit' or 'quit' to exit")
+    while True:
+        prompt = click.prompt("", prompt_suffix="> ")
+        if template_obj:
+            try:
+                prompt, system = template_obj.evaluate(prompt, params)
+            except Template.MissingVariables as ex:
+                raise click.ClickException(str(ex))
+        if prompt.strip() in ("exit", "quit"):
+            break
+        response = conversation.prompt(prompt, system)
+        # System prompt only sent for the first message:
+        system = None
+        for chunk in response:
+            print(chunk, end="")
+            sys.stdout.flush()
+        response.log_to_db(db)
+        print("")
+
+
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)

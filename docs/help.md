@@ -61,6 +61,7 @@ Options:
 Commands:
   prompt*       Execute a prompt
   aliases       Manage model aliases
+  chat          Hold an ongoing chat with a model.
   embed         Embed text and store or return the result
   embed-db      Manage the embeddings database
   embed-models  Manage available embedding models
@@ -99,6 +100,24 @@ Options:
   --key TEXT                   API key to use
   --save TEXT                  Save prompt with this template name
   --help                       Show this message and exit.
+```
+
+(help-chat)=
+### llm chat --help
+```
+Usage: llm chat [OPTIONS]
+
+  Hold an ongoing chat with a model.
+
+Options:
+  -s, --system TEXT           System prompt to use
+  -m, --model TEXT            Model to use
+  -c, --continue              Continue the most recent conversation.
+  --cid, --conversation TEXT  Continue the conversation with the given ID.
+  -t, --template TEXT         Template to use
+  -p, --param <TEXT TEXT>...  Parameters for template
+  --key TEXT                  API key to use
+  --help                      Show this message and exit.
 ```
 
 (help-keys)=
