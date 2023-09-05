@@ -36,9 +36,9 @@ This is too
 ```
 This is useful for truncating a large document down to a size where it can be processed by an LLM.
 
-## symbex
+## Symbex
 
-[symbex](https://github.com/simonw/symbex) is a tool for searching for symbols in Python codebases. It's useful for extracting just the code for a specific problem and then piping that into LLM for explanation, refactoring or other tasks.
+[Symbex](https://github.com/simonw/symbex) is a tool for searching for symbols in Python codebases. It's useful for extracting just the code for a specific problem and then piping that into LLM for explanation, refactoring or other tasks.
 
 Here's how to use it to find all functions that match `test*csv*` and use those to guess what the software under test does:
 
@@ -46,4 +46,10 @@ Here's how to use it to find all functions that match `test*csv*` and use those 
 symbex 'test*csv*' | \
   llm --system 'based on these tests guess what this tool does'
 ```
-For more examples see [symbex: search Python code for functions and classes, then pipe them into a LLM](https://simonwillison.net/2023/Jun/18/symbex/).
+It can also be used to export symbols in a format that can be piped to {ref}`llm embed-multi <embeddings-cli-embed-multi>` in order to create embeddings:
+```bash
+symbex '*' '*:*' --nl | \
+  llm embed-multi symbols - \
+  --format nl --database embeddings.db --store
+```
+For more examples see [Symbex: search Python code for functions and classes, then pipe them into a LLM](https://simonwillison.net/2023/Jun/18/symbex/).
