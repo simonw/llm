@@ -135,8 +135,8 @@ llm chat -t cheesecake
 ```
 ```
 Chatting with gpt-4
-Type 'exit' or 'quit' to exit
-> whe are you?
+Type 'exit' or 'quit' to 
+> who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
 cheesecake. However, I don't consume or prepare foods
