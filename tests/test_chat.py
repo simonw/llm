@@ -69,3 +69,40 @@ def test_chat_basic(mock_model, logs_db):
             "datetime_utc": ANY,
         },
     ]
+    # Now continue that conversation
+    mock_model.enqueue(["continued"])
+    result2 = runner.invoke(
+        llm.cli.cli, ["chat", "-m", "mock", "-c"], input="Continue\nquit\n"
+    )
+    assert result2.exit_code == 0
+    assert result2.output == (
+        "Chatting with mock"
+        "\nType 'exit' or 'quit' to exit"
+        "\n> Continue"
+        "\ncontinued"
+        "\n> quit"
+        "\n"
+    )
+    new_responses = list(
+        logs_db.query(
+            "select * from responses where id not in ({})".format(
+                ", ".join("?" for _ in responses)
+            ),
+            [r["id"] for r in responses],
+        )
+    )
+    assert new_responses == [
+        {
+            "id": ANY,
+            "model": "mock",
+            "prompt": "Continue",
+            "system": None,
+            "prompt_json": None,
+            "options_json": "{}",
+            "response": "continued",
+            "response_json": None,
+            "conversation_id": conversation_id,
+            "duration_ms": ANY,
+            "datetime_utc": ANY,
+        }
+    ]
