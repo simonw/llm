@@ -106,3 +106,38 @@ def test_chat_basic(mock_model, logs_db):
             "datetime_utc": ANY,
         }
     ]
+
+
+def test_chat_system(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(["I am mean"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock", "--system", "You are mean"],
+        input="Hi\nquit\n",
+    )
+    assert result.exit_code == 0
+    assert result.output == (
+        "Chatting with mock"
+        "\nType 'exit' or 'quit' to exit"
+        "\n> Hi"
+        "\nI am mean"
+        "\n> quit"
+        "\n"
+    )
+    responses = list(logs_db["responses"].rows)
+    assert responses == [
+        {
+            "id": ANY,
+            "model": "mock",
+            "prompt": "Hi",
+            "system": "You are mean",
+            "prompt_json": None,
+            "options_json": "{}",
+            "response": "I am mean",
+            "response_json": None,
+            "conversation_id": ANY,
+            "duration_ms": ANY,
+            "datetime_utc": ANY,
+        }
+    ]
