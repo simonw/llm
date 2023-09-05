@@ -363,9 +363,7 @@ def chat(system, model_id, _continue, conversation_id, template, param, key):
 
     if conversation is None:
         # Start a fresh conversation for this chat
-        conversation = Conversation(
-            model=model, name="Chat with {}".format(model.model_id)
-        )
+        conversation = Conversation(model=model)
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
