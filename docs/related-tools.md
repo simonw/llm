@@ -3,6 +3,7 @@
 
 The following tools are designed to be used with LLM:
 
+(related-tools-strip-tags)=
 ## strip-tags
 
 [strip-tags](https://github.com/simonw/strip-tags) is a command for stripping tags from HTML. This is useful when working with LLMs because HTML tags can use up a lot of your token budget.
@@ -17,6 +18,7 @@ curl -s https://www.nytimes.com/ \
 
 [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/) describes ways to use `strip-tags` in more detail.
 
+(related-tools-ttok)=
 ## ttok
 
 [ttok](https://github.com/simonw/ttok) is a command-line tool for counting OpenAI tokens. You can use it to check if input is likely to fit in the token limit for GPT 3.5 or GPT4:
@@ -36,6 +38,7 @@ This is too
 ```
 This is useful for truncating a large document down to a size where it can be processed by an LLM.
 
+(related-tools-symbex)=
 ## Symbex
 
 [Symbex](https://github.com/simonw/symbex) is a tool for searching for symbols in Python codebases. It's useful for extracting just the code for a specific problem and then piping that into LLM for explanation, refactoring or other tasks.
