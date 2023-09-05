@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_10_a0)=
+## 0.10a0 (2023-09-04)
+
+- New {ref}`llm chat <usage-chat>` command for starting an interactive terminal chat with a model. [#231](https://github.com/simonw/llm/issues/231)
+- `llm embed-multi --files` now has an `--encoding` option and defaults to falling back to `latin-1` if a file cannot be processed as `utf-8`. [#225](https://github.com/simonw/llm/issues/225)
+
 (v0_9)=
 ## 0.9 (2023-09-03)
 
