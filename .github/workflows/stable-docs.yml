@@ -36,7 +36,7 @@ jobs:
           git push -u origin stable
         fi
     - name: Handle Release
-      if: github.event_name == 'release'
+      if: github.event_name == 'release' && !github.event.release.prerelease
       run: |
         git fetch --all
         git checkout stable
