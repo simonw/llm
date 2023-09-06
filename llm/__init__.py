@@ -17,11 +17,16 @@ from .embeddings import Collection
 from .templates import Template
 from .plugins import pm
 import click
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import json
 import os
 import pathlib
 import struct
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 __all__ = [
     "hookimpl",
@@ -244,8 +249,32 @@ def decode(binary):
     return struct.unpack("<" + "f" * (len(binary) // 4), binary)
 
 
-def cosine_similarity(a, b):
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Calculate cosine similarity without using NumPy."""
     dot_product = sum(x * y for x, y in zip(a, b))
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b)
+
+
+def cosine_top_n(
+    target_vector: List[float], vectors: List[List[float]], n: int
+) -> List[Tuple[int, float]]:
+    np = None
+    if np:
+        # NumPy-based calculation
+        all_vectors = np.array(vectors)
+        dot_products = np.dot(all_vectors, target_vector)
+        magnitude_a = np.linalg.norm(target_vector)
+        magnitude_b = np.linalg.norm(all_vectors, axis=1)
+        similarities = dot_products / (magnitude_a * magnitude_b)
+        top_indices = np.argsort(similarities)[::-1][:n]
+        top_scores = [(int(idx), float(similarities[idx])) for idx in top_indices]
+    else:
+        # Fallback to Python-based calculation
+        similarities = [
+            (idx, cosine_similarity(target_vector, vec))
+            for idx, vec in enumerate(vectors)
+        ]
+        top_scores = sorted(similarities, key=lambda x: x[1], reverse=True)[:n]
+    return top_scores

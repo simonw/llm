@@ -242,39 +242,50 @@ class Collection:
         """
         import llm
 
-        def distance_score(other_encoded):
-            other_vector = llm.decode(other_encoded)
-            return llm.cosine_similarity(other_vector, vector)
-
-        self.db.register_function(distance_score, replace=True)
-
-        where_bits = ["collection_id = ?"]
-        where_args = [str(self.id)]
-
-        if skip_id:
-            where_bits.append("id != ?")
-            where_args.append(skip_id)
-
-        return [
-            Entry(
-                id=row["id"],
-                score=row["score"],
-                content=row["content"],
-                metadata=json.loads(row["metadata"]) if row["metadata"] else None,
-            )
+        # Load all the vectors into memory
+        ids_and_vectors = {
+            row["id"]: llm.decode(row["embedding"])
             for row in self.db.query(
-                """
-            select id, content, metadata, distance_score(embedding) as score
-            from embeddings
-            where {where}
-            order by score desc limit {number}
-        """.format(
-                    where=" and ".join(where_bits),
-                    number=number,
-                ),
-                where_args,
+                "select id, embedding from embeddings where collection_id = ?",
+                [self.id],
             )
-        ]
+        }
+        if skip_id:
+            ids_and_vectors.pop(skip_id, None)
+
+        vectors = list(ids_and_vectors.values())
+        top_n = llm.cosine_top_n(vector, vectors, number)
+
+        # Just the IDs represented in that top_n, based on index
+        all_ids = list(ids_and_vectors.keys())
+        top_n_ids = [all_ids[index] for index, _ in top_n]
+
+        # Fetch their data
+        rows = list(
+            self.db.query(
+                """
+            select id, content, metadata from embeddings
+            where collection_id = ? and id in ({})
+        """.format(
+                    ",".join("?" for _ in top_n_ids)
+                ),
+                [self.id] + top_n_ids,
+            )
+        )
+        id_to_row = {row["id"]: row for row in rows}
+        entries = []
+        for idx, score in top_n:
+            id = all_ids[idx]
+            row = id_to_row[id]
+            entries.append(
+                Entry(
+                    id=row["id"],
+                    score=score,
+                    content=row["content"],
+                    metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+                )
+            )
+        return entries
 
     def similar_by_id(self, id: str, number: int = 10) -> List[Entry]:
         """
