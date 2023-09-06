@@ -364,6 +364,9 @@ def chat(system, model_id, _continue, conversation_id, template, param, key):
     if conversation is None:
         # Start a fresh conversation for this chat
         conversation = Conversation(model=model)
+    else:
+        # Ensure it can see the API key
+        conversation.model = model
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
