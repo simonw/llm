@@ -38,7 +38,7 @@ setup(
     install_requires=[
         "click",
         "openai",
-        "click-default-group-wheel",
+        "click-default-group>=1.2.3",
         "sqlite-utils>=3.35.0",
         "sqlite-migrate>=0.1a2",
         "pydantic>=1.10.2",
