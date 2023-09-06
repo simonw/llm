@@ -260,7 +260,6 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 def cosine_top_n(
     target_vector: List[float], vectors: List[List[float]], n: int
 ) -> List[Tuple[int, float]]:
-    np = None
     if np:
         # NumPy-based calculation
         all_vectors = np.array(vectors)
