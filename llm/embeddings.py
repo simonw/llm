@@ -7,7 +7,7 @@ import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 import time
-from typing import cast, Any, Dict, Iterable, List, Optional, Tuple
+from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
 @dataclass
@@ -334,6 +334,8 @@ class Collection:
             self.db.execute("delete from collections where id = ?", [self.id])
 
     @staticmethod
-    def content_hash(text: str) -> bytes:
+    def content_hash(input: Union[str, bytes]) -> bytes:
         "Hash content for deduplication. Override to change hashing behavior."
-        return hashlib.md5(text.encode("utf8")).digest()
+        if isinstance(input, str):
+            input = input.encode("utf8")
+        return hashlib.md5(input).digest()

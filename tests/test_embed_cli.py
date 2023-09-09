@@ -254,7 +254,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
     if filename.endswith(".jsonl"):
         args.extend(("--format", "nl"))
     runner = CliRunner()
-    result = runner.invoke(cli, args, input=input)
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     # Check that everything was embedded correctly
     db = sqlite_utils.Database(str(db_path))

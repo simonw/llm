@@ -34,7 +34,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional
+from typing import cast, Optional, Iterable, Union, Tuple
 import warnings
 import yaml
 
@@ -1025,7 +1025,7 @@ def uninstall(packages, yes):
 @click.option(
     "-i",
     "--input",
-    type=click.File("r"),
+    type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed",
 )
 @click.option("-m", "--model", help="Embedding model to use")
@@ -1041,6 +1041,7 @@ def uninstall(packages, yes):
     "--content",
     help="Content to embed",
 )
+@click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
     "--metadata",
     help="JSON object metadata to store",
@@ -1053,7 +1054,9 @@ def uninstall(packages, yes):
     type=click.Choice(["json", "blob", "base64", "hex"]),
     help="Output format",
 )
-def embed(collection, id, input, model, store, database, content, metadata, format_):
+def embed(
+    collection, id, input, model, store, database, content, binary, metadata, format_
+):
     """Embed text and store or return the result"""
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
@@ -1101,10 +1104,15 @@ def embed(collection, id, input, model, store, database, content, metadata, form
 
     # Resolve input text
     if not content:
-        if not input:
+        if not input or input == "-":
             # Read from stdin
-            input = sys.stdin
-        content = input.read()
+            input_source = sys.stdin.buffer if binary else sys.stdin
+            content = input_source.read()
+        else:
+            mode = "rb" if binary else "r"
+            with open(input, mode) as f:
+                content = f.read()
+
     if not content:
         raise click.ClickException("No content provided")
 
@@ -1148,6 +1156,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     help="Encoding to use when reading --files",
     multiple=True,
 )
+@click.option("--binary", is_flag=True, help="Treat --files as binary data")
 @click.option("--sql", help="Read input using this SQL query")
 @click.option(
     "--attach",
@@ -1170,6 +1179,7 @@ def embed_multi(
     format,
     files,
     encodings,
+    binary,
     sql,
     attach,
     prefix,
@@ -1193,6 +1203,10 @@ def embed_multi(
     2. A SQL query against a SQLite database
     3. A directory of files
     """
+    if binary and not files:
+        raise click.UsageError("--binary must be used with --files")
+    if binary and encodings:
+        raise click.UsageError("--binary cannot be used with --encoding")
     if not input_path and not sql and not files:
         raise click.UsageError("Either --sql or input path or --files is required")
 
@@ -1235,11 +1249,14 @@ def embed_multi(
                 for path in pathlib.Path(directory).glob(pattern):
                     relative = path.relative_to(directory)
                     content = None
-                    for encoding in encodings:
-                        try:
-                            content = path.read_text(encoding=encoding)
-                        except UnicodeDecodeError:
-                            continue
+                    if binary:
+                        content = path.read_bytes()
+                    else:
+                        for encoding in encodings:
+                            try:
+                                content = path.read_text(encoding=encoding)
+                            except UnicodeDecodeError:
+                                continue
                     if content is None:
                         # Log to stderr
                         click.echo(
@@ -1280,12 +1297,14 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples():
+        def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
                 values = list(row.values())
                 id = prefix + str(values[0])
-                text = " ".join(v or "" for v in values[1:])
-                yield id, text
+                if binary:
+                    yield id, cast(bytes, values[1])
+                else:
+                    yield id, " ".join(v or "" for v in values[1:])
 
         # collection_obj.max_batch_size = 1
         collection_obj.embed_multi(tuples(), store=store)
