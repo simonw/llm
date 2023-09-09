@@ -23,6 +23,10 @@
   echo "  ruff"
   pipenv run ruff .
 
+# Run mypy
+@mypy:
+  pipenv run mypy llm
+
 # Rebuild docs with cog
 @cog:
   pipenv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md
