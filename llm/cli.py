@@ -324,8 +324,19 @@ def prompt(
     multiple=True,
     help="key/value options for the model",
 )
+@click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
-def chat(system, model_id, _continue, conversation_id, template, param, options, key):
+def chat(
+    system,
+    model_id,
+    _continue,
+    conversation_id,
+    template,
+    param,
+    options,
+    no_stream,
+    key,
+):
     """
     Hold an ongoing chat with a model.
     """
@@ -387,6 +398,10 @@ def chat(system, model_id, _continue, conversation_id, template, param, options,
             )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
+
+    should_stream = model.can_stream and not no_stream
+    if not should_stream:
+        validated_options["stream"] = False
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
