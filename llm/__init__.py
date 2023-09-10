@@ -44,6 +44,8 @@ def get_plugins():
     plugins = []
     plugin_to_distinfo = dict(pm.list_plugin_distinfo())
     for plugin in pm.get_plugins():
+        if plugin.__name__.startswith("llm.default_plugins."):
+            continue
         plugin_info = {
             "name": plugin.__name__,
             "hooks": [h.name for h in pm.get_hookcallers(plugin)],

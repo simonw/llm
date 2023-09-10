@@ -559,3 +559,23 @@ It adds `llm` as a dependency, ensuring it will be installed if someone tries to
 It adds some links to useful pages (you can drop the `project.urls` section if those links are not useful for your project).
 
 You should drop a `LICENSE` file into the GitHub repository for your package as well. I like to use the Apache 2 license [like this](https://github.com/simonw/llm/blob/main/LICENSE).
+
+## What to do if it breaks
+
+Sometimes you may make a change to your plugin that causes it to break, preventing `llm` from starting. For example you may see an error like this one:
+
+```
+$ llm 'hi'
+Traceback (most recent call last):
+  ...
+  File llm-markov/llm_markov.py", line 10
+    register(Markov()):
+                      ^
+SyntaxError: invalid syntax
+```
+You may find that you are unable to uninstall the plugin using `llm uninstall llm-markov` because the command itself fails with the same error.
+
+Should this happen, you can uninstall the plugin after first disabling it using the {ref}`LLM_LOAD_PLUGINS <llm-load-plugins>` environment variable like this:
+```bash
+LLM_LOAD_PLUGINS='' llm uninstall llm-markov
+```

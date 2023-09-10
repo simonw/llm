@@ -59,6 +59,7 @@ setup(
             "types-click",
             "types-PyYAML",
             "types-requests",
+            "types-setuptools",
         ]
     },
     python_requires=">=3.7",

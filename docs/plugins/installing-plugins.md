@@ -69,3 +69,25 @@ llm plugins
   }
 ]
 ```
+
+(llm-load-plugins)=
+## Running with a subset of plugins
+
+By default, LLM will load all plugins that are installed in the same virtual environment as LLM itself.
+
+You can control the set of plugins that is loaded using the `LLM_LOAD_PLUGINS` environment variable.
+
+Set that to the empty string to disable all plugins:
+
+```bash
+LLM_LOAD_PLUGINS='' llm ...
+```
+Or to a comma-separated list of plugin names to load only those plugins:
+
+```bash
+LLM_LOAD_PLUGINS='llm-gpt4all,llm-cluster' llm ...
+```
+You can use the `llm plugins` command to check that it is working correctly:
+```
+LLM_LOAD_PLUGINS='' llm plugins
+```
