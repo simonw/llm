@@ -141,3 +141,30 @@ def test_chat_system(mock_model, logs_db):
             "datetime_utc": ANY,
         }
     ]
+
+
+def test_chat_options(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(["Some text"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock", "--option", "max_tokens", "10"],
+        input="Hi\nquit\n",
+    )
+    assert result.exit_code == 0
+    responses = list(logs_db["responses"].rows)
+    assert responses == [
+        {
+            "id": ANY,
+            "model": "mock",
+            "prompt": "Hi",
+            "system": None,
+            "prompt_json": None,
+            "options_json": '{"max_tokens": 10}',
+            "response": "Some text",
+            "response_json": None,
+            "conversation_id": ANY,
+            "duration_ms": 0,
+            "datetime_utc": ANY,
+        }
+    ]

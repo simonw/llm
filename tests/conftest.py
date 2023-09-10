@@ -2,6 +2,8 @@ import pytest
 import sqlite_utils
 import llm
 from llm.plugins import pm
+from pydantic import Field
+from typing import Optional
 
 
 def pytest_configure(config):
@@ -45,6 +47,11 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
+
+    class Options(llm.Options):
+        max_tokens: Optional[int] = Field(
+            description="Maximum number of tokens to generate.", default=None
+        )
 
     def __init__(self):
         self.history = []

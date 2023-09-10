@@ -316,8 +316,16 @@ def prompt(
     type=(str, str),
     help="Parameters for template",
 )
+@click.option(
+    "options",
+    "-o",
+    "--option",
+    type=(str, str),
+    multiple=True,
+    help="key/value options for the model",
+)
 @click.option("--key", help="API key to use")
-def chat(system, model_id, _continue, conversation_id, template, param, key):
+def chat(system, model_id, _continue, conversation_id, template, param, options, key):
     """
     Hold an ongoing chat with a model.
     """
@@ -368,6 +376,18 @@ def chat(system, model_id, _continue, conversation_id, template, param, key):
         # Ensure it can see the API key
         conversation.model = model
 
+    # Validate options
+    validated_options = {}
+    if options:
+        try:
+            validated_options = dict(
+                (key, value)
+                for key, value in model.Options(**dict(options))
+                if value is not None
+            )
+        except pydantic.ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     while True:
@@ -379,7 +399,7 @@ def chat(system, model_id, _continue, conversation_id, template, param, key):
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system)
+        response = conversation.prompt(prompt, system, **validated_options)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
