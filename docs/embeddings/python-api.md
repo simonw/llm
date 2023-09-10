@@ -182,6 +182,7 @@ CREATE TABLE "embeddings" (
    [id] TEXT,
    [embedding] BLOB,
    [content] TEXT,
+   [content_blob] BLOB,
    [content_hash] BLOB,
    [metadata] TEXT,
    [updated] INTEGER,
