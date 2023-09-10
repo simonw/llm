@@ -1,4 +1,5 @@
 import click
+from click.shell_completion import CompletionItem
 from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
@@ -82,6 +83,16 @@ def cli():
     """
 
 
+class TemplateType(click.ParamType):
+    """Support shell auto-complete for --template parameter."""
+
+    name = "template"
+
+    def shell_complete(self, ctx, param, incomplete):
+        template_names = get_templates().keys()
+        return [CompletionItem(name) for name in template_names]
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
@@ -94,7 +105,7 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", type=TemplateType(), help="Template to use")
 @click.option(
     "-p",
     "--param",
@@ -826,14 +837,22 @@ def templates():
     "Manage stored prompt templates"
 
 
-@templates.command(name="list")
-def templates_list():
-    "List available prompt templates"
+def get_templates():
+    """Return a dictionary with all templates."""
+    ret = {}
     path = template_dir()
-    pairs = []
     for file in path.glob("*.yaml"):
         name = file.stem
         template = load_template(name)
+        ret[name] = template
+    return ret
+
+
+@templates.command(name="list")
+def templates_list():
+    "List available prompt templates"
+    pairs = []
+    for name, template in get_templates().items():
         text = []
         if template.system:
             text.append(f"system: {template.system}")
