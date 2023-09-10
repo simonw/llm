@@ -146,6 +146,11 @@ your queries.
 
 Type `quit` or `exit` to end a chat.
 
+For models that support them, you can pass options using `-o/--option`:
+```bash
+llm chat -m gpt-4 -o temperature 0.5
+```
+
 ## Listing available models
 
 The `llm models` command lists every model that can be used with LLM, along with any aliases:
