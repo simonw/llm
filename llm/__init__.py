@@ -40,11 +40,11 @@ __all__ = [
 ]
 
 
-def get_plugins():
+def get_plugins(all=False):
     plugins = []
     plugin_to_distinfo = dict(pm.list_plugin_distinfo())
     for plugin in pm.get_plugins():
-        if plugin.__name__.startswith("llm.default_plugins."):
+        if not all and plugin.__name__.startswith("llm.default_plugins."):
             continue
         plugin_info = {
             "name": plugin.__name__,

@@ -927,9 +927,10 @@ def aliases_path():
 
 
 @cli.command(name="plugins")
-def plugins_list():
+@click.option("--all", help="Include built-in default plugins", is_flag=True)
+def plugins_list(all):
     "List installed plugins"
-    click.echo(json.dumps(get_plugins(), indent=2))
+    click.echo(json.dumps(get_plugins(all), indent=2))
 
 
 def display_truncated(text):

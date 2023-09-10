@@ -28,7 +28,7 @@ if LLM_LOAD_PLUGINS is not None:
                     mod = entry_point.load()
                     pm.register(mod, name=entry_point.name)
                     # Ensure name can be found in plugin_to_distinfo later:
-                    pm._plugin_distinfo.append(mod, distribution)  # type: ignore
+                    pm._plugin_distinfo.append((mod, distribution))  # type: ignore
         except pkg_resources.DistributionNotFound:
             sys.stderr.write("Plugin {} could not be found\n".format(package_name))
 
