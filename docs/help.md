@@ -62,8 +62,8 @@ Commands:
   prompt*       Execute a prompt
   aliases       Manage model aliases
   chat          Hold an ongoing chat with a model.
+  collections   View and manage collections of embeddings
   embed         Embed text and store or return the result
-  embed-db      Manage the embeddings database
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once
   install       Install packages from PyPI into the same environment as LLM
@@ -582,26 +582,26 @@ Options:
   --help            Show this message and exit.
 ```
 
-(help-embed-db)=
-### llm embed-db --help
+(help-collections)=
+### llm collections --help
 ```
-Usage: llm embed-db [OPTIONS] COMMAND [ARGS]...
+Usage: llm collections [OPTIONS] COMMAND [ARGS]...
 
-  Manage the embeddings database
+  View and manage collections of embeddings
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  collections        Output the path to the embeddings database
-  delete-collection  Delete the specified collection
-  path               Output the path to the embeddings database
+  delete  Delete the specified collection
+  list    View a list of collections
+  path    Output the path to the embeddings database
 ```
 
-(help-embed-db-path)=
-#### llm embed-db path --help
+(help-collections-path)=
+#### llm collections path --help
 ```
-Usage: llm embed-db path [OPTIONS]
+Usage: llm collections path [OPTIONS]
 
   Output the path to the embeddings database
 
@@ -609,12 +609,12 @@ Options:
   --help  Show this message and exit.
 ```
 
-(help-embed-db-collections)=
-#### llm embed-db collections --help
+(help-collections-list)=
+#### llm collections list --help
 ```
-Usage: llm embed-db collections [OPTIONS]
+Usage: llm collections list [OPTIONS]
 
-  Output the path to the embeddings database
+  View a list of collections
 
 Options:
   -d, --database FILE  Path to embeddings database
@@ -622,16 +622,16 @@ Options:
   --help               Show this message and exit.
 ```
 
-(help-embed-db-delete-collection)=
-#### llm embed-db delete-collection --help
+(help-collections-delete)=
+#### llm collections delete --help
 ```
-Usage: llm embed-db delete-collection [OPTIONS] COLLECTION
+Usage: llm collections delete [OPTIONS] COLLECTION
 
   Delete the specified collection
 
   Example usage:
 
-      llm embed-db delete-collection my-collection
+      llm collections delete my-collection
 
 Options:
   -d, --database FILE  Path to embeddings database

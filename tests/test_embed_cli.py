@@ -125,9 +125,9 @@ def test_embed_store(user_path, metadata, metadata_error):
             "updated": ANY,
         }
     ]
-    # Should show up in 'llm embed-db collections'
+    # Should show up in 'llm collections list'
     for is_json in (False, True):
-        args = ["embed-db", "collections"]
+        args = ["collections", "list"]
         if is_json:
             args.extend(["--json"])
         result2 = runner.invoke(cli, args)
@@ -140,7 +140,7 @@ def test_embed_store(user_path, metadata, metadata_error):
             assert result2.output == "items: embed-demo\n  1 embedding\n"
 
     # And test deleting it too
-    result = runner.invoke(cli, ["embed-db", "delete-collection", "items"])
+    result = runner.invoke(cli, ["collections", "delete", "items"])
     assert result.exit_code == 0
     assert db["collections"].count == 0
     assert db["embeddings"].count == 0
@@ -154,7 +154,7 @@ def test_collection_delete_errors(user_path):
     assert db["embeddings"].count == 1
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["embed-db", "delete-collection", "does-not-exist"], catch_exceptions=False
+        cli, ["collections", "delete", "does-not-exist"], catch_exceptions=False
     )
     assert result.exit_code == 1
     assert "Collection does not exist" in result.output

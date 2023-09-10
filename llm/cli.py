@@ -1407,17 +1407,17 @@ def embed_models_default(model, remove_default):
 
 
 @cli.group()
-def embed_db():
-    "Manage the embeddings database"
+def collections():
+    "View and manage collections of embeddings"
 
 
-@embed_db.command(name="path")
-def embed_db_path():
+@collections.command(name="path")
+def collections_path():
     "Output the path to the embeddings database"
     click.echo(user_dir() / "embeddings.db")
 
 
-@embed_db.command(name="collections")
+@collections.command(name="list")
 @click.option(
     "-d",
     "--database",
@@ -1427,7 +1427,7 @@ def embed_db_path():
 )
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def embed_db_collections(database, json_):
-    "Output the path to the embeddings database"
+    "View a list of collections"
     database = database or (user_dir() / "embeddings.db")
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
@@ -1457,7 +1457,7 @@ def embed_db_collections(database, json_):
             )
 
 
-@embed_db.command(name="delete-collection")
+@collections.command(name="delete")
 @click.argument("collection")
 @click.option(
     "-d",
@@ -1466,14 +1466,14 @@ def embed_db_collections(database, json_):
     envvar="LLM_EMBEDDINGS_DB",
     help="Path to embeddings database",
 )
-def embed_db_delete_collection(collection, database):
+def collections_delete(collection, database):
     """
     Delete the specified collection
 
     Example usage:
 
     \b
-        llm embed-db delete-collection my-collection
+        llm collections delete my-collection
     """
     database = database or (user_dir() / "embeddings.db")
     db = sqlite_utils.Database(str(database))

@@ -74,7 +74,7 @@ llm embed phrases hound -m ada-002 -c 'my happy hound'
 ```
 By default, the SQLite database used to store embeddings is the `embeddings.db` in the user content directory managed by LLM.
 
-You can see the path to this directory by running `llm embed-db path`.
+You can see the path to this directory by running `llm collections path`.
 
 You can store embeddings in a different SQLite database by passing a path to it using the `-d/--database` option to `llm embed`. If this file does not exist yet the command will create it:
 
@@ -355,28 +355,28 @@ llm embed-models default --remove-default
 ```
 When no default model is set, the `llm embed` and `llm embed-multi` commands will require that a model is specified using `-m/--model`.
 
-## llm embed-db collections
+## llm collections list
 
 To list all of the collections in the embeddings database, run this command:
 
 ```bash
-llm embed-db collections
+llm collections list
 ```
 Add `--json` for JSON output:
 ```bash
-llm embed-db collections --json
+llm collections list --json
 ```
 Add `-d/--database` to specify a different database file:
 ```bash
-llm embed-db collections -d my-embeddings.db
+llm collections list -d my-embeddings.db
 ```
-## llm embed-db delete-collection
+## llm collections delete
 
 To delete a collection from the database, run this:
 ```bash
-llm embed-db delete-collection collection-name
+llm collections delete collection-name
 ```
 Pass `-d` to specify a different database file:
 ```bash
-llm embed-db delete-collection collection-name -d my-embeddings.db
+llm collections delete collection-name -d my-embeddings.db
 ```
