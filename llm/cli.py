@@ -1181,7 +1181,7 @@ def embed_multi(
         )
     except ValueError:
         raise click.ClickException(
-            "You need to specify a model (no default model is set)"
+            "You need to specify an embedding model (no default model is set)"
         )
 
     expected_length = None
