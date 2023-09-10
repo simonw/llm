@@ -474,7 +474,10 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         assert result.exit_code == 0
     else:
         assert result.exit_code == 1
-        assert "You need to specify a model (no default model is set)" in result.output
+        assert (
+            "You need to specify an embedding model (no default model is set)"
+            in result.output
+        )
         # Now set the default model and try again
         result2 = runner.invoke(cli, ["embed-models", "default", "embed-demo"])
         assert result2.exit_code == 0

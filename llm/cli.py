@@ -1082,7 +1082,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
                 model = get_default_embedding_model()
                 if model is None:
                     raise click.ClickException(
-                        "You need to specify a model (no default model is set)"
+                        "You need to specify an embedding model (no default model is set)"
                     )
             collection_obj = Collection(collection, db=db, model_id=model)
             model_obj = collection_obj.model()
@@ -1092,7 +1092,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
             model_obj = get_embedding_model(model)
         except UnknownModelError:
             raise click.ClickException(
-                "You need to specify a model (no default model is set)"
+                "You need to specify an embedding model (no default model is set)"
             )
 
     show_output = True
@@ -1216,7 +1216,7 @@ def embed_multi(
         )
     except ValueError:
         raise click.ClickException(
-            "You need to specify a model (no default model is set)"
+            "You need to specify an embedding model (no default model is set)"
         )
 
     expected_length = None
