@@ -91,6 +91,7 @@ def test_migrations_for_embeddings():
         "id": str,
         "embedding": bytes,
         "content": str,
+        "content_blob": bytes,
         "content_hash": bytes,
         "metadata": str,
         "updated": int,
