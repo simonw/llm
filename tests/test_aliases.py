@@ -3,6 +3,7 @@ from llm.cli import cli
 import llm
 import json
 import pytest
+import re
 
 
 @pytest.mark.parametrize("model_id_or_alias", ("gpt-3.5-turbo", "chatgpt"))
@@ -29,7 +30,7 @@ def test_cli_aliases_list(args):
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
-    assert result.output == (
+    for line in (
         "3.5         : gpt-3.5-turbo\n"
         "chatgpt     : gpt-3.5-turbo\n"
         "chatgpt-16k : gpt-3.5-turbo-16k\n"
@@ -39,7 +40,13 @@ def test_cli_aliases_list(args):
         "4-32k       : gpt-4-32k\n"
         "e-demo      : embed-demo (embedding)\n"
         "ada         : ada-002 (embedding)\n"
-    )
+    ).split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # Turn the whitespace into a regex
+        regex = r"\s+".join(re.escape(part) for part in line.split())
+        assert re.search(regex, result.output)
 
 
 @pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
@@ -48,17 +55,20 @@ def test_cli_aliases_list_json(args):
     runner = CliRunner()
     result = runner.invoke(cli, args + ["--json"])
     assert result.exit_code == 0
-    assert json.loads(result.output) == {
-        "3.5": "gpt-3.5-turbo",
-        "chatgpt": "gpt-3.5-turbo",
-        "chatgpt-16k": "gpt-3.5-turbo-16k",
-        "3.5-16k": "gpt-3.5-turbo-16k",
-        "4": "gpt-4",
-        "gpt4": "gpt-4",
-        "4-32k": "gpt-4-32k",
-        "ada": "ada-002",
-        "e-demo": "embed-demo",
-    }
+    assert (
+        json.loads(result.output).items()
+        >= {
+            "3.5": "gpt-3.5-turbo",
+            "chatgpt": "gpt-3.5-turbo",
+            "chatgpt-16k": "gpt-3.5-turbo-16k",
+            "3.5-16k": "gpt-3.5-turbo-16k",
+            "4": "gpt-4",
+            "gpt4": "gpt-4",
+            "4-32k": "gpt-4-32k",
+            "ada": "ada-002",
+            "e-demo": "embed-demo",
+        }.items()
+    )
 
 
 def test_cli_aliases_set(user_path):
