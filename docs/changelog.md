@@ -1,5 +1,17 @@
 # Changelog
 
+(v0_10_a1)=
+## 0.10a1 (2023-09-11)
+
+- Support for embedding binary data. [#254](https://github.com/simonw/llm/pull/254)
+- `llm chat` now works for models with API keys. [#247](https://github.com/simonw/llm/issues/247)
+- `llm chat -o` for passing options to a model. [#244](https://github.com/simonw/llm/issues/244)
+- `llm chat --no-stream` option. [#248](https://github.com/simonw/llm/issues/248)
+- `LLM_LOAD_PLUGINS` environment variable. [#256](https://github.com/simonw/llm/issues/256)
+- `llm plugins --all` option for including builtin plugins. [#259](https://github.com/simonw/llm/issues/259)
+- `llm embed-db` has been renamed to `llm collections`. [#229](https://github.com/simonw/llm/issues/229)
+- Fixed bug where `llm embed -c` option was treated as a filepath, not a string. Thanks, [mhalle](https://github.com/mhalle). [#263](https://github.com/simonw/llm/pull/263)
+
 (v0_10_a0)=
 ## 0.10a0 (2023-09-04)
 
@@ -32,7 +44,7 @@ The new commands for working with embeddings are:
 - **{ref}`llm embed-multi <embeddings-cli-embed-multi>`** - run bulk embeddings for multiple strings, using input from a CSV, TSV or JSON file, data from a SQLite database or data found by scanning the filesystem. [#215](https://github.com/simonw/llm/issues/215)
 - **{ref}`llm similar <embeddings-cli-similar>`** - run similarity searches against your stored embeddings - starting with a search phrase or finding content related to a previously stored vector. [#190](https://github.com/simonw/llm/issues/190)
 - **{ref}`llm embed-models <embeddings-cli-embed-models>`** - list available embedding models.
-- **{ref}`llm embed-db <help-embed-db>`** - commands for inspecting and working with the default embeddings SQLite database.
+- `llm embed-db` - commands for inspecting and working with the default embeddings SQLite database.
 
 There's also a new {ref}`llm.Collection <embeddings-python-collections>` class for creating and searching collections of embedding from Python code, and a {ref}`llm.get_embedding_model() <embeddings-python-api>` interface for embedding strings directly. [#191](https://github.com/simonw/llm/issues/191)
 

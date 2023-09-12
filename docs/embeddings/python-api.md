@@ -10,7 +10,7 @@ embedding_model = llm.get_embedding_model("ada-002")
 To embed a string, returning a Python list of floating point numbers, use the `.embed()` method:
 ```python
 vector = embedding_model.embed("my happy hound")
-
+```
 If the embedding model can handle binary input, you can call `.embed()` with a byte string instead. You can check the `supports_binary` property to see if this is supported:
 ```python
 if embedding_model.supports_binary:
