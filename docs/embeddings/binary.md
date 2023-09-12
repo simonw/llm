@@ -1,11 +1,13 @@
 (embeddings-binary)=
-# Binary embedding formats
+# Embedding storage format
 
 The default output format of the `llm embed` command is a JSON array of floating point numbers.
 
-LLM stores embeddings in a more space-efficient format: little-endian binary sequences of 32-bit floating point numbers, each represented using 4 bytes.
+LLM stores embeddings in space-efficient format: a little-endian binary sequences of 32-bit floating point numbers, each represented using 4 bytes.
 
-The following Python functions can be used to convert between the two formats:
+These are stored in a `BLOB` column in a SQLite database.
+
+The following Python functions can be used to convert between this format and an array of floating point numbers:
 
 ```python
 import struct
@@ -16,6 +18,3 @@ def encode(values):
 def decode(binary):
     return struct.unpack("<" + "f" * (len(binary) // 4), binary)
 ```
-When using `llm embed` directly, the default output format is JSON.
-
-Use `--format blob` for the binary output, `--format hex` for that binary output as hexadecimal and `--format base64` for that binary output encoded using base64.

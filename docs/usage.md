@@ -1,7 +1,7 @@
 (usage)=
 # Usage
 
-The default command for this is `llm prompt` - you can use `llm` instead if you prefer.
+The command to run a prompt is `llm prompt 'your prompt'`. This is the default command, so you can use `llm 'your prompt'` as a shortcut.
 
 (usage-executing-prompts)=
 ## Executing a prompt
@@ -24,7 +24,7 @@ llm 'Ten names for cheesecakes' -m gpt4
 ```
 You can use `-m 4` as an even shorter shortcut.
 
-Pass `--model <model name>` to use a different model.
+Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
 You can also send a prompt to standard input, for example:
 ```bash
@@ -53,7 +53,7 @@ By default, the tool will start a new conversation each time you run it.
 
 You can opt to continue the previous conversation by passing the `-c/--continue` option:
 ```bash
-llm 'More names' --continue
+llm 'More names' -c
 ```
 This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
 
@@ -67,9 +67,9 @@ You can find these conversation IDs using the `llm logs` command.
 
 ## Using with a shell
 
-To generate a description of changes made to a Git repository since the last commit:
+To learn more about your computer's operating system based on the output of `uname -a`, run this:
 ```bash
-llm "Describe these changes: $(git diff)"
+llm "Tell me about my operating system: $(uname -a)"
 ```
 This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
 
@@ -85,6 +85,10 @@ This is useful for piping content to standard input, for example:
 ```bash
 curl -s 'https://simonwillison.net/2023/May/15/per-interpreter-gils/' | \
   llm -s 'Suggest topics for this post as a JSON array'
+```
+Or to generate a description of changes made to a Git repository since the last commit:
+```bash
+git diff | llm -s 'Describe these changes'
 ```
 Different models support system prompts in different ways.
 
@@ -150,13 +154,13 @@ like humans do, I communicate, learn and help answer
 your queries.
 ```
 
-Type `quit` or `exit` to end a chat.
+Type `quit` or `exit` followed by `<enter>` to end a chat session.
 
 Sometimes you may want to paste multiple lines of text into a chat at once - for example when debugging an error message.
 
 To do that, type `!multi` to start a multi-line input. Type or paste your text, then type `!end` and hit `<enter>` to finish.
 
-If your pasted text might itself contain a `!end\n` line, you can set a custom delimiter using `!multi abc` followed by `!end abc` at the end:
+If your pasted text might itself contain a `!end` line, you can set a custom delimiter using `!multi abc` followed by `!end abc` at the end:
 
 ```
 Chatting with gpt-4
@@ -176,7 +180,7 @@ urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, 
 
 ## Listing available models
 
-The `llm models` command lists every model that can be used with LLM, along with any aliases:
+The `llm models` command lists every model that can be used with LLM, along with their aliases. This includes models that have been installed using {ref}`plugins <plugins>`.
 
 ```bash
 llm models
@@ -189,6 +193,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
 PaLM 2: chat-bison-001 (aliases: palm, palm2)
 ```
+
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options
@@ -257,6 +262,6 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
 
 When running a prompt you can pass the full model name or any of the aliases to the `-m/--model` option:
 ```bash
-llm -m chatgpt-16k 'As many names for cheesecakes as you can think of, with detailed descriptions'
+llm -m chatgpt-16k \
+  'As many names for cheesecakes as you can think of, with detailed descriptions'
 ```
-Models that have been installed using plugins will be shown here as well.

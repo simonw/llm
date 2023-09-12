@@ -1,7 +1,7 @@
 (other-models)=
 # Other models
 
-LLM supports OpenAI models by default. You can install {ref}`plugins` to add support for other models. You can also add additional OpenAI-compatible models {ref}`using a configuration file <openai-extra-models>`.
+LLM supports OpenAI models by default. You can install {ref}`plugins <plugins>` to add support for other models. You can also add additional OpenAI-API-compatible models {ref}`using a configuration file <openai-extra-models>`.
 
 ## Installing and using a local model
 
