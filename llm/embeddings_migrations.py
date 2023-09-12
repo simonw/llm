@@ -83,3 +83,11 @@ def m004_store_content_hash(db):
     # De-register functions
     db.conn.create_function("temp_md5", 1, None)
     db.conn.create_function("temp_random_md5", 0, None)
+
+
+@embeddings_migrations()
+def m005_add_content_blob(db):
+    db["embeddings"].add_column("content_blob", bytes)
+    db["embeddings"].transform(
+        column_order=("collection_id", "id", "embedding", "content", "content_blob")
+    )

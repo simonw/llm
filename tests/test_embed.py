@@ -57,6 +57,7 @@ def test_collection(collection):
             "id": "1",
             "embedding": llm.encode([5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
+            "content_blob": None,
             "content_hash": collection.content_hash("hello world"),
             "metadata": None,
             "updated": ANY,
@@ -66,6 +67,7 @@ def test_collection(collection):
             "id": "2",
             "embedding": llm.encode([7, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
+            "content_blob": None,
             "content_hash": collection.content_hash("goodbye world"),
             "metadata": None,
             "updated": ANY,
@@ -121,3 +123,35 @@ def test_collection_delete(collection):
     collection.delete()
     assert db["embeddings"].count == 0
     assert db["collections"].count == 0
+
+
+def test_binary_only_and_text_only_embedding_models():
+    binary_only = llm.get_embedding_model("embed-binary-only")
+    text_only = llm.get_embedding_model("embed-text-only")
+
+    assert binary_only.supports_binary
+    assert not binary_only.supports_text
+    assert not text_only.supports_binary
+    assert text_only.supports_text
+
+    with pytest.raises(ValueError):
+        binary_only.embed("hello world")
+
+    binary_only.embed(b"hello world")
+
+    with pytest.raises(ValueError):
+        text_only.embed(b"hello world")
+
+    text_only.embed("hello world")
+
+    # Try the multi versions too
+    # Have to call list() on this or the generator is not evaluated
+    with pytest.raises(ValueError):
+        list(binary_only.embed_multi(["hello world"]))
+
+    list(binary_only.embed_multi([b"hello world"]))
+
+    with pytest.raises(ValueError):
+        list(text_only.embed_multi([b"hello world"]))
+
+    list(text_only.embed_multi(["hello world"]))

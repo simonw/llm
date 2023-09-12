@@ -4,7 +4,7 @@ from .errors import NeedsKeyException
 from itertools import islice
 import re
 import time
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -291,29 +291,49 @@ class EmbeddingModel(ABC, _get_key_mixin):
     key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
-
+    supports_text: bool = True
+    supports_binary: bool = False
     batch_size: Optional[int] = None
 
-    def embed(self, text: str) -> List[float]:
-        "Embed a single text string, return a list of floats"
-        return next(iter(self.embed_batch([text])))
+    def _check(self, item: Union[str, bytes]):
+        if not self.supports_binary and isinstance(item, bytes):
+            raise ValueError(
+                "This model does not support binary data, only text strings"
+            )
+        if not self.supports_text and isinstance(item, str):
+            raise ValueError(
+                "This model does not support text strings, only binary data"
+            )
 
-    def embed_multi(self, texts: Iterable[str]) -> Iterator[List[float]]:
-        "Embed multiple texts in batches according to the model batch_size"
-        iter_texts = iter(texts)
+    def embed(self, item: Union[str, bytes]) -> List[float]:
+        "Embed a single text string or binary blob, return a list of floats"
+        self._check(item)
+        return next(iter(self.embed_batch([item])))
+
+    def embed_multi(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
+        "Embed multiple items in batches according to the model batch_size"
+        iter_items = iter(items)
+        if (not self.supports_binary) or (not self.supports_text):
+
+            def checking_iter(items):
+                for item in items:
+                    self._check(item)
+                    yield item
+
+            iter_items = checking_iter(items)
         if self.batch_size is None:
-            yield from self.embed_batch(iter_texts)
+            yield from self.embed_batch(iter_items)
             return
         while True:
-            batch_texts = list(islice(iter_texts, self.batch_size))
-            if not batch_texts:
+            batch_items = list(islice(iter_items, self.batch_size))
+            if not batch_items:
                 break
-            yield from self.embed_batch(batch_texts)
+            yield from self.embed_batch(batch_items)
 
     @abstractmethod
-    def embed_batch(self, texts: Iterable[str]) -> Iterator[List[float]]:
+    def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
         """
-        Embed a batch of text strings, return a list of lists of floats
+        Embed a batch of strings or blobs, return a list of lists of floats
         """
         pass
 

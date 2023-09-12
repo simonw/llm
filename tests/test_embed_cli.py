@@ -120,6 +120,7 @@ def test_embed_store(user_path, metadata, metadata_error):
                 b"\x00\x00\x00\x00\x00\x00\x00"
             ),
             "content": None,
+            "content_blob": None,
             "content_hash": Collection.content_hash("hello"),
             "metadata": expected_metadata,
             "updated": ANY,
@@ -144,6 +145,32 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert result.exit_code == 0
     assert db["collections"].count == 0
     assert db["embeddings"].count == 0
+
+
+def test_embed_store_binary(user_path):
+    runner = CliRunner()
+    args = ["embed", "-m", "embed-demo", "items", "2", "--binary", "--store"]
+    result = runner.invoke(cli, args, input=b"\x00\x01\x02")
+    assert result.exit_code == 0
+    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    rows = list(db["embeddings"].rows)
+    assert rows == [
+        {
+            "collection_id": 1,
+            "id": "2",
+            "embedding": (
+                b"\x00\x00@@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            ),
+            "content": None,
+            "content_blob": b"\x00\x01\x02",
+            "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
+            "metadata": None,
+            "updated": ANY,
+        }
+    ]
 
 
 def test_collection_delete_errors(user_path):
@@ -254,7 +281,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
     if filename.endswith(".jsonl"):
         args.extend(("--format", "nl"))
     runner = CliRunner()
-    result = runner.invoke(cli, args, input=input)
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     # Check that everything was embedded correctly
     db = sqlite_utils.Database(str(db_path))
@@ -264,6 +291,35 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
     if prefix:
         expected_ids = ["prefix1", "prefix2"]
     assert ids == expected_ids
+
+
+def test_embed_multi_files_binary_store(tmpdir):
+    db_path = tmpdir / "embeddings.db"
+    args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
+    bin_path = tmpdir / "file.bin"
+    bin_path.write(b"\x00\x01\x02")
+    args.extend(("--files", str(tmpdir), "*.bin", "--store", "--binary"))
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 1
+    row = list(db["embeddings"].rows)[0]
+    assert row == {
+        "collection_id": 1,
+        "id": "file.bin",
+        "embedding": (
+            b"\x00\x00@@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        "content": None,
+        "content_blob": b"\x00\x01\x02",
+        "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
+        "metadata": None,
+        "updated": ANY,
+    }
 
 
 @pytest.mark.parametrize("use_other_db", (True, False))

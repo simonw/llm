@@ -67,9 +67,9 @@ class Ada002(EmbeddingModel):
     key_env_var = "OPENAI_API_KEY"
     batch_size = 100  # Maybe this should be 2048
 
-    def embed_batch(self, texts: Iterable[str]) -> Iterator[List[float]]:
+    def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
         results = openai.Embedding.create(
-            input=texts, model="text-embedding-ada-002", api_key=self.get_key()
+            input=items, model="text-embedding-ada-002", api_key=self.get_key()
         )["data"]
         return ([float(r) for r in result["embedding"]] for result in results)
 

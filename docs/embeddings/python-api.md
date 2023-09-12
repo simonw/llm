@@ -10,8 +10,13 @@ embedding_model = llm.get_embedding_model("ada-002")
 To embed a string, returning a Python list of floating point numbers, use the `.embed()` method:
 ```python
 vector = embedding_model.embed("my happy hound")
+
+If the embedding model can handle binary input, you can call `.embed()` with a byte string instead. You can check the `supports_binary` property to see if this is supported:
+```python
+if embedding_model.supports_binary:
+    vector = embedding_model.embed(open("my-image.jpg", "rb").read())
 ```
-Many embeddings models are more efficient when you embed multiple strings at once. To embed multiple strings at once, use the `.embed_multi()` method:
+Many embeddings models are more efficient when you embed multiple strings or binary strings at once. To embed multiple strings at once, use the `.embed_multi()` method:
 ```python
 vectors = list(embedding_model.embed_multi(["my happy hound", "my dissatisfied cat"]))
 ```
@@ -63,7 +68,7 @@ This additional metadata will be stored as JSON in the `metadata` column of the 
 (embeddings-python-bulk)=
 ### Storing embeddings in bulk
 
-The `collection.embed_multi()` method can be used to store embeddings for multiple strings at once. This can be more efficient for some embedding models.
+The `collection.embed_multi()` method can be used to store embeddings for multiple items at once. This can be more efficient for some embedding models.
 
 ```python
 collection.embed_multi(
@@ -177,6 +182,7 @@ CREATE TABLE "embeddings" (
    [id] TEXT,
    [embedding] BLOB,
    [content] TEXT,
+   [content_blob] BLOB,
    [content_hash] BLOB,
    [metadata] TEXT,
    [updated] INTEGER,

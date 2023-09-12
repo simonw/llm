@@ -7,7 +7,7 @@ import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 import time
-from typing import cast, Any, Dict, Iterable, List, Optional, Tuple
+from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
 @dataclass
@@ -117,33 +117,34 @@ class Collection:
     def embed(
         self,
         id: str,
-        text: str,
+        value: Union[str, bytes],
         metadata: Optional[Dict[str, Any]] = None,
         store: bool = False,
     ) -> None:
         """
-        Embed text and store it in the collection with a given ID.
+        Embed value and store it in the collection with a given ID.
 
         Args:
-            id (str): ID for the text
-            text (str): Text to be embedded
+            id (str): ID for the value
+            value (str or bytes): value to be embedded
             metadata (dict, optional): Metadata to be stored
-            store (bool, optional): Whether to store the text in the content column
+            store (bool, optional): Whether to store the value in the content or content_blob column
         """
         from llm import encode
 
-        content_hash = self.content_hash(text)
+        content_hash = self.content_hash(value)
         if self.db["embeddings"].count_where(
             "content_hash = ? and collection_id = ?", [content_hash, self.id]
         ):
             return
-        embedding = self.model().embed(text)
+        embedding = self.model().embed(value)
         cast(Table, self.db["embeddings"]).insert(
             {
                 "collection_id": self.id,
                 "id": id,
                 "embedding": encode(embedding),
-                "content": text if store else None,
+                "content": value if (store and isinstance(value, str)) else None,
+                "content_blob": value if (store and isinstance(value, bytes)) else None,
                 "content_hash": content_hash,
                 "metadata": json.dumps(metadata) if metadata else None,
                 "updated": int(time.time()),
@@ -152,7 +153,7 @@ class Collection:
         )
 
     def embed_multi(
-        self, entries: Iterable[Tuple[str, str]], store: bool = False
+        self, entries: Iterable[Tuple[str, Union[str, bytes]]], store: bool = False
     ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
@@ -162,20 +163,20 @@ class Collection:
             store (bool, optional): Whether to store the text in the content column
         """
         self.embed_multi_with_metadata(
-            ((id, text, None) for id, text in entries), store=store
+            ((id, value, None) for id, value in entries), store=store
         )
 
     def embed_multi_with_metadata(
         self,
-        entries: Iterable[Tuple[str, str, Optional[Dict[str, Any]]]],
+        entries: Iterable[Tuple[str, Union[str, bytes], Optional[Dict[str, Any]]]],
         store: bool = False,
     ) -> None:
         """
-        Embed multiple texts along with metadata and store them in the collection with given IDs.
+        Embed multiple values along with metadata and store them in the collection with given IDs.
 
         Args:
-            entries (iterable): Iterable of (id: str, text: str, metadata: None or dict)
-            store (bool, optional): Whether to store the text in the content column
+            entries (iterable): Iterable of (id: str, value: str or bytes, metadata: None or dict)
+            store (bool, optional): Whether to store the value in the content or content_blob column
         """
         import llm
 
@@ -215,12 +216,17 @@ class Collection:
                             "collection_id": collection_id,
                             "id": id,
                             "embedding": llm.encode(embedding),
-                            "content": text if store else None,
-                            "content_hash": self.content_hash(text),
+                            "content": value
+                            if (store and isinstance(value, str))
+                            else None,
+                            "content_blob": value
+                            if (store and isinstance(value, bytes))
+                            else None,
+                            "content_hash": self.content_hash(value),
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
                         }
-                        for (embedding, (id, text, metadata)) in zip(
+                        for (embedding, (id, value, metadata)) in zip(
                             embeddings, filtered_batch
                         )
                     ),
@@ -300,18 +306,18 @@ class Collection:
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(comparison_vector, number, skip_id=id)
 
-    def similar(self, text: str, number: int = 10) -> List[Entry]:
+    def similar(self, value: Union[str, bytes], number: int = 10) -> List[Entry]:
         """
-        Find similar items in the collection by a given text.
+        Find similar items in the collection by a given value.
 
         Args:
-            text (str): Text to search by
+            value (str or bytes): value to search by
             number (int, optional): Number of similar items to return
 
         Returns:
             list: List of Entry objects
         """
-        comparison_vector = self.model().embed(text)
+        comparison_vector = self.model().embed(value)
         return self.similar_by_vector(comparison_vector, number)
 
     @classmethod
@@ -334,6 +340,8 @@ class Collection:
             self.db.execute("delete from collections where id = ?", [self.id])
 
     @staticmethod
-    def content_hash(text: str) -> bytes:
+    def content_hash(input: Union[str, bytes]) -> bytes:
         "Hash content for deduplication. Override to change hashing behavior."
-        return hashlib.md5(text.encode("utf8")).digest()
+        if isinstance(input, str):
+            input = input.encode("utf8")
+        return hashlib.md5(input).digest()
