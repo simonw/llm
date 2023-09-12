@@ -1,4 +1,4 @@
-(embeddings-binary)=
+(embeddings-storage)=
 # Embedding storage format
 
 The default output format of the `llm embed` command is a JSON array of floating point numbers.

@@ -31,7 +31,26 @@ The `llm embed` command returns a JSON array of floating point numbers directly 
 ```
 You can omit the `-m/--model` option if you set a {ref}`default embedding model <embeddings-cli-embed-models-default>`.
 
-See {ref}`embeddings-binary` for options to get back embeddings in formats other than JSON.
+LLM also offers a binary storage format for embeddings, described in {ref}`embeddings storage format <embeddings-storage>`.
+
+You can output embeddings using that format as raw bytes using `--format blob`, or in hexadecimal using `--format hex`, or in Base64 using `--format base64`:
+
+```bash
+llm embed -c 'This is some content' -m ada-002 --format base64
+```
+This outputs:
+```
+8NGzPFtdgTqHcZw7aUT6u+++WrwwpZo8XbSxv...
+```
+Some models such as [llm-clip](https://github.com/simonw/llm-clip) can run against binary data. You can pass in binary data using the `-i` and `--binary` options:
+
+```bash
+llm embed --binary -m clip -i image.jpg
+```
+Or from standard input like this:
+```bash
+cat image.jpg | llm embed --binary -m clip -i -
+```
 
 (embeddings-collections)=
 ### Storing embeddings in SQLite
@@ -291,6 +310,13 @@ llm embed-multi documentation \
   --encoding latin-1
 ```
 If a file cannot be read it will be logged to standard error but the script will keep on running.
+
+If you are embedding binary content such as images for use with CLIP, add the `--binary` option:
+```
+llm embed-multi photos \
+  -m clip \
+  --files photos/ '*.jpeg' --binary
+```
 
 (embeddings-cli-similar)=
 ## llm similar

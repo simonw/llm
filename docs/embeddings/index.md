@@ -22,5 +22,5 @@ maxdepth: 3
 cli
 python-api
 writing-plugins
-binary
+storage
 ```
