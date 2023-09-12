@@ -1,6 +1,6 @@
 # Changelog
 
-(v0_10)
+(v0_10)=
 ## 0.10 (2023-09-12)
 
 The two major features in this release are the **{ref}`llm chat command <usage-chat>`** and support for **embedding binary data**.
