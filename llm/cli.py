@@ -975,7 +975,7 @@ def templates_show(name):
 
 
 @templates.command(name="edit")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
     # First ensure it exists
