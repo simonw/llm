@@ -1,3 +1,5 @@
+import click
+import contextlib
 from typing import List, Dict
 
 
@@ -23,3 +25,24 @@ def dicts_to_table_string(
         res.append("    ".join(row))
 
     return res
+
+
+class NullProgressBar:
+    def __init__(self, *args):
+        self.args = args
+
+    def __iter__(self):
+        yield from self.args[0]
+
+    def update(self, value):
+        pass
+
+
+@contextlib.contextmanager
+def progressbar(*args, **kwargs):
+    silent = kwargs.pop("silent")
+    if silent:
+        yield NullProgressBar(*args)
+    else:
+        with click.progressbar(*args, **kwargs) as bar:
+            yield bar

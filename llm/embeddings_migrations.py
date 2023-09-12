@@ -91,3 +91,23 @@ def m005_add_content_blob(db):
     db["embeddings"].transform(
         column_order=("collection_id", "id", "embedding", "content", "content_blob")
     )
+
+
+@embeddings_migrations()
+def m006_similarities(db):
+    db["similarities"].create(
+        {
+            "collection_id": int,
+            "id": str,
+            "other_id": str,
+            "score": float,
+        },
+        pk=("collection_id", "id", "other_id"),
+    )
+
+
+@embeddings_migrations()
+def m007_similarities_foreign_keys(db):
+    db["similarities"].add_foreign_key("collection_id", "collections", "id")
+    # We don't setup foreign keys for id and other_id because embeddings actually
+    # have compound foreign keys on (collection_id, id) and (collection_id, other_id)

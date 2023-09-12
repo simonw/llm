@@ -22,7 +22,7 @@ from llm import (
     set_alias,
     remove_alias,
 )
-
+from .utils import progressbar
 from .migrations import migrate
 from .plugins import pm
 import base64
@@ -1329,7 +1329,38 @@ def embed_multi(
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, number, database):
+@click.option(
+    "all_",
+    "--all",
+    is_flag=True,
+    help="Calculate similar records for every record in the database",
+)
+@click.option(
+    "--save", is_flag=True, help="Save the results to a table called similarities"
+)
+@click.option(
+    "--recalculate-for-matches",
+    is_flag=True,
+    help="Recalculate the similarities for any that match the first set",
+)
+@click.option(
+    "print_",
+    "--print",
+    is_flag=True,
+    help="Echo the similarities even while saving them to the database",
+)
+def similar(
+    collection,
+    id,
+    input,
+    content,
+    number,
+    database,
+    all_,
+    save,
+    recalculate_for_matches,
+    print_,
+):
     """
     Return top N similar IDs from a collection
 
@@ -1343,7 +1374,7 @@ def similar(collection, id, input, content, number, database):
     \b
         llm similar my-collection 1234
     """
-    if not id and not content and not input:
+    if not id and not content and not input and not all_:
         raise click.ClickException("Must provide content or an ID for the comparison")
 
     if database:
@@ -1359,12 +1390,12 @@ def similar(collection, id, input, content, number, database):
     except Collection.DoesNotExist:
         raise click.ClickException("Collection does not exist")
 
-    if id:
-        try:
-            results = collection_obj.similar_by_id(id, number)
-        except Collection.DoesNotExist:
-            raise click.ClickException("ID not found in collection")
-    else:
+    def output_results(results):
+        for result in results:
+            click.echo(json.dumps(asdict(result)))
+
+    if not id and not all_:
+        # We need to embed the content and then compare it to the database
         if not content:
             if not input:
                 # Read from stdin
@@ -1373,9 +1404,53 @@ def similar(collection, id, input, content, number, database):
         if not content:
             raise click.ClickException("No content provided")
         results = collection_obj.similar(content, number)
+        output_results(results)
+        return
 
-    for result in results:
-        click.echo(json.dumps(asdict(result)))
+    # If we get here, we have an ID - we may need to --save it too
+    # We run two rounds here, in case the user wants to --recalculate-for-matches
+    table = db["similarities"]
+    ids = [id]
+    if all_:
+        ids = collection_obj.ids()
+    for _ in (1, 2):
+        next_round = []
+        with progressbar(
+            ids,
+            label="Calculating similarities",
+            show_percent=True,
+            show_eta=True,
+            silent=print_ or (not save),
+        ) as bar:
+            for item_id in ids:
+                try:
+                    results = collection_obj.similar_by_id(item_id, number + 1)
+                except Collection.DoesNotExist:
+                    raise click.ClickException("ID not found in collection")
+                if print_ or (not save):
+                    click.echo(item_id)
+                for result in results:
+                    if print_ or (not save):
+                        click.echo(f"  {result.score:.3f} {result.id}")
+                    next_round.append(id)
+                if save:
+                    table.insert_all(
+                        [
+                            {
+                                "collection_id": collection_obj.id,
+                                "id": item_id,
+                                "other_id": result.id,
+                                "score": result.score,
+                            }
+                            for result in results
+                        ],
+                        pk=("id", "other_id"),
+                        replace=True,
+                    )
+            if not recalculate_for_matches or not next_round:
+                break
+            else:
+                ids = next_round
 
 
 @cli.group(

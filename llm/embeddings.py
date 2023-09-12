@@ -114,6 +114,12 @@ class Collection:
             )
         )["c"]
 
+    def ids(self) -> List[str]:
+        return [
+            row["id"]
+            for row in self.db["embeddings"].rows_where("collection_id = ?", [self.id])
+        ]
+
     def embed(
         self,
         id: str,
