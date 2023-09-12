@@ -47,6 +47,16 @@ response = model.prompt(
 )
 ```
 
+### Model options
+
+For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
+
+```python
+model = llm.get_model("gpt-3.5-turbo")
+model.key = "... key here ..."
+print(model.prompt("Names for otters", temperature=0.2))
+```
+
 ### Models from plugins
 
 Any models you have installed as plugins will also be available through this mechanism, for example to use Google's PaLM 2 model with [llm-palm](https://github.com/simonw/llm-palm)
