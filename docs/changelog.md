@@ -1,5 +1,82 @@
 # Changelog
 
+(v0_10)
+## 0.10 (2023-09-12)
+
+The two major features in this release are the **{ref}`llm chat command <usage-chat>`** and support for **embedding binary data**.
+
+### llm chat
+
+The new `llm chat` command starts an ongoing chat conversation with a model in your terminal. It works with all models supported by LLM and its {ref}`plugins <plugins>`, including locally installed models such as Llama 2. [#231](https://github.com/simonw/llm/issues/231)
+
+This offers a big performance boost for local models, since they don't need to be freshly loaded into memory for each prompt.
+
+Here's an example chat with Llama 2 13B, provided by the [llm-mlc](https://github.com/simonw/llm-mlc) plugin.
+
+```bash
+llm chat -m mlc-chat-Llama-2-13b-chat-hf-q4f16_1
+```
+This starts a chat session:
+```
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+> Who are you?
+Hello! I'm just an AI, here to assist you with any questions you may have.
+My name is LLaMA, and I'm a large language model trained to provide helpful
+and informative responses to a wide range of questions and topics. I'm here
+to help you find the information you need, while ensuring a safe and
+respectful conversation. Please feel free to ask me anything, and I'll do my
+best to provide a helpful and accurate response.
+> Tell me a joke about otters
+Sure, here's a joke about otters:
+
+Why did the otter go to the party?
+
+Because he heard it was a "whale" of a time!
+
+(Get it? Whale, like a big sea mammal, but also a "wild" or "fun" time.
+Otters are known for their playful and social nature, so it's a lighthearted
+and silly joke.)
+
+I hope that brought a smile to your face! Do you have any other questions or
+topics you'd like to discuss?
+> exit
+```
+Chat sessions are {ref}`logged to SQLite <logging>` - use `llm logs` to view them. They can accept system prompts, templates and model options - consult {ref}`the chat documentation <usage-chat>` for details.
+
+### Binary embedding support
+
+LLM's {ref}`embeddings feature <embeddings>` has been expanded to provide support for embedding binary data, in addition to text. [#254](https://github.com/simonw/llm/pull/254)
+
+This enables models like [CLIP](https://openai.com/research/clip), supported by the new **[llm-clip](https://github.com/simonw/llm-clip)** plugin.
+
+CLIP is a multi-modal embedding model which can embed images and text into the same vector space. This means you can use it to create an embedding index of photos, and then search for the embedding vector for "a happy dog" and get back images that are semantically closest to that string.
+
+To create embeddings for every JPEG in a directory stored in a `photos` collection, run:
+
+```bash
+llm install llm-clip
+llm embed-multi photos --files photos/ '*.jpg' --binary -m clip
+```
+Now you can search for photos of racoons using:
+```
+llm similar photos -c 'raccoon'
+```
+This spits out a list of images, ranked by how similar they are to the string "raccoon":
+```
+{"id": "IMG_4801.jpeg", "score": 0.28125139257127457, "content": null, "metadata": null}
+{"id": "IMG_4656.jpeg", "score": 0.26626441704164294, "content": null, "metadata": null}
+{"id": "IMG_2944.jpeg", "score": 0.2647445926996852, "content": null, "metadata": null}
+...
+```
+
+### Also in this release
+
+- The {ref}`LLM_LOAD_PLUGINS environment variable <llm-load-plugins>` can be used to control which plugins are loaded when `llm` starts running. [#256](https://github.com/simonw/llm/issues/256)
+- The `llm plugins --all` option includes builtin plugins in the list of plugins. [#259](https://github.com/simonw/llm/issues/259)
+- The `llm embed-db` family of commands has been renamed to `llm collections`. [#229](https://github.com/simonw/llm/issues/229)
+- `llm embed-multi --files` now has an `--encoding` option and defaults to falling back to `latin-1` if a file cannot be processed as `utf-8`. [#225](https://github.com/simonw/llm/issues/225)
+
 (v0_10_a1)=
 ## 0.10a1 (2023-09-11)
 
