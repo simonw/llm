@@ -480,7 +480,7 @@ Options:
   -m, --model TEXT                Embedding model to use
   --store                         Store the text itself in the database
   -d, --database FILE
-  -c, --content FILE              Content to embed
+  -c, --content TEXT              Content to embed
   --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
