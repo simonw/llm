@@ -18,3 +18,5 @@ def encode(values):
 def decode(binary):
     return struct.unpack("<" + "f" * (len(binary) // 4), binary)
 ```
+
+These functions are available as `llm.encode()` and `llm.decode()`.

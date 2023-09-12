@@ -16,6 +16,8 @@ If the embedding model can handle binary input, you can call `.embed()` with a b
 if embedding_model.supports_binary:
     vector = embedding_model.embed(open("my-image.jpg", "rb").read())
 ```
+The `embedding_model.supports_text` property indicates if the model supports text input.
+
 Many embeddings models are more efficient when you embed multiple strings or binary strings at once. To embed multiple strings at once, use the `.embed_multi()` method:
 ```python
 vectors = list(embedding_model.embed_multi(["my happy hound", "my dissatisfied cat"]))

@@ -46,3 +46,21 @@ Or via its registered alias like this:
 ```bash
 cat file.txt | llm embed -m all-MiniLM-L6-v2
 ```
+[llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) is a complete example of a plugin that provides an embedding model.
+
+## Embedding binary content
+
+If your model can embed binary content, use the `supports_binary` property to indicate that:
+
+```python
+class ClipEmbeddingModel(llm.EmbeddingModel):
+    model_id = "clip"
+    supports_binary = True
+    supports_text= True
+```
+
+`supports_text` defaults to `True` and so is not necessary here. You can set it to `False` if your model only supports binary data.
+
+If your model accepts binary, your `.embed_batch()` model may be called with a list of Python bytestrings. These may be mixed with regular strings if the model accepts both types of input.
+
+[llm-clip](https://github.com/simonw/llm-clip) is an example of a model that can embed both binary and text content.
