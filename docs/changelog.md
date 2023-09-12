@@ -5,6 +5,8 @@
 
 The two major features in this release are the **{ref}`llm chat command <usage-chat>`** and support for **embedding binary data**.
 
+See [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/) for more background on these features.
+
 ### llm chat
 
 The new `llm chat` command starts an ongoing chat conversation with a model in your terminal. It works with all models supported by LLM and its {ref}`plugins <plugins>`, including locally installed models such as Llama 2. [#231](https://github.com/simonw/llm/issues/231)
