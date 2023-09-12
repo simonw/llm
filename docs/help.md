@@ -539,8 +539,9 @@ Usage: llm similar [OPTIONS] COLLECTION [ID]
       llm similar my-collection 1234
 
 Options:
-  -i, --input FILENAME  File to embed for comparison
+  -i, --input PATH      File to embed for comparison
   -c, --content TEXT    Content to embed for comparison
+  --binary              Treat input as binary data
   -n, --number INTEGER  Number of results to return
   -d, --database FILE
   --help                Show this message and exit.

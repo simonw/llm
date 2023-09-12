@@ -342,6 +342,10 @@ Or feed text to standard input using `-i -`:
 ```bash
 echo 'computer science' | llm similar quotations -i -
 ```
+When using a model like CLIP, you can find images similar to an input image using `-i filename` with `--binary`:
+```bash
+llm similar photos -i image.jpg --binary
+```
 
 (embeddings-cli-embed-models)=
 ## llm embed-models

@@ -1334,10 +1334,11 @@ def embed_multi(
 @click.option(
     "-i",
     "--input",
-    type=click.File("r"),
+    type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed for comparison",
 )
 @click.option("-c", "--content", help="Content to embed for comparison")
+@click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
@@ -1347,7 +1348,7 @@ def embed_multi(
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, number, database):
+def similar(collection, id, input, content, binary, number, database):
     """
     Return top N similar IDs from a collection
 
@@ -1383,11 +1384,16 @@ def similar(collection, id, input, content, number, database):
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
+        # Resolve input text
         if not content:
-            if not input:
+            if not input or input == "-":
                 # Read from stdin
-                input = sys.stdin
-            content = input.read()
+                input_source = sys.stdin.buffer if binary else sys.stdin
+                content = input_source.read()
+            else:
+                mode = "rb" if binary else "r"
+                with open(input, mode) as f:
+                    content = f.read()
         if not content:
             raise click.ClickException("No content provided")
         results = collection_obj.similar(content, number)
