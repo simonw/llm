@@ -405,8 +405,26 @@ def chat(
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
+    click.echo("Type !multi to enter multiple lines, then !end to finish")
+    in_multi = False
+    accumulated = []
+    end_token = "!end"
     while True:
-        prompt = click.prompt("", prompt_suffix="> ")
+        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        if prompt.strip().startswith("!multi"):
+            in_multi = True
+            bits = prompt.strip().split()
+            if len(bits) > 1:
+                end_token = "!end {}".format(" ".join(bits[1:]))
+            continue
+        if in_multi:
+            if prompt.strip() == end_token:
+                prompt = "\n".join(accumulated)
+                in_multi = False
+                accumulated = []
+            else:
+                accumulated.append(prompt)
+                continue
         if template_obj:
             try:
                 prompt, system = template_obj.evaluate(prompt, params)

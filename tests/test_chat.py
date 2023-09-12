@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 import llm.cli
 from unittest.mock import ANY
+import pytest
 
 
 def test_mock_model(mock_model):
@@ -25,6 +26,7 @@ def test_chat_basic(mock_model, logs_db):
     assert result.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
+        "\nType !multi to enter multiple lines, then !end to finish"
         "\n> Hi"
         "\none world"
         "\n> Hi two"
@@ -78,6 +80,7 @@ def test_chat_basic(mock_model, logs_db):
     assert result2.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
+        "\nType !multi to enter multiple lines, then !end to finish"
         "\n> Continue"
         "\ncontinued"
         "\n> quit"
@@ -120,6 +123,7 @@ def test_chat_system(mock_model, logs_db):
     assert result.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
+        "\nType !multi to enter multiple lines, then !end to finish"
         "\n> Hi"
         "\nI am mean"
         "\n> quit"
@@ -168,3 +172,46 @@ def test_chat_options(mock_model, logs_db):
             "datetime_utc": ANY,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "input,expected",
+    (
+        (
+            "Hi\n!multi\nthis is multiple lines\nuntil the !end\n!end\nquit\n",
+            [
+                {"prompt": "Hi", "response": "One\n"},
+                {
+                    "prompt": "this is multiple lines\nuntil the !end",
+                    "response": "Two\n",
+                },
+            ],
+        ),
+        # quit should not work within !multi
+        (
+            "!multi\nthis is multiple lines\nquit\nuntil the !end\n!end\nquit\n",
+            [
+                {
+                    "prompt": "this is multiple lines\nquit\nuntil the !end",
+                    "response": "One\n",
+                }
+            ],
+        ),
+        # Try custom delimiter
+        (
+            "!multi abc\nCustom delimiter\n!end\n!end 123\n!end abc\nquit\n",
+            [{"prompt": "Custom delimiter\n!end\n!end 123", "response": "One\n"}],
+        ),
+    ),
+)
+def test_chat_multi(mock_model, logs_db, input, expected):
+    runner = CliRunner()
+    mock_model.enqueue(["One\n"])
+    mock_model.enqueue(["Two\n"])
+    mock_model.enqueue(["Three\n"])
+    result = runner.invoke(
+        llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input
+    )
+    assert result.exit_code == 0
+    rows = list(logs_db["responses"].rows_where(select="prompt, response"))
+    assert rows == expected

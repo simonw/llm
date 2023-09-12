@@ -118,6 +118,11 @@ llm chat -m chatgpt
 ```
 Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logs-conversation>`.
 
+For models that support them, you can pass options using `-o/--option`:
+```bash
+llm chat -m gpt-4 -o temperature 0.5
+```
+
 You can pass a system prompt to be used for your chat conversation:
 
 ```bash
@@ -135,7 +140,8 @@ llm chat -t cheesecake
 ```
 ```
 Chatting with gpt-4
-Type 'exit' or 'quit' to 
+Type 'exit' or 'quit' to exit
+Type !multi to enter multiple lines, then !end to finish
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -146,9 +152,26 @@ your queries.
 
 Type `quit` or `exit` to end a chat.
 
-For models that support them, you can pass options using `-o/--option`:
-```bash
-llm chat -m gpt-4 -o temperature 0.5
+Sometimes you may want to paste multiple lines of text into a chat at once - for example when debugging an error message.
+
+To do that, type `!multi` to start a multi-line input. Type or paste your text, then type `!end` and hit `<enter>` to finish.
+
+If your pasted text might itself contain a `!end\n` line, you can set a custom delimiter using `!multi abc` followed by `!end abc` at the end:
+
+```
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type !multi to enter multiple lines, then !end to finish
+> !multi custom-end
+ Explain this error:
+
+   File "/opt/homebrew/Caskroom/miniconda/base/lib/python3.10/urllib/request.py", line 1391, in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+  File "/opt/homebrew/Caskroom/miniconda/base/lib/python3.10/urllib/request.py", line 1351, in do_open
+    raise URLError(err)
+urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>
+
+ !end custom-end
 ```
 
 ## Listing available models
