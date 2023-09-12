@@ -362,7 +362,7 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     assert result.exit_code == 0
     embeddings_db = sqlite_utils.Database(db_path)
     assert embeddings_db["embeddings"].count == 2
-    rows = list(embeddings_db.query("select id, content from embeddings"))
+    rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     assert rows == [
         {"id": (prefix or "") + "1", "content": "cli Command line interface"},
         {"id": (prefix or "") + "2", "content": "sql Structured query language"},
@@ -432,20 +432,20 @@ def test_embed_multi_files(multi_files, scenario):
     )
     assert result.exit_code == 0
     embeddings_db = sqlite_utils.Database(db_path)
-    rows = list(embeddings_db.query("select id, content from embeddings"))
+    rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     if scenario == "single":
         assert rows == [
-            {"id": "file2.txt", "content": "goodbye world"},
             {"id": "file1.txt", "content": "hello world"},
-            {"id": "nested/two.txt", "content": "two"},
-            {"id": "nested/one.txt", "content": "one"},
+            {"id": "file2.txt", "content": "goodbye world"},
             {"id": "nested/more/three.txt", "content": "three"},
+            {"id": "nested/one.txt", "content": "one"},
+            {"id": "nested/two.txt", "content": "two"},
         ]
     else:
         assert rows == [
             {"id": "ignored.ini", "content": "Has weird \x96 character"},
-            {"id": "two.txt", "content": "two"},
             {"id": "one.txt", "content": "one"},
+            {"id": "two.txt", "content": "two"},
         ]
 
 
@@ -487,7 +487,9 @@ def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
         assert result.exit_code == 0
         assert not result.stderr
         embeddings_db = sqlite_utils.Database(db_path)
-        rows = list(embeddings_db.query("select id, content from embeddings"))
+        rows = list(
+            embeddings_db.query("select id, content from embeddings order by id")
+        )
         assert rows == [
             {"id": "ignored.ini", "content": "Has weird \x96 character"},
         ]
