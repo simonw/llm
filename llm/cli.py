@@ -405,7 +405,7 @@ def chat(
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
-    click.echo("Type !multi to enter multiple lines, then !end to finish")
+    click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
     in_multi = False
     accumulated = []
     end_token = "!end"

@@ -58,6 +58,7 @@ llm chat -m chatgpt
 ```
 Chatting with gpt-3.5-turbo
 Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
 > Tell me a joke about a pelican
 Why don't pelicans like to tip waiters?
 

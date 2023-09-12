@@ -141,7 +141,7 @@ llm chat -t cheesecake
 ```
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
-Type !multi to enter multiple lines, then !end to finish
+Type '!multi' to enter multiple lines, then '!end' to finish
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -161,7 +161,7 @@ If your pasted text might itself contain a `!end\n` line, you can set a custom d
 ```
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
-Type !multi to enter multiple lines, then !end to finish
+Type '!multi' to enter multiple lines, then '!end' to finish
 > !multi custom-end
  Explain this error:
 

@@ -27,7 +27,7 @@ def test_chat_basic(mock_model, logs_db):
     assert result.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
-        "\nType !multi to enter multiple lines, then !end to finish"
+        "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\n> Hi"
         "\none world"
         "\n> Hi two"
@@ -81,7 +81,7 @@ def test_chat_basic(mock_model, logs_db):
     assert result2.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
-        "\nType !multi to enter multiple lines, then !end to finish"
+        "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\n> Continue"
         "\ncontinued"
         "\n> quit"
@@ -124,7 +124,7 @@ def test_chat_system(mock_model, logs_db):
     assert result.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
-        "\nType !multi to enter multiple lines, then !end to finish"
+        "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\n> Hi"
         "\nI am mean"
         "\n> quit"
