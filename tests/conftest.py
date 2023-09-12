@@ -75,6 +75,7 @@ class MockModel(llm.Model):
 class EmbedDemo(llm.EmbeddingModel):
     model_id = "embed-demo"
     batch_size = 10
+    supports_binary = True
 
     def __init__(self):
         self.embedded_content = []
@@ -90,6 +91,18 @@ class EmbedDemo(llm.EmbeddingModel):
             # Pad with 0 up to 16 words
             embedding += [0] * (16 - len(embedding))
             yield embedding
+
+
+class EmbedBinaryOnly(EmbedDemo):
+    model_id = "embed-binary-only"
+    supports_text = False
+    supports_binary = True
+
+
+class EmbedTextOnly(EmbedDemo):
+    model_id = "embed-text-only"
+    supports_text = True
+    supports_binary = False
 
 
 @pytest.fixture
@@ -110,6 +123,8 @@ def register_embed_demo_model(embed_demo, mock_model):
         @llm.hookimpl
         def register_embedding_models(self, register):
             register(embed_demo)
+            register(EmbedBinaryOnly())
+            register(EmbedTextOnly())
 
         @llm.hookimpl
         def register_models(self, register):

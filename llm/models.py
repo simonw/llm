@@ -291,16 +291,36 @@ class EmbeddingModel(ABC, _get_key_mixin):
     key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
+    supports_text: bool = True
     supports_binary: bool = False
     batch_size: Optional[int] = None
 
+    def _check(self, item: Union[str, bytes]):
+        if not self.supports_binary and isinstance(item, bytes):
+            raise ValueError(
+                "This model does not support binary data, only text strings"
+            )
+        if not self.supports_text and isinstance(item, str):
+            raise ValueError(
+                "This model does not support text strings, only binary data"
+            )
+
     def embed(self, item: Union[str, bytes]) -> List[float]:
         "Embed a single text string or binary blob, return a list of floats"
+        self._check(item)
         return next(iter(self.embed_batch([item])))
 
     def embed_multi(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
+        if (not self.supports_binary) or (not self.supports_text):
+
+            def checking_iter(items):
+                for item in items:
+                    self._check(item)
+                    yield item
+
+            iter_items = checking_iter(items)
         if self.batch_size is None:
             yield from self.embed_batch(iter_items)
             return
