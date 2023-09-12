@@ -1424,7 +1424,11 @@ def embed_models_default(model, remove_default):
         raise click.ClickException("Unknown embedding model: {}".format(model))
 
 
-@cli.group()
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
 def collections():
     "View and manage collections of embeddings"
 

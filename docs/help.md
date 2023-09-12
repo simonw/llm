@@ -595,8 +595,8 @@ Options:
   --help  Show this message and exit.
 
 Commands:
+  list*   View a list of collections
   delete  Delete the specified collection
-  list    View a list of collections
   path    Output the path to the embeddings database
 ```
 

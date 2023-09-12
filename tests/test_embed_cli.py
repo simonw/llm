@@ -128,9 +128,9 @@ def test_embed_store(user_path, metadata, metadata_error):
     ]
     # Should show up in 'llm collections list'
     for is_json in (False, True):
-        args = ["collections", "list"]
+        args = ["collections"]
         if is_json:
-            args.extend(["--json"])
+            args.extend(["list", "--json"])
         result2 = runner.invoke(cli, args)
         assert result2.exit_code == 0
         if is_json:
