@@ -29,6 +29,10 @@ For Homebrew:
 ```bash
 brew upgrade llm
 ```
+If the latest version is not yet available on Homebrew you can upgrade like this instead:
+```bash
+llm install -U llm
+```
 
 ## Installing plugins
 
