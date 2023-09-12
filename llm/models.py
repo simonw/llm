@@ -105,6 +105,9 @@ class Response(ABC):
         if not self._done:
             list(self)
 
+    def __str__(self) -> str:
+        return self.text()
+
     def text(self) -> str:
         self._force()
         return "".join(self._chunks)

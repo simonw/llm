@@ -10,6 +10,7 @@ def test_mock_model(mock_model):
     model = llm.get_model("mock")
     response = model.prompt(prompt="hello")
     assert response.text() == "hello world"
+    assert str(response) == "hello world"
     assert model.history[0][0].prompt == "hello"
     response2 = model.prompt(prompt="hello again")
     assert response2.text() == "second"

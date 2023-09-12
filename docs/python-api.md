@@ -19,7 +19,13 @@ print(response.text())
 ```
 The `llm.get_model()` function accepts model names or aliases - so `chatgpt` would work here too.
 
-Run this command to see a list of available models and their aliases:
+The `__str__()` method of `response` also returns the text of the response, so you can do this instead:
+
+```python
+print(response)
+```
+
+You can run this command to see a list of available models and their aliases:
 
 ```bash
 llm models
