@@ -1040,7 +1040,6 @@ def uninstall(packages, yes):
     "-c",
     "--content",
     help="Content to embed",
-    type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
 )
 @click.option(
     "--metadata",
