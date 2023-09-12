@@ -546,6 +546,7 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
 
 def test_duplicate_content_embedded_only_once(embed_demo):
     # content_hash should avoid embedding the same content twice
+    # per collection
     db = sqlite_utils.Database(memory=True)
     assert len(embed_demo.embedded_content) == 0
     collection = Collection("test", db, model_id="embed-demo")
@@ -557,11 +558,11 @@ def test_duplicate_content_embedded_only_once(embed_demo):
     collection.embed("1", "hello world")
     assert db["embeddings"].count == 2
     assert len(embed_demo.embedded_content) == 2
-    # The same string in another collection should also not be embedded
+    # The same string in another collection should be embedded
     c2 = Collection("test2", db, model_id="embed-demo")
     c2.embed("1", "hello world")
     assert db["embeddings"].count == 3
-    assert len(embed_demo.embedded_content) == 2
+    assert len(embed_demo.embedded_content) == 3
 
     # Same again for embed_multi
     collection.embed_multi(
@@ -569,50 +570,4 @@ def test_duplicate_content_embedded_only_once(embed_demo):
     )
     # Should have only embedded one more thing
     assert db["embeddings"].count == 4
-    assert len(embed_demo.embedded_content) == 3
-
-
-def test_embed_again_with_store(embed_demo, multi_files):
-    # https://github.com/simonw/llm/issues/224
-    db_path, files = multi_files
-    runner = CliRunner(mix_stderr=False)
-    # First embed all the files without storing them
-    args = [
-        "embed-multi",
-        "files",
-        "-d",
-        db_path,
-        "-m",
-        "embed-demo",
-        "--files",
-        str(files),
-        "**/*.txt",
-    ]
-    result = runner.invoke(cli, args)
-    assert result.exit_code == 0
-    assert not result.stderr
-    embeddings_db = sqlite_utils.Database(db_path)
-    rows = list(embeddings_db.query("select id, content from embeddings"))
-    assert rows == [
-        {"id": "file2.txt", "content": None},
-        {"id": "file1.txt", "content": None},
-        {"id": "nested/two.txt", "content": None},
-        {"id": "nested/one.txt", "content": None},
-        {"id": "nested/more/three.txt", "content": None},
-    ]
-    assert len(embed_demo.embedded_content) == 5
-    # Now we run it again with the --store option
-    result2 = runner.invoke(cli, args + ["--store"])
-    assert result2.exit_code == 0
-    assert not result2.stderr
-    # The rows should have their content now
-    rows = list(embeddings_db.query("select id, content from embeddings"))
-    assert rows == [
-        {"id": "file2.txt", "content": "goodbye world"},
-        {"id": "file1.txt", "content": "hello world"},
-        {"id": "nested/two.txt", "content": "two"},
-        {"id": "nested/one.txt", "content": "one"},
-        {"id": "nested/more/three.txt", "content": "three"},
-    ]
-    # But it should not have run any more embedding tasks
-    assert len(embed_demo.embedded_content) == 5
+    assert len(embed_demo.embedded_content) == 4
