@@ -63,6 +63,38 @@ llm "Five cute names for a pet penguin"
 ```
 Read the [usage instructions](https://llm.datasette.io/en/stable/usage.html) for more.
 
+## Installing a model that runs on your own machine
+
+[LLM plugins](https://llm.datasette.io/en/stable/plugins/index.html) can add support for alternative models, including models that run on your own machine.
+
+To download and run Llama 2 13B locally, you can install the [llm-mlc](https://github.com/simonw/llm-mlc) plugin:
+```bash
+llm install llm-mlc
+llm mlc pip install --pre --force-reinstall \
+  mlc-ai-nightly \
+  mlc-chat-nightly \
+  -f https://mlc.ai/wheels
+llm mlc setup
+```
+Then download the 15GB Llama 2 13B model like this:
+```bash
+llm mlc download-model Llama-2-7b-chat --alias llama2
+```
+And run a prompt through it:
+```bash
+llm -m llama2 'difference between a llama and an alpaca'
+```
+You can also start a chat session with the model using the `llm chat` command:
+```bash
+llm chat -m llama2
+```
+```
+Chatting with mlc-chat-Llama-2-13b-chat-hf-q4f16_1
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+> 
+```
+
 ## Using a system prompt
 
 You can use the `-s/--system` option to set a system prompt, providing instructions for processing other input to the tool.
