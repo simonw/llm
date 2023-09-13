@@ -47,9 +47,6 @@ Save your OpenAI API key like this:
 llm keys set openai
 ```
 This will prompt you for your key like so:
-```bash
-llm keys set openai
-```
 ```
 Enter key: <paste here>
 ```
