@@ -188,8 +188,11 @@ def load_keys():
 def user_dir():
     llm_user_path = os.environ.get("LLM_USER_PATH")
     if llm_user_path:
-        return pathlib.Path(llm_user_path)
-    return pathlib.Path(click.get_app_dir("io.datasette.llm"))
+        path = pathlib.Path(llm_user_path)
+    else:
+        path = pathlib.Path(click.get_app_dir("io.datasette.llm"))
+    path.mkdir(exist_ok=True, parents=True)
+    return path
 
 
 def set_alias(alias, model_id_or_alias):

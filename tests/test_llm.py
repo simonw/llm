@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 import datetime
+import llm
 from llm.cli import cli
 from llm.migrations import migrate
 import json
@@ -354,3 +355,12 @@ def test_llm_models_options(user_path):
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
     assert EXPECTED_OPTIONS.strip() in result.output
+
+
+def test_llm_user_dir(tmpdir, monkeypatch):
+    user_dir = str(tmpdir / "u")
+    monkeypatch.setenv("LLM_USER_PATH", user_dir)
+    assert not os.path.exists(user_dir)
+    user_dir2 = llm.user_dir()
+    assert user_dir == str(user_dir2)
+    assert os.path.exists(user_dir)

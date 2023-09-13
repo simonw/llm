@@ -9,7 +9,7 @@ LLM stores various pieces of logging and configuration data in a directory on th
 
 On macOS this directory is `~/Library/Application Support/io.datasette.llm`, but this will differ on other operating systems.
 
-The `llm.user_dir()` function returns the path to this directory as a `pathlib.Path` object.
+The `llm.user_dir()` function returns the path to this directory as a `pathlib.Path` object, after creating that directory if it does not yet exist.
 
 Plugins can use this to store their own data in a subdirectory of this directory.
 
