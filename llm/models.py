@@ -313,9 +313,12 @@ class EmbeddingModel(ABC, _get_key_mixin):
         self._check(item)
         return next(iter(self.embed_batch([item])))
 
-    def embed_multi(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
+    def embed_multi(
+        self, items: Iterable[Union[str, bytes]], batch_size: Optional[int] = None
+    ) -> Iterator[List[float]]:
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
+        batch_size = self.batch_size if batch_size is None else batch_size
         if (not self.supports_binary) or (not self.supports_text):
 
             def checking_iter(items):
@@ -324,11 +327,11 @@ class EmbeddingModel(ABC, _get_key_mixin):
                     yield item
 
             iter_items = checking_iter(items)
-        if self.batch_size is None:
+        if batch_size is None:
             yield from self.embed_batch(iter_items)
             return
         while True:
-            batch_items = list(islice(iter_items, self.batch_size))
+            batch_items = list(islice(iter_items, batch_size))
             if not batch_items:
                 break
             yield from self.embed_batch(batch_items)

@@ -24,6 +24,12 @@ vectors = list(embedding_model.embed_multi(["my happy hound", "my dissatisfied c
 ```
 This returns a generator that yields one embedding vector per string.
 
+Embeddings are calculated in batches. By default all items will be processed in a single batch, unless the underlying embedding model has defined its own preferred batch size. You can pass a custom batch size using `batch_size=N`, for example:
+
+```python
+vectors = list(embedding_model.embed_multi(lines_from_file, batch_size=20))
+```
+
 (embeddings-python-collections)=
 ## Working with collections
 
@@ -94,6 +100,17 @@ collection.embed_multi_with_metadata(
     store=True,
 )
 ```
+The `batch_size=` argument defaults to 100, and will be used unless the embedding model itself defines a lower batch size. You can adjust this if you are having trouble with memory while embedding large collections:
+
+```python
+collection.embed_multi(
+    (
+        (i, line)
+        for i, line in enumerate(lines_in_file)
+    ),
+    batch_size=10
+)
+```
 
 (embeddings-python-collection-class)=
 ### Collection class reference
@@ -106,8 +123,8 @@ A collection instance has the following properties and methods:
 - `model()` - returns the `EmbeddingModel` instance, based on that `model_id`
 - `count()` - returns the integer number of items in the collection
 - `embed(id: str, text: str, metadata: dict=None, store: bool=False)` - embeds the given string and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON) and store the text content itself in the database table.
-- `embed_multi(entries: Iterable, store: bool=False)` - see above
-- `embed_multi_with_metadata(entries: Iterable, store: bool=False)` - see above
+- `embed_multi(entries: Iterable, store: bool=False, batch_size: int=100)` - see above
+- `embed_multi_with_metadata(entries: Iterable, store: bool=False, batch_size: int=100)` - see above
 - `similar(query: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the given query string
 - `similar_by_id(id: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the item with the given ID
 - `similar_by_vector(vector: List[float], number: int=10, skip_id: str=None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID

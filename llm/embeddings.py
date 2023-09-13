@@ -19,8 +19,6 @@ class Entry:
 
 
 class Collection:
-    max_batch_size: int = 100
-
     class DoesNotExist(Exception):
         pass
 
@@ -153,7 +151,10 @@ class Collection:
         )
 
     def embed_multi(
-        self, entries: Iterable[Tuple[str, Union[str, bytes]]], store: bool = False
+        self,
+        entries: Iterable[Tuple[str, Union[str, bytes]]],
+        store: bool = False,
+        batch_size: int = 100,
     ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
@@ -161,15 +162,19 @@ class Collection:
         Args:
             entries (iterable): Iterable of (id: str, text: str) tuples
             store (bool, optional): Whether to store the text in the content column
+            batch_size (int, optional): custom maximum batch size to use
         """
         self.embed_multi_with_metadata(
-            ((id, value, None) for id, value in entries), store=store
+            ((id, value, None) for id, value in entries),
+            store=store,
+            batch_size=batch_size,
         )
 
     def embed_multi_with_metadata(
         self,
         entries: Iterable[Tuple[str, Union[str, bytes], Optional[Dict[str, Any]]]],
         store: bool = False,
+        batch_size: int = 100,
     ) -> None:
         """
         Embed multiple values along with metadata and store them in the collection with given IDs.
@@ -177,12 +182,11 @@ class Collection:
         Args:
             entries (iterable): Iterable of (id: str, value: str or bytes, metadata: None or dict)
             store (bool, optional): Whether to store the value in the content or content_blob column
+            batch_size (int, optional): custom maximum batch size to use
         """
         import llm
 
-        batch_size = min(
-            self.max_batch_size, (self.model().batch_size or self.max_batch_size)
-        )
+        batch_size = min(batch_size, (self.model().batch_size or batch_size))
         iterator = iter(entries)
         collection_id = self.id
         while True:

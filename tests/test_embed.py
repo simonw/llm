@@ -11,18 +11,27 @@ def test_demo_plugin():
     assert model.embed("hello world") == [5, 5] + [0] * 14
 
 
-def test_embed_huge_list():
+@pytest.mark.parametrize(
+    "batch_size,expected_batches",
+    (
+        (None, 100),
+        (10, 100),
+    ),
+)
+def test_embed_huge_list(batch_size, expected_batches):
     model = llm.get_embedding_model("embed-demo")
     huge_list = ("hello {}".format(i) for i in range(1000))
-    results = model.embed_multi(huge_list)
+    kwargs = {}
+    if batch_size:
+        kwargs["batch_size"] = batch_size
+    results = model.embed_multi(huge_list, **kwargs)
     assert repr(type(results)) == "<class 'generator'>"
     first_twos = {}
     for result in results:
         key = (result[0], result[1])
         first_twos[key] = first_twos.get(key, 0) + 1
     assert first_twos == {(5, 1): 10, (5, 2): 90, (5, 3): 900}
-    # Should have happened in 100 batches
-    assert model.batch_count == 100
+    assert model.batch_count == expected_batches
 
 
 def test_embed_store(collection):
@@ -91,17 +100,29 @@ def test_similar_by_id(collection):
     ]
 
 
+@pytest.mark.parametrize(
+    "batch_size,expected_batches",
+    (
+        (None, 100),
+        (5, 200),
+    ),
+)
 @pytest.mark.parametrize("with_metadata", (False, True))
-def test_embed_multi(with_metadata):
+def test_embed_multi(with_metadata, batch_size, expected_batches):
     db = sqlite_utils.Database(memory=True)
     collection = llm.Collection("test", db, model_id="embed-demo")
+    model = collection.model()
+    assert getattr(model, "batch_count", 0) == 0
     ids_and_texts = ((str(i), "hello {}".format(i)) for i in range(1000))
+    kwargs = {}
+    if batch_size is not None:
+        kwargs["batch_size"] = batch_size
     if with_metadata:
         ids_and_texts = ((id, text, {"meta": id}) for id, text in ids_and_texts)
-        collection.embed_multi_with_metadata(ids_and_texts)
+        collection.embed_multi_with_metadata(ids_and_texts, **kwargs)
     else:
         # Exercise store=True here too
-        collection.embed_multi(ids_and_texts, store=True)
+        collection.embed_multi(ids_and_texts, store=True, **kwargs)
     rows = list(db["embeddings"].rows)
     assert len(rows) == 1000
     rows_with_metadata = [row for row in rows if row["metadata"] is not None]
@@ -114,6 +135,8 @@ def test_embed_multi(with_metadata):
         assert len(rows_with_content) == 1000
     # Every row should have content_hash set
     assert all(row["content_hash"] is not None for row in rows)
+    # Check batch count
+    assert collection.model().batch_count == expected_batches
 
 
 def test_collection_delete(collection):

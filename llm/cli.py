@@ -1324,7 +1324,6 @@ def embed_multi(
                 else:
                     yield id, " ".join(v or "" for v in values[1:])
 
-        # collection_obj.max_batch_size = 1
         collection_obj.embed_multi(tuples(), store=store)
 
 
