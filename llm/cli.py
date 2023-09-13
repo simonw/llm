@@ -97,10 +97,24 @@ class TemplateType(click.ParamType):
         ]
 
 
+class ModelType(click.ParamType):
+    """Support shell auto-complete for --model parameter."""
+
+    name = "model_id"
+
+    def shell_complete(self, ctx, param, incomplete):
+        model_aliases = get_model_aliases().keys()
+        return [
+            CompletionItem(model_id)
+            for model_id in model_aliases
+            if model_id.startswith(incomplete)
+        ]
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", type=ModelType(), help="Model to use")
 @click.option(
     "options",
     "-o",
@@ -308,7 +322,7 @@ def prompt(
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", type=ModelType(), help="Model to use")
 @click.option(
     "_continue",
     "-c",
@@ -617,7 +631,7 @@ order by responses_fts.rank desc{limit}
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
 )
-@click.option("-m", "--model", help="Filter by model or model alias")
+@click.option("-m", "--model", type=ModelType(), help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
@@ -818,7 +832,7 @@ def models_list(options):
 
 
 @models.command(name="default")
-@click.argument("model", required=False)
+@click.argument("model", required=False, type=ModelType())
 def models_default(model):
     "Show or set the default model"
     if not model:
@@ -913,7 +927,7 @@ def aliases_list(json_):
 
 @aliases.command(name="set")
 @click.argument("alias")
-@click.argument("model_id")
+@click.argument("model_id", type=ModelType())
 def aliases_set(alias, model_id):
     """
     Set an alias for a model
@@ -1051,7 +1065,7 @@ def uninstall(packages, yes):
     type=click.File("r"),
     help="File to embed",
 )
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option("-m", "--model", type=ModelType(), help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1180,7 +1194,7 @@ def embed(collection, id, input, model, store, database, content, metadata, form
     help="Additional databases to attach - specify alias and file path",
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option("-m", "--model", type=ModelType(), help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1405,7 +1419,7 @@ def embed_models_list():
 
 
 @embed_models.command(name="default")
-@click.argument("model", required=False)
+@click.argument("model", required=False, type=ModelType())
 @click.option(
     "--remove-default", is_flag=True, help="Reset to specifying no default model"
 )
