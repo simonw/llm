@@ -90,7 +90,11 @@ class TemplateType(click.ParamType):
 
     def shell_complete(self, ctx, param, incomplete):
         template_names = get_templates().keys()
-        return [CompletionItem(name) for name in template_names]
+        return [
+            CompletionItem(name)
+            for name in template_names
+            if name.startswith(incomplete)
+        ]
 
 
 @cli.command(name="prompt")
@@ -961,7 +965,7 @@ def display_truncated(text):
 
 
 @templates.command(name="show")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_show(name):
     "Show the specified prompt template"
     template = load_template(name)
