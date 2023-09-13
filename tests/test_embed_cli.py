@@ -369,6 +369,40 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     ]
 
 
+def test_embed_multi_batch_size(embed_demo, tmpdir):
+    db_path = str(tmpdir / "data.db")
+    runner = CliRunner()
+    sql = """
+    with recursive cte (id) as (
+      select 1
+      union all
+      select id+1 from cte where id < 100
+    )
+    select id, 'Row ' || cast(id as text) as value from cte
+    """
+    assert getattr(embed_demo, "batch_count", 0) == 0
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "rows",
+            "--sql",
+            sql,
+            "-d",
+            db_path,
+            "-m",
+            "embed-demo",
+            "--store",
+            "--batch-size",
+            "8",
+        ],
+    )
+    assert result.exit_code == 0
+    db = sqlite_utils.Database(db_path)
+    assert db["embeddings"].count == 100
+    assert embed_demo.batch_count == 13
+
+
 @pytest.fixture
 def multi_files(tmpdir):
     db_path = str(tmpdir / "files.db")

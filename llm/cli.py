@@ -1182,6 +1182,9 @@ def embed(
     multiple=True,
     help="Additional databases to attach - specify alias and file path",
 )
+@click.option(
+    "--batch-size", type=int, help="Batch size to use when running embeddings"
+)
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option("-m", "--model", help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
@@ -1200,6 +1203,7 @@ def embed_multi(
     binary,
     sql,
     attach,
+    batch_size,
     prefix,
     model,
     store,
@@ -1324,7 +1328,10 @@ def embed_multi(
                 else:
                     yield id, " ".join(v or "" for v in values[1:])
 
-        collection_obj.embed_multi(tuples(), store=store)
+        embed_kwargs = {"store": store}
+        if batch_size:
+            embed_kwargs["batch_size"] = batch_size
+        collection_obj.embed_multi(tuples(), **embed_kwargs)
 
 
 @cli.command()

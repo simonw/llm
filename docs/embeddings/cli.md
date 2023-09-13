@@ -148,6 +148,7 @@ All three mechanisms support these options:
 - `-d database.db` to specify a different database file to store the embeddings in
 - `--store` to store the original content in the embeddings table in addition to the embedding vector
 - `--prefix` to prepend a prefix to the stored ID of each item
+- `--batch-size SIZE` to process embeddings in batches of the specified size
 
 (embeddings-cli-embed-multi-csv-etc)=
 ### Embedding data from a CSV, TSV or JSON file
