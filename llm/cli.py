@@ -126,7 +126,13 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
-@click.option("--rich", "-r", is_flag=True, default=False, help="Format output as rich markdown text")
+@click.option(
+    "--rich",
+    "-r",
+    is_flag=True,
+    default=False,
+    help="Format output as rich markdown text",
+)
 def prompt(
     prompt,
     system,
