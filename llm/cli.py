@@ -335,7 +335,13 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
-@click.option("--rich", "-r", is_flag=True, help="Format output as rich markdown text")
+@click.option(
+    "--rich",
+    "-r",
+    is_flag=True,
+    default=False,
+    help="Format output as rich markdown text",
+)
 def chat(
     system,
     model_id,
