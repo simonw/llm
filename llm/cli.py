@@ -1657,4 +1657,4 @@ def print_response(response: Response, stream: bool = True, rich: bool = False):
     elif stream is False and rich is True:
         console.print(Markdown(response.text()))
     else:
-        console.print(Markdown(response.text()))
+        console.print(response.text())
