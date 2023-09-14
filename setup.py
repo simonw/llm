@@ -51,6 +51,7 @@ setup(
     extras_require={
         "test": [
             "pytest",
+            "numpy",
             "requests-mock",
             "cogapp",
             "mypy",

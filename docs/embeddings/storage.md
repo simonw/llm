@@ -20,3 +20,12 @@ def decode(binary):
 ```
 
 These functions are available as `llm.encode()` and `llm.decode()`.
+
+If you are using [NumPy](https://numpy.org/) you can decode one of these binary values like this:
+
+```python
+import numpy as np
+
+numpy_array = np.frombuffer(value, "<f4")
+```
+The `<f4` format string here ensures NumPy will treat the data as a little-endian sequence of 32-bit floats.
