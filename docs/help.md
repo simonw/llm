@@ -99,6 +99,7 @@ Options:
   --cid, --conversation TEXT   Continue the conversation with the given ID.
   --key TEXT                   API key to use
   --save TEXT                  Save prompt with this template name
+  -r, --rich                   Format output as rich markdown text
   --help                       Show this message and exit.
 ```
 
@@ -119,6 +120,7 @@ Options:
   -o, --option <TEXT TEXT>...  key/value options for the model
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
+  -r, --rich                   Format output as rich markdown text
   --help                       Show this message and exit.
 ```
 
