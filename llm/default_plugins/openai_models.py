@@ -206,7 +206,7 @@ class Chat(Model):
             return validated_logit_bias
         
         function_call: Optional[str] = Field(
-            description=("The name of a function to return JSON for, or 'auto' (default), or 'none'."),
+            description=("The name of a function to return JSON for."),
             default=None,
         )
 
@@ -293,6 +293,8 @@ class Chat(Model):
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["headers"] = self.headers
+        if kwargs.get("function_call") is not None:
+            kwargs["function_call"] = { "name": kwargs["function_call"] }
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
