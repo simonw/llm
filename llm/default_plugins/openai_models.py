@@ -204,6 +204,32 @@ class Chat(Model):
                     raise ValueError("Invalid key-value pair in logit_bias dictionary")
 
             return validated_logit_bias
+        
+        function_call: Optional[str] = Field(
+            description=("The name of a function to return JSON for."),
+            default=None,
+        )
+
+        functions: Optional[list] = Field(
+            description=("Path to JSON file listing functions that the model can return parameters for."
+                         "The file should contain an array of {name,description,parameters} objects;"
+                         "each 'parameters' field is a JSON schema, as per the OpenAI API."),
+            default=None,
+        )
+
+        @field_validator("functions", mode='before')
+        def validate_functions(cls, functions):
+            if functions is None:
+                return None
+            
+            if isinstance(functions, str):
+                try:
+                    with open(functions,"r") as f:
+                        functions = json.load(f)
+                except json.JSONDecodeError:
+                    raise ValueError("Invalid JSON in functions file")
+            
+            return functions
 
     def __init__(
         self,
@@ -267,6 +293,9 @@ class Chat(Model):
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["headers"] = self.headers
+        req_function_call = kwargs.get("function_call")
+        if req_function_call is not None:
+            kwargs["function_call"] = { "name": req_function_call }
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
@@ -280,6 +309,20 @@ class Chat(Model):
                 content = chunk["choices"][0].get("delta", {}).get("content")
                 if content is not None:
                     yield content
+                    continue
+                function_call = chunk["choices"][0].get("delta", {}).get("function_call")
+                finish_reason = chunk["choices"][0].get("finish_reason")
+                if function_call is not None:
+                    function_name = function_call.get("name")
+                    if function_name is not None:
+                        yield f"{{\"function_call\": {{\n\"name\": \"{function_name}\",\n\"arguments\": "
+                        continue
+                    function_args = function_call.get("arguments")
+                    if function_args is not None:
+                        yield function_args
+                        continue
+                if finish_reason == "function_call" or (finish_reason == "stop" and req_function_call is not None):
+                    yield "\n}}\n"
             response.response_json = combine_chunks(chunks)
         else:
             completion = openai.ChatCompletion.create(
@@ -289,7 +332,19 @@ class Chat(Model):
                 **kwargs,
             )
             response.response_json = completion.to_dict_recursive()
-            yield completion.choices[0].message.content
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
+            elif "function_call" in completion.choices[0].message:
+                function_call = completion.choices[0].message["function_call"]
+                function_name = function_call.get("name", "")
+                function_args = function_call.get("arguments", "{}")
+                try:
+                    function_args = json.loads (function_args)
+                except json.JSONDecodeError:
+                    pass
+                yield json.dumps ({ "function_call": { "name": function_name, "arguments": function_args }})
+            else:
+                yield ""
 
 
 def not_nulls(data) -> dict:
@@ -300,15 +355,26 @@ def combine_chunks(chunks: List[dict]) -> dict:
     content = ""
     role = None
     finish_reason = None
+    function_name = None
+    function_args = ""
 
     for item in chunks:
         for choice in item["choices"]:
             if "role" in choice["delta"]:
                 role = choice["delta"]["role"]
-            if "content" in choice["delta"]:
+            if "content" in choice["delta"] and choice["delta"]["content"] is not None:
                 content += choice["delta"]["content"]
+            if "function_call" in choice["delta"]:
+                if "name" in choice["delta"]["function_call"]:
+                    function_name = choice["delta"]["function_call"]["name"]
+                if "arguments" in choice["delta"]["function_call"]:
+                    function_args += choice["delta"]["function_call"]["arguments"]
             if choice.get("finish_reason") is not None:
                 finish_reason = choice["finish_reason"]
+
+    # Coerce the function call back to being content
+    if content=="" and function_name is not None:
+        content = json.dumps ({ "function_call": { "name": function_name, "arguments": function_args } })
 
     # Imitations of the OpenAI API may be missing some of these fields
     combined = {
