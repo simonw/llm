@@ -293,8 +293,9 @@ class Chat(Model):
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["headers"] = self.headers
-        if kwargs.get("function_call") is not None:
-            kwargs["function_call"] = { "name": kwargs["function_call"] }
+        req_function_call = kwargs.get("function_call")
+        if req_function_call is not None:
+            kwargs["function_call"] = { "name": req_function_call }
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
@@ -308,15 +309,19 @@ class Chat(Model):
                 content = chunk["choices"][0].get("delta", {}).get("content")
                 if content is not None:
                     yield content
+                    continue
                 function_call = chunk["choices"][0].get("delta", {}).get("function_call")
+                finish_reason = chunk["choices"][0].get("finish_reason")
                 if function_call is not None:
                     function_name = function_call.get("name")
                     if function_name is not None:
                         yield f"{{\"function_call\": {{\n\"name\": \"{function_name}\",\n\"arguments\": "
+                        continue
                     function_args = function_call.get("arguments")
                     if function_args is not None:
                         yield function_args
-                if chunk["choices"][0].get("finish_reason") == "function_call":
+                        continue
+                if finish_reason == "function_call" or (finish_reason == "stop" and req_function_call is not None):
                     yield "\n}}\n"
             response.response_json = combine_chunks(chunks)
         else:
@@ -329,7 +334,7 @@ class Chat(Model):
             response.response_json = completion.to_dict_recursive()
             if completion.choices[0].message.content is not None:
                 yield completion.choices[0].message.content
-            if "function_call" in completion.choices[0].message:
+            elif "function_call" in completion.choices[0].message:
                 function_call = completion.choices[0].message["function_call"]
                 function_name = function_call.get("name", "")
                 function_args = function_call.get("arguments", "{}")
@@ -338,7 +343,8 @@ class Chat(Model):
                 except json.JSONDecodeError:
                     pass
                 yield json.dumps ({ "function_call": { "name": function_name, "arguments": function_args }})
-            yield ""
+            else:
+                yield ""
 
 
 def not_nulls(data) -> dict:
