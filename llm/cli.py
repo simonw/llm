@@ -1269,6 +1269,8 @@ def embed_multi(
         def iterate_files():
             for directory, pattern in files:
                 for path in pathlib.Path(directory).glob(pattern):
+                    if path.is_dir():
+                        continue # fixed issue/280 - skip directories
                     relative = path.relative_to(directory)
                     content = None
                     if binary:
