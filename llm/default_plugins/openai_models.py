@@ -4,6 +4,7 @@ from llm.utils import dicts_to_table_string
 import click
 import datetime
 import openai
+import os
 
 try:
     from pydantic import field_validator, Field  # type: ignore
@@ -14,6 +15,15 @@ import requests
 from typing import List, Iterable, Iterator, Optional, Union
 import json
 import yaml
+
+if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+
+    def log_response(response, *args, **kwargs):
+        click.echo(response.text, err=True)
+        return response
+
+    openai.requestssession = requests.Session()
+    openai.requestssession.hooks["response"].append(log_response)
 
 
 @hookimpl

@@ -18,6 +18,16 @@ To run the tests:
 
     pytest
 
+## Debugging tricks
+
+The default OpenAI plugin has a debugging mechanism for showing the exact responses that came back from the OpenAI API.
+
+Set the `LLM_OPENAI_SHOW_RESPONSES` environment variable like this:
+```bash
+LLM_OPENAI_SHOW_RESPONSES=1 llm -m chatgpt 'three word slogan for an an otter-run bakery'
+```
+This will output the response (including streaming responses) to standard error, as shown in [issues 286](https://github.com/simonw/llm/issues/286).
+
 ## Documentation
 
 Documentation for this project uses [MyST](https://myst-parser.readthedocs.io/) - it is written in Markdown and rendered using Sphinx.
