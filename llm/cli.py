@@ -280,7 +280,6 @@ def prompt(
         else:
             print(response.text())
     except Exception as ex:
-        raise
         raise click.ClickException(str(ex))
 
     # Log to the database
