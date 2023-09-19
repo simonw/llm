@@ -23,7 +23,7 @@ def register_models(register):
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
     register(
-        Completion("gpt-3.5-turbo-instruct"),
+        Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
         aliases=("3.5-instruct", "chatgpt-instruct"),
     )
     # Load extra models
@@ -125,6 +125,8 @@ class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     can_stream: bool = True
+
+    default_max_tokens = None
 
     class Options(llm.Options):
         temperature: Optional[float] = Field(
@@ -280,6 +282,8 @@ class Chat(Model):
 
     def build_kwargs(self, prompt):
         kwargs = dict(not_nulls(prompt.options))
+        if "max_tokens" not in kwargs and self.default_max_tokens is not None:
+            kwargs["max_tokens"] = self.default_max_tokens
         if self.api_base:
             kwargs["api_base"] = self.api_base
         if self.api_type:
@@ -301,6 +305,10 @@ class Chat(Model):
 
 
 class Completion(Chat):
+    def __init__(self, *args, default_max_tokens=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default_max_tokens = default_max_tokens
+
     def __str__(self):
         return "OpenAI Completion: {}".format(self.model_id)
 

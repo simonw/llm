@@ -313,6 +313,15 @@ def test_openai_completion(mocked_openai_completion, user_path):
     )
     assert result.exit_code == 0
     assert result.output == "\n\nThis is indeed a test\n"
+
+    # Should have requested 256 tokens
+    assert json.loads(mocked_openai_completion.last_request.text) == {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Say this is a test",
+        "stream": False,
+        "max_tokens": 256,
+    }
+
     # Check it was logged
     rows = list(log_db["responses"].rows)
     assert len(rows) == 1
