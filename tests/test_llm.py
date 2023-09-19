@@ -294,6 +294,13 @@ def test_llm_default_prompt(
     )
 
 
+def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
+    assert result.exit_code == 0
+    assert result.output == "Hi!\n"
+
+
 def test_openai_completion(mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))

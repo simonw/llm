@@ -1,5 +1,6 @@
 import pytest
 import sqlite_utils
+import json
 import llm
 from llm.plugins import pm
 from pydantic import Field
@@ -147,6 +148,37 @@ def mocked_openai_chat(requests_mock):
             "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
         },
         headers={"Content-Type": "application/json"},
+    )
+
+
+@pytest.fixture
+def mocked_openai_chat_stream(requests_mock):
+    def stream_events(*args):
+        print(args)
+        for delta, finish_reason in (
+            ({"role": "assistant", "content": ""}, None),
+            ({"content": "Hi"}, None),
+            ({"content": "!"}, None),
+            ({}, "stop"),
+        ):
+            yield "data: {}\n\n".format(
+                json.dumps(
+                    {
+                        "id": "chat-1",
+                        "object": "chat.completion.chunk",
+                        "created": 1695096940,
+                        "model": "gpt-3.5-turbo-0613",
+                        "choices": [
+                            {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                        ],
+                    }
+                )
+            ).encode("utf-8")
+
+    requests_mock.post(
+        "https://api.openai.com/v1/chat/completions",
+        content=b"".join(stream_events()),
+        headers={"Content-Type": "text/event-stream"},
     )
 
 
