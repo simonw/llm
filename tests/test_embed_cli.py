@@ -432,7 +432,7 @@ def test_embed_multi_files(multi_files, scenario):
         ("nested/two.txt", b"two"),
         ("nested/more/three.txt", b"three"),
         # This tests the fallback to latin-1 encoding:
-        ("nested/more/ignored.ini", b"Has weird \x96 character"),
+        ("nested/more.txt/ignored.ini", b"Has weird \x96 character"),
     ):
         path = pathlib.Path(files / filename)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -481,6 +481,20 @@ def test_embed_multi_files(multi_files, scenario):
             {"id": "one.txt", "content": "one"},
             {"id": "two.txt", "content": "two"},
         ]
+
+
+@pytest.mark.parametrize(
+    "args,expected_error",
+    ((["not-a-dir", "*.txt"], "Invalid directory: not-a-dir"),),
+)
+def test_embed_multi_files_errors(multi_files, args, expected_error):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["embed-multi", "files", "-m", "embed-demo", "--files"] + args,
+    )
+    assert result.exit_code == 2
+    assert expected_error in result.output
 
 
 @pytest.mark.parametrize(
