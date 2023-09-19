@@ -334,6 +334,10 @@ class Completion(Chat):
         return "OpenAI Completion: {}".format(self.model_id)
 
     def execute(self, prompt, stream, response, conversation=None):
+        if prompt.system:
+            raise NotImplementedError(
+                "System prompts are not supported for OpenAI completion models"
+            )
         messages = []
         if conversation is not None:
             for prev_response in conversation.responses:
