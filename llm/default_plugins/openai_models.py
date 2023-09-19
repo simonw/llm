@@ -337,13 +337,8 @@ class Completion(Chat):
         messages = []
         if conversation is not None:
             for prev_response in conversation.responses:
-                # We add system prompts in Markdown bold
-                if prev_response.prompt.system:
-                    messages.append("**{}**".format(prev_response.prompt.system))
                 messages.append(prev_response.prompt.prompt)
                 messages.append(prev_response.text())
-        if prompt.system:
-            messages.append("**{}**".format(prompt.system))
         messages.append(prompt.prompt)
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)

@@ -301,8 +301,7 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     assert result.output == "Hi.\n"
 
 
-@pytest.mark.parametrize("system", (None, "a system prompt"))
-def test_openai_completion(mocked_openai_completion, user_path, system):
+def test_openai_completion(mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
     log_db["responses"].delete_where()
@@ -316,32 +315,28 @@ def test_openai_completion(mocked_openai_completion, user_path, system):
             "--no-stream",
             "--key",
             "x",
-        ]
-        + (["--system", system] if system else []),
+        ],
         catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output == "\n\nThis is indeed a test\n"
 
     # Should have requested 256 tokens
-    expected_prompt = "Say this is a test"
-    if system:
-        expected_prompt = "**a system prompt**\n" + expected_prompt
     assert json.loads(mocked_openai_completion.last_request.text) == {
         "model": "gpt-3.5-turbo-instruct",
-        "prompt": expected_prompt,
+        "prompt": "Say this is a test",
         "stream": False,
         "max_tokens": 256,
     }
-    expected_messages = json.dumps(expected_prompt.split("\n"))
+
     # Check it was logged
     rows = list(log_db["responses"].rows)
     assert len(rows) == 1
     expected = {
         "model": "gpt-3.5-turbo-instruct",
         "prompt": "Say this is a test",
-        "system": system,
-        "prompt_json": '{"messages": ' + expected_messages + "}",
+        "system": None,
+        "prompt_json": '{"messages": ["Say this is a test"]}',
         "options_json": "{}",
         "response": "\n\nThis is indeed a test",
     }
