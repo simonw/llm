@@ -22,6 +22,10 @@ def register_models(register):
     register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
+    register(
+        Completion("gpt-3.5-turbo-instruct"),
+        aliases=("3.5-instruct", "chatgpt-instruct"),
+    )
     # Load extra models
     extra_path = llm.user_dir() / "extra-openai-models.yaml"
     if not extra_path.exists():
@@ -249,24 +253,7 @@ class Chat(Model):
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
         response._prompt_json = {"messages": messages}
-        kwargs = dict(not_nulls(prompt.options))
-        if self.api_base:
-            kwargs["api_base"] = self.api_base
-        if self.api_type:
-            kwargs["api_type"] = self.api_type
-        if self.api_version:
-            kwargs["api_version"] = self.api_version
-        if self.api_engine:
-            kwargs["engine"] = self.api_engine
-        if self.needs_key:
-            if self.key:
-                kwargs["api_key"] = self.key
-        else:
-            # OpenAI-compatible models don't need a key, but the
-            # openai client library requires one
-            kwargs["api_key"] = "DUMMY_KEY"
-        if self.headers:
-            kwargs["headers"] = self.headers
+        kwargs = self.build_kwargs(prompt)
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
@@ -291,6 +278,65 @@ class Chat(Model):
             response.response_json = completion.to_dict_recursive()
             yield completion.choices[0].message.content
 
+    def build_kwargs(self, prompt):
+        kwargs = dict(not_nulls(prompt.options))
+        if self.api_base:
+            kwargs["api_base"] = self.api_base
+        if self.api_type:
+            kwargs["api_type"] = self.api_type
+        if self.api_version:
+            kwargs["api_version"] = self.api_version
+        if self.api_engine:
+            kwargs["engine"] = self.api_engine
+        if self.needs_key:
+            if self.key:
+                kwargs["api_key"] = self.key
+        else:
+            # OpenAI-compatible models don't need a key, but the
+            # openai client library requires one
+            kwargs["api_key"] = "DUMMY_KEY"
+        if self.headers:
+            kwargs["headers"] = self.headers
+        return kwargs
+
+
+class Completion(Chat):
+    def __str__(self):
+        return "OpenAI Completion: {}".format(self.model_id)
+
+    def execute(self, prompt, stream, response, conversation=None):
+        messages = []
+        if conversation is not None:
+            for prev_response in conversation.responses:
+                messages.append(prev_response.prompt.prompt)
+                messages.append(prev_response.text())
+        messages.append(prompt.prompt)
+        response._prompt_json = {"messages": messages}
+        kwargs = self.build_kwargs(prompt)
+        if stream:
+            completion = openai.Completion.create(
+                model=self.model_name or self.model_id,
+                prompt="\n".join(messages),
+                stream=True,
+                **kwargs,
+            )
+            chunks = []
+            for chunk in completion:
+                chunks.append(chunk)
+                content = chunk["choices"][0].get("text") or ""
+                if content is not None:
+                    yield content
+            response.response_json = combine_chunks(chunks)
+        else:
+            completion = openai.Completion.create(
+                model=self.model_name or self.model_id,
+                prompt="\n".join(messages),
+                stream=False,
+                **kwargs,
+            )
+            response.response_json = completion.to_dict_recursive()
+            yield completion.choices[0]["text"]
+
 
 def not_nulls(data) -> dict:
     return {key: value for key, value in data if value is not None}
@@ -303,6 +349,9 @@ def combine_chunks(chunks: List[dict]) -> dict:
 
     for item in chunks:
         for choice in item["choices"]:
+            if "text" in choice and "delta" not in choice:
+                content += choice["text"]
+                continue
             if "role" in choice["delta"]:
                 role = choice["delta"]["role"]
             if "content" in choice["delta"]:

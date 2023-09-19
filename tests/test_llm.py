@@ -168,7 +168,7 @@ def test_logs_search(user_path, query, expected):
     assert [record["id"] for record in records] == expected
 
 
-def test_llm_prompt_creates_log_database(mocked_openai, tmpdir, monkeypatch):
+def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch):
     user_path = tmpdir / "user"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
@@ -198,7 +198,7 @@ def test_llm_prompt_creates_log_database(mocked_openai, tmpdir, monkeypatch):
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai, use_stdin, user_path, logs_off, logs_args, should_log
+    mocked_openai_chat, use_stdin, user_path, logs_off, logs_args, should_log
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
@@ -232,7 +232,7 @@ def test_llm_default_prompt(
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    assert mocked_openai.last_request.headers["Authorization"] == "Bearer X"
+    assert mocked_openai_chat.last_request.headers["Authorization"] == "Bearer X"
 
     # Was it logged?
     rows = list(log_db["responses"].rows)
@@ -292,6 +292,40 @@ def test_llm_default_prompt(
             "conversation_model": "gpt-3.5-turbo",
         }.items()
     )
+
+
+def test_openai_completion(mocked_openai_completion, user_path):
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-3.5-turbo-instruct",
+            "Say this is a test",
+            "--no-stream",
+            "--key",
+            "x",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == "\n\nThis is indeed a test\n"
+    # Check it was logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+    expected = {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Say this is a test",
+        "system": None,
+        "prompt_json": '{"messages": ["Say this is a test"]}',
+        "options_json": "{}",
+        "response": "\n\nThis is indeed a test",
+    }
+    row = rows[0]
+    assert expected.items() <= row.items()
 
 
 EXTRA_MODELS_YAML = """

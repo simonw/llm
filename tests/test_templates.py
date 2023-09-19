@@ -157,7 +157,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
 )
 def test_template_basic(
     templates_path,
-    mocked_openai,
+    mocked_openai_chat,
     template,
     extra_args,
     expected_model,
@@ -173,7 +173,7 @@ def test_template_basic(
     )
     if expected_error is None:
         assert result.exit_code == 0
-        assert mocked_openai.last_request.json() == {
+        assert mocked_openai_chat.last_request.json() == {
             "model": expected_model,
             "messages": [{"role": "user", "content": expected_input}],
             "stream": False,

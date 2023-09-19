@@ -44,7 +44,7 @@ def test_keys_list(monkeypatch, tmpdir, args):
     assert result2.output.strip() == "openai"
 
 
-def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
+def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     user_dir = tmpdir / "user-dir"
     pathlib.Path(user_dir).mkdir()
     keys_path = user_dir / "keys.json"
@@ -57,7 +57,7 @@ def test_uses_correct_key(mocked_openai, monkeypatch, tmpdir):
     monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
     def assert_key(key):
-        assert mocked_openai.last_request.headers[
+        assert mocked_openai_chat.last_request.headers[
             "Authorization"
         ] == "Bearer {}".format(key)
 

@@ -138,13 +138,36 @@ def register_embed_demo_model(embed_demo, mock_model):
 
 
 @pytest.fixture
-def mocked_openai(requests_mock):
+def mocked_openai_chat(requests_mock):
     return requests_mock.post(
         "https://api.openai.com/v1/chat/completions",
         json={
             "model": "gpt-3.5-turbo",
             "usage": {},
             "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+
+@pytest.fixture
+def mocked_openai_completion(requests_mock):
+    return requests_mock.post(
+        "https://api.openai.com/v1/completions",
+        json={
+            "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
+            "object": "text_completion",
+            "created": 1589478378,
+            "model": "gpt-3.5-turbo-instruct",
+            "choices": [
+                {
+                    "text": "\n\nThis is indeed a test",
+                    "index": 0,
+                    "logprobs": None,
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
         },
         headers={"Content-Type": "application/json"},
     )
