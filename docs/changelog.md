@@ -1,5 +1,57 @@
 # Changelog
 
+(v0_11)=
+## 0.11 (2023-09-18)
+
+LLM now supports the new OpenAI `gpt-3.5-turbo-instruct` model, and OpenAI completion (as opposed to chat completion) models in general. [#284](https://github.com/simonw/llm/issues/284)
+
+```bash
+llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+```
+OpenAI completion models like this support a `-o logprobs 3` option, which accepts a number between 1 and 5 and will include the log probabilities (for each produced token, what were the top 3 options considered by the model) in the logged response.
+
+```bash
+llm -m gpt-3.5-turbo-instruct 'Say hello succinctly' -o logprobs 3
+```
+You can then view the `logprobs` that were recorded in the SQLite logs database like this:
+```bash
+sqlite-utils "$(llm logs path)" \
+  'select * from responses order by id desc limit 1' | \
+  jq '.[0].response_json' -r | jq
+```
+Truncated output looks like this:
+```
+  [
+    {
+      "text": "Hi",
+      "top_logprobs": [
+        {
+          "Hi": -0.13706253,
+          "Hello": -2.3714375,
+          "Hey": -3.3714373
+        }
+      ]
+    },
+    {
+      "text": " there",
+      "top_logprobs": [
+        {
+          " there": -0.96057636,
+          "!\"": -0.5855763,
+          ".\"": -3.2574513
+        }
+      ]
+    }
+  ]
+```
+Also in this release:
+
+- The `llm.user_dir()` function, used by plugins, now ensures the directory exists before returning it. [#275](https://github.com/simonw/llm/issues/275)
+- New `LLM_OPENAI_SHOW_RESPONSES=1` environment variable for displaying the full HTTP response returned by OpenAI compatible APIs. [#286](https://github.com/simonw/llm/issues/286)
+- The `llm embed-multi` command now has a `--batch-size X` option for setting the batch size to use when processing embeddings - useful if you have limited memory available. [#273](https://github.com/simonw/llm/issues/273)
+- The `collection.embed_multi()` method also now accepts an optional `batch_size=int` argument.
+- Fixed two bugs with `llm embed-multi --files` relating to handling of directories. Thanks, [ealvar3z](https://github.com/ealvar3z). [#274](https://github.com/simonw/llm/issues/274), [#280](https://github.com/simonw/llm/issues/280)
+
 (v0_10)=
 ## 0.10 (2023-09-12)
 
