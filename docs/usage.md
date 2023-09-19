@@ -46,6 +46,19 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
+(usage-completion-prompts)=
+## Completion prompts
+
+Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
+
+An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
+
+You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+
+```bash
+llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+```
+
 (conversation)=
 ## Continuing a conversation
 
