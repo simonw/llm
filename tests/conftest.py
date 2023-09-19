@@ -154,11 +154,10 @@ def mocked_openai_chat(requests_mock):
 @pytest.fixture
 def mocked_openai_chat_stream(requests_mock):
     def stream_events(*args):
-        print(args)
         for delta, finish_reason in (
             ({"role": "assistant", "content": ""}, None),
             ({"content": "Hi"}, None),
-            ({"content": "!"}, None),
+            ({"content": "."}, None),
             ({}, "stop"),
         ):
             yield "data: {}\n\n".format(
@@ -174,8 +173,9 @@ def mocked_openai_chat_stream(requests_mock):
                     }
                 )
             ).encode("utf-8")
+        yield "data: [DONE]\n\n".encode("utf-8")
 
-    requests_mock.post(
+    return requests_mock.post(
         "https://api.openai.com/v1/chat/completions",
         content=b"".join(stream_events()),
         headers={"Content-Type": "text/event-stream"},
@@ -200,6 +200,117 @@ def mocked_openai_completion(requests_mock):
                 }
             ],
             "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+
+@pytest.fixture
+def mocked_openai_completion_logprobs_stream(requests_mock):
+    choices_chunks = [
+        [
+            {
+                "text": "\n\n",
+                "index": 0,
+                "logprobs": {
+                    "tokens": ["\n\n"],
+                    "token_logprobs": [-0.6],
+                    "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}],
+                    "text_offset": [16],
+                },
+                "finish_reason": None,
+            }
+        ],
+        [
+            {
+                "text": "Hi",
+                "index": 0,
+                "logprobs": {
+                    "tokens": ["Hi"],
+                    "token_logprobs": [-1.1],
+                    "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}],
+                    "text_offset": [18],
+                },
+                "finish_reason": None,
+            }
+        ],
+        [
+            {
+                "text": ".",
+                "index": 0,
+                "logprobs": {
+                    "tokens": ["."],
+                    "token_logprobs": [-1.1],
+                    "top_logprobs": [{".": -1.1, "!": -0.9}],
+                    "text_offset": [20],
+                },
+                "finish_reason": None,
+            }
+        ],
+        [
+            {
+                "text": "",
+                "index": 0,
+                "logprobs": {
+                    "tokens": [],
+                    "token_logprobs": [],
+                    "top_logprobs": [],
+                    "text_offset": [],
+                },
+                "finish_reason": "stop",
+            }
+        ],
+    ]
+
+    def stream_events():
+        for choices in choices_chunks:
+            yield "data: {}\n\n".format(
+                json.dumps(
+                    {
+                        "id": "cmpl-80MdSaou7NnPuff5ZyRMysWBmgSPS",
+                        "object": "text_completion",
+                        "created": 1695097702,
+                        "choices": choices,
+                        "model": "gpt-3.5-turbo-instruct",
+                    }
+                )
+            ).encode("utf-8")
+        yield "data: [DONE]\n\n".encode("utf-8")
+
+    return requests_mock.post(
+        "https://api.openai.com/v1/completions",
+        content=b"".join(stream_events()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+
+@pytest.fixture
+def mocked_openai_completion_logprobs(requests_mock):
+    return requests_mock.post(
+        "https://api.openai.com/v1/completions",
+        json={
+            "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
+            "object": "text_completion",
+            "created": 1695097747,
+            "model": "gpt-3.5-turbo-instruct",
+            "choices": [
+                {
+                    "text": "\n\nHi.",
+                    "index": 0,
+                    "logprobs": {
+                        "tokens": ["\n\n", "Hi", "1"],
+                        "token_logprobs": [-0.6, -1.1, -0.9],
+                        "top_logprobs": [
+                            {"\n\n": -0.6, "\n": -1.9},
+                            {"Hi": -1.1, "Hello": -0.7},
+                            {".": -0.9, "!": -1.1},
+                        ],
+                        "text_offset": [16, 18, 20],
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
         },
         headers={"Content-Type": "application/json"},
     )

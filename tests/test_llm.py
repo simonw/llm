@@ -298,7 +298,7 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
     assert result.exit_code == 0
-    assert result.output == "Hi!\n"
+    assert result.output == "Hi.\n"
 
 
 def test_openai_completion(mocked_openai_completion, user_path):
@@ -342,6 +342,96 @@ def test_openai_completion(mocked_openai_completion, user_path):
     }
     row = rows[0]
     assert expected.items() <= row.items()
+
+
+def test_openai_completion_logprobs_stream(
+    mocked_openai_completion_logprobs_stream, user_path
+):
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    runner = CliRunner()
+    args = [
+        "-m",
+        "gpt-3.5-turbo-instruct",
+        "Say hi",
+        "-o",
+        "logprobs",
+        "2",
+        "--key",
+        "x",
+    ]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "\n\nHi.\n"
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+    row = rows[0]
+    assert json.loads(row["response_json"]) == {
+        "content": "\n\nHi.",
+        "role": None,
+        "finish_reason": None,
+        "logprobs": [
+            {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
+            {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
+            {"text": ".", "top_logprobs": [{".": -1.1, "!": -0.9}]},
+            {"text": "", "top_logprobs": []},
+        ],
+        "id": "cmpl-80MdSaou7NnPuff5ZyRMysWBmgSPS",
+        "object": "text_completion",
+        "model": "gpt-3.5-turbo-instruct",
+        "created": 1695097702,
+    }
+
+
+def test_openai_completion_logprobs_nostream(
+    mocked_openai_completion_logprobs, user_path
+):
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    runner = CliRunner()
+    args = [
+        "-m",
+        "gpt-3.5-turbo-instruct",
+        "Say hi",
+        "-o",
+        "logprobs",
+        "2",
+        "--key",
+        "x",
+        "--no-stream",
+    ]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "\n\nHi.\n"
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+    row = rows[0]
+    assert json.loads(row["response_json"]) == {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "index": 0,
+                "logprobs": {
+                    "text_offset": [16, 18, 20],
+                    "token_logprobs": [-0.6, -1.1, -0.9],
+                    "tokens": ["\n\n", "Hi", "1"],
+                    "top_logprobs": [
+                        {"\n": -1.9, "\n\n": -0.6},
+                        {"Hello": -0.7, "Hi": -1.1},
+                        {"!": -1.1, ".": -0.9},
+                    ],
+                },
+                "text": "\n\nHi.",
+            }
+        ],
+        "created": 1695097747,
+        "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
+        "model": "gpt-3.5-turbo-instruct",
+        "object": "text_completion",
+        "usage": {"completion_tokens": 3, "prompt_tokens": 5, "total_tokens": 8},
+    }
 
 
 EXTRA_MODELS_YAML = """

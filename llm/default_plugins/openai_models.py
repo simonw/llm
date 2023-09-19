@@ -315,6 +315,13 @@ class Chat(Model):
 
 
 class Completion(Chat):
+    class Options(Chat.Options):
+        logprobs: Optional[int] = Field(
+            description="Include the log probabilities of most likely N per token",
+            default=None,
+            le=5,
+        )
+
     def __init__(self, *args, default_max_tokens=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.default_max_tokens = default_max_tokens
@@ -365,8 +372,24 @@ def combine_chunks(chunks: List[dict]) -> dict:
     role = None
     finish_reason = None
 
+    # If any of them have log probability, we're going to persist
+    # those later on
+    logprobs = []
+
     for item in chunks:
         for choice in item["choices"]:
+            if (
+                "logprobs" in choice
+                and "text" in choice
+                and isinstance(choice["logprobs"], dict)
+                and "top_logprobs" in choice["logprobs"]
+            ):
+                logprobs.append(
+                    {
+                        "text": choice["text"],
+                        "top_logprobs": choice["logprobs"]["top_logprobs"],
+                    }
+                )
             if "text" in choice and "delta" not in choice:
                 content += choice["text"]
                 continue
@@ -383,6 +406,8 @@ def combine_chunks(chunks: List[dict]) -> dict:
         "role": role,
         "finish_reason": finish_reason,
     }
+    if logprobs:
+        combined["logprobs"] = logprobs
     for key in ("id", "object", "model", "created", "index"):
         if key in chunks[0]:
             combined[key] = chunks[0][key]
