@@ -47,6 +47,8 @@ Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want 
 ```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
 
+If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+
 With this configuration in place, the following command should run a prompt against the new model:
 
 ```bash
@@ -86,6 +88,8 @@ To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](http
 If the `api_base` is set, the existing configured `openai` API key will not be sent by default.
 
 You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
+
+Add `completion: true` if the model is a completion model that uses a `/completion` as opposed to a `/completion/chat` endpoint.
 
 Having configured the model like this, run `llm models` to check that it installed correctly. You can then run prompts against it like so:
 

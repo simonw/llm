@@ -51,7 +51,11 @@ def register_models(register):
         api_version = extra_model.get("api_version")
         api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
-        chat_model = Chat(
+        if extra_model.get("completion"):
+            klass = Completion
+        else:
+            klass = Chat
+        chat_model = klass(
             model_id,
             model_name=model_name,
             api_base=api_base,

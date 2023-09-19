@@ -438,6 +438,10 @@ EXTRA_MODELS_YAML = """
 - model_id: orca
   model_name: orca-mini-3b
   api_base: "http://localai.localhost"
+- model_id: completion-babbage
+  model_name: babbage
+  api_base: "http://localai.localhost"
+  completion: 1
 """
 
 
@@ -456,6 +460,15 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     assert json.loads(mocked_localai.last_request.text) == {
         "model": "orca-mini-3b",
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}],
+        "stream": False,
+    }
+    # And check the completion model too
+    result2 = runner.invoke(cli, ["--no-stream", "--model", "completion-babbage", "hi"])
+    assert result2.exit_code == 0
+    assert result2.output == "Hello\n"
+    assert json.loads(mocked_localai.last_request.text) == {
+        "model": "babbage",
+        "prompt": "hi",
         "stream": False,
     }
 

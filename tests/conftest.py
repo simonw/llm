@@ -318,7 +318,7 @@ def mocked_openai_completion_logprobs(requests_mock):
 
 @pytest.fixture
 def mocked_localai(requests_mock):
-    return requests_mock.post(
+    requests_mock.post(
         "http://localai.localhost/chat/completions",
         json={
             "model": "orca",
@@ -327,6 +327,16 @@ def mocked_localai(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+    requests_mock.post(
+        "http://localai.localhost/completions",
+        json={
+            "model": "completion-babbage",
+            "usage": {},
+            "choices": [{"text": "Hello"}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    return requests_mock
 
 
 @pytest.fixture
