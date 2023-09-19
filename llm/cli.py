@@ -1268,7 +1268,13 @@ def embed_multi(
 
         def iterate_files():
             for directory, pattern in files:
+                p = pathlib.Path(directory)
+                if not p.exists() or not p.is_dir():
+                    # fixes issue/274 - raise error if directory does not exist
+                    raise click.UsageError(f"Invalid directory: {directory}")
                 for path in pathlib.Path(directory).glob(pattern):
+                    if path.is_dir():
+                        continue  # fixed issue/280 - skip directories
                     relative = path.relative_to(directory)
                     content = None
                     if binary:
