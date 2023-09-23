@@ -204,31 +204,33 @@ class Chat(Model):
                     raise ValueError("Invalid key-value pair in logit_bias dictionary")
 
             return validated_logit_bias
-        
+
         function_call: Optional[str] = Field(
             description=("The name of a function to return JSON for."),
             default=None,
         )
 
         functions: Optional[list] = Field(
-            description=("Path to JSON file listing functions that the model can return parameters for."
-                         "The file should contain an array of {name,description,parameters} objects;"
-                         "each 'parameters' field is a JSON schema, as per the OpenAI API."),
+            description=(
+                "Path to JSON file listing functions that the model can return parameters for."
+                "The file should contain an array of {name,description,parameters} objects;"
+                "each 'parameters' field is a JSON schema, as per the OpenAI API."
+            ),
             default=None,
         )
 
-        @field_validator("functions", mode='before')
+        @field_validator("functions", mode="before")
         def validate_functions(cls, functions):
             if functions is None:
                 return None
-            
+
             if isinstance(functions, str):
                 try:
-                    with open(functions,"r") as f:
+                    with open(functions, "r") as f:
                         functions = json.load(f)
                 except json.JSONDecodeError:
                     raise ValueError("Invalid JSON in functions file")
-            
+
             return functions
 
     def __init__(
@@ -295,7 +297,7 @@ class Chat(Model):
             kwargs["headers"] = self.headers
         req_function_call = kwargs.get("function_call")
         if req_function_call is not None:
-            kwargs["function_call"] = { "name": req_function_call }
+            kwargs["function_call"] = {"name": req_function_call}
         if stream:
             completion = openai.ChatCompletion.create(
                 model=self.model_name or self.model_id,
@@ -310,18 +312,22 @@ class Chat(Model):
                 if content is not None:
                     yield content
                     continue
-                function_call = chunk["choices"][0].get("delta", {}).get("function_call")
+                function_call = (
+                    chunk["choices"][0].get("delta", {}).get("function_call")
+                )
                 finish_reason = chunk["choices"][0].get("finish_reason")
                 if function_call is not None:
                     function_name = function_call.get("name")
                     if function_name is not None:
-                        yield f"{{\"function_call\": {{\n\"name\": \"{function_name}\",\n\"arguments\": "
+                        yield f'{{"function_call": {{\n"name": "{function_name}",\n"arguments": '
                         continue
                     function_args = function_call.get("arguments")
                     if function_args is not None:
                         yield function_args
                         continue
-                if finish_reason == "function_call" or (finish_reason == "stop" and req_function_call is not None):
+                if finish_reason == "function_call" or (
+                    finish_reason == "stop" and req_function_call is not None
+                ):
                     yield "\n}}\n"
             response.response_json = combine_chunks(chunks)
         else:
@@ -339,10 +345,17 @@ class Chat(Model):
                 function_name = function_call.get("name", "")
                 function_args = function_call.get("arguments", "{}")
                 try:
-                    function_args = json.loads (function_args)
+                    function_args = json.loads(function_args)
                 except json.JSONDecodeError:
                     pass
-                yield json.dumps ({ "function_call": { "name": function_name, "arguments": function_args }})
+                yield json.dumps(
+                    {
+                        "function_call": {
+                            "name": function_name,
+                            "arguments": function_args,
+                        }
+                    }
+                )
             else:
                 yield ""
 
@@ -373,8 +386,10 @@ def combine_chunks(chunks: List[dict]) -> dict:
                 finish_reason = choice["finish_reason"]
 
     # Coerce the function call back to being content
-    if content=="" and function_name is not None:
-        content = json.dumps ({ "function_call": { "name": function_name, "arguments": function_args } })
+    if content == "" and function_name is not None:
+        content = json.dumps(
+            {"function_call": {"name": function_name, "arguments": function_args}}
+        )
 
     # Imitations of the OpenAI API may be missing some of these fields
     combined = {
