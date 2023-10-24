@@ -50,7 +50,7 @@ Or you can {ref}`install a plugin <installing-plugins>` and use models that can 
 llm install llm-gpt4all
 
 # Download and run a prompt against the Orca Mini 7B model
-llm -m orca-mini-7b 'What is the capital of France?'
+llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
 To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
 ```bash

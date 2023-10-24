@@ -25,7 +25,7 @@ llm models --options
 ```
 To run a prompt against a newly installed model, pass its name as the `-m/--model` option:
 ```bash
-llm -m orca-mini-7b 'What is the capital of France?'
+llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
 
 ## Listing installed plugins

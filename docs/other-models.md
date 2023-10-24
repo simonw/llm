@@ -16,7 +16,7 @@ Run `llm models` to see the expanded list of available models.
 
 To run a prompt through one of the models from GPT4All specify it using `-m/--model`:
 ```bash
-llm -m orca-mini-7b 'What is the capital of France?'
+llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
 The model will be downloaded and cached the first time you use it.
 
