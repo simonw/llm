@@ -76,7 +76,7 @@ llm mlc pip install --pre --force-reinstall \
   -f https://mlc.ai/wheels
 llm mlc setup
 ```
-Then download the 15GB Llama 2 13B model like this:
+Then download the 15GB Llama 2 7B model like this:
 ```bash
 llm mlc download-model Llama-2-7b-chat --alias llama2
 ```
