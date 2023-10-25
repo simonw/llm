@@ -78,7 +78,7 @@ llm mlc setup
 ```
 Then download the 15GB Llama 2 13B model like this:
 ```bash
-llm mlc download-model Llama-2-7b-chat --alias llama2
+llm mlc download-model Llama-2-13b-chat --alias llama2
 ```
 And run a prompt through it:
 ```bash
