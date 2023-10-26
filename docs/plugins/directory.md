@@ -31,6 +31,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 
 - **[llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers)** adds support for embeddings using the [sentence-transformers](https://www.sbert.net/) library, which provides access to [a wide range](https://www.sbert.net/docs/pretrained_models.html) of embedding models.
 - **[llm-clip](https://github.com/simonw/llm-clip)** provides the [CLIP](https://openai.com/research/clip) model, which can be used to embed images and text in the same vector space, enabling text search against images. See [Build an image search engine with llm-clip](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/) for more on this plugin.
+- **[llm-embed-jina](https://github.com/simonw/llm-embed-jina)** provides Jina AI's [8K text embedding models](https://jina.ai/news/jina-ai-launches-worlds-first-open-source-8k-text-embedding-rivaling-openai/).
 
 ## Extra commands
 
