@@ -558,6 +558,12 @@ def test_default_embedding_model():
     result5 = runner.invoke(cli, ["embed-models", "default"])
     assert result5.exit_code == 0
     assert result5.output == "<No default embedding model set>\n"
+    # Now set the default and actually use it
+    result6 = runner.invoke(cli, ["embed-models", "default", "embed-demo"])
+    assert result6.exit_code == 0
+    result7 = runner.invoke(cli, ["embed", "-c", "hello world"])
+    assert result7.exit_code == 0
+    assert result7.output == "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"
 
 
 @pytest.mark.parametrize("default_is_set", (False, True))

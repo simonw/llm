@@ -1109,6 +1109,8 @@ def embed(
             model_obj = collection_obj.model()
 
     if model_obj is None:
+        if model is None:
+            model = get_default_embedding_model()
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError:
