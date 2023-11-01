@@ -1,5 +1,12 @@
 # Changelog
 
+(v0_11_1)=
+## 0.11.1 (2023-10-31)
+
+- Fixed a bug where `llm embed -c "text"` did not correctly pick up the configured {ref}`default embedding model <embeddings-cli-embed-models-default>`. [#317](https://github.com/simonw/llm/issues/317)
+- New plugins: [llm-python](https://github.com/simonw/llm-python), [llm-bedrock-anthropic](https://github.com/sblakey/llm-bedrock-anthropic) and [llm-embed-jina](https://github.com/simonw/llm-embed-jina) (described in [Execute Jina embeddings with a CLI using llm-embed-jina](https://simonwillison.net/2023/Oct/26/llm-embed-jina/)).
+- [llm-gpt4all](https://github.com/simonw/llm-gpt4all) now uses the new GGUF model format. [simonw/llm-gpt4all#16](https://github.com/simonw/llm-gpt4all/issues/16)
+
 (v0_11)=
 ## 0.11 (2023-09-18)
 
