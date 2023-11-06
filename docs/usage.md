@@ -245,6 +245,8 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   logit_bias: dict, str
     Modify the likelihood of specified tokens appearing in the completion.
     Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+  seed: int
+    Integer seed to attempt to sample deterministically
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   temperature: float
   max_tokens: int
@@ -253,6 +255,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   presence_penalty: float
   stop: str
   logit_bias: dict, str
+  seed: int
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   temperature: float
   max_tokens: int
@@ -261,6 +264,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   presence_penalty: float
   stop: str
   logit_bias: dict, str
+  seed: int
 OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   temperature: float
   max_tokens: int
@@ -269,6 +273,7 @@ OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   presence_penalty: float
   stop: str
   logit_bias: dict, str
+  seed: int
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   temperature: float
   max_tokens: int
@@ -277,6 +282,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   presence_penalty: float
   stop: str
   logit_bias: dict, str
+  seed: int
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   temperature: float
     What sampling temperature to use, between 0 and 2. Higher values like
@@ -303,6 +309,8 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
   logit_bias: dict, str
     Modify the likelihood of specified tokens appearing in the completion.
     Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+  seed: int
+    Integer seed to attempt to sample deterministically
   logprobs: int
     Include the log probabilities of most likely N per token
 
