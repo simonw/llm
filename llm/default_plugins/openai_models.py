@@ -31,11 +31,13 @@ def register_models(register):
     register(Chat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt"))
     register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
+    register(Chat("gpt-4-turbo"), aliases=("4-turbo", "4t"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
         aliases=("3.5-instruct", "chatgpt-instruct"),
     )
+
     # Load extra models
     extra_path = llm.user_dir() / "extra-openai-models.yaml"
     if not extra_path.exists():
