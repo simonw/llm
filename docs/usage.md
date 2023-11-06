@@ -18,11 +18,11 @@ To disable streaming and only return the response once it has completed:
 ```bash
 llm 'Ten names for cheesecakes' --no-stream
 ```
-To switch from ChatGPT 3.5 (the default) to GPT-4 if you have access:
+To switch from ChatGPT 3.5 (the default) to GPT-4 Turbo:
 ```bash
-llm 'Ten names for cheesecakes' -m gpt4
+llm 'Ten names for cheesecakes' -m gpt-4-turbo
 ```
-You can use `-m 4` as an even shorter shortcut.
+You can use `-m 4t` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
@@ -254,6 +254,14 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   stop: str
   logit_bias: dict, str
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   temperature: float
   max_tokens: int
   top_p: float

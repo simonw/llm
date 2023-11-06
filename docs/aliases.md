@@ -25,6 +25,9 @@ chatgpt-16k      : gpt-3.5-turbo-16k
 3.5-16k          : gpt-3.5-turbo-16k
 4                : gpt-4
 gpt4             : gpt-4
+gpt-4-turbo      : gpt-4-1106-preview
+4-turbo          : gpt-4-1106-preview
+4t               : gpt-4-1106-preview
 4-32k            : gpt-4-32k
 3.5-instruct     : gpt-3.5-turbo-instruct
 chatgpt-instruct : gpt-3.5-turbo-instruct
