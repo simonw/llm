@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-VERSION = "0.11.1"
+VERSION = "0.11.2"
 
 
 def get_long_description():
@@ -37,7 +37,7 @@ setup(
     """,
     install_requires=[
         "click",
-        "openai~=1.0",
+        "openai<1.0",
         "click-default-group>=1.2.3",
         "sqlite-utils>=3.35.0",
         "sqlite-migrate>=0.1a2",

@@ -5,6 +5,11 @@
 
 - Support for new OpenAI model GPT-4 Turbo. Try it using `llm chat -m gpt-4-turbo` or `llm chat -m 4t`. [#323](https://github.com/simonw/llm/issues/323)
 
+(v0_11_2)=
+## 0.11.2 (2023-11-06)
+
+- Pin to version of OpenAI Python library prior to 1.0 to avoid breaking. [#327](https://github.com/simonw/llm/issues/327)
+
 (v0_11_1)=
 ## 0.11.1 (2023-10-31)
 
