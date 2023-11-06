@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_12)=
+## 0.12 (2023-11-06)
+
+- Support for the [new GPT-4 Turbo model](https://openai.com/blog/new-models-and-developer-products-announced-at-devday) from OpenAI. Try it using `llm chat -m gpt-4-turbo` or `llm chat -m 4t`. [#323](https://github.com/simonw/llm/issues/323)
+- New `-o seed 1` option for OpenAI models which sets a seed that can attempt to evaluate the prompt deterministically. [#324](https://github.com/simonw/llm/issues/324)
+
 (v0_11_2)=
 ## 0.11.2 (2023-11-06)
 
