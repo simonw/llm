@@ -202,7 +202,8 @@ class Chat(Model):
             default=None,
         )
         seed: Optional[int] = Field(
-            description="Integer seed to attempt to sample deterministically", default=None
+            description="Integer seed to attempt to sample deterministically",
+            default=None,
         )
 
         @field_validator("logit_bias")
