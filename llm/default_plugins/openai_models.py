@@ -16,14 +16,18 @@ from typing import List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
-if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+
+def openai_client(api_key):
+    if not os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+        return openai.OpenAI(api_key=api_key)
 
     def log_response(response, *args, **kwargs):
         click.echo(response.text, err=True)
         return response
 
-    openai.requestssession = requests.Session()
-    openai.requestssession.hooks["response"].append(log_response)
+    session = requests.Session()
+    session.hooks["response"].append(log_response)
+    return openai.OpenAI(api_key=api_key, requestssession=session)
 
 
 @hookimpl
@@ -32,6 +36,7 @@ def register_models(register):
     register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
+    register(Chat("gpt-4-1106-preview"), aliases=("gpt-4-turbo", "4-turbo", "4t"))
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
         aliases=("3.5-instruct", "chatgpt-instruct"),
@@ -270,8 +275,10 @@ class Chat(Model):
         messages.append({"role": "user", "content": prompt.prompt})
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
+        api_key = kwargs.pop("api_key", None)
+        client = openai_client(api_key)
         if stream:
-            completion = openai.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=True,
@@ -280,12 +287,12 @@ class Chat(Model):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
-                content = chunk["choices"][0].get("delta", {}).get("content")
+                content = chunk.choices[0].delta.content
                 if content is not None:
                     yield content
             response.response_json = combine_chunks(chunks)
         else:
-            completion = openai.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=False,
@@ -346,8 +353,10 @@ class Completion(Chat):
         messages.append(prompt.prompt)
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
+        api_key = kwargs.pop("api_key", None)
+        client = openai_client(api_key)
         if stream:
-            completion = openai.Completion.create(
+            completion = client.completions.create(
                 model=self.model_name or self.model_id,
                 prompt="\n".join(messages),
                 stream=True,
@@ -356,12 +365,12 @@ class Completion(Chat):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
-                content = chunk["choices"][0].get("text") or ""
+                content = chunk.choices[0].get("text") or ""
                 if content is not None:
                     yield content
             response.response_json = combine_chunks(chunks)
         else:
-            completion = openai.Completion.create(
+            completion = client.completions.create(
                 model=self.model_name or self.model_id,
                 prompt="\n".join(messages),
                 stream=False,
@@ -385,7 +394,7 @@ def combine_chunks(chunks: List[dict]) -> dict:
     logprobs = []
 
     for item in chunks:
-        for choice in item["choices"]:
+        for choice in item.choices:
             if (
                 "logprobs" in choice
                 and "text" in choice
@@ -401,12 +410,12 @@ def combine_chunks(chunks: List[dict]) -> dict:
             if "text" in choice and "delta" not in choice:
                 content += choice["text"]
                 continue
-            if "role" in choice["delta"]:
-                role = choice["delta"]["role"]
-            if "content" in choice["delta"]:
-                content += choice["delta"]["content"]
-            if choice.get("finish_reason") is not None:
-                finish_reason = choice["finish_reason"]
+            if "role" in choice.delta:
+                role = choice.delta.role
+            if "content" in choice.delta:
+                content += choice.delta.content
+            if choice.finish_reason is not None:
+                finish_reason = choice.finish_reason
 
     # Imitations of the OpenAI API may be missing some of these fields
     combined = {
