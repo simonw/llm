@@ -168,17 +168,17 @@ def test_logs_search(user_path, query, expected):
     assert [record["id"] for record in records] == expected
 
 
-def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch):
+def test_llm_prompt_creates_log_database(tmpdir, monkeypatch):
     user_path = tmpdir / "user"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["three names \nfor a pet pelican", "--no-stream", "--key", "x"],
+        ["three names \nfor a pet pelican", "--no-stream", "-m", "mock"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.output == "Bob, Alice, Eve\n"
+    assert result.output == "\n"
     # Should have created user_path and put a logs.db in it
     assert (user_path / "logs.db").exists()
     assert sqlite_utils.Database(str(user_path / "logs.db"))["responses"].count == 1
@@ -197,9 +197,7 @@ def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch
         (True, ["--log"], True),
     ),
 )
-def test_llm_default_prompt(
-    mocked_openai_chat, use_stdin, user_path, logs_off, logs_args, should_log
-):
+def test_llm_default_prompt(use_stdin, user_path, logs_off, logs_args, should_log):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
@@ -220,7 +218,7 @@ def test_llm_default_prompt(
     runner = CliRunner()
     prompt = "three names \nfor a pet pelican"
     input = None
-    args = ["--no-stream"]
+    args = ["--no-stream", "-m", "mock"]
     if use_stdin == "split":
         input = "three names"
         args.append("\nfor a pet pelican")
@@ -231,8 +229,7 @@ def test_llm_default_prompt(
     args += logs_args
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
-    assert result.output == "Bob, Alice, Eve\n"
-    assert mocked_openai_chat.last_request.headers["Authorization"] == "Bearer X"
+    assert result.output == "\n"
 
     # Was it logged?
     rows = list(log_db["responses"].rows)
@@ -247,7 +244,7 @@ def test_llm_default_prompt(
         "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
-        "response": "Bob, Alice, Eve",
+        "response": "\n",
     }
     row = rows[0]
     assert expected.items() <= row.items()

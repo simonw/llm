@@ -5,8 +5,6 @@ import pluggy
 import sys
 from . import hookspecs
 
-DEFAULT_PLUGINS = ("llm.default_plugins.openai_models",)
-
 pm = pluggy.PluginManager("llm")
 pm.add_hookspecs(hookspecs)
 
@@ -31,8 +29,3 @@ if LLM_LOAD_PLUGINS is not None:
                     pm._plugin_distinfo.append((mod, distribution))  # type: ignore
         except pkg_resources.DistributionNotFound:
             sys.stderr.write("Plugin {} could not be found\n".format(package_name))
-
-
-for plugin in DEFAULT_PLUGINS:
-    mod = importlib.import_module(plugin)
-    pm.register(mod, plugin)

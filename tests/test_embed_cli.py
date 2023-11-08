@@ -548,11 +548,11 @@ def test_default_embedding_model():
     result = runner.invoke(cli, ["embed-models", "default"])
     assert result.exit_code == 0
     assert result.output == "<No default embedding model set>\n"
-    result2 = runner.invoke(cli, ["embed-models", "default", "ada-002"])
+    result2 = runner.invoke(cli, ["embed-models", "default", "embed-demo"])
     assert result2.exit_code == 0
     result3 = runner.invoke(cli, ["embed-models", "default"])
     assert result3.exit_code == 0
-    assert result3.output == "ada-002\n"
+    assert result3.output == "embed-demo\n"
     result4 = runner.invoke(cli, ["embed-models", "default", "--remove-default"])
     assert result4.exit_code == 0
     result5 = runner.invoke(cli, ["embed-models", "default"])

@@ -78,13 +78,6 @@ The output should look like this:
       "register_models"
     ],
     "version": "0.1"
-  },
-  {
-    "name": "llm.default_plugins.openai_models",
-    "hooks": [
-      "register_commands",
-      "register_models"
-    ]
   }
 ]
 ```

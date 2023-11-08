@@ -436,7 +436,6 @@ Usage: llm plugins [OPTIONS]
   List installed plugins
 
 Options:
-  --all   Include built-in default plugins
   --help  Show this message and exit.
 ```
 

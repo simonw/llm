@@ -6,19 +6,19 @@ import pytest
 import re
 
 
-@pytest.mark.parametrize("model_id_or_alias", ("gpt-3.5-turbo", "chatgpt"))
+@pytest.mark.parametrize("model_id_or_alias", ("mock", "mock-alias"))
 def test_set_alias(model_id_or_alias):
     with pytest.raises(llm.UnknownModelError):
         llm.get_model("this-is-a-new-alias")
     llm.set_alias("this-is-a-new-alias", model_id_or_alias)
-    assert llm.get_model("this-is-a-new-alias").model_id == "gpt-3.5-turbo"
+    assert llm.get_model("this-is-a-new-alias").model_id == "mock"
 
 
 def test_remove_alias():
     with pytest.raises(KeyError):
         llm.remove_alias("some-other-alias")
-    llm.set_alias("some-other-alias", "gpt-3.5-turbo")
-    assert llm.get_model("some-other-alias").model_id == "gpt-3.5-turbo"
+    llm.set_alias("some-other-alias", "mock")
+    assert llm.get_model("some-other-alias").model_id == "mock"
     llm.remove_alias("some-other-alias")
     with pytest.raises(llm.UnknownModelError):
         llm.get_model("some-other-alias")
@@ -30,20 +30,7 @@ def test_cli_aliases_list(args):
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
-    for line in (
-        "3.5         : gpt-3.5-turbo\n"
-        "chatgpt     : gpt-3.5-turbo\n"
-        "chatgpt-16k : gpt-3.5-turbo-16k\n"
-        "3.5-16k     : gpt-3.5-turbo-16k\n"
-        "4           : gpt-4\n"
-        "gpt4        : gpt-4\n"
-        "4-32k       : gpt-4-32k\n"
-        "e-demo      : embed-demo (embedding)\n"
-        "ada         : ada-002 (embedding)\n"
-    ).split("\n"):
-        line = line.strip()
-        if not line:
-            continue
+    for line in ("mock-alias     : mock", "e-demo         : embed-demo (embedding)"):
         # Turn the whitespace into a regex
         regex = r"\s+".join(re.escape(part) for part in line.split())
         assert re.search(regex, result.output)
@@ -57,17 +44,7 @@ def test_cli_aliases_list_json(args):
     assert result.exit_code == 0
     assert (
         json.loads(result.output).items()
-        >= {
-            "3.5": "gpt-3.5-turbo",
-            "chatgpt": "gpt-3.5-turbo",
-            "chatgpt-16k": "gpt-3.5-turbo-16k",
-            "3.5-16k": "gpt-3.5-turbo-16k",
-            "4": "gpt-4",
-            "gpt4": "gpt-4",
-            "4-32k": "gpt-4-32k",
-            "ada": "ada-002",
-            "e-demo": "embed-demo",
-        }.items()
+        >= {"mock-alias": "mock", "e-demo": "embed-demo"}.items()
     )
 
 
@@ -107,9 +84,9 @@ def test_cli_aliases_remove_invalid(user_path):
 @pytest.mark.parametrize("args", (["models"], ["models", "list"]))
 def test_cli_aliases_are_registered(user_path, args):
     (user_path / "aliases.json").write_text(
-        json.dumps({"foo": "bar", "turbo": "gpt-3.5-turbo"}), "utf-8"
+        json.dumps({"foo": "bar", "turbo-mock": "mock"}), "utf-8"
     )
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
-    assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
+    assert "mock (aliases: mock-alias, turbo-mock)" in result.output

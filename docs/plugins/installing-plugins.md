@@ -54,13 +54,6 @@ llm plugins
     "version": "0.1"
   },
   {
-    "name": "llm.default_plugins.openai_models",
-    "hooks": [
-      "register_commands",
-      "register_models"
-    ]
-  },
-  {
     "name": "llm-gpt4all",
     "hooks": [
       "register_models"
