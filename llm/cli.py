@@ -40,6 +40,8 @@ import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 DEFAULT_MODEL = "gpt-3.5-turbo"
 DEFAULT_EMBEDDING_MODEL = "ada-002"
 
@@ -62,6 +64,7 @@ def _validate_metadata_json(ctx, param, value):
     cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings=CONTEXT_SETTINGS
 )
 @click.version_option()
 def cli():
