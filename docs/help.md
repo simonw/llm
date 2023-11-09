@@ -1,6 +1,6 @@
 # CLI reference
 
-This page lists the `--help` output for all of the `llm` commands.
+This page lists the `-h/--help` output for all of the `llm` commands.
 
 <!-- [[[cog
 from click.testing import CliRunner

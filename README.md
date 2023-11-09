@@ -107,10 +107,10 @@ cat mycode.py | llm -s "Explain this code"
 
 ## Help
 
-For help, run:
+For help use `-h/--help` option:
 
-    llm --help
+    llm -h
 
-You can also use:
+You can also invoke using `python`:
 
     python -m llm --help
