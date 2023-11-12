@@ -137,7 +137,7 @@ To execute the model, we start with a word. We look at the options for words tha
 
 Some words might not have any following words from our training sentence. For our implementation we wil fall back on picking a random word from our collection.
 
-We will implement this as a [Python generator], using the yield keyword to produce each token:
+We will implement this as a [Python generator](https://realpython.com/introduction-to-python-generators/), using the yield keyword to produce each token:
 ```python
 def generate(transitions, length, start_word=None):
     all_words = list(transitions.keys())
