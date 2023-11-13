@@ -47,6 +47,7 @@ setup(
         "python-ulid",
         "setuptools",
         "pip",
+        "rich",
     ],
     extras_require={
         "test": [
