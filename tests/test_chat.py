@@ -237,6 +237,7 @@ def test_chat_options(mock_model, logs_db):
         ),
     ),
 )
+
 def test_chat_multi(mock_model, logs_db, input, expected):
     """
     Test the chat functionality with multiple lines using a mock model.
@@ -255,9 +256,18 @@ def test_chat_multi(mock_model, logs_db, input, expected):
     mock_model.enqueue(["One\n"])
     mock_model.enqueue(["Two\n"])
     mock_model.enqueue(["Three\n"])
+    mock_model.enqueue(["Four\n"])
+    mock_model.enqueue(["Five\n"])
     result = runner.invoke(
         llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input
     )
     assert result.exit_code == 0
     rows = list(logs_db["responses"].rows_where(select="prompt, response"))
     assert rows == expected
+
+    # Check if the chat history is maintained correctly
+    assert mock_model.history[0][0].prompt == "One"
+    assert mock_model.history[1][0].prompt == "Two"
+    assert mock_model.history[2][0].prompt == "Three"
+    assert mock_model.history[3][0].prompt == "Four"
+    assert mock_model.history[4][0].prompt == "Five"
