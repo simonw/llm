@@ -5,6 +5,16 @@ import pytest
 
 
 def test_mock_model(mock_model):
+    """
+    Test the functionality of the mock model.
+
+    Parameters:
+    - mock_model: A mock model object for testing.
+
+    This test function simulates interactions with a mock language model.
+    It enqueues prompts, retrieves responses, and asserts the expected outcomes.
+
+    """
     mock_model.enqueue(["hello world"])
     mock_model.enqueue(["second"])
     model = llm.get_model("mock")
@@ -17,6 +27,17 @@ def test_mock_model(mock_model):
 
 
 def test_chat_basic(mock_model, logs_db):
+    """
+    Test the basic chat functionality with a mock model.
+
+    Parameters:
+    - mock_model: A mock model object for testing.
+    - logs_db: A database object for logging conversations and responses.
+
+    This test function simulates a chat interaction using the llm CLI.
+    It enqueues prompts, invokes the CLI with specific inputs, and checks the output and logs.
+
+    """
     runner = CliRunner()
     mock_model.enqueue(["one world"])
     mock_model.enqueue(["one again"])
@@ -149,6 +170,17 @@ def test_chat_system(mock_model, logs_db):
 
 
 def test_chat_options(mock_model, logs_db):
+    """
+    Test the chat functionality with a system message using a mock model.
+
+    Parameters:
+    - mock_model: A mock model object for testing.
+    - logs_db: A database object for logging conversations and responses.
+
+    This test function simulates a chat interaction with a system message using the llm CLI.
+    It enqueues prompts, invokes the CLI with specific inputs, and checks the output and logs.
+
+    """
     runner = CliRunner()
     mock_model.enqueue(["Some text"])
     result = runner.invoke(
@@ -206,6 +238,19 @@ def test_chat_options(mock_model, logs_db):
     ),
 )
 def test_chat_multi(mock_model, logs_db, input, expected):
+    """
+    Test the chat functionality with multiple lines using a mock model.
+
+    Parameters:
+    - mock_model: A mock model object for testing.
+    - logs_db: A database object for logging conversations and responses.
+    - input: Input string for the CLI.
+    - expected: Expected prompt-response pairs for validation.
+
+    This test function simulates a chat interaction with multiple lines using the llm CLI.
+    It enqueues prompts, invokes the CLI with specific inputs, and checks the output and logs.
+
+    """
     runner = CliRunner()
     mock_model.enqueue(["One\n"])
     mock_model.enqueue(["Two\n"])
