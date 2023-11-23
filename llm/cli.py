@@ -28,6 +28,7 @@ from .plugins import pm
 import base64
 import pathlib
 import pydantic
+import readline
 from runpy import run_module
 import shutil
 import sqlite_utils
@@ -340,6 +341,7 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
+    readline.parse_and_bind("")
     log_path = logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
