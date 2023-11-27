@@ -118,7 +118,8 @@ def cli():
     "conversation_id",
     "--cid",
     "--conversation",
-    help="Continue the conversation with the given ID.",
+    help="Continue the conversation with the given ID. "
+         "If no conversation with that ID exists, a new one will be created.",
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
@@ -240,6 +241,11 @@ def prompt(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
+    # if a conversation ID was passed that doesn't correspond to an existing
+    # conversation, create a new one
+    if conversation_id and conversation is None:
+        conversation = Conversation(model=model, id=conversation_id)
+
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
@@ -307,7 +313,8 @@ def prompt(
     "conversation_id",
     "--cid",
     "--conversation",
-    help="Continue the conversation with the given ID.",
+    help="Continue the conversation with the given ID. "
+         "If no conversation with that ID exists, a new one will be created.",
 )
 @click.option("-t", "--template", help="Template to use")
 @click.option(
@@ -377,6 +384,11 @@ def chat(
         model = get_model(model_id)
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
+
+    # if a conversation ID was passed that doesn't correspond to an existing
+    # conversation, create a new one
+    if conversation_id and conversation is None:
+        conversation = Conversation(model=model, id=conversation_id)
 
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
@@ -457,9 +469,9 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
-        raise click.ClickException(
-            "No conversation found with id={}".format(conversation_id)
-        )
+        # do nothing. We'll create a new conversation from the given ID
+        return None
+
     # Inflate that conversation
     conversation = Conversation.from_row(row)
     for response in db["responses"].rows_where(

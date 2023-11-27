@@ -540,3 +540,30 @@ def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir2 = llm.user_dir()
     assert user_dir == str(user_dir2)
     assert os.path.exists(user_dir)
+
+def test_cid_creates_new_conversation(
+    mocked_openai_chat, user_path
+):
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["conversations"].delete_where()
+
+    runner = CliRunner()
+    args = [
+        "-m",
+        "gpt-3.5-turbo",
+        "three names \nfor a pet pelican",
+        "--key",
+        "x",
+        "--no-stream",
+        "--cid",
+        "asdf-123"
+    ]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+    rows = list(log_db["conversations"].rows)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["id"] == "asdf-123"
+    assert row["name"].startswith("three names ")
