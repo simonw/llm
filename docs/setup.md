@@ -10,6 +10,10 @@ Or using [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
+Or if you use [Homebrew](https://brew.sh/) for macOS:
+```bash
+brew install llm
+```
 
 ## Upgrading to the latest version
 
