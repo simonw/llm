@@ -410,7 +410,8 @@ def combine_chunks(chunks: List[dict]) -> dict:
             if "role" in choice["delta"]:
                 role = choice["delta"]["role"]
             if "content" in choice["delta"]:
-                content += choice["delta"]["content"]
+                chunk = choice["delta"]["content"]
+                if chunk: content += chunk
             if choice.get("finish_reason") is not None:
                 finish_reason = choice["finish_reason"]
 
