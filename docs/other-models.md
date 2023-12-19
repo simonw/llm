@@ -85,6 +85,9 @@ To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](http
   model_name: orca-mini-3b.ggmlv3
   api_base: "http://localhost:8080"
 ```
+
+The location of this file is [system dependent](https://llm.datasette.io/en/stable/setup.html#setting-a-custom-directory-location).
+
 If the `api_base` is set, the existing configured `openai` API key will not be sent by default.
 
 You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
