@@ -135,6 +135,12 @@ llm chat -m chatgpt
 ```
 Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logs-conversation>`.
 
+You can pass `-c` to start a conversation as a continuation of your most recent prompt. This will automatically use the most recently used model:
+
+```bash
+llm chat -c
+```
+
 For models that support them, you can pass options using `-o/--option`:
 ```bash
 llm chat -m gpt-4 -o temperature 0.5
