@@ -83,6 +83,10 @@ def register_embedding_models(register):
     )
     register(OpenAIEmbeddingModel("3-small", "text-embedding-3-small"))
     register(OpenAIEmbeddingModel("3-large", "text-embedding-3-large"))
+    # With varying dimensions
+    register(OpenAIEmbeddingModel("3-small-512", "text-embedding-3-small", 512))
+    register(OpenAIEmbeddingModel("3-large-256", "text-embedding-3-large", 256))
+    register(OpenAIEmbeddingModel("3-large-1024", "text-embedding-3-large", 1024))
 
 
 class OpenAIEmbeddingModel(EmbeddingModel):
@@ -90,14 +94,20 @@ class OpenAIEmbeddingModel(EmbeddingModel):
     key_env_var = "OPENAI_API_KEY"
     batch_size = 100
 
-    def __init__(self, model_id, openai_model_id):
+    def __init__(self, model_id, openai_model_id, dimensions=None):
         self.model_id = model_id
         self.openai_model_id = openai_model_id
+        self.dimensions = dimensions
 
     def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
-        results = openai.Embedding.create(
-            input=items, model=self.openai_model_id, api_key=self.get_key()
-        )["data"]
+        kwargs = {
+            "input": items,
+            "model": self.openai_model_id,
+            "api_key": self.get_key(),
+        }
+        if self.dimensions:
+            kwargs["dimensions"] = self.dimensions
+        results = openai.Embedding.create(**kwargs)["data"]
         return ([float(r) for r in result["embedding"]] for result in results)
 
 
