@@ -13,9 +13,9 @@ The `llm embed` command can be used to calculate embedding vectors for a string 
 The simplest way to use this command is to pass content to it using the `-c/--content` option, like this:
 
 ```bash
-llm embed -c 'This is some content' -m ada-002
+llm embed -c 'This is some content' -m 3-small
 ```
-`-m ada-002` specifies the OpenAI `ada-002` model. You will need to have set an OpenAI API key using `llm keys set openai` for this to work.
+`-m 3-small` specifies the OpenAI `text-embedding-3-small` model. You will need to have set an OpenAI API key using `llm keys set openai` for this to work.
 
 You can install plugins to access other models. The [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) plugin can be used to run models on your own laptop, such as the [MiniLM-L6](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) model:
 
@@ -36,7 +36,7 @@ LLM also offers a binary storage format for embeddings, described in {ref}`embed
 You can output embeddings using that format as raw bytes using `--format blob`, or in hexadecimal using `--format hex`, or in Base64 using `--format base64`:
 
 ```bash
-llm embed -c 'This is some content' -m ada-002 --format base64
+llm embed -c 'This is some content' -m 3-small --format base64
 ```
 This outputs:
 ```
@@ -63,7 +63,7 @@ Embeddings also store a hash of the content that was embedded. This hash is late
 
 First, we'll set a default model so we don't have to keep repeating it:
 ```bash
-llm embed-models default ada-002
+llm embed-models default 3-small
 ```
 
 The `llm embed` command can store results directly in a named collection like this:
@@ -86,10 +86,10 @@ Collections have a fixed embedding model, which is the model that was used for t
 
 In the above example this would have been the default embedding model at the time that the command was run.
 
-The following example stores the embedding for the string "my happy hound" in a collection called `phrases` under the key `hound` and using the model `ada-002`:
+The following example stores the embedding for the string "my happy hound" in a collection called `phrases` under the key `hound` and using the model `3-small`:
 
 ```bash
-llm embed phrases hound -m ada-002 -c 'my happy hound'
+llm embed phrases hound -m 3-small -c 'my happy hound'
 ```
 By default, the SQLite database used to store embeddings is the `embeddings.db` in the user content directory managed by LLM.
 
@@ -116,7 +116,7 @@ You can also store a JSON object containing arbitrary metadata in the `metadata`
 
 ```bash
 llm embed phrases hound \
-  -m ada-002 \
+  -m 3-small \
   -c 'my happy hound' \
   --metadata '{"name": "Hound"}' \
   --store
@@ -197,12 +197,12 @@ cat mydata.json | llm embed-multi items - --format nl
 ```
 Other supported `--format` options are `csv`, `tsv` and `json`.
 
-This example embeds the data from a JSON file in a collection called `items` in database called `docs.db` using the `ada-002` model and stores the original content in the `embeddings` table as well, adding a prefix of `my-items/` to each ID:
+This example embeds the data from a JSON file in a collection called `items` in database called `docs.db` using the `3-small` model and stores the original content in the `embeddings` table as well, adding a prefix of `my-items/` to each ID:
 
 ```bash
 llm embed-multi items mydata.json \
   -d docs.db \
-  -m ada-002 \
+  -m 3-small \
   --prefix my-items/ \
   --store
 ```
@@ -218,7 +218,7 @@ If you are storing embeddings in the same database as the source data, you can d
 llm embed-multi docs \
   -d docs.db \
   --sql 'select id, title, content from documents' \
-  -m ada-002
+  -m 3-small
 ```
 The `docs.db` database here contains a `documents` table, and we want to embed the `title` and `content` columns from that table and store the results back in the same database.
 
@@ -229,7 +229,7 @@ llm embed-multi docs \
   -d embeddings.db \
   --attach other other.db \
   --sql 'select id, title, content from other.documents' \
-  -m ada-002
+  -m 3-small
 ```
 
 (embeddings-cli-embed-multi-directories)=
@@ -253,7 +253,7 @@ To embed all of those documents, you can run the following:
 
 ```bash
 llm embed-multi documentation \
-  -m ada-002 \
+  -m 3-small \
   --files docs '**/*.md' \
   -d documentation.db \
   --store
@@ -279,7 +279,7 @@ The `--prefix` option can be used to add a prefix to each ID:
 
 ```bash
 llm embed-multi documentation \
-  -m ada-002 \
+  -m 3-small \
   --files docs '**/*.md' \
   -d documentation.db \
   --store \
@@ -303,7 +303,7 @@ Files are assumed to be `utf-8`, but LLM will fall back to `latin-1` if it encou
 This example will try `utf-16` first and then `mac_roman` before falling back to `latin-1`:
 ```
 llm embed-multi documentation \
-  -m ada-002 \
+  -m 3-small \
   --files docs '**/*.md' \
   -d documentation.db \
   --encoding utf-16 \
@@ -358,7 +358,7 @@ llm embed-models
 ```
 The output should look something like this:
 ```
-ada-002 (aliases: ada)
+3-small (aliases: ada)
 sentence-transformers/all-MiniLM-L6-v2 (aliases: all-MiniLM-L6-v2)
 ```
 
@@ -373,9 +373,9 @@ llm embed-models default
 ```
 You can set a different default like this:
 ```bash
-llm embed-models default ada-002
+llm embed-models default 3-small
 ```
-This will set the default model to OpenAI's `ada-002` model.
+This will set the default model to OpenAI's `3-small` model.
 
 Any of the supported aliases for a model can be passed to this command.
 

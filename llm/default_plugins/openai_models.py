@@ -78,18 +78,25 @@ def register_models(register):
 
 @hookimpl
 def register_embedding_models(register):
-    register(Ada002(), aliases=("ada",))
+    register(
+        OpenAIEmbeddingModel("ada-002", "text-embedding-ada-002"), aliases=("ada",)
+    )
+    register(OpenAIEmbeddingModel("3-small", "text-embedding-3-small"))
+    register(OpenAIEmbeddingModel("3-large", "text-embedding-3-large"))
 
 
-class Ada002(EmbeddingModel):
-    model_id = "ada-002"
+class OpenAIEmbeddingModel(EmbeddingModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
-    batch_size = 100  # Maybe this should be 2048
+    batch_size = 100
+
+    def __init__(self, model_id, openai_model_id):
+        self.model_id = model_id
+        self.openai_model_id = openai_model_id
 
     def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
         results = openai.Embedding.create(
-            input=items, model="text-embedding-ada-002", api_key=self.get_key()
+            input=items, model=self.openai_model_id, api_key=self.get_key()
         )["data"]
         return ([float(r) for r in result["embedding"]] for result in results)
 
