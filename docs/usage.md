@@ -253,6 +253,8 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
   seed: int
     Integer seed to attempt to sample deterministically
+  json_object: boolean
+    Output a valid JSON object {...}. Prompt must mention JSON.
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   temperature: float
   max_tokens: int
@@ -262,6 +264,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   stop: str
   logit_bias: dict, str
   seed: int
+  json_object: boolean
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   temperature: float
   max_tokens: int
@@ -271,6 +274,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   stop: str
   logit_bias: dict, str
   seed: int
+  json_object: boolean
 OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   temperature: float
   max_tokens: int
@@ -280,6 +284,7 @@ OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   stop: str
   logit_bias: dict, str
   seed: int
+  json_object: boolean
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   temperature: float
   max_tokens: int
@@ -289,6 +294,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   stop: str
   logit_bias: dict, str
   seed: int
+  json_object: boolean
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   temperature: float
     What sampling temperature to use, between 0 and 2. Higher values like

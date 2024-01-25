@@ -137,6 +137,94 @@ def register_commands(cli):
             print("\n".join(done))
 
 
+class SharedOptions(llm.Options):
+    temperature: Optional[float] = Field(
+        description=(
+            "What sampling temperature to use, between 0 and 2. Higher values like "
+            "0.8 will make the output more random, while lower values like 0.2 will "
+            "make it more focused and deterministic."
+        ),
+        ge=0,
+        le=2,
+        default=None,
+    )
+    max_tokens: Optional[int] = Field(
+        description="Maximum number of tokens to generate.", default=None
+    )
+    top_p: Optional[float] = Field(
+        description=(
+            "An alternative to sampling with temperature, called nucleus sampling, "
+            "where the model considers the results of the tokens with top_p "
+            "probability mass. So 0.1 means only the tokens comprising the top "
+            "10% probability mass are considered. Recommended to use top_p or "
+            "temperature but not both."
+        ),
+        ge=0,
+        le=1,
+        default=None,
+    )
+    frequency_penalty: Optional[float] = Field(
+        description=(
+            "Number between -2.0 and 2.0. Positive values penalize new tokens based "
+            "on their existing frequency in the text so far, decreasing the model's "
+            "likelihood to repeat the same line verbatim."
+        ),
+        ge=-2,
+        le=2,
+        default=None,
+    )
+    presence_penalty: Optional[float] = Field(
+        description=(
+            "Number between -2.0 and 2.0. Positive values penalize new tokens based "
+            "on whether they appear in the text so far, increasing the model's "
+            "likelihood to talk about new topics."
+        ),
+        ge=-2,
+        le=2,
+        default=None,
+    )
+    stop: Optional[str] = Field(
+        description=("A string where the API will stop generating further tokens."),
+        default=None,
+    )
+    logit_bias: Optional[Union[dict, str]] = Field(
+        description=(
+            "Modify the likelihood of specified tokens appearing in the completion. "
+            'Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
+        ),
+        default=None,
+    )
+    seed: Optional[int] = Field(
+        description="Integer seed to attempt to sample deterministically",
+        default=None,
+    )
+
+    @field_validator("logit_bias")
+    def validate_logit_bias(cls, logit_bias):
+        if logit_bias is None:
+            return None
+
+        if isinstance(logit_bias, str):
+            try:
+                logit_bias = json.loads(logit_bias)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON in logit_bias string")
+
+        validated_logit_bias = {}
+        for key, value in logit_bias.items():
+            try:
+                int_key = int(key)
+                int_value = int(value)
+                if -100 <= int_value <= 100:
+                    validated_logit_bias[int_key] = int_value
+                else:
+                    raise ValueError("Value must be between -100 and 100")
+            except ValueError:
+                raise ValueError("Invalid key-value pair in logit_bias dictionary")
+
+        return validated_logit_bias
+
+
 class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
@@ -144,92 +232,11 @@ class Chat(Model):
 
     default_max_tokens = None
 
-    class Options(llm.Options):
-        temperature: Optional[float] = Field(
-            description=(
-                "What sampling temperature to use, between 0 and 2. Higher values like "
-                "0.8 will make the output more random, while lower values like 0.2 will "
-                "make it more focused and deterministic."
-            ),
-            ge=0,
-            le=2,
-            default=None,
+    class Options(SharedOptions):
+        json_object: bool = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=False,
         )
-        max_tokens: Optional[int] = Field(
-            description="Maximum number of tokens to generate.", default=None
-        )
-        top_p: Optional[float] = Field(
-            description=(
-                "An alternative to sampling with temperature, called nucleus sampling, "
-                "where the model considers the results of the tokens with top_p "
-                "probability mass. So 0.1 means only the tokens comprising the top "
-                "10% probability mass are considered. Recommended to use top_p or "
-                "temperature but not both."
-            ),
-            ge=0,
-            le=1,
-            default=None,
-        )
-        frequency_penalty: Optional[float] = Field(
-            description=(
-                "Number between -2.0 and 2.0. Positive values penalize new tokens based "
-                "on their existing frequency in the text so far, decreasing the model's "
-                "likelihood to repeat the same line verbatim."
-            ),
-            ge=-2,
-            le=2,
-            default=None,
-        )
-        presence_penalty: Optional[float] = Field(
-            description=(
-                "Number between -2.0 and 2.0. Positive values penalize new tokens based "
-                "on whether they appear in the text so far, increasing the model's "
-                "likelihood to talk about new topics."
-            ),
-            ge=-2,
-            le=2,
-            default=None,
-        )
-        stop: Optional[str] = Field(
-            description=("A string where the API will stop generating further tokens."),
-            default=None,
-        )
-        logit_bias: Optional[Union[dict, str]] = Field(
-            description=(
-                "Modify the likelihood of specified tokens appearing in the completion. "
-                'Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
-            ),
-            default=None,
-        )
-        seed: Optional[int] = Field(
-            description="Integer seed to attempt to sample deterministically",
-            default=None,
-        )
-
-        @field_validator("logit_bias")
-        def validate_logit_bias(cls, logit_bias):
-            if logit_bias is None:
-                return None
-
-            if isinstance(logit_bias, str):
-                try:
-                    logit_bias = json.loads(logit_bias)
-                except json.JSONDecodeError:
-                    raise ValueError("Invalid JSON in logit_bias string")
-
-            validated_logit_bias = {}
-            for key, value in logit_bias.items():
-                try:
-                    int_key = int(key)
-                    int_value = int(value)
-                    if -100 <= int_value <= 100:
-                        validated_logit_bias[int_key] = int_value
-                    else:
-                        raise ValueError("Value must be between -100 and 100")
-                except ValueError:
-                    raise ValueError("Invalid key-value pair in logit_bias dictionary")
-
-            return validated_logit_bias
 
     def __init__(
         self,
@@ -302,6 +309,7 @@ class Chat(Model):
 
     def build_kwargs(self, prompt):
         kwargs = dict(not_nulls(prompt.options))
+        json_object = kwargs.pop("json_object", None)
         if "max_tokens" not in kwargs and self.default_max_tokens is not None:
             kwargs["max_tokens"] = self.default_max_tokens
         if self.api_base:
@@ -315,6 +323,8 @@ class Chat(Model):
         if self.needs_key:
             if self.key:
                 kwargs["api_key"] = self.key
+        if json_object:
+            kwargs["response_format"] = {"type": "json_object"}
         else:
             # OpenAI-compatible models don't need a key, but the
             # openai client library requires one
@@ -325,7 +335,7 @@ class Chat(Model):
 
 
 class Completion(Chat):
-    class Options(Chat.Options):
+    class Options(SharedOptions):
         logprobs: Optional[int] = Field(
             description="Include the log probabilities of most likely N per token",
             default=None,
