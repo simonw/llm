@@ -275,7 +275,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
+OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   temperature: float
   max_tokens: int
   top_p: float
@@ -285,7 +285,27 @@ OpenAI Chat: gpt-4-1106-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
+OpenAI Chat: gpt-4-1106-preview
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
+OpenAI Chat: gpt-4-0125-preview
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
+OpenAI Chat: gpt-4-turbo-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
   temperature: float
   max_tokens: int
   top_p: float
