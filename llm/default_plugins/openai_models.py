@@ -233,9 +233,9 @@ class Chat(Model):
     default_max_tokens = None
 
     class Options(SharedOptions):
-        json_object: bool = Field(
+        json_object: Optional[bool] = Field(
             description="Output a valid JSON object {...}. Prompt must mention JSON.",
-            default=False,
+            default=None,
         )
 
     def __init__(
@@ -320,11 +320,11 @@ class Chat(Model):
             kwargs["api_version"] = self.api_version
         if self.api_engine:
             kwargs["engine"] = self.api_engine
+        if json_object:
+            kwargs["response_format"] = {"type": "json_object"}
         if self.needs_key:
             if self.key:
                 kwargs["api_key"] = self.key
-        if json_object:
-            kwargs["response_format"] = {"type": "json_object"}
         else:
             # OpenAI-compatible models don't need a key, but the
             # openai client library requires one
