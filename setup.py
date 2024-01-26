@@ -55,7 +55,7 @@ setup(
             "pytest-httpx",
             "cogapp",
             "mypy",
-            "black",
+            "black>=24.1.0",
             "ruff",
             "types-click",
             "types-PyYAML",

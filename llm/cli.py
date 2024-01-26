@@ -746,12 +746,16 @@ def logs_list(
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
-                    "    conversation: {}".format(row["conversation_id"])
-                    if should_show_conversation
-                    else "",
-                    "\nModel: **{}**\n".format(row["model"])
-                    if should_show_conversation
-                    else "",
+                    (
+                        "    conversation: {}".format(row["conversation_id"])
+                        if should_show_conversation
+                        else ""
+                    ),
+                    (
+                        "\nModel: **{}**\n".format(row["model"])
+                        if should_show_conversation
+                        else ""
+                    ),
                 )
             )
             # In conversation log mode only show it for the first one

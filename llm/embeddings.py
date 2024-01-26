@@ -220,12 +220,12 @@ class Collection:
                             "collection_id": collection_id,
                             "id": id,
                             "embedding": llm.encode(embedding),
-                            "content": value
-                            if (store and isinstance(value, str))
-                            else None,
-                            "content_blob": value
-                            if (store and isinstance(value, bytes))
-                            else None,
+                            "content": (
+                                value if (store and isinstance(value, str)) else None
+                            ),
+                            "content_blob": (
+                                value if (store and isinstance(value, bytes)) else None
+                            ),
                             "content_hash": self.content_hash(value),
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
