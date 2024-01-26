@@ -3,6 +3,8 @@
 (v0_13)=
 ## 0.13 (2024-01-26)
 
+See also [LLM 0.13: The annotated release notes](https://simonwillison.net/2024/Jan/26/llm/).
+
 - Added support for new OpenAI embedding models: `3-small` and `3-large` and three variants of those with different dimension sizes, 
 `3-small-512`, `3-large-256` and `3-large-1024`. See {ref}`OpenAI embedding models <openai-models-embedding>` for details. [#394](https://github.com/simonw/llm/issues/394)
 - The default `gpt-4-turbo` model alias now points to `gpt-4-turbo-preview`, which uses the most recent OpenAI GPT-4 turbo model (currently `gpt-4-0125-preview`). [#396](https://github.com/simonw/llm/issues/396)
