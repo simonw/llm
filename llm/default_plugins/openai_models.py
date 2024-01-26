@@ -1,10 +1,11 @@
 from llm import EmbeddingModel, Model, hookimpl
 import llm
-from llm.utils import dicts_to_table_string, remove_dict_none_values
+from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
 import click
 import datetime
 import httpx
 import openai
+import os
 
 try:
     # Pydantic 2
@@ -342,6 +343,8 @@ class Chat(Model):
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["headers"] = self.headers
+        if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+            kwargs["http_client"] = logging_client()
         return openai.OpenAI(**kwargs)
 
     def build_kwargs(self, prompt):
