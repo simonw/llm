@@ -43,5 +43,5 @@ jobs:
         ruff .
     - name: Run test-llm-load-plugins.sh
       run: |
-        llm install llm-cluster llm-sentence-transformers
+        llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh

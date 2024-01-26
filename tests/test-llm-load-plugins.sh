@@ -1,18 +1,18 @@
 #!/bin/bash
-# This should only run in environemnts where both
-# llm-cluster and llm-sentence-transformers are installed
+# This should only run in environments where both
+# llm-cluster and llm-mistral are installed
 
 PLUGINS=$(llm plugins)
-echo "$PLUGINS" | jq 'any(.[]; .name == "llm-sentence-transformers")' | \
+echo "$PLUGINS" | jq 'any(.[]; .name == "llm-mistral")' | \
   grep -q true || ( \
-    echo "Test failed: llm-sentence-transformers not found" && \
+    echo "Test failed: llm-mistral not found" && \
     exit 1 \
   )
 # With the LLM_LOAD_PLUGINS we should not see that
 PLUGINS2=$(LLM_LOAD_PLUGINS=llm-cluster llm plugins)
-echo "$PLUGINS2" | jq 'any(.[]; .name == "llm-sentence-transformers")' | \
+echo "$PLUGINS2" | jq 'any(.[]; .name == "llm-mistral")' | \
   grep -q false || ( \
-    echo "Test failed: llm-sentence-transformers should not have been loaded" && \
+    echo "Test failed: llm-mistral should not have been loaded" && \
     exit 1 \
   )
 echo "$PLUGINS2" | jq 'any(.[]; .name == "llm-cluster")' | \
