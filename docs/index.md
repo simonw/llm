@@ -25,14 +25,18 @@ For more check out [the llm tag](https://simonwillison.net/tags/llm/) on my blog
 
 ## Quick start
 
-First, install LLM using `pip` or Homebrew:
+First, install LLM using `pip` or Homebrew or `pipx`:
 
 ```bash
 pip install llm
 ```
-Or with Homebrew:
+Or with Homebrew (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
+```
+Or with [pipx](https://pypa.github.io/pipx/):
+```bash
+pipx install llm
 ```
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 ```bash

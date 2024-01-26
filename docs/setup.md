@@ -10,7 +10,7 @@ Or using [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
-Or using [Homebrew](https://brew.sh/):
+Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
 ```
@@ -33,6 +33,24 @@ If the latest version is not yet available on Homebrew you can upgrade like this
 ```bash
 llm install -U llm
 ```
+
+(homebrew-warning)=
+## A note about Homebrew and PyTorch
+
+The version of LLM packaged for Homebrew currently uses Python 3.12. The PyTorch project do not yet have a stable release of PyTorch for that version of Python.
+
+This means that LLM plugins that depend on PyTorch such as [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) may not install cleanly with the Homebrew version of LLM.
+
+You can workaround this by manually installing PyTorch before installing `llm-sentence-transformers`:
+
+```bash
+llm install llm-python
+llm python -m pip install \
+  --pre torch torchvision \
+  --index-url https://download.pytorch.org/whl/nightly/cpu
+llm install llm-sentence-transformers
+```
+This should produce a working installation of that plugin.
 
 ## Installing plugins
 
