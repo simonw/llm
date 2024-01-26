@@ -1,23 +1,23 @@
 # Contributing
 
 To contribute to this tool, first checkout the code. Then create a new virtual environment:
-
-    cd llm
-    python -m venv venv
-    source venv/bin/activate
-
+```bash
+cd llm
+python -m venv venv
+source venv/bin/activate
+```
 Or if you are using `pipenv`:
-
-    pipenv shell
-
+```bash
+pipenv shell
+```
 Now install the dependencies and test dependencies:
-
-    pip install -e '.[test]'
-
+```bash
+pip install -e '.[test]'
+```
 To run the tests:
-
-    pytest
-
+```bash
+pytest
+```
 ## Debugging tricks
 
 The default OpenAI plugin has a debugging mechanism for showing the exact requests and responses that were sent to the OpenAI API.
@@ -40,17 +40,17 @@ LLM_OPENAI_SHOW_RESPONSES=1 llm -m chatgpt --no-stream \
 Documentation for this project uses [MyST](https://myst-parser.readthedocs.io/) - it is written in Markdown and rendered using Sphinx.
 
 To build the documentation locally, run the following:
-
-    cd docs
-    pip install -r requirements.txt
-    make livehtml
-
+```bash
+cd docs
+pip install -r requirements.txt
+make livehtml
+```
 This will start a live preview server, using [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/).
 
 The CLI `--help` examples in the documentation are managed using [Cog](https://github.com/nedbat/cog). Update those files like this:
-
-    just cog
-
+```bash
+just cog
+```
 You'll need [Just](https://github.com/casey/just) installed to run this command.
 
 ## Release process
