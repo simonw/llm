@@ -4,9 +4,10 @@ import pytest
 
 
 @pytest.fixture
-def mocked_models(requests_mock):
-    requests_mock.get(
-        "https://api.openai.com/v1/models",
+def mocked_models(httpx_mock):
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.openai.com/v1/models",
         json={
             "data": [
                 {
@@ -25,7 +26,7 @@ def mocked_models(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return requests_mock
+    return httpx_mock
 
 
 def test_openai_models(mocked_models):
@@ -39,7 +40,7 @@ def test_openai_models(mocked_models):
     )
 
 
-def test_openai_options_min_max(mocked_models):
+def test_openai_options_min_max():
     options = {
         "temperature": [0, 2],
         "top_p": [0, 1],

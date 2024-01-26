@@ -1,6 +1,6 @@
 from llm import EmbeddingModel, Model, hookimpl
 import llm
-from llm.utils import dicts_to_table_string
+from llm.utils import dicts_to_table_string, remove_dict_none_values
 import click
 import datetime
 import httpx
@@ -312,7 +312,7 @@ class Chat(Model):
                 content = chunk.choices[0].delta.content
                 if content is not None:
                     yield content
-            response.response_json = combine_chunks(chunks)
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -320,13 +320,13 @@ class Chat(Model):
                 stream=False,
                 **kwargs,
             )
-            response.response_json = completion.dict()
+            response.response_json = remove_dict_none_values(completion.dict())
             yield completion.choices[0].message.content
 
     def get_client(self):
         kwargs = {}
         if self.api_base:
-            kwargs["api_base"] = self.api_base
+            kwargs["base_url"] = self.api_base
         if self.api_type:
             kwargs["api_type"] = self.api_type
         if self.api_version:
@@ -396,7 +396,9 @@ class Completion(Chat):
                 content = chunk.choices[0].text
                 if content is not None:
                     yield content
-            response.response_json = combine_chunks(chunks)
+            combined = combine_chunks(chunks)
+            cleaned = remove_dict_none_values(combined)
+            response.response_json = cleaned
         else:
             completion = client.completions.create(
                 model=self.model_name or self.model_id,
@@ -404,8 +406,8 @@ class Completion(Chat):
                 stream=False,
                 **kwargs,
             )
-            response.response_json = completion.dict()
-            yield completion.choices[0]["text"]
+            response.response_json = remove_dict_none_values(completion.dict())
+            yield completion.choices[0].text
 
 
 def not_nulls(data) -> dict:
@@ -416,7 +418,6 @@ def combine_chunks(chunks: List) -> dict:
     content = ""
     role = None
     finish_reason = None
-
     # If any of them have log probability, we're going to persist
     # those later on
     logprobs = []
@@ -449,7 +450,8 @@ def combine_chunks(chunks: List) -> dict:
     if logprobs:
         combined["logprobs"] = logprobs
     for key in ("id", "object", "model", "created", "index"):
-        if key in chunks[0]:
-            combined[key] = chunks[0][key]
+        value = getattr(chunks[0], key, None)
+        if value is not None:
+            combined[key] = value
 
     return combined
