@@ -57,7 +57,7 @@ class _LoggingStream(ResponseStream):
             yield chunk
 
 
-def _no_encoding(request: httpx.Request):
+def _no_accept_encoding(request: httpx.Request):
     request.headers.pop("accept-encoding", None)
 
 
@@ -91,5 +91,5 @@ def _log_response(response: httpx.Response):
 
 def logging_client() -> httpx.Client:
     return httpx.Client(
-        event_hooks={"request": [_no_encoding], "response": [_log_response]}
+        event_hooks={"request": [_no_accept_encoding], "response": [_log_response]}
     )
