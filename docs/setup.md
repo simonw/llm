@@ -44,7 +44,7 @@ llm install llm-gpt4all
 
 Many LLM models require an API key. These API keys can be provided to this tool using several different mechanisms.
 
-You can obtain an API key for OpenAI's language models from [the API keys page](https://platform.openai.com/account/api-keys) on their site.
+You can obtain an API key for OpenAI's language models from [the API keys page](https://platform.openai.com/api-keys) on their site.
 
 ### Saving and using stored keys
 

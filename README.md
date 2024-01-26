@@ -38,7 +38,7 @@ pipx install llm
 
 ## Getting started
 
-If you have an [OpenAI API key](https://platform.openai.com/account/api-keys) you can get started using the OpenAI models right away.
+If you have an [OpenAI API key](https://platform.openai.com/api-keys) you can get started using the OpenAI models right away.
 
 As an alternative to OpenAI, you can [install plugins](https://llm.datasette.io/en/stable/plugins/installing-plugins.html) to access models by other providers, including models that can be installed and run on your own device.
 

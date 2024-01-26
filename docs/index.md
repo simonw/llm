@@ -34,7 +34,7 @@ Or with [pipx](https://pipxproject.github.io/pipx/) (recommended, as then it won
 ```bash
 pipx install llm
 ```
-If you have an [OpenAI API key](https://platform.openai.com/account/api-keys) key you can run this:
+If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 ```bash
 # Paste your OpenAI API key into this
 llm keys set openai
