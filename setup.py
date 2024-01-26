@@ -47,6 +47,7 @@ setup(
         "python-ulid",
         "setuptools",
         "pip",
+        "cchardet",
     ],
     extras_require={
         "test": [
