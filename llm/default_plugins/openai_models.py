@@ -427,10 +427,10 @@ def combine_chunks(chunks: List) -> dict:
 
     for item in chunks:
         for choice in item.choices:
-            if choice.logprobs:
+            if choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
                 logprobs.append(
                     {
-                        "text": choice.text,
+                        "text": choice.text if hasattr(choice, "text") else None,
                         "top_logprobs": choice.logprobs.top_logprobs,
                     }
                 )
