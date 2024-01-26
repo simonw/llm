@@ -517,6 +517,7 @@ def keys_set(name, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text(json.dumps(default))
+        path.chmod(0o600)
     try:
         current = json.loads(path.read_text())
     except json.decoder.JSONDecodeError:

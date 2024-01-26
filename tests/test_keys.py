@@ -20,12 +20,17 @@ def test_keys_in_user_path(monkeypatch, env, user_path):
 
 
 def test_keys_set(monkeypatch, tmpdir):
-    user_path = str(tmpdir / "user/keys")
-    monkeypatch.setenv("LLM_USER_PATH", user_path)
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    assert not keys_path.exists()
     runner = CliRunner()
     result = runner.invoke(cli, ["keys", "set", "openai"], input="foo")
     assert result.exit_code == 0
-    content = open(user_path + "/keys.json").read()
+    assert keys_path.exists()
+    # Should be chmod 600
+    assert oct(keys_path.stat().mode)[-3:] == "600"
+    content = keys_path.read_text("utf-8")
     assert json.loads(content) == {
         "// Note": "This file stores secret API credentials. Do not share!",
         "openai": "foo",
