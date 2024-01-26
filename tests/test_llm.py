@@ -232,7 +232,8 @@ def test_llm_default_prompt(
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    assert mocked_openai_chat.last_request.headers["Authorization"] == "Bearer X"
+    last_request = mocked_openai_chat.get_requests()[-1]
+    assert last_request.headers["Authorization"] == "Bearer X"
 
     # Was it logged?
     rows = list(log_db["responses"].rows)

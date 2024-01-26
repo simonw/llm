@@ -139,9 +139,10 @@ def register_embed_demo_model(embed_demo, mock_model):
 
 
 @pytest.fixture
-def mocked_openai_chat(requests_mock):
-    return requests_mock.post(
-        "https://api.openai.com/v1/chat/completions",
+def mocked_openai_chat(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
         json={
             "model": "gpt-3.5-turbo",
             "usage": {},
@@ -149,6 +150,7 @@ def mocked_openai_chat(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+    return httpx_mock
 
 
 @pytest.fixture

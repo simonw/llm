@@ -1,4 +1,5 @@
 from click.testing import CliRunner
+import json
 from llm import Template
 from llm.cli import cli
 import os
@@ -173,7 +174,8 @@ def test_template_basic(
     )
     if expected_error is None:
         assert result.exit_code == 0
-        assert mocked_openai_chat.last_request.json() == {
+        last_request = mocked_openai_chat.get_requests()[-1]
+        assert json.loads(last_request.content) == {
             "model": expected_model,
             "messages": [{"role": "user", "content": expected_input}],
             "stream": False,
@@ -181,3 +183,4 @@ def test_template_basic(
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
+        mocked_openai_chat.reset(assert_all_responses_were_requested=False)

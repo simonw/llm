@@ -22,11 +22,11 @@ To run the tests:
 
 The default OpenAI plugin has a debugging mechanism for showing the exact responses that came back from the OpenAI API.
 
-Set the `LLM_OPENAI_SHOW_RESPONSES` environment variable like this:
+Set the `OPENAI_LOG` environment variable like this:
 ```bash
-LLM_OPENAI_SHOW_RESPONSES=1 llm -m chatgpt 'three word slogan for an an otter-run bakery'
+OPENAI_LOG=debug llm -m chatgpt 'three word slogan for an an otter-run bakery'
 ```
-This will output the response (including streaming responses) to standard error, as shown in [issues 286](https://github.com/simonw/llm/issues/286).
+This will output details of the API request to the console.
 
 ## Documentation
 
