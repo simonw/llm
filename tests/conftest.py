@@ -4,6 +4,7 @@ import json
 import llm
 from llm.plugins import pm
 from pydantic import Field
+from pytest_httpx import IteratorStream
 from typing import Optional
 
 
@@ -139,9 +140,10 @@ def register_embed_demo_model(embed_demo, mock_model):
 
 
 @pytest.fixture
-def mocked_openai_chat(requests_mock):
-    return requests_mock.post(
-        "https://api.openai.com/v1/chat/completions",
+def mocked_openai_chat(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
         json={
             "model": "gpt-3.5-turbo",
             "usage": {},
@@ -149,43 +151,47 @@ def mocked_openai_chat(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+    return httpx_mock
+
+
+def stream_events():
+    for delta, finish_reason in (
+        ({"role": "assistant", "content": ""}, None),
+        ({"content": "Hi"}, None),
+        ({"content": "."}, None),
+        ({}, "stop"),
+    ):
+        yield "data: {}\n\n".format(
+            json.dumps(
+                {
+                    "id": "chat-1",
+                    "object": "chat.completion.chunk",
+                    "created": 1695096940,
+                    "model": "gpt-3.5-turbo-0613",
+                    "choices": [
+                        {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                    ],
+                }
+            )
+        ).encode("utf-8")
+    yield "data: [DONE]\n\n".encode("utf-8")
 
 
 @pytest.fixture
-def mocked_openai_chat_stream(requests_mock):
-    def stream_events(*args):
-        for delta, finish_reason in (
-            ({"role": "assistant", "content": ""}, None),
-            ({"content": "Hi"}, None),
-            ({"content": "."}, None),
-            ({}, "stop"),
-        ):
-            yield "data: {}\n\n".format(
-                json.dumps(
-                    {
-                        "id": "chat-1",
-                        "object": "chat.completion.chunk",
-                        "created": 1695096940,
-                        "model": "gpt-3.5-turbo-0613",
-                        "choices": [
-                            {"index": 0, "delta": delta, "finish_reason": finish_reason}
-                        ],
-                    }
-                )
-            ).encode("utf-8")
-        yield "data: [DONE]\n\n".encode("utf-8")
-
-    return requests_mock.post(
-        "https://api.openai.com/v1/chat/completions",
-        content=b"".join(stream_events()),
+def mocked_openai_chat_stream(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        stream=IteratorStream(stream_events()),
         headers={"Content-Type": "text/event-stream"},
     )
 
 
 @pytest.fixture
-def mocked_openai_completion(requests_mock):
-    return requests_mock.post(
-        "https://api.openai.com/v1/completions",
+def mocked_openai_completion(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/completions",
         json={
             "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
             "object": "text_completion",
@@ -203,10 +209,10 @@ def mocked_openai_completion(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+    return httpx_mock
 
 
-@pytest.fixture
-def mocked_openai_completion_logprobs_stream(requests_mock):
+def stream_completion_events():
     choices_chunks = [
         [
             {
@@ -262,32 +268,37 @@ def mocked_openai_completion_logprobs_stream(requests_mock):
         ],
     ]
 
-    def stream_events():
-        for choices in choices_chunks:
-            yield "data: {}\n\n".format(
-                json.dumps(
-                    {
-                        "id": "cmpl-80MdSaou7NnPuff5ZyRMysWBmgSPS",
-                        "object": "text_completion",
-                        "created": 1695097702,
-                        "choices": choices,
-                        "model": "gpt-3.5-turbo-instruct",
-                    }
-                )
-            ).encode("utf-8")
-        yield "data: [DONE]\n\n".encode("utf-8")
-
-    return requests_mock.post(
-        "https://api.openai.com/v1/completions",
-        content=b"".join(stream_events()),
-        headers={"Content-Type": "text/event-stream"},
-    )
+    for choices in choices_chunks:
+        yield "data: {}\n\n".format(
+            json.dumps(
+                {
+                    "id": "cmpl-80MdSaou7NnPuff5ZyRMysWBmgSPS",
+                    "object": "text_completion",
+                    "created": 1695097702,
+                    "choices": choices,
+                    "model": "gpt-3.5-turbo-instruct",
+                }
+            )
+        ).encode("utf-8")
+    yield "data: [DONE]\n\n".encode("utf-8")
 
 
 @pytest.fixture
-def mocked_openai_completion_logprobs(requests_mock):
-    return requests_mock.post(
-        "https://api.openai.com/v1/completions",
+def mocked_openai_completion_logprobs_stream(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/completions",
+        stream=IteratorStream(stream_completion_events()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    return httpx_mock
+
+
+@pytest.fixture
+def mocked_openai_completion_logprobs(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/completions",
         json={
             "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
             "object": "text_completion",
@@ -314,12 +325,14 @@ def mocked_openai_completion_logprobs(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
+    return httpx_mock
 
 
 @pytest.fixture
-def mocked_localai(requests_mock):
-    requests_mock.post(
-        "http://localai.localhost/chat/completions",
+def mocked_localai(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="http://localai.localhost/chat/completions",
         json={
             "model": "orca",
             "usage": {},
@@ -327,8 +340,9 @@ def mocked_localai(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    requests_mock.post(
-        "http://localai.localhost/completions",
+    httpx_mock.add_response(
+        method="POST",
+        url="http://localai.localhost/completions",
         json={
             "model": "completion-babbage",
             "usage": {},
@@ -336,7 +350,7 @@ def mocked_localai(requests_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return requests_mock
+    return httpx_mock
 
 
 @pytest.fixture

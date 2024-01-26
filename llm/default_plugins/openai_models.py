@@ -1,29 +1,23 @@
 from llm import EmbeddingModel, Model, hookimpl
 import llm
-from llm.utils import dicts_to_table_string
+from llm.utils import dicts_to_table_string, remove_dict_none_values
 import click
 import datetime
+import httpx
 import openai
-import os
 
 try:
+    # Pydantic 2
     from pydantic import field_validator, Field  # type: ignore
+
 except ImportError:
+    # Pydantic 1
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
-import requests
+
 from typing import List, Iterable, Iterator, Optional, Union
 import json
 import yaml
-
-if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-
-    def log_response(response, *args, **kwargs):
-        click.echo(response.text, err=True)
-        return response
-
-    openai.requestssession = requests.Session()
-    openai.requestssession.hooks["response"].append(log_response)
 
 
 @hookimpl
@@ -107,12 +101,12 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
-            "api_key": self.get_key(),
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        results = openai.Embedding.create(**kwargs)["data"]
-        return ([float(r) for r in result["embedding"]] for result in results)
+        client = openai.OpenAI(api_key=self.get_key())
+        results = client.embeddings.create(**kwargs).data
+        return ([float(r) for r in result.embedding] for result in results)
 
 
 @hookimpl
@@ -129,7 +123,7 @@ def register_commands(cli):
         from llm.cli import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
-        response = requests.get(
+        response = httpx.get(
             "https://api.openai.com/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -304,8 +298,9 @@ class Chat(Model):
         messages.append({"role": "user", "content": prompt.prompt})
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
+        client = self.get_client()
         if stream:
-            completion = openai.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=True,
@@ -314,35 +309,30 @@ class Chat(Model):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
-                content = chunk["choices"][0].get("delta", {}).get("content")
+                content = chunk.choices[0].delta.content
                 if content is not None:
                     yield content
-            response.response_json = combine_chunks(chunks)
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
-            completion = openai.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
                 messages=messages,
                 stream=False,
                 **kwargs,
             )
-            response.response_json = completion.to_dict_recursive()
+            response.response_json = remove_dict_none_values(completion.dict())
             yield completion.choices[0].message.content
 
-    def build_kwargs(self, prompt):
-        kwargs = dict(not_nulls(prompt.options))
-        json_object = kwargs.pop("json_object", None)
-        if "max_tokens" not in kwargs and self.default_max_tokens is not None:
-            kwargs["max_tokens"] = self.default_max_tokens
+    def get_client(self):
+        kwargs = {}
         if self.api_base:
-            kwargs["api_base"] = self.api_base
+            kwargs["base_url"] = self.api_base
         if self.api_type:
             kwargs["api_type"] = self.api_type
         if self.api_version:
             kwargs["api_version"] = self.api_version
         if self.api_engine:
             kwargs["engine"] = self.api_engine
-        if json_object:
-            kwargs["response_format"] = {"type": "json_object"}
         if self.needs_key:
             if self.key:
                 kwargs["api_key"] = self.key
@@ -352,6 +342,15 @@ class Chat(Model):
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["headers"] = self.headers
+        return openai.OpenAI(**kwargs)
+
+    def build_kwargs(self, prompt):
+        kwargs = dict(not_nulls(prompt.options))
+        json_object = kwargs.pop("json_object", None)
+        if "max_tokens" not in kwargs and self.default_max_tokens is not None:
+            kwargs["max_tokens"] = self.default_max_tokens
+        if json_object:
+            kwargs["response_format"] = {"type": "json_object"}
         return kwargs
 
 
@@ -383,8 +382,9 @@ class Completion(Chat):
         messages.append(prompt.prompt)
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
+        client = self.get_client()
         if stream:
-            completion = openai.Completion.create(
+            completion = client.completions.create(
                 model=self.model_name or self.model_id,
                 prompt="\n".join(messages),
                 stream=True,
@@ -393,57 +393,53 @@ class Completion(Chat):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
-                content = chunk["choices"][0].get("text") or ""
+                content = chunk.choices[0].text
                 if content is not None:
                     yield content
-            response.response_json = combine_chunks(chunks)
+            combined = combine_chunks(chunks)
+            cleaned = remove_dict_none_values(combined)
+            response.response_json = cleaned
         else:
-            completion = openai.Completion.create(
+            completion = client.completions.create(
                 model=self.model_name or self.model_id,
                 prompt="\n".join(messages),
                 stream=False,
                 **kwargs,
             )
-            response.response_json = completion.to_dict_recursive()
-            yield completion.choices[0]["text"]
+            response.response_json = remove_dict_none_values(completion.dict())
+            yield completion.choices[0].text
 
 
 def not_nulls(data) -> dict:
     return {key: value for key, value in data if value is not None}
 
 
-def combine_chunks(chunks: List[dict]) -> dict:
+def combine_chunks(chunks: List) -> dict:
     content = ""
     role = None
     finish_reason = None
-
     # If any of them have log probability, we're going to persist
     # those later on
     logprobs = []
 
     for item in chunks:
-        for choice in item["choices"]:
-            if (
-                "logprobs" in choice
-                and "text" in choice
-                and isinstance(choice["logprobs"], dict)
-                and "top_logprobs" in choice["logprobs"]
-            ):
+        for choice in item.choices:
+            if choice.logprobs:
                 logprobs.append(
                     {
-                        "text": choice["text"],
-                        "top_logprobs": choice["logprobs"]["top_logprobs"],
+                        "text": choice.text,
+                        "top_logprobs": choice.logprobs.top_logprobs,
                     }
                 )
-            if "text" in choice and "delta" not in choice:
-                content += choice["text"]
+
+            if not hasattr(choice, "delta"):
+                content += choice.text
                 continue
-            if "role" in choice["delta"]:
-                role = choice["delta"]["role"]
-            if "content" in choice["delta"]:
-                content += choice["delta"]["content"]
-            if choice.get("finish_reason") is not None:
-                finish_reason = choice["finish_reason"]
+            role = choice.delta.role
+            if choice.delta.content is not None:
+                content += choice.delta.content
+            if choice.finish_reason is not None:
+                finish_reason = choice.finish_reason
 
     # Imitations of the OpenAI API may be missing some of these fields
     combined = {
@@ -454,7 +450,8 @@ def combine_chunks(chunks: List[dict]) -> dict:
     if logprobs:
         combined["logprobs"] = logprobs
     for key in ("id", "object", "model", "created", "index"):
-        if key in chunks[0]:
-            combined[key] = chunks[0][key]
+        value = getattr(chunks[0], key, None)
+        if value is not None:
+            combined[key] = value
 
     return combined

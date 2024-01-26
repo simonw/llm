@@ -232,7 +232,8 @@ def test_llm_default_prompt(
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    assert mocked_openai_chat.last_request.headers["Authorization"] == "Bearer X"
+    last_request = mocked_openai_chat.get_requests()[-1]
+    assert last_request.headers["Authorization"] == "Bearer X"
 
     # Was it logged?
     rows = list(log_db["responses"].rows)
@@ -258,7 +259,6 @@ def test_llm_default_prompt(
     }
     assert json.loads(row["response_json"]) == {
         "model": "gpt-3.5-turbo",
-        "usage": {},
         "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
 
@@ -284,7 +284,6 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             "response_json": {
                 "model": "gpt-3.5-turbo",
-                "usage": {},
                 "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
             },
             # This doesn't have the \n after three names:
@@ -322,7 +321,8 @@ def test_openai_completion(mocked_openai_completion, user_path):
     assert result.output == "\n\nThis is indeed a test\n"
 
     # Should have requested 256 tokens
-    assert json.loads(mocked_openai_completion.last_request.text) == {
+    last_request = mocked_openai_completion.get_requests()[-1]
+    assert json.loads(last_request.content) == {
         "model": "gpt-3.5-turbo-instruct",
         "prompt": "Say this is a test",
         "stream": False,
@@ -392,8 +392,6 @@ def test_openai_completion_logprobs_stream(
     row = rows[0]
     assert json.loads(row["response_json"]) == {
         "content": "\n\nHi.",
-        "role": None,
-        "finish_reason": None,
         "logprobs": [
             {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
             {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
@@ -480,7 +478,8 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     result = runner.invoke(cli, ["--no-stream", "--model", "orca", prompt])
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    assert json.loads(mocked_localai.last_request.text) == {
+    last_request = mocked_localai.get_requests()[-1]
+    assert json.loads(last_request.content) == {
         "model": "orca-mini-3b",
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}],
         "stream": False,
@@ -489,7 +488,8 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     result2 = runner.invoke(cli, ["--no-stream", "--model", "completion-babbage", "hi"])
     assert result2.exit_code == 0
     assert result2.output == "Hello\n"
-    assert json.loads(mocked_localai.last_request.text) == {
+    last_request2 = mocked_localai.get_requests()[-1]
+    assert json.loads(last_request2.content) == {
         "model": "babbage",
         "prompt": "hi",
         "stream": False,

@@ -9,6 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: ["==1.10.2", ">=2.0.0"]
@@ -23,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -e '.[test]'
-        pip install pydantic${{ matrix.pydantic }}
+        pip install 'pydantic${{ matrix.pydantic }}'
     - name: Run tests
       run: |
         pytest

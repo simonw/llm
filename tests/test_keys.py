@@ -57,9 +57,8 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
     def assert_key(key):
-        assert mocked_openai_chat.last_request.headers[
-            "Authorization"
-        ] == "Bearer {}".format(key)
+        request = mocked_openai_chat.get_requests()[-1]
+        assert request.headers["Authorization"] == "Bearer {}".format(key)
 
     runner = CliRunner()
 
