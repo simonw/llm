@@ -25,7 +25,7 @@ def dicts_to_table_string(
     return res
 
 
-def remove_dict_none_values(d: dict) -> dict:
+def remove_dict_none_values(d):
     """
     Recursively remove keys with value of None or value of a dict that is all values of None
     """

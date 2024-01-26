@@ -4,7 +4,7 @@ import json
 import llm
 from llm.plugins import pm
 from pydantic import Field
-from pytest_httpx import HTTPXMock, IteratorStream
+from pytest_httpx import IteratorStream
 from typing import Optional
 
 

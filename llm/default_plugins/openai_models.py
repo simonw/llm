@@ -101,12 +101,12 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
-            "api_key": self.get_key(),
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        results = client.Embedding.create(**kwargs)["data"]
-        return ([float(r) for r in result["embedding"]] for result in results)
+        client = openai.OpenAI(api_key=self.get_key())
+        results = client.embeddings.create(**kwargs).data
+        return ([float(r) for r in result.embedding] for result in results)
 
 
 @hookimpl
