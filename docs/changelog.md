@@ -1,5 +1,21 @@
 # Changelog
 
+(v0_13)=
+## 0.13 (2024-01-26)
+
+- Added support for new OpenAI embedding models: `3-small` and `3-large` and three variants of those with different dimension sizes, 
+`3-small-512`, `3-large-256` and `3-large-1024`. See {ref}`OpenAI embedding models <openai-models-embedding>` for details. [#394](https://github.com/simonw/llm/issues/394)
+- The default `gpt-4-turbo` model alias now points to `gpt-4-turbo-preview`, which uses the most recent OpenAI GPT-4 turbo model (currently `gpt-4-0125-preview`). [#396](https://github.com/simonw/llm/issues/396)
+- New OpenAI model aliases `gpt-4-1106-preview` and `gpt-4-0125-preview`.
+- OpenAI models now support a `-o json_object 1` option which will cause their output to be returned as a valid JSON object. [#373](https://github.com/simonw/llm/issues/373)
+- New {ref}`plugins <plugin-directory>` since the last release include [llm-mistral](https://github.com/simonw/llm-mistral), [llm-gemini](https://github.com/simonw/llm-gemini), [llm-ollama](https://github.com/taketwo/llm-ollama) and [llm-bedrock-meta](https://github.com/flabat/llm-bedrock-meta).
+- The `keys.json` file for storing API keys is now created with `600` file permissions. [#351](https://github.com/simonw/llm/issues/351)
+- Documented {ref}`a pattern <homebrew-warning>` for installing plugins that depend on PyTorch using the Homebrew version of LLM, despite Homebrew using Python 3.12 when PyTorch have not yet released a stable package for that Python version. [#397](https://github.com/simonw/llm/issues/397)
+- Underlying OpenAI Python library has been upgraded to `>1.0`. It is possible this could cause compatibility issues with LLM plugins that also depend on that library. [#325](https://github.com/simonw/llm/issues/325)
+- Arrow keys now work inside the `llm chat` command. [#376](https://github.com/simonw/llm/issues/376)
+- `LLM_OPENAI_SHOW_RESPONSES=1` environment variable now outputs much more detailed information about the HTTP request and response made to OpenAI (and OpenAI-compatible) APIs. [#404](https://github.com/simonw/llm/issues/404)
+- Dropped support for Python 3.7.
+
 (v0_12)=
 ## 0.12 (2023-11-06)
 
