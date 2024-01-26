@@ -76,6 +76,7 @@ maxdepth: 3
 ---
 setup
 usage
+openai-models
 other-models
 embeddings/index
 plugins/index

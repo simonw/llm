@@ -22,52 +22,6 @@ The model will be downloaded and cached the first time you use it.
 
 Check the {ref}`plugin directory <plugin-directory>` for the latest list of available plugins for other models.
 
-(openai-extra-models)=
-
-## Adding more OpenAI models
-
-OpenAI occasionally release new models with new names. LLM aims to ship new releases to support these, but you can also configure them directly, by adding them to a `extra-openai-models.yaml` configuration file.
-
-Run this command to find the directory in which this file should be created:
-
-```bash
-dirname "$(llm logs path)"
-```
-On my Mac laptop I get this:
-```
-~/Library/Application Support/io.datasette.llm
-```
-Create a file in that directory called `extra-openai-models.yaml`.
-
-Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
-
-```yaml
-- model_id: gpt-3.5-turbo-0613
-  aliases: ["0613"]
-```
-The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
-
-If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
-
-With this configuration in place, the following command should run a prompt against the new model:
-
-```bash
-llm -m 0613 'What is the capital of France?'
-```
-Run `llm models` to confirm that the new model is now available:
-```bash
-llm models
-```
-Example output:
-```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
-```
-Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.
-
 (openai-compatible-models)=
 
 ## OpenAI-compatible models
