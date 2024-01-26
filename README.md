@@ -30,9 +30,9 @@ Install this tool using `pip`:
 ```bash
 pip install llm
 ```
-Or using [pipx](https://pipxproject.github.io/pipx/):
+Or using [Homebrew](https://brew.sh/):
 ```bash
-pipx install llm
+brew install llm
 ```
 [Detailed installation instructions](https://llm.datasette.io/en/stable/setup.html).
 
