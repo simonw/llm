@@ -68,29 +68,30 @@ Read the [usage instructions](https://llm.datasette.io/en/stable/usage.html) for
 
 [LLM plugins](https://llm.datasette.io/en/stable/plugins/index.html) can add support for alternative models, including models that run on your own machine.
 
-To download and run Llama 2 13B locally, you can install the [llm-mlc](https://github.com/simonw/llm-mlc) plugin:
+To download and run Mistral 7B Instruct locally, you can install the [llm-gpt4all](https://github.com/simonw/llm-gpt4all) plugin:
 ```bash
-llm install llm-mlc
-llm mlc pip install --pre --force-reinstall \
-  mlc-ai-nightly \
-  mlc-chat-nightly \
-  -f https://mlc.ai/wheels
-llm mlc setup
+llm install llm-gpt4all
 ```
-Then download the 15GB Llama 2 13B model like this:
+Then run this command to see which models it makes available:
 ```bash
-llm mlc download-model Llama-2-13b-chat --alias llama2
+llm models
 ```
-And run a prompt through it:
+```
+gpt4all: all-MiniLM-L6-v2-f16 - SBert, 43.76MB download, needs 1GB RAM
+gpt4all: orca-mini-3b-gguf2-q4_0 - Mini Orca (Small), 1.84GB download, needs 4GB RAM
+gpt4all: mistral-7b-instruct-v0 - Mistral Instruct, 3.83GB download, needs 8GB RAM
+...
+```
+Each model file will be downloaded once the first time you use it. Try Mistral out like this:
 ```bash
-llm -m llama2 'difference between a llama and an alpaca'
+llm -m mistral-7b-instruct-v0 'difference between a pelican and a walrus'
 ```
 You can also start a chat session with the model using the `llm chat` command:
 ```bash
-llm chat -m llama2
+llm chat -m mistral-7b-instruct-v0
 ```
 ```
-Chatting with mlc-chat-Llama-2-13b-chat-hf-q4f16_1
+Chatting with mistral-7b-instruct-v0
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 > 
