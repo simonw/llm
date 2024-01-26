@@ -41,3 +41,7 @@ jobs:
     - name: Run ruff
       run: |
         ruff .
+    - name: Run test-llm-load-plugins.sh
+      run: |
+        llm install llm-cluster llm-mistral
+        ./tests/test-llm-load-plugins.sh
