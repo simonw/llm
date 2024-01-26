@@ -342,7 +342,7 @@ class Chat(Model):
             # openai client library requires one
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
-            kwargs["headers"] = self.headers
+            kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
         return openai.OpenAI(**kwargs)
