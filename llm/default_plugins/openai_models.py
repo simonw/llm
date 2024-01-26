@@ -26,12 +26,11 @@ _log_session = requests.Session()
 _log_session.hooks["response"].append(_log_response)
 
 
-def is_openai_pre_1():
-    return openai.version.VERSION.startswith("0.")
+IS_OPENAI_PRE_1 = openai.version.VERSION.startswith("0.")
 
 
-if is_openai_pre_1 and os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-    openai.requestssession = _log_session
+if IS_OPENAI_PRE_1 and os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+    openai.requestssession = _log_session  # type: ignore
 
 
 class OpenAILegacyWrapper:
@@ -52,7 +51,7 @@ class OpenAILegacyWrapper:
 
 
 def get_openai_client():
-    if is_openai_pre_1:
+    if IS_OPENAI_PRE_1:
         return openai
 
     if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
