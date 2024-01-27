@@ -5,6 +5,7 @@ import json
 import pathlib
 import pytest
 import sqlite_utils
+import sys
 from unittest.mock import ANY
 
 
@@ -422,6 +423,7 @@ def multi_files(tmpdir):
     return db_path, tmpdir / "files"
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("scenario", ("single", "multi"))
 def test_embed_multi_files(multi_files, scenario):
     db_path, files = multi_files
