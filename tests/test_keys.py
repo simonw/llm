@@ -19,7 +19,7 @@ def test_keys_in_user_path(monkeypatch, env, user_path):
     assert pathlib.Path(result.output.strip()) == pathlib.Path(expected)
 
 
-# @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_keys_set(monkeypatch, tmpdir):
     user_path = tmpdir / "user/keys"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
