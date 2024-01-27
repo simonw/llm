@@ -413,7 +413,7 @@ Then paste in your API key.
 
 Keys can also be passed using the new `--key` command line option - this can be a full key or the alias of a key that has been previously stored.
 
-See link-to-docs for more. [#13](https://github.com/simonw/llm/issues/13)
+See {ref}`api-keys` for more. [#13](https://github.com/simonw/llm/issues/13)
 
 ### New location for the logs.db database
 
