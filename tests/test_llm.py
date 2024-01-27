@@ -9,7 +9,6 @@ import pathlib
 import pytest
 import re
 import sqlite_utils
-import sys
 from ulid import ULID
 from unittest import mock
 

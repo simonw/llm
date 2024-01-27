@@ -5,7 +5,6 @@ import json
 import pathlib
 import pytest
 import sqlite_utils
-import sys
 from unittest.mock import ANY
 
 
