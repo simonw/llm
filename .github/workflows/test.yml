@@ -7,16 +7,16 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: ["==1.10.2", ">=2.0.0"]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: pip
@@ -29,20 +29,25 @@ jobs:
       run: |
         pytest
     - name: Check if cog needs to be run
+      if: matrix.os != 'windows-latest'
       run: |
         cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
           docs/**/*.md docs/*.md
     - name: Run Black
+      if: matrix.os != 'windows-latest'
       run: |
         black --check .
     - name: Run mypy
+      if: matrix.os != 'windows-latest'
       run: |
         mypy llm
     - name: Run ruff
+      if: matrix.os != 'windows-latest'
       run: |
         ruff .
     - name: Run test-llm-load-plugins.sh
+      if: matrix.os != 'windows-latest'
       run: |
         llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh

@@ -8,6 +8,7 @@ import os
 import pytest
 import re
 import sqlite_utils
+import sys
 from ulid import ULID
 from unittest import mock
 
@@ -96,6 +97,7 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):
     for key, value in env.items():

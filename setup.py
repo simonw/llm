@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-VERSION = "0.13"
+VERSION = "0.13.1"
 
 
 def get_long_description():
@@ -47,6 +47,7 @@ setup(
         "python-ulid",
         "setuptools",
         "pip",
+        "pyreadline3; sys_platform == 'win32'",
     ],
     extras_require={
         "test": [
