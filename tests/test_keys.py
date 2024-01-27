@@ -3,6 +3,7 @@ import json
 from llm.cli import cli
 import pathlib
 import pytest
+import sys
 
 
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-keys-test"}))
