@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_13_1)=
+## 0.13.1 (2024-01-26)
+
+- Fix for `No module named 'readline'` error on Windows. [#407](https://github.com/simonw/llm/issues/407)
+
 (v0_13)=
 ## 0.13 (2024-01-26)
 
