@@ -5,6 +5,7 @@ from llm.cli import cli
 from llm.migrations import migrate
 import json
 import os
+import pathlib
 import pytest
 import re
 import sqlite_utils
@@ -97,7 +98,6 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):
     for key, value in env.items():
@@ -109,7 +109,7 @@ def test_logs_path(monkeypatch, env, user_path):
         expected = env["LLM_USER_PATH"] + "/logs.db"
     else:
         expected = str(user_path) + "/logs.db"
-    assert result.output.strip() == expected
+    assert pathlib.Path(result.output.strip()) == pathlib.Path(expected)
 
 
 @pytest.mark.parametrize("model", ("davinci", "curie"))
