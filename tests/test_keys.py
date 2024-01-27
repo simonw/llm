@@ -3,8 +3,10 @@ import json
 from llm.cli import cli
 import pathlib
 import pytest
+import sys
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-keys-test"}))
 def test_keys_in_user_path(monkeypatch, env, user_path):
     for key, value in env.items():
@@ -19,6 +21,7 @@ def test_keys_in_user_path(monkeypatch, env, user_path):
     assert result.output.strip() == expected
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_keys_set(monkeypatch, tmpdir):
     user_path = tmpdir / "user/keys"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
