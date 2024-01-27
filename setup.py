@@ -47,6 +47,7 @@ setup(
         "python-ulid",
         "setuptools",
         "pip",
+        "pyreadline3; sys_platform == 'win32'",
     ],
     extras_require={
         "test": [
