@@ -1,9 +1,8 @@
 import click
 import httpx
-from httpx._transports.default import ResponseStream
 import json
 import textwrap
-from typing import List, Dict, Iterator
+from typing import List, Dict
 
 
 def dicts_to_table_string(
@@ -50,11 +49,25 @@ def remove_dict_none_values(d):
     return new_dict
 
 
-class _LoggingStream(ResponseStream):
-    def __iter__(self) -> Iterator[bytes]:
-        for chunk in super().__iter__():
-            click.echo(f"    {chunk.decode()}", err=True)
+class _LogResponse(httpx.Response):
+    def iter_bytes(self, *args, **kwargs):
+        for chunk in super().iter_bytes(*args, **kwargs):
+            click.echo(chunk.decode(), err=True)
             yield chunk
+
+
+class _LogTransport(httpx.BaseTransport):
+    def __init__(self, transport: httpx.BaseTransport):
+        self.transport = transport
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        response = self.transport.handle_request(request)
+        return _LogResponse(
+            status_code=response.status_code,
+            headers=response.headers,
+            stream=response.stream,
+            extensions=response.extensions,
+        )
 
 
 def _no_accept_encoding(request: httpx.Request):
@@ -86,10 +99,10 @@ def _log_response(response: httpx.Response):
             value = value.split("=")[0] + "=..."
         click.echo(f"    {key}: {value}", err=True)
     click.echo("  Body:", err=True)
-    response.stream._stream = _LoggingStream(response.stream._stream)  # type: ignore
 
 
 def logging_client() -> httpx.Client:
     return httpx.Client(
-        event_hooks={"request": [_no_accept_encoding], "response": [_log_response]}
+        transport=_LogTransport(httpx.HTTPTransport()),
+        event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
