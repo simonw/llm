@@ -11,6 +11,7 @@ import yaml
 @pytest.mark.parametrize(
     "prompt,system,defaults,params,expected_prompt,expected_system,expected_error",
     (
+        ("$$test", None, None, {}, "$test", None, None),
         ("S: $input", None, None, {}, "S: input", None, None),
         ("S: $input", "system", None, {}, "S: input", "system", None),
         ("No vars", None, None, {}, "No vars", None, None),
