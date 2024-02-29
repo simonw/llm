@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 import string
 from typing import Optional, Any, Dict, List, Tuple
+import platform
 
 
 class Template(BaseModel):
@@ -41,10 +42,25 @@ class Template(BaseModel):
             return text
         # Confirm all variables in text are provided
         string_template = string.Template(text)
-        vars = string_template.get_identifiers()
+        vars = cls.extract_identifiers(string_template)
         missing = [p for p in vars if p not in params]
         if missing:
             raise cls.MissingVariables(
                 "Missing variables: {}".format(", ".join(missing))
             )
         return string_template.substitute(**params)
+
+    @classmethod
+    def extract_identifiers(cls, template: string.Template) -> list[str]:
+        (major, minor, patchlevel) = platform.python_version_tuple()
+        if int(major) >= 3 and int(minor) >= 11:
+            # Added in Python 3.11 
+            return template.get_identifiers()
+        else:
+            result = set()
+            # Adapted from source at https://github.com/python/cpython/blob/86e5e063aba76a7f4fc58f7d06b17b0a4730fd8e/Lib/string.py#L157
+            for match in template.pattern.finditer(template.template):
+                named = match.group("named") or match.group("braced")
+                if named is not None:
+                    result.add(match.group("named"))
+            return list(result)
