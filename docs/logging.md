@@ -54,7 +54,13 @@ You can view the logs using the `llm logs` command:
 ```bash
 llm logs
 ```
-This will output the three most recent logged items in Markdown format
+This will output the three most recent logged items in Markdown format, showing both the prompt and the response formatted using Markdown.
+
+To get back just the most recent prompt response as plain text, add `-r/--response`:
+
+```bash
+llm logs -r
+```
 
 Add `--json` to get the log messages in JSON instead:
 

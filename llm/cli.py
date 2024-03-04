@@ -628,6 +628,7 @@ order by responses_fts.rank desc{limit}
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+@click.option("-r", "--response", is_flag=True, help="Just output the last response")
 @click.option(
     "current_conversation",
     "-c",
@@ -654,6 +655,7 @@ def logs_list(
     model,
     query,
     truncate,
+    response,
     current_conversation,
     conversation_id,
     json_output,
@@ -664,6 +666,9 @@ def logs_list(
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    if response and not current_conversation and not conversation_id:
+        current_conversation = True
 
     if current_conversation:
         try:
@@ -738,9 +743,13 @@ def logs_list(
                 else:
                     row[key] = json.loads(row[key])
 
-    # Output as JSON if request
     if json_output:
+        # Output as JSON if requested
         click.echo(json.dumps(list(rows), indent=2))
+    elif response:
+        # Just output the last response
+        if rows:
+            click.echo(rows[-1]["response"])
     else:
         # Output neatly formatted human-readable logs
         current_system = None

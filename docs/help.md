@@ -253,6 +253,7 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -t, --truncate              Truncate long strings in output
+  -r, --response              Just output the last response
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
   --json                      Output logs as JSON

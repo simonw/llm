@@ -97,6 +97,17 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
+@pytest.mark.parametrize(
+    "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
+)
+def test_logs_response_only(args, log_path):
+    "Test that logs -r/--response returns just the last response"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "response\n"
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):
