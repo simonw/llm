@@ -7,10 +7,18 @@ import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
 from abc import ABC, abstractmethod
 import json
+from pathlib import Path
 from pydantic import BaseModel
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
+
+
+@dataclass
+class PromptImage:
+    filepath: Optional[Path]
+    url: Optional[str]
+    bytes: Optional[bytes]
 
 
 @dataclass
@@ -20,13 +28,17 @@ class Prompt:
     system: Optional[str]
     prompt_json: Optional[str]
     options: "Options"
+    images: Optional[List[PromptImage]]
 
-    def __init__(self, prompt, model, system=None, prompt_json=None, options=None):
+    def __init__(
+        self, prompt, model, system=None, images=None, prompt_json=None, options=None
+    ):
         self.prompt = prompt
         self.model = model
         self.system = system
         self.prompt_json = prompt_json
         self.options = options or {}
+        self.images = images
 
 
 @dataclass
@@ -246,6 +258,7 @@ class Model(ABC, _get_key_mixin):
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
     can_stream: bool = False
+    supports_images: bool = False
 
     class Options(_Options):
         pass
@@ -272,10 +285,19 @@ class Model(ABC, _get_key_mixin):
         prompt: Optional[str],
         system: Optional[str] = None,
         stream: bool = True,
+        images: Optional[List[PromptImage]] = None,
         **options
     ):
+        if images and not self.supports_images:
+            raise ValueError("This model does not support images")
         return self.response(
-            Prompt(prompt, system=system, model=self, options=self.Options(**options)),
+            Prompt(
+                prompt,
+                system=system,
+                model=self,
+                images=images,
+                options=self.Options(**options),
+            ),
             stream=stream,
         )
 

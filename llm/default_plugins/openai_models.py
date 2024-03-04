@@ -1,3 +1,4 @@
+import base64
 from llm import EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
@@ -31,6 +32,7 @@ def register_models(register):
     register(Chat("gpt-4-1106-preview"))
     register(Chat("gpt-4-0125-preview"))
     register(Chat("gpt-4-turbo-preview"), aliases=("gpt-4-turbo", "4-turbo", "4t"))
+    register(Chat("gpt-4-vision-preview", images=True), aliases=("4v",))
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -264,6 +266,7 @@ class Chat(Model):
         api_version=None,
         api_engine=None,
         headers=None,
+        images=False,
     ):
         self.model_id = model_id
         self.key = key
@@ -273,6 +276,7 @@ class Chat(Model):
         self.api_version = api_version
         self.api_engine = api_engine
         self.headers = headers
+        self.supports_images = images
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
@@ -297,6 +301,23 @@ class Chat(Model):
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
+        if prompt.images:
+            for image in prompt.images:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "data:image/jpeg;base64,{}".format(
+                                        base64.b64encode(image.read()).decode("utf-8")
+                                    )
+                                },
+                            }
+                        ],
+                    }
+                )
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
         client = self.get_client()

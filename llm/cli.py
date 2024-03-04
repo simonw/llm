@@ -22,12 +22,12 @@ from llm import (
     set_alias,
     remove_alias,
 )
-
 from .migrations import migrate
 from .plugins import pm
 import base64
 import pathlib
 import pydantic
+import re
 import readline
 from runpy import run_module
 import shutil
@@ -36,6 +36,7 @@ from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
 from typing import cast, Optional, Iterable, Union, Tuple
+import urllib
 import warnings
 import yaml
 
@@ -83,10 +84,28 @@ def cli():
     """
 
 
+class FileOrUrl(click.ParamType):
+    name = "file_or_url"
+
+    def convert(self, value, param, ctx):
+        if value == "-":
+            return sys.stdin
+        if re.match(r"^https?://", value):
+            return urllib.request.urlopen(value)
+        # Use pathlib to detect if it is a readable file
+        path = pathlib.Path(value)
+        if path.exists() and path.is_file():
+            return path.open("rb")
+        self.fail(f"{value} is not a valid file path or URL", param, ctx)
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
+@click.option(
+    "images", "-i", "--image", type=FileOrUrl(), multiple=True, help="Images for prompt"
+)
 @click.option(
     "options",
     "-o",
@@ -126,6 +145,7 @@ def prompt(
     prompt,
     system,
     model_id,
+    images,
     options,
     template,
     param,
@@ -272,7 +292,7 @@ def prompt(
         prompt_method = conversation.prompt
 
     try:
-        response = prompt_method(prompt, system, **validated_options)
+        response = prompt_method(prompt, system, images=images, **validated_options)
         if should_stream:
             for chunk in response:
                 print(chunk, end="")
