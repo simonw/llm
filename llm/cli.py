@@ -1,4 +1,5 @@
 import click
+from click.shell_completion import CompletionItem
 from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
@@ -83,10 +84,38 @@ def cli():
     """
 
 
+class TemplateType(click.ParamType):
+    """Support shell auto-complete for --template parameter."""
+
+    name = "template"
+
+    def shell_complete(self, ctx, param, incomplete):
+        template_names = get_templates().keys()
+        return [
+            CompletionItem(name)
+            for name in template_names
+            if name.startswith(incomplete)
+        ]
+
+
+class ModelType(click.ParamType):
+    """Support shell auto-complete for --model parameter."""
+
+    name = "model_id"
+
+    def shell_complete(self, ctx, param, incomplete):
+        model_aliases = get_model_aliases().keys()
+        return [
+            CompletionItem(model_id)
+            for model_id in model_aliases
+            if model_id.startswith(incomplete)
+        ]
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", type=ModelType(), help="Model to use")
 @click.option(
     "options",
     "-o",
@@ -95,7 +124,7 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", type=TemplateType(), help="Template to use")
 @click.option(
     "-p",
     "--param",
@@ -294,7 +323,7 @@ def prompt(
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", type=ModelType(), help="Model to use")
 @click.option(
     "_continue",
     "-c",
@@ -625,7 +654,7 @@ order by responses_fts.rank desc{limit}
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
 )
-@click.option("-m", "--model", help="Filter by model or model alias")
+@click.option("-m", "--model", type=ModelType(), help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
@@ -839,7 +868,7 @@ def models_list(options):
 
 
 @models.command(name="default")
-@click.argument("model", required=False)
+@click.argument("model", required=False, type=ModelType())
 def models_default(model):
     "Show or set the default model"
     if not model:
@@ -862,14 +891,22 @@ def templates():
     "Manage stored prompt templates"
 
 
-@templates.command(name="list")
-def templates_list():
-    "List available prompt templates"
+def get_templates():
+    """Return a dictionary with all templates."""
+    ret = {}
     path = template_dir()
-    pairs = []
     for file in path.glob("*.yaml"):
         name = file.stem
         template = load_template(name)
+        ret[name] = template
+    return ret
+
+
+@templates.command(name="list")
+def templates_list():
+    "List available prompt templates"
+    pairs = []
+    for name, template in get_templates().items():
         text = []
         if template.system:
             text.append(f"system: {template.system}")
@@ -926,7 +963,7 @@ def aliases_list(json_):
 
 @aliases.command(name="set")
 @click.argument("alias")
-@click.argument("model_id")
+@click.argument("model_id", type=ModelType())
 def aliases_set(alias, model_id):
     """
     Set an alias for a model
@@ -978,7 +1015,7 @@ def display_truncated(text):
 
 
 @templates.command(name="show")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_show(name):
     "Show the specified prompt template"
     template = load_template(name)
@@ -992,7 +1029,7 @@ def templates_show(name):
 
 
 @templates.command(name="edit")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
     # First ensure it exists
@@ -1064,7 +1101,7 @@ def uninstall(packages, yes):
     type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed",
 )
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option("-m", "--model", type=ModelType(), help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1206,7 +1243,7 @@ def embed(
     "--batch-size", type=int, help="Batch size to use when running embeddings"
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option("-m", "--model", type=ModelType(), help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1456,7 +1493,7 @@ def embed_models_list():
 
 
 @embed_models.command(name="default")
-@click.argument("model", required=False)
+@click.argument("model", required=False, type=ModelType())
 @click.option(
     "--remove-default", is_flag=True, help="Reset to specifying no default model"
 )
