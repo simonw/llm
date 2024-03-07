@@ -1,6 +1,6 @@
 # CLI reference
 
-This page lists the `--help` output for all of the `llm` commands.
+This page lists the `-h/--help` output for all of the `llm` commands.
 
 <!-- [[[cog
 from click.testing import CliRunner
@@ -55,8 +55,8 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
       llm 'Five outrageous names for a pet pelican'
 
 Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   prompt*       Execute a prompt
@@ -99,7 +99,7 @@ Options:
   --cid, --conversation TEXT   Continue the conversation with the given ID.
   --key TEXT                   API key to use
   --save TEXT                  Save prompt with this template name
-  --help                       Show this message and exit.
+  -h, --help                   Show this message and exit.
 ```
 
 (help-chat)=
@@ -119,7 +119,7 @@ Options:
   -o, --option <TEXT TEXT>...  key/value options for the model
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
-  --help                       Show this message and exit.
+  -h, --help                   Show this message and exit.
 ```
 
 (help-keys)=
@@ -130,7 +130,7 @@ Usage: llm keys [OPTIONS] COMMAND [ARGS]...
   Manage stored API keys for different models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*  List names of all stored keys
@@ -146,7 +146,7 @@ Usage: llm keys list [OPTIONS]
   List names of all stored keys
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-keys-path)=
@@ -157,7 +157,7 @@ Usage: llm keys path [OPTIONS]
   Output the path to the keys.json file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-keys-set)=
@@ -174,7 +174,7 @@ Usage: llm keys set [OPTIONS] NAME
 
 Options:
   --value TEXT  Value to set
-  --help        Show this message and exit.
+  -h, --help    Show this message and exit.
 ```
 
 (help-logs)=
@@ -185,7 +185,7 @@ Usage: llm logs [OPTIONS] COMMAND [ARGS]...
   Tools for exploring logged prompts and responses
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*   Show recent logged prompts and their responses
@@ -203,7 +203,7 @@ Usage: llm logs path [OPTIONS]
   Output the path to the logs.db file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-status)=
@@ -214,7 +214,7 @@ Usage: llm logs status [OPTIONS]
   Show current status of database logging
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-on)=
@@ -225,7 +225,7 @@ Usage: llm logs on [OPTIONS]
   Turn on logging for all prompts
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-off)=
@@ -236,7 +236,7 @@ Usage: llm logs off [OPTIONS]
   Turn off logging for all prompts
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-list)=
@@ -257,7 +257,7 @@ Options:
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
   --json                      Output logs as JSON
-  --help                      Show this message and exit.
+  -h, --help                  Show this message and exit.
 ```
 
 (help-models)=
@@ -268,7 +268,7 @@ Usage: llm models [OPTIONS] COMMAND [ARGS]...
   Manage available models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*    List available models
@@ -283,8 +283,8 @@ Usage: llm models list [OPTIONS]
   List available models
 
 Options:
-  --options  Show options for each model, if available
-  --help     Show this message and exit.
+  --options   Show options for each model, if available
+  -h, --help  Show this message and exit.
 ```
 
 (help-models-default)=
@@ -295,7 +295,7 @@ Usage: llm models default [OPTIONS] [MODEL]
   Show or set the default model
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates)=
@@ -306,7 +306,7 @@ Usage: llm templates [OPTIONS] COMMAND [ARGS]...
   Manage stored prompt templates
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*  List available prompt templates
@@ -323,7 +323,7 @@ Usage: llm templates list [OPTIONS]
   List available prompt templates
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-show)=
@@ -334,7 +334,7 @@ Usage: llm templates show [OPTIONS] NAME
   Show the specified prompt template
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-edit)=
@@ -345,7 +345,7 @@ Usage: llm templates edit [OPTIONS] NAME
   Edit the specified prompt template using the default $EDITOR
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-path)=
@@ -356,7 +356,7 @@ Usage: llm templates path [OPTIONS]
   Output the path to the templates directory
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases)=
@@ -367,7 +367,7 @@ Usage: llm aliases [OPTIONS] COMMAND [ARGS]...
   Manage model aliases
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*   List current aliases
@@ -384,8 +384,8 @@ Usage: llm aliases list [OPTIONS]
   List current aliases
 
 Options:
-  --json  Output as JSON
-  --help  Show this message and exit.
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases-set)=
@@ -400,7 +400,7 @@ Usage: llm aliases set [OPTIONS] ALIAS MODEL_ID
       $ llm aliases set turbo gpt-3.5-turbo
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases-remove)=
@@ -415,7 +415,7 @@ Usage: llm aliases remove [OPTIONS] ALIAS
       $ llm aliases remove turbo
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases-path)=
@@ -426,7 +426,7 @@ Usage: llm aliases path [OPTIONS]
   Output the path to the aliases.json file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-plugins)=
@@ -437,8 +437,8 @@ Usage: llm plugins [OPTIONS]
   List installed plugins
 
 Options:
-  --all   Include built-in default plugins
-  --help  Show this message and exit.
+  --all       Include built-in default plugins
+  -h, --help  Show this message and exit.
 ```
 
 (help-install)=
@@ -454,7 +454,7 @@ Options:
   --force-reinstall    Reinstall all packages even if they are already up-to-
                        date
   --no-cache-dir       Disable the cache
-  --help               Show this message and exit.
+  -h, --help           Show this message and exit.
 ```
 
 (help-uninstall)=
@@ -465,8 +465,8 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
   Uninstall Python packages from the LLM environment
 
 Options:
-  -y, --yes  Don't ask for confirmation
-  --help     Show this message and exit.
+  -y, --yes   Don't ask for confirmation
+  -h, --help  Show this message and exit.
 ```
 
 (help-embed)=
@@ -486,7 +486,7 @@ Options:
   --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
-  --help                          Show this message and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 (help-embed-multi)=
@@ -522,7 +522,7 @@ Options:
   -m, --model TEXT             Embedding model to use
   --store                      Store the text itself in the database
   -d, --database FILE
-  --help                       Show this message and exit.
+  -h, --help                   Show this message and exit.
 ```
 
 (help-similar)=
@@ -546,7 +546,7 @@ Options:
   --binary              Treat input as binary data
   -n, --number INTEGER  Number of results to return
   -d, --database FILE
-  --help                Show this message and exit.
+  -h, --help            Show this message and exit.
 ```
 
 (help-embed-models)=
@@ -557,7 +557,7 @@ Usage: llm embed-models [OPTIONS] COMMAND [ARGS]...
   Manage available embedding models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*    List available embedding models
@@ -572,7 +572,7 @@ Usage: llm embed-models list [OPTIONS]
   List available embedding models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-embed-models-default)=
@@ -584,7 +584,7 @@ Usage: llm embed-models default [OPTIONS] [MODEL]
 
 Options:
   --remove-default  Reset to specifying no default model
-  --help            Show this message and exit.
+  -h, --help        Show this message and exit.
 ```
 
 (help-collections)=
@@ -595,7 +595,7 @@ Usage: llm collections [OPTIONS] COMMAND [ARGS]...
   View and manage collections of embeddings
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*   View a list of collections
@@ -611,7 +611,7 @@ Usage: llm collections path [OPTIONS]
   Output the path to the embeddings database
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-collections-list)=
@@ -624,7 +624,7 @@ Usage: llm collections list [OPTIONS]
 Options:
   -d, --database FILE  Path to embeddings database
   --json               Output as JSON
-  --help               Show this message and exit.
+  -h, --help           Show this message and exit.
 ```
 
 (help-collections-delete)=
@@ -640,7 +640,7 @@ Usage: llm collections delete [OPTIONS] COLLECTION
 
 Options:
   -d, --database FILE  Path to embeddings database
-  --help               Show this message and exit.
+  -h, --help           Show this message and exit.
 ```
 
 (help-openai)=
@@ -651,7 +651,7 @@ Usage: llm openai [OPTIONS] COMMAND [ARGS]...
   Commands for working directly with the OpenAI API
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   models  List models available to you from the OpenAI API
@@ -667,6 +667,6 @@ Usage: llm openai models [OPTIONS]
 Options:
   --json      Output as JSON
   --key TEXT  OpenAI API key
-  --help      Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 <!-- [[[end]]] -->
