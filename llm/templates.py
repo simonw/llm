@@ -54,7 +54,7 @@ class Template(BaseModel):
     def extract_identifiers(cls, template: string.Template) -> List[str]:
         (major, minor, patchlevel) = platform.python_version_tuple()
         if int(major) >= 3 and int(minor) >= 11:
-            # Added in Python 3.11 
+            # Added in Python 3.11
             return template.get_identifiers()
         else:
             result = set()
