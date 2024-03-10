@@ -3,6 +3,13 @@ from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
 import json
+
+try:
+    import readline  # noqa: F401
+except ImportError:
+    # Readline is not built into Python on Windows
+    pass
+
 from llm import (
     Collection,
     Conversation,
