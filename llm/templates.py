@@ -55,7 +55,7 @@ class Template(BaseModel):
         (major, minor, patchlevel) = platform.python_version_tuple()
         if int(major) >= 3 and int(minor) >= 11:
             # Added in Python 3.11
-            return template.get_identifiers()
+            return sort(template.get_identifiers()) # type: ignore
         else:
             result = set()
             # Adapted from source at https://github.com/python/cpython/blob/86e5e063aba76a7f4fc58f7d06b17b0a4730fd8e/Lib/string.py#L157
@@ -63,4 +63,4 @@ class Template(BaseModel):
                 named = match.group("named") or match.group("braced")
                 if named is not None:
                     result.add(match.group("named"))
-            return list(result)
+            return sort(list(result))
