@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 import string
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple, Union
 
 
 class Template(BaseModel):
@@ -9,6 +9,7 @@ class Template(BaseModel):
     system: Optional[str] = None
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
+    options: Optional[Dict[str, Union[float, int, str, bool]]] = None
 
     class Config:
         extra = "forbid"

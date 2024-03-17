@@ -218,6 +218,12 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+        if template_obj.options:
+            merged_options = template_obj.options.copy()
+            if options:
+                for key, value in options:
+                    merged_options[key] = value
+            options = tuple((key, str(value)) for key, value in merged_options.items())
 
     conversation = None
     if conversation_id or _continue:
@@ -366,6 +372,12 @@ def chat(
         template_obj = load_template(template)
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+        if template_obj.options:
+            merged_options = template_obj.options.copy()
+            if options:
+                for key, value in options:
+                    merged_options[key] = value
+            options = tuple((key, str(value)) for key, value in merged_options.items())
 
     # Figure out which model we are using
     if model_id is None:
