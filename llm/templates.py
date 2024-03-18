@@ -54,13 +54,17 @@ class Template(BaseModel):
     def extract_identifiers(cls, template: string.Template) -> List[str]:
         (major, minor, patchlevel) = platform.python_version_tuple()
         if int(major) >= 3 and int(minor) >= 11:
+            result = template.get_identifiers() # type: ignore
+            result.sort()
             # Added in Python 3.11
-            return sort(template.get_identifiers()) # type: ignore
+            return result
         else:
             result = set()
             # Adapted from source at https://github.com/python/cpython/blob/86e5e063aba76a7f4fc58f7d06b17b0a4730fd8e/Lib/string.py#L157
             for match in template.pattern.finditer(template.template):
                 named = match.group("named") or match.group("braced")
                 if named is not None:
-                    result.add(match.group("named"))
-            return sort(list(result))
+                    result.add(named)
+            result = list(result)
+            result.sort()
+            return result

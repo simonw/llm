@@ -13,6 +13,7 @@ import yaml
     (
         ("$$test", None, None, {}, "$test", None, None),
         ("S: $input", None, None, {}, "S: input", None, None),
+        ("S: ${input}", None, None, {}, "S: input", None, None),
         ("S: $input", "system", None, {}, "S: input", "system", None),
         ("No vars", None, None, {}, "No vars", None, None),
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
