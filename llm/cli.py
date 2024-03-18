@@ -178,7 +178,9 @@ def prompt(
             if var:
                 disallowed_options.append(option)
         if disallowed_options:
-            raise click.ClickException("--save cannot be used with {}".format(", ".join(disallowed_options)))
+            raise click.ClickException(
+                "--save cannot be used with {}".format(", ".join(disallowed_options))
+            )
         path = template_dir() / f"{save}.yaml"
         to_save = {}
         if model_id:
@@ -253,7 +255,11 @@ def prompt(
     if options:
         # Validate with pydantic
         try:
-            validated_options = dict((key, value) for key, value in model.Options(**dict(options)) if value is not None)
+            validated_options = dict(
+                (key, value)
+                for key, value in model.Options(**dict(options))
+                if value is not None
+            )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
@@ -393,7 +399,11 @@ def chat(
     validated_options = {}
     if options:
         try:
-            validated_options = dict((key, value) for key, value in model.Options(**dict(options)) if value is not None)
+            validated_options = dict(
+                (key, value)
+                for key, value in model.Options(**dict(options))
+                if value is not None
+            )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
@@ -453,10 +463,14 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
-        raise click.ClickException("No conversation found with id={}".format(conversation_id))
+        raise click.ClickException(
+            "No conversation found with id={}".format(conversation_id)
+        )
     # Inflate that conversation
     conversation = Conversation.from_row(row)
-    for response in db["responses"].rows_where("conversation_id = ?", [conversation_id]):
+    for response in db["responses"].rows_where(
+        "conversation_id = ?", [conversation_id]
+    ):
         conversation.responses.append(Response.from_row(response))
     return conversation
 
@@ -547,7 +561,9 @@ def logs_status():
     click.echo("Found log database at {}".format(path))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
     click.echo("Number of responses logged:\t{}".format(db["responses"].count))
-    click.echo("Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size)))
+    click.echo(
+        "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
+    )
 
 
 @logs.command(name="on")
@@ -660,7 +676,11 @@ def logs_list(
 
     if current_conversation:
         try:
-            conversation_id = next(db.query("select conversation_id from responses order by id desc limit 1"))["conversation_id"]
+            conversation_id = next(
+                db.query(
+                    "select conversation_id from responses order by id desc limit 1"
+                )
+            )["conversation_id"]
         except StopIteration:
             # No conversations yet
             raise click.ClickException("No conversations found")
@@ -742,8 +762,16 @@ def logs_list(
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
-                    ("    conversation: {}".format(row["conversation_id"]) if should_show_conversation else ""),
-                    ("\nModel: **{}**\n".format(row["model"]) if should_show_conversation else ""),
+                    (
+                        "    conversation: {}".format(row["conversation_id"])
+                        if should_show_conversation
+                        else ""
+                    ),
+                    (
+                        "\nModel: **{}**\n".format(row["model"])
+                        if should_show_conversation
+                        else ""
+                    ),
                 )
             )
             # In conversation log mode only show it for the first one
@@ -775,7 +803,9 @@ _type_lookup = {
 
 
 @models.command(name="list")
-@click.option("--options", is_flag=True, help="Show options for each model, if available")
+@click.option(
+    "--options", is_flag=True, help="Show options for each model, if available"
+)
 def models_list(options):
     "List available models"
     models_that_have_shown_options = set()
@@ -785,14 +815,25 @@ def models_list(options):
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         output = str(model_with_aliases.model) + extra
         if options and model_with_aliases.model.Options.schema()["properties"]:
-            for name, field in model_with_aliases.model.Options.schema()["properties"].items():
+            for name, field in model_with_aliases.model.Options.schema()[
+                "properties"
+            ].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
                     any_of = [{"type": field["type"]}]
-                types = ", ".join([_type_lookup.get(item["type"], item["type"]) for item in any_of if item["type"] != "null"])
+                types = ", ".join(
+                    [
+                        _type_lookup.get(item["type"], item["type"])
+                        for item in any_of
+                        if item["type"] != "null"
+                    ]
+                )
                 bits = ["\n  ", name, ": ", types]
                 description = field.get("description", "")
-                if description and (model_with_aliases.model.__class__ not in models_that_have_shown_options):
+                if description and (
+                    model_with_aliases.model.__class__
+                    not in models_that_have_shown_options
+                ):
                     wrapped = textwrap.wrap(description, 70)
                     bits.append("\n    ")
                     bits.extend("\n    ".join(wrapped))
@@ -873,12 +914,18 @@ def aliases_list(json_):
         if alias != embedding_model.model_id:
             to_output.append((alias, embedding_model.model_id, "embedding"))
     if json_:
-        click.echo(json.dumps({key: value for key, value, type_ in to_output}, indent=4))
+        click.echo(
+            json.dumps({key: value for key, value, type_ in to_output}, indent=4)
+        )
         return
     max_alias_length = max(len(a) for a, _, _ in to_output)
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}{type_}"
     for alias, model_id, type_ in to_output:
-        click.echo(fmt.format(alias=alias, model_id=model_id, type_=f" ({type_})" if type_ else ""))
+        click.echo(
+            fmt.format(
+                alias=alias, model_id=model_id, type_=f" ({type_})" if type_ else ""
+            )
+        )
 
 
 @aliases.command(name="set")
@@ -969,7 +1016,9 @@ def templates_path():
 
 @cli.command()
 @click.argument("packages", nargs=-1, required=False)
-@click.option("-U", "--upgrade", is_flag=True, help="Upgrade packages to latest version")
+@click.option(
+    "-U", "--upgrade", is_flag=True, help="Upgrade packages to latest version"
+)
 @click.option(
     "-e",
     "--editable",
@@ -1045,7 +1094,9 @@ def uninstall(packages, yes):
     type=click.Choice(["json", "blob", "base64", "hex"]),
     help="Output format",
 )
-def embed(collection, id, input, model, store, database, content, binary, metadata, format_):
+def embed(
+    collection, id, input, model, store, database, content, binary, metadata, format_
+):
     """Embed text and store or return the result"""
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
@@ -1073,7 +1124,9 @@ def embed(collection, id, input, model, store, database, content, binary, metada
             if not model:
                 model = get_default_embedding_model()
                 if model is None:
-                    raise click.ClickException("You need to specify an embedding model (no default model is set)")
+                    raise click.ClickException(
+                        "You need to specify an embedding model (no default model is set)"
+                    )
             collection_obj = Collection(collection, db=db, model_id=model)
             model_obj = collection_obj.model()
 
@@ -1083,7 +1136,9 @@ def embed(collection, id, input, model, store, database, content, binary, metada
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError:
-            raise click.ClickException("You need to specify an embedding model (no default model is set)")
+            raise click.ClickException(
+                "You need to specify an embedding model (no default model is set)"
+            )
 
     show_output = True
     if collection and (format_ is None):
@@ -1151,7 +1206,9 @@ def embed(collection, id, input, model, store, database, content, binary, metada
     multiple=True,
     help="Additional databases to attach - specify alias and file path",
 )
-@click.option("--batch-size", type=int, help="Batch size to use when running embeddings")
+@click.option(
+    "--batch-size", type=int, help="Batch size to use when running embeddings"
+)
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option("-m", "--model", help="Embedding model to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
@@ -1201,7 +1258,9 @@ def embed_multi(
 
     if files:
         if input_path or sql or format:
-            raise click.UsageError("Cannot use --files with --sql, input path or --format")
+            raise click.UsageError(
+                "Cannot use --files with --sql, input path or --format"
+            )
 
     if database:
         db = sqlite_utils.Database(database)
@@ -1212,9 +1271,13 @@ def embed_multi(
         db.attach(alias, attach_path)
 
     try:
-        collection_obj = Collection(collection, db=db, model_id=model or get_default_embedding_model())
+        collection_obj = Collection(
+            collection, db=db, model_id=model or get_default_embedding_model()
+        )
     except ValueError:
-        raise click.ClickException("You need to specify an embedding model (no default model is set)")
+        raise click.ClickException(
+            "You need to specify an embedding model (no default model is set)"
+        )
 
     expected_length = None
     if files:
@@ -1274,11 +1337,17 @@ def embed_multi(
                     for _ in load_rows(fp):
                         expected_length += 1
 
-            rows = load_rows(open(input_path, "rb") if input_path != "-" else io.BufferedReader(sys.stdin.buffer))
+            rows = load_rows(
+                open(input_path, "rb")
+                if input_path != "-"
+                else io.BufferedReader(sys.stdin.buffer)
+            )
         except json.JSONDecodeError as ex:
             raise click.ClickException(str(ex))
 
-    with click.progressbar(rows, label="Embedding", show_percent=True, length=expected_length) as rows:
+    with click.progressbar(
+        rows, label="Embedding", show_percent=True, length=expected_length
+    ) as rows:
 
         def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
@@ -1306,7 +1375,9 @@ def embed_multi(
 )
 @click.option("-c", "--content", help="Content to embed for comparison")
 @click.option("--binary", is_flag=True, help="Treat input as binary data")
-@click.option("-n", "--number", type=int, default=10, help="Number of results to return")
+@click.option(
+    "-n", "--number", type=int, default=10, help="Number of results to return"
+)
 @click.option(
     "-d",
     "--database",
@@ -1390,7 +1461,9 @@ def embed_models_list():
 
 @embed_models.command(name="default")
 @click.argument("model", required=False)
-@click.option("--remove-default", is_flag=True, help="Reset to specifying no default model")
+@click.option(
+    "--remove-default", is_flag=True, help="Reset to specifying no default model"
+)
 def embed_models_default(model, remove_default):
     "Show or set the default embedding model"
     if not model and not remove_default:
@@ -1459,7 +1532,11 @@ def embed_db_collections(database, json_):
     else:
         for row in rows:
             click.echo("{}: {}".format(row["name"], row["model"]))
-            click.echo("  {} embedding{}".format(row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""))
+            click.echo(
+                "  {} embedding{}".format(
+                    row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""
+                )
+            )
 
 
 @collections.command(name="delete")
@@ -1561,7 +1638,9 @@ def get_history(chat_id):
             chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
         else:  # Database is empty
             return None, []
-    rows = db["logs"].rows_where("id = ? or chat_id = ?", [chat_id, chat_id], order_by="id")
+    rows = db["logs"].rows_where(
+        "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
+    )
     return chat_id, rows
 
 

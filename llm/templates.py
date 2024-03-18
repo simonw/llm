@@ -17,7 +17,9 @@ class Template(BaseModel):
     class MissingVariables(Exception):
         pass
 
-    def evaluate(self, input: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Optional[str], Optional[str]]:
+    def evaluate(
+        self, input: str, params: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
         params = params or {}
         params["input"] = input
         if self.defaults:
@@ -34,7 +36,9 @@ class Template(BaseModel):
             system = self.interpolate(self.system, params)
         return prompt, system
 
-    def evaluate_options(self, options=Optional[Tuple[Tuple[str, Any]]]) -> Tuple[Tuple[str, Any]]:
+    def evaluate_options(
+        self, options=Optional[Tuple[Tuple[str, Any]]]
+    ) -> Tuple[Tuple[str, Any]]:
         ret = {}
         if self.options:
             ret.update(self.options)
@@ -51,9 +55,14 @@ class Template(BaseModel):
         vars = cls.extract_vars(string_template)
         missing = [p for p in vars if p not in params]
         if missing:
-            raise cls.MissingVariables("Missing variables: {}".format(", ".join(missing)))
+            raise cls.MissingVariables(
+                "Missing variables: {}".format(", ".join(missing))
+            )
         return string_template.substitute(**params)
 
     @staticmethod
     def extract_vars(string_template: string.Template) -> List[str]:
-        return [match.group("named") for match in string_template.pattern.finditer(string_template.template)]
+        return [
+            match.group("named")
+            for match in string_template.pattern.finditer(string_template.template)
+        ]
