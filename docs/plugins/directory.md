@@ -21,6 +21,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-gemini](https://github.com/simonw/llm-gemini)** adds support for Google's [Gemini](https://ai.google.dev/docs) models.
 - **[llm-claude](https://github.com/tomviner/llm-claude)** by Tom Viner adds support for Claude 2.1 and Claude Instant 2.1 by Anthropic.
 - **[llm-claude-3](https://github.com/simonw/llm-claude-3)** supports Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family) of models.
+- **[llm-command-r](https://github.com/simonw/llm-command-r)** supports Cohere's Command R and [Command R Plus](https://txt.cohere.com/command-r-plus-microsoft-azure/) API models.
 - **[llm-anyscale-endpoints](https://github.com/simonw/llm-anyscale-endpoints)** supports models hosted on the [Anyscale Endpoints](https://app.endpoints.anyscale.com/) platform, including Llama 2 70B.
 - **[llm-replicate](https://github.com/simonw/llm-replicate)** adds support for remote models hosted on [Replicate](https://replicate.com/), including Llama 2 from Meta AI.
 - **[llm-palm](https://github.com/simonw/llm-palm)** adds support for Google's [PaLM 2 model](https://developers.generativeai.google/).
