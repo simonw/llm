@@ -427,7 +427,7 @@ def combine_chunks(chunks: List) -> dict:
 
     for item in chunks:
         for choice in item.choices:
-            if choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
+            if hasattr(choice, 'logprobs') and choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
                 logprobs.append(
                     {
                         "text": choice.text if hasattr(choice, "text") else None,
