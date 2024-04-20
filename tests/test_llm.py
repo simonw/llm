@@ -545,6 +545,12 @@ def test_llm_models_options(user_path):
     assert result.exit_code == 0
     assert EXPECTED_OPTIONS.strip() in result.output
 
+def test_llm_model_envvar(tmpdir, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.setenv("LLM_CHAT_MODEL_ID", "non-existent-model")
+    result = runner.invoke(cli, ["chat"], catch_exceptions=False)
+    assert result.exit_code == 1
+    assert "Error: 'non-existent-model' is not a known model" in result.output
 
 def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir = str(tmpdir / "u")
@@ -553,3 +559,4 @@ def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir2 = llm.user_dir()
     assert user_dir == str(user_dir2)
     assert os.path.exists(user_dir)
+
