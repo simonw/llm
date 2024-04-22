@@ -42,12 +42,12 @@ class Template(BaseModel):
         # Confirm all variables in text are provided
         string_template = string.Template(text)
         vars = cls.extract_vars(string_template)
-        missing = [p for p in vars if p not in params]
+        missing = [p for p in vars if p is not None and p not in params]
         if missing:
             raise cls.MissingVariables(
                 "Missing variables: {}".format(", ".join(missing))
             )
-        return string_template.substitute(**params)
+        return string_template.safe_substitute(**params)
 
     @staticmethod
     def extract_vars(string_template: string.Template) -> List[str]:
