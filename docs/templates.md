@@ -27,9 +27,9 @@ llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
 
-To use `$` characters that don't refer to a template variable, escape them with another `$`:
+To use `$` characters in strings that look like a template variable but aren't, escape them with another `$`:
 ```bash
-llm 'Summarize this and add a $$ at the end: $input' --save summarize
+llm 'Replace all instances of $$replace_me with the string "$ dollars" in this text: $input' --save replace
 ```
 ## Using a template
 
