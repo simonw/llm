@@ -11,6 +11,8 @@ A CLI utility and Python library for interacting with Large Language Models, bot
 
 {ref}`Run prompts from the command-line <usage-executing-prompts>`, {ref}`store the results in SQLite <logging>`, {ref}`generate embeddings <embeddings>` and more.
 
+Consult the **{ref}`LLM plugins directory<plugin-directory>`** for plugins that provide access to remote and local models.
+
 Background on this project:
 - [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
 - [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
