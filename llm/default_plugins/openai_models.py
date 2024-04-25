@@ -281,6 +281,10 @@ class Chat(Model):
 
     def execute(self, prompt, stream, response, conversation=None):
 
+        def _stream_preproc(x):
+            "OpenAI stores stream results in a nested structure; this grabs the content"
+            return x.choices[0].delta.content
+
         messages = []
         current_system = None
         if conversation is not None:
@@ -313,7 +317,7 @@ class Chat(Model):
                 **kwargs,
             )
             chunks = []
-            for content in remove_pref(prompt.prefill, completion, store=chunks):
+            for content in remove_pref(prompt.prefill, completion, store=chunks, preproc=_stream_preproc):
                 if content is not None and content != '':
                     yield content
             response.response_json = remove_dict_none_values(combine_chunks(chunks))

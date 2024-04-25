@@ -3,7 +3,7 @@ import httpx
 import json
 import textwrap
 import re
-from typing import List, Dict, Generator, Iterable, Optional
+from typing import List, Dict, Generator, Iterable, Optional, Callable
 
 
 def dicts_to_table_string(
@@ -108,7 +108,7 @@ def logging_client() -> httpx.Client:
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
-def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None) -> Generator[str,None,None]:
+def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None, preproc:Optional[Callable]=None) -> Generator[str,None,None]:
     "Remove prefill `p` from result chunks `r` if the prefill matches the initial chunks"
     # The requirement is that the `p` values should be added to the start of the concatenated list `r`
     # if it's not already there. However, the function is a streaming function which yields one item from
@@ -123,7 +123,7 @@ def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None) -> Generator[
     has_pre = False
     for x in ir:
         if store is not None: store.append(x)
-        if not isinstance(x,str): x = x.choices[0].delta.content
+        if preproc and not isinstance(x,str): x = preproc(x)
         buffer += x
         if buffer.startswith(p):
             buffer = buffer[len(p):]
@@ -140,6 +140,6 @@ def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None) -> Generator[
     yield buffer
     for x in ir:
         if store is not None: store.append(x)
-        if not isinstance(x,str): x = x.choices[0].delta.content
+        if preproc and not isinstance(x,str): x = preproc(x)
         yield x
 
