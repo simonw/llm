@@ -1,7 +1,7 @@
 import re
 from llm import EmbeddingModel, Model, hookimpl
 import llm
-from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
+from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client, remove_pref
 import click
 import datetime
 import httpx
@@ -280,7 +280,7 @@ class Chat(Model):
         return "OpenAI Chat: {}".format(self.model_id)
 
     def execute(self, prompt, stream, response, conversation=None):
-        
+
         messages = []
         current_system = None
         if conversation is not None:
@@ -300,7 +300,7 @@ class Chat(Model):
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
-        if prompt.prefill: 
+        if prompt.prefill:
             messages.append({"role": "assistant", "content": prompt.prefill})
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
@@ -313,10 +313,8 @@ class Chat(Model):
                 **kwargs,
             )
             chunks = []
-            for chunk in completion:
-                chunks.append(chunk)
-                content = chunk.choices[0].delta.content
-                if content is not None:
+            for content in remove_pref(prompt.prefill, completion, store=chunks):
+                if content is not None and content != '':
                     yield content
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
