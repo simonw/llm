@@ -2,7 +2,8 @@ import click
 import httpx
 import json
 import textwrap
-from typing import List, Dict
+import re
+from typing import List, Dict, Generator, Iterable
 
 
 def dicts_to_table_string(
@@ -106,3 +107,34 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+def remove_pref(p:str, r:Iterable[str]) -> Generator[str,None,None]:
+    "Remove prefill `p` from result chunks `r` if the prefill matches the initial chunks"
+    # The requirement is that the `p` values should be added to the start of the concatenated list `r`
+    # if it's not already there. However, the function is a streaming function which yields one item from
+    # `r` at a time -- so we can't actually concatenate `r` first. Instead we have to accrue each part of
+    # `r` until we know whether or not it has a prefix which matches `p`, at which point we can start yielding values.
+    #
+    # To implement this, we iterate through r and accumulate items into `buffer`.
+    # At each step, check if the buffer starts with p. Once it does, yield p, then the rest of the buffer (after p)
+    # and each subsequent item from r individually.
+    buffer = ''
+    ir = iter(r)
+    has_pre = False
+    for x in ir:
+        buffer += x
+        if buffer.startswith(p):
+            buffer = buffer[len(p):]
+            has_pre = True
+            break
+        if not p.startswith(buffer[:len(p)+1]):
+            # If we already know the prefill doesn't match the start of the buffer,
+            # stop looking.
+            break
+    yield p
+    # LLMs assume that prefill ends at a word boundary, but don't actually add the space char.
+    # So if we are adding the prefill, and the prefill doesn't end in whitespace, then also add the space
+    if not has_pre and not re.search(r'\s$', p): yield ' '
+    yield buffer
+    yield from ir
+
