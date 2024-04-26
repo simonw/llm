@@ -108,7 +108,7 @@ def logging_client() -> httpx.Client:
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
-def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None, preproc:Optional[Callable]=None) -> Generator[str,None,None]:
+def remove_pref(p:Optional[str], r:Iterable[str], store:Optional[List]=None, preproc:Optional[Callable]=None) -> Generator[str,None,None]:
     "Remove prefill `p` from result chunks `r` if the prefill matches the initial chunks"
     # The requirement is that the `p` values should be added to the start of the concatenated list `r`
     # if it's not already there. However, the function is a streaming function which yields one item from
@@ -118,6 +118,7 @@ def remove_pref(p:str, r:Iterable[str], store:Optional[List]=None, preproc:Optio
     # To implement this, we iterate through r and accumulate items into `buffer`.
     # At each step, check if the buffer starts with p. Once it does, yield p, then the rest of the buffer (after p)
     # and each subsequent item from r individually.
+    if p is None: p=''
     buffer = ''
     ir = iter(r)
     has_pre = False
