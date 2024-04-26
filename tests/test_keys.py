@@ -40,6 +40,33 @@ def test_keys_set(monkeypatch, tmpdir):
     }
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_keys_remove(monkeypatch, tmpdir):
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
+    keys_path.write_text(json.dumps({
+        "// Note": "This file stores secret API credentials. Do not share!",
+        "openai": "foo",
+        "another": "bar",
+    }))
+    assert keys_path.exists()
+    runner = CliRunner()
+    # Try to remove an existing key
+    result = runner.invoke(cli, ["keys", "remove", "openai"])
+    assert result.exit_code == 0
+    content = keys_path.read_text("utf-8")
+    assert json.loads(content) == {
+        "// Note": "This file stores secret API credentials. Do not share!",
+        "another": "bar",
+    }
+    # Try to remove a non-existent key
+    result = runner.invoke(cli, ["keys", "remove", "non-existent"])
+    assert result.exit_code == 0
+    assert "Key 'non-existent' not found" in result.output
+
+
 @pytest.mark.parametrize("args", (["keys", "list"], ["keys"]))
 def test_keys_list(monkeypatch, tmpdir, args):
     user_path = str(tmpdir / "user/keys")
