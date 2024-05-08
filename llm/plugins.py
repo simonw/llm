@@ -10,7 +10,7 @@ DEFAULT_PLUGINS = ("llm.default_plugins.openai_models",)
 pm = pluggy.PluginManager("llm")
 pm.add_hookspecs(hookspecs)
 
-LLM_LOAD_PLUGINS = os.environ.get("LLM_LOAD_PLUGINS", None)
+LLM_LOAD_PLUGINS = os.environ.get("LLM_LOAD_PLUGINS")
 
 if not hasattr(sys, "_called_from_test") and LLM_LOAD_PLUGINS is None:
     # Only load plugins if not running tests
