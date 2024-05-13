@@ -55,7 +55,7 @@ setup(
             "numpy",
             "pytest-httpx",
             "cogapp",
-            "mypy",
+            "mypy>=1.10.0",
             "black>=24.1.0",
             "ruff",
             "types-click",
