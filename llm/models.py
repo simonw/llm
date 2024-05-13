@@ -87,7 +87,7 @@ class Response(ABC):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
-            return self._chunks
+            yield from self._chunks
         for chunk in self.model.execute(
             self.prompt,
             stream=self.stream,
