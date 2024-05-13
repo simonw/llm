@@ -84,18 +84,35 @@ def cli():
     """
 
 
-class FileOrUrl(click.ParamType):
-    name = "file_or_url"
+class ImageOrUrl:
+    def __init__(self, fp=None, url=None):
+        self._fp = fp
+        self.url = url
+
+    def fp(self):
+        if self._fp:
+            return self._fp
+        else:
+            return urllib.request.urlopen(self.url)
+
+
+class ImageOption(click.ParamType):
+    """
+    Images can be specified as a filepath or a
+    URL or a '-' to read from standard input
+    """
+
+    name = "image"
 
     def convert(self, value, param, ctx):
         if value == "-":
-            return sys.stdin
+            return ImageOrUrl(sys.stdin)
         if re.match(r"^https?://", value):
-            return urllib.request.urlopen(value)
+            return ImageOrUrl(url=value)
         # Use pathlib to detect if it is a readable file
         path = pathlib.Path(value)
         if path.exists() and path.is_file():
-            return path.open("rb")
+            return ImageOrUrl(path.open("rb"))
         self.fail(f"{value} is not a valid file path or URL", param, ctx)
 
 
@@ -104,7 +121,12 @@ class FileOrUrl(click.ParamType):
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option(
-    "images", "-i", "--image", type=FileOrUrl(), multiple=True, help="Images for prompt"
+    "images",
+    "-i",
+    "--image",
+    type=ImageOption(),
+    multiple=True,
+    help="Images for prompt",
 )
 @click.option(
     "options",
@@ -125,6 +147,7 @@ class FileOrUrl(click.ParamType):
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--log", is_flag=True, help="Log prompt and response to the database")
+@click.option("--store", is_flag=True, help="Store image files in the database")
 @click.option(
     "_continue",
     "-c",
@@ -152,6 +175,7 @@ def prompt(
     no_stream,
     no_log,
     log,
+    store,
     _continue,
     conversation_id,
     key,
@@ -194,6 +218,7 @@ def prompt(
             ("--template", template),
             ("--continue", _continue),
             ("--cid", conversation_id),
+            ("--image", images),
         ):
             if var:
                 disallowed_options.append(option)

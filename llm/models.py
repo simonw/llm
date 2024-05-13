@@ -259,6 +259,7 @@ class Model(ABC, _get_key_mixin):
     key_env_var: Optional[str] = None
     can_stream: bool = False
     supports_images: bool = False
+    supports_image_urls: bool = False
 
     class Options(_Options):
         pass

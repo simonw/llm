@@ -201,3 +201,15 @@ def m010_create_new_log_tables(db):
 @migration
 def m011_fts_for_responses(db):
     db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+
+
+@migration
+def m012_images_table(db):
+    db["images"].create({
+        "id": str, # ulid
+        "url": str,
+        "filepath": str,
+        "content": bytes,
+        "content_md5": str, # To avoid storing duplicate blobs
+    })
+    db["images"].create_index(["content_md5"])
