@@ -1,5 +1,21 @@
 # Changelog
 
+(v0_14)=
+## 0.14 (2024-05-13)
+
+- Support for OpenAI's [new GPT-4o](https://openai.com/index/hello-gpt-4o/) model: `llm -m gpt-4o 'say hi in Spanish'` [#490](https://github.com/simonw/llm/issues/490)
+- New `llm logs -r/--response` option for outputting just the last captured response, without wrapping it in Markdown and accompanying it with the prompt. [#431](https://github.com/simonw/llm/issues/431)
+- Nine new {ref}`plugins <plugin-directory>` since version 0.13:
+  - **[llm-claude-3](https://github.com/simonw/llm-claude-3)** supporting Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family) of models.
+  - **[llm-command-r](https://github.com/simonw/llm-command-r)** supporting Cohere's Command R and [Command R Plus](https://txt.cohere.com/command-r-plus-microsoft-azure/) API models.
+  - **[llm-reka](https://github.com/simonw/llm-reka)** supports the [Reka](https://www.reka.ai/) family of models via their API.
+  - **[llm-perplexity](https://github.com/hex/llm-perplexity)** by Alexandru Geana supporting the [Perplexity Labs](https://docs.perplexity.ai/) API models, including `llama-3-sonar-large-32k-online` which can search for things online and `llama-3-70b-instruct`.
+  - **[llm-groq](https://github.com/angerman/llm-groq)** by Moritz Angermann providing access to fast models hosted by [Groq](https://console.groq.com/docs/models).
+  - **[llm-fireworks](https://github.com/simonw/llm-fireworks)** supporting models hosted by [Fireworks AI](https://fireworks.ai/).
+  - **[llm-together](https://github.com/wearedevx/llm-together)** adds support for the [Together AI](https://www.together.ai/) extensive family of hosted openly licensed models.
+  - **[llm-embed-onnx](https://github.com/simonw/llm-embed-onnx)** provides seven embedding models that can be executed using the ONNX model framework.
+  - **[llm-cmd](https://github.com/simonw/llm-cmd)** accepts a prompt for a shell command, runs that prompt and populates the result in your shell so you can review it, edit it and then hit `<enter>` to execute or `ctrl+c` to cancel, see [this post for details](https://simonwillison.net/2024/Mar/26/llm-cmd/).
+
 (v0_13_1)=
 ## 0.13.1 (2024-01-26)
 
