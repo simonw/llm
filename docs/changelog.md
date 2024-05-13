@@ -4,6 +4,7 @@
 ## 0.14 (2024-05-13)
 
 - Support for OpenAI's [new GPT-4o](https://openai.com/index/hello-gpt-4o/) model: `llm -m gpt-4o 'say hi in Spanish'` [#490](https://github.com/simonw/llm/issues/490)
+- The `gpt-4-turbo` alias is now a model ID, which indicates the latest version of OpenAI's GPT-4 Turbo text and image model. Your existing `logs.db` database may contain records under the previous model ID of `gpt-4-turbo-preview`. [#493](https://github.com/simonw/llm/issues/493)
 - New `llm logs -r/--response` option for outputting just the last captured response, without wrapping it in Markdown and accompanying it with the prompt. [#431](https://github.com/simonw/llm/issues/431)
 - Nine new {ref}`plugins <plugin-directory>` since version 0.13:
   - **[llm-claude-3](https://github.com/simonw/llm-claude-3)** supporting Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family) of models.

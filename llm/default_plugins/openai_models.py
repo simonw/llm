@@ -27,10 +27,11 @@ def register_models(register):
     register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
     register(Chat("gpt-4"), aliases=("4", "gpt4"))
     register(Chat("gpt-4-32k"), aliases=("4-32k",))
-    # GPT-4 turbo models
+    # GPT-4 Turbo models
     register(Chat("gpt-4-1106-preview"))
     register(Chat("gpt-4-0125-preview"))
-    register(Chat("gpt-4-turbo-preview"), aliases=("gpt-4-turbo", "4-turbo", "4t"))
+    register(Chat("gpt-4-turbo-2024-04-09"))
+    register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
     # GPT-4o
     register(Chat("gpt-4o"), aliases=("4o",))
     # The -instruct completion model

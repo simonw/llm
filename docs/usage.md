@@ -305,7 +305,17 @@ OpenAI Chat: gpt-4-0125-preview
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-turbo-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
+OpenAI Chat: gpt-4-turbo-2024-04-09
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   temperature: float
   max_tokens: int
   top_p: float
