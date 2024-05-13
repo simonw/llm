@@ -12,6 +12,7 @@ These plugins all help you run LLMs directly on your own computer:
 - **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)** adds support for various models released by the [GPT4All](https://gpt4all.io/) project that are optimized to run locally on your own machine. These models include versions of Vicuna, Orca, Falcon and MPT - here's [a full list of models](https://observablehq.com/@simonw/gpt4all-models).
 - **[llm-mpt30b](https://github.com/simonw/llm-mpt30b)** adds support for the [MPT-30B](https://huggingface.co/mosaicml/mpt-30b) local model.
 - **[llm-ollama](https://github.com/taketwo/llm-ollama)** adds support for local models run using [Ollama](https://ollama.ai/).
+- **[llm-llamafile](https://github.com/simonw/llm-llamafile)** adds support for local models that are running locally using [llamafile](https://github.com/Mozilla-Ocho/llamafile).
 
 ## Remote APIs
 
