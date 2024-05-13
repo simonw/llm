@@ -23,16 +23,24 @@ Then paste in the API key.
 
 Run `llm models` for a full list of available models. The OpenAI models supported by LLM are:
 
+<!-- [[[cog
+from click.testing import CliRunner
+from llm.cli import cli
+result = CliRunner().invoke(cli, ["models", "list"])
+models = [line for line in result.output.split("\n") if line.startswith("OpenAI ")]
+cog.out("```\n{}```".format("\n".join(models)))
+]]] -->
 ```
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k, turbo)
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
 OpenAI Chat: gpt-4-1106-preview
 OpenAI Chat: gpt-4-0125-preview
 OpenAI Chat: gpt-4-turbo-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct, instruct)
-```
+OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)```
+<!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 

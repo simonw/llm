@@ -29,6 +29,7 @@ gpt4             : gpt-4
 gpt-4-turbo      : gpt-4-turbo-preview
 4-turbo          : gpt-4-turbo-preview
 4t               : gpt-4-turbo-preview
+4o               : gpt-4o
 3.5-instruct     : gpt-3.5-turbo-instruct
 chatgpt-instruct : gpt-3.5-turbo-instruct
 ada              : ada-002 (embedding)
