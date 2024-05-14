@@ -1,6 +1,6 @@
 # LLM
 
-![GitHub Repo stars](https://img.shields.io/github/stars/simonw/llm)
+[![GitHub repo](https://img.shields.io/badge/github-repo-green)](https://github.com/simonw/llm)
 [![PyPI](https://img.shields.io/pypi/v/llm.svg)](https://pypi.org/project/llm/)
 [![Changelog](https://img.shields.io/github/v/release/simonw/llm?include_prereleases&label=changelog)](https://llm.datasette.io/en/stable/changelog.html)
 [![Tests](https://github.com/simonw/llm/workflows/Test/badge.svg)](https://github.com/simonw/llm/actions?query=workflow%3ATest)
