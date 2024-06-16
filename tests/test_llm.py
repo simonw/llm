@@ -146,16 +146,19 @@ def test_logs_filtered(user_path, model):
 
 
 @pytest.mark.parametrize(
-    "query,expected",
+    "query,extra_args,expected",
     (
         # With no search term order should be by datetime
-        ("", ["doc1", "doc2", "doc3"]),
+        ("", [], ["doc1", "doc2", "doc3"]),
         # With a search it's order by rank instead
-        ("llama", ["doc1", "doc3"]),
-        ("alpaca", ["doc2"]),
+        ("llama", [], ["doc1", "doc3"]),
+        ("alpaca", [], ["doc2"]),
+        # Model filter should work too
+        ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
+        ("llama", ["-m", "davinci2"], []),
     ),
 )
-def test_logs_search(user_path, query, expected):
+def test_logs_search(user_path, query, extra_args, expected):
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -175,7 +178,7 @@ def test_logs_search(user_path, query, expected):
     _insert("doc2", "alpaca")
     _insert("doc3", "llama llama")
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"])
+    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"] + extra_args)
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert [record["id"] for record in records] == expected

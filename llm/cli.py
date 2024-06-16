@@ -716,7 +716,8 @@ def logs_list(
     if conversation_id:
         where_bits.append("responses.conversation_id = :conversation_id")
     if where_bits:
-        sql_format["extra_where"] = " where " + " and ".join(where_bits)
+        where_ = " and " if query else " where "
+        sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
     rows = list(
