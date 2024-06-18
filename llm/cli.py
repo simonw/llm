@@ -122,6 +122,9 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
+@click.option("--file", "-f", help="read prompt input from file instead of stdin",
+type=click.Path(exists=True, dir_okay=False)
+)
 def prompt(
     prompt,
     system,
@@ -136,6 +139,7 @@ def prompt(
     conversation_id,
     key,
     save,
+    file,
 ):
     """
     Execute a prompt
@@ -149,6 +153,8 @@ def prompt(
 
     def read_prompt():
         nonlocal prompt
+        if file is not None:
+            return open(file, 'r').read()
 
         # Is there extra prompt available on stdin?
         stdin_prompt = None
