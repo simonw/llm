@@ -19,13 +19,15 @@ class Prompt:
     model: "Model"
     system: Optional[str]
     prompt_json: Optional[str]
+    prefill: Optional[str]
     options: "Options"
 
-    def __init__(self, prompt, model, system=None, prompt_json=None, options=None):
+    def __init__(self, prompt, model, system=None, prompt_json=None, prefill=None, options=None):
         self.prompt = prompt
         self.model = model
         self.system = system
         self.prompt_json = prompt_json
+        self.prefill = prefill
         self.options = options or {}
 
 
@@ -246,6 +248,7 @@ class Model(ABC, _get_key_mixin):
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
     can_stream: bool = False
+    supports_prefill: bool=False
 
     class Options(_Options):
         pass
@@ -272,10 +275,11 @@ class Model(ABC, _get_key_mixin):
         prompt: Optional[str],
         system: Optional[str] = None,
         stream: bool = True,
+        prefill: Optional[str] = None,
         **options
     ):
         return self.response(
-            Prompt(prompt, system=system, model=self, options=self.Options(**options)),
+            Prompt(prompt, system=system, model=self, prefill=prefill, options=self.Options(**options)),
             stream=stream,
         )
 
