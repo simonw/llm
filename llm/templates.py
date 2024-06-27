@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 import string
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple, Union
 
 
 class Template(BaseModel):
@@ -9,6 +9,7 @@ class Template(BaseModel):
     system: Optional[str] = None
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
+    options: Optional[Dict[str, Union[float, int, str, bool]]] = None
 
     class Config:
         extra = "forbid"
@@ -34,6 +35,16 @@ class Template(BaseModel):
             prompt = self.interpolate(self.prompt, params)
             system = self.interpolate(self.system, params)
         return prompt, system
+
+    def evaluate_options(
+        self, options=Optional[Tuple[Tuple[str, Any]]]
+    ) -> Tuple[Tuple[str, Any]]:
+        ret = {}
+        if self.options:
+            ret.update(self.options)
+        if options:
+            ret.update(options)
+        return tuple((key, str(value)) for key, value in ret.items())
 
     @classmethod
     def interpolate(cls, text: Optional[str], params: Dict[str, Any]) -> Optional[str]:
