@@ -35,6 +35,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-bedrock-anthropic](https://github.com/sblakey/llm-bedrock-anthropic)** by Sean Blakey adds support for Claude and Claude Instant by Anthropic via Amazon Bedrock.
 - **[llm-bedrock-meta](https://github.com/flabat/llm-bedrock-meta)** by Fabian Labat adds support for Llama 2 and Llama 3 by Meta via Amazon Bedrock.
 - **[llm-together](https://github.com/wearedevx/llm-together)** adds support for the [Together AI](https://www.together.ai/) extensive family of hosted openly licensed models.
+- **[llm-watsonx](https://github.com/h0rv/llm-watsonx)** adds support for the [IBM watsonx.ai](https://www.ibm.com/products/watsonx-ai) models.
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
@@ -46,6 +47,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-clip](https://github.com/simonw/llm-clip)** provides the [CLIP](https://openai.com/research/clip) model, which can be used to embed images and text in the same vector space, enabling text search against images. See [Build an image search engine with llm-clip](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/) for more on this plugin.
 - **[llm-embed-jina](https://github.com/simonw/llm-embed-jina)** provides Jina AI's [8K text embedding models](https://jina.ai/news/jina-ai-launches-worlds-first-open-source-8k-text-embedding-rivaling-openai/).
 - **[llm-embed-onnx](https://github.com/simonw/llm-embed-onnx)** provides seven embedding models that can be executed using the ONNX model framework.
+- **[llm-watsonx](https://github.com/h0rv/llm-watsonx)** adds support for the [IBM watsonx.ai](https://www.ibm.com/products/watsonx-ai) embedding models.
 
 ## Extra commands
 
