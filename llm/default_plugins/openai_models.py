@@ -348,6 +348,8 @@ class Chat(Model):
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
+        if self.api_type == 'azure':
+            return openai.AzureOpenAI(api_version=self.api_version, azure_endpoint=self.api_base, api_key=self.key)
         return openai.OpenAI(**kwargs)
 
     def build_kwargs(self, prompt):
