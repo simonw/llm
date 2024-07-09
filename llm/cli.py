@@ -61,7 +61,7 @@ def _validate_metadata_json(ctx, param, value):
 
 @click.group(
     cls=DefaultGroup,
-    default="prompt",
+    default="--help",
     default_if_no_args=True,
 )
 @click.version_option()
