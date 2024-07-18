@@ -46,7 +46,7 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 
-`gpt-3.5-turbo` (aliased to `3.5`) is the least expensive model. `gpt-4o` (aliased to `4o`) is the newest, cheapest and fastest of the GPT-4 family of models.
+`gpt-4o-mini` (aliased to `4o-mini`) is the least expensive model, and is the default for if you don't specify a model at all. `gpt-4o` (aliased to `4o`) is the newest, cheapest and fastest of the GPT-4 family of models.
 
 The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
 

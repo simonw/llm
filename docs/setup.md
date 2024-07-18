@@ -136,7 +136,7 @@ You can configure LLM in a number of different ways.
 
 ### Setting a custom default model
 
-The model used when calling `llm` without the `-m/--model` option defaults to `gpt-3.5-turbo` - the fastest and least expensive OpenAI model, and the same model family that powers ChatGPT.
+The model used when calling `llm` without the `-m/--model` option defaults to `gpt-4o-mini` - the fastest and least expensive OpenAI model.
 
 You can use the `llm models default` command to set a different default model. For GPT-4 (slower and more expensive, but more capable) run this:
 
