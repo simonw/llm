@@ -145,7 +145,7 @@ def mocked_openai_chat(httpx_mock):
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "usage": {},
             "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
         },
