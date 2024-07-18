@@ -34,6 +34,7 @@ def register_models(register):
     register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
     # GPT-4o
     register(Chat("gpt-4o"), aliases=("4o",))
+    register(Chat("gpt-4o-mini"), aliases=("4o-mini",))
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
