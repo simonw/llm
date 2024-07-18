@@ -39,7 +39,7 @@ setup(
         "click",
         "openai>=1.0",
         "click-default-group>=1.2.3",
-        "sqlite-utils>=3.35.0",
+        "sqlite-utils>=3.37",
         "sqlite-migrate>=0.1a2",
         "pydantic>=1.10.2",
         "PyYAML",
