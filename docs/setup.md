@@ -134,14 +134,15 @@ llm 'my prompt' --key $OPENAI_API_KEY
 
 You can configure LLM in a number of different ways.
 
+(setup-default-model)=
 ### Setting a custom default model
 
 The model used when calling `llm` without the `-m/--model` option defaults to `gpt-4o-mini` - the fastest and least expensive OpenAI model.
 
-You can use the `llm models default` command to set a different default model. For GPT-4 (slower and more expensive, but more capable) run this:
+You can use the `llm models default` command to set a different default model. For GPT-4o (slower and more expensive, but more capable) run this:
 
 ```bash
-llm models default gpt-4
+llm models default gpt-4o
 ```
 You can view the current model by running this:
 ```
