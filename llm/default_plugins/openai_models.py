@@ -1,6 +1,7 @@
+import re
 from llm import EmbeddingModel, Model, hookimpl
 import llm
-from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
+from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client, remove_pref
 import click
 import datetime
 import httpx
@@ -249,6 +250,7 @@ class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     can_stream: bool = True
+    supports_prefill: bool = True
 
     default_max_tokens = None
 
@@ -282,6 +284,11 @@ class Chat(Model):
         return "OpenAI Chat: {}".format(self.model_id)
 
     def execute(self, prompt, stream, response, conversation=None):
+
+        def _stream_preproc(x):
+            "OpenAI stores stream results in a nested structure; this grabs the content"
+            return x.choices[0].delta.content
+
         messages = []
         current_system = None
         if conversation is not None:
@@ -301,6 +308,8 @@ class Chat(Model):
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         messages.append({"role": "user", "content": prompt.prompt})
+        if prompt.prefill:
+            messages.append({"role": "assistant", "content": prompt.prefill})
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
         client = self.get_client()
@@ -312,10 +321,8 @@ class Chat(Model):
                 **kwargs,
             )
             chunks = []
-            for chunk in completion:
-                chunks.append(chunk)
-                content = chunk.choices[0].delta.content
-                if content is not None:
+            for content in remove_pref(prompt.prefill, completion, store=chunks, preproc=_stream_preproc):
+                if content is not None and content != '':
                     yield content
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
@@ -326,7 +333,16 @@ class Chat(Model):
                 **kwargs,
             )
             response.response_json = remove_dict_none_values(completion.dict())
-            yield completion.choices[0].message.content
+            content = completion.choices[0].message.content
+            # Add the prefill
+            if not content.startswith(prompt.prefill):
+                s = prompt.prefill
+                # LLMs seem to assume there's a whitespace at the end of prefill
+                # So we add one if there isn't one
+                if not re.search(r'\s$', s):
+                    s += ' '
+                content = s + content
+            yield content
 
     def get_client(self):
         kwargs = {}
