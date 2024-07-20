@@ -21,7 +21,7 @@
   echo "  mypy"
   pipenv run mypy llm
   echo "  ruff"
-  pipenv run ruff .
+  pipenv run ruff check .
 
 # Run mypy
 @mypy:
@@ -42,7 +42,7 @@
 
 # Run automatic fixes
 @fix: cog
-  pipenv run ruff . --fix
+  pipenv run ruff check . --fix
   pipenv run black .
 
 # Push commit if tests pass

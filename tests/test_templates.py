@@ -115,7 +115,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
         (
             "'Summarize this: $input'",
             [],
-            "gpt-3.5-turbo",
+            "gpt-4o-mini",
             "Summarize this: Input text",
             None,
         ),
@@ -150,7 +150,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
         (
             "prompt: 'Say $hello'",
             ["-p", "hello", "Blah"],
-            "gpt-3.5-turbo",
+            "gpt-4o-mini",
             "Say Blah",
             None,
         ),

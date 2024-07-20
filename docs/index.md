@@ -62,10 +62,10 @@ llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
 To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
 ```bash
-llm chat -m chatgpt
+llm chat -m gpt-4o-mini
 ```
 ```
-Chatting with gpt-3.5-turbo
+Chatting with gpt-4o-mini
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 > Tell me a joke about a pelican
