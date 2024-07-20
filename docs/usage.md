@@ -22,7 +22,7 @@ To switch from ChatGPT 3.5 (the default) to GPT-4o:
 ```bash
 llm 'Ten names for cheesecakes' -m gpt-4o
 ```
-You can use `-m 4t` as an even shorter shortcut.
+You can use `-m 4o` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
@@ -326,6 +326,16 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   seed: int
   json_object: boolean
 OpenAI Chat: gpt-4o (aliases: 4o)
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   temperature: float
   max_tokens: int
   top_p: float

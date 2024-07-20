@@ -45,7 +45,7 @@ jobs:
     - name: Run ruff
       if: matrix.os != 'windows-latest'
       run: |
-        ruff .
+        ruff check .
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |

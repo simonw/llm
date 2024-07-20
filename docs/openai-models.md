@@ -40,13 +40,14 @@ OpenAI Chat: gpt-4-0125-preview
 OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
 OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 
-`gpt-3.5-turbo` (aliased to `3.5`) is the least expensive model. `gpt-4o` (aliased to `4o`) is the newest, cheapest and fastest of the GPT-4 family of models.
+`gpt-4o-mini` (aliased to `4o-mini`) is the least expensive model, and is the default for if you don't specify a model at all. `gpt-4o` (aliased to `4o`) is the newest, cheapest and fastest of the GPT-4 family of models.
 
 The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
 
@@ -133,7 +134,7 @@ Running `llm logs -n 1` should confirm that the prompt and response has been cor
 
 ## Adding Azure OpenAI models
 
-Azure OpenAI models can be configured directly, by adding them to a `extra-openai-models.yaml` configuration file. 
+Azure OpenAI models can be configured directly, by adding them to a `extra-openai-models.yaml` configuration file.
 
 Create a file called `extra-openai-models.yaml` in directory `dirname "$(llm logs path)"` as described above.
 
