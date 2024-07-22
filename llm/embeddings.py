@@ -101,16 +101,19 @@ class Collection:
         Returns:
             int: Number of items in the collection
         """
-        return next(
-            self.db.query(
-                """
-            select count(*) as c from embeddings where collection_id = (
-                select id from collections where name = ?
-            )
-            """,
-                (self.name,),
-            )
-        )["c"]
+        try:
+            return next(
+                self.db.query(
+                    """
+                select count(*) as c from embeddings where collection_id = (
+                    select id from collections where name = ?
+                )
+                """,
+                    (self.name,),
+                )
+            )["c"]
+        except StopIteration:
+            return 0
 
     def embed(
         self,
