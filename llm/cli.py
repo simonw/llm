@@ -1345,6 +1345,14 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
+        def truncate_text_tokens(text, encoding_name="cl100k_base", max_tokens=(8191)):
+            """Truncate a string to have `max_tokens` according to the given encoding."""
+            import tiktoken
+
+            encoding = tiktoken.get_encoding(encoding_name)
+            truncated_encoded = encoding.encode(text)[:max_tokens]
+            return encoding.decode(truncated_encoded)
+
         def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
                 values = list(row.values())
@@ -1352,7 +1360,9 @@ def embed_multi(
                 if binary:
                     yield id, cast(bytes, values[1])
                 else:
-                    yield id, " ".join(v or "" for v in values[1:])
+                    yield id, truncate_text_tokens(
+                        " ".join(v or "" for v in values[1:] if isinstance(v, str))
+                    )
 
         embed_kwargs = {"store": store}
         if batch_size:
