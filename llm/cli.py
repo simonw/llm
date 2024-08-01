@@ -45,6 +45,8 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 DEFAULT_TEMPLATE = "prompt: "
 
+AUTO_ENVVAR_PREFIX = "LLM"
+
 
 def _validate_metadata_json(ctx, param, value):
     if value is None:
@@ -62,6 +64,7 @@ def _validate_metadata_json(ctx, param, value):
     cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings=dict(auto_envvar_prefix=AUTO_ENVVAR_PREFIX)
 )
 @click.version_option()
 def cli():
