@@ -1,3 +1,5 @@
+import os
+
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
@@ -20,7 +22,7 @@ from llm import (
     get_models_with_aliases,
     user_dir,
     set_alias,
-    remove_alias,
+    remove_alias, Prompt,
 )
 
 from .migrations import migrate
@@ -119,6 +121,11 @@ def cli():
     "--conversation",
     help="Continue the conversation with the given ID.",
 )
+@click.option(
+    "conversation_json",
+    "--conversation-json",
+    help="Continue the conversation whose history is in the given JSON blob",
+)
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
 def prompt(
@@ -133,6 +140,7 @@ def prompt(
     log,
     _continue,
     conversation_id,
+    conversation_json,
     key,
     save,
 ):
@@ -143,6 +151,9 @@ def prompt(
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
+
+    if conversation_json and (conversation_id or _continue):
+        raise click.ClickException("--conversation-json cannot be used with --cid or --continue")
 
     model_aliases = get_model_aliases()
 
@@ -242,6 +253,38 @@ def prompt(
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
+
+    if conversation_json:
+        # Load response history from JSON
+        try:
+            history_data = json.loads(conversation_json)
+            if not all('prompt' in item and 'response' in item for item in history_data):
+                raise ValueError("Each item in the JSON must have a 'prompt' and 'response' key")
+        except json.JSONDecodeError as e:
+            raise click.ClickException(f"Invalid JSON format: {e}")
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        # Create a new conversation object
+        conversation = Conversation(model=model)
+        for item in history_data:
+            resp = Response(
+                model=model,
+                prompt=Prompt(
+                    prompt=item["prompt"],
+                    system=system,
+                    model=model,
+                    options=model.Options(**item.get("options", {})),
+                ),
+                stream=False,
+            )
+            if "id" in item:
+                resp.id = item["id"]
+            resp._prompt_json = item.get("prompt_json", None)
+            resp.response_json = item.get("response_json", None)
+            resp._done = item.get("done", True)
+            resp._chunks = [item["response"]]
+            conversation.responses.append(resp)
 
     if conversation:
         # To ensure it can see the key
