@@ -26,6 +26,11 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
+
+To use `$` characters in strings that look like a template variable but aren't, escape them with another `$`:
+```bash
+llm 'Replace all instances of $$replace_me with the string "$ dollars" in this text: $input' --save replace
+```
 ## Using a template
 
 You can execute a named template using the `-t/--template` option:

@@ -26,6 +26,7 @@ import yaml
             None,
             None,
         ),
+        ("$ not a $$template_var", None, None, None, "$ not a $template_var", None, None),
     ),
 )
 def test_template_evaluate(
