@@ -7,12 +7,12 @@ Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
-To run a prompt against the `gpt-3.5-turbo` model, run this:
+To run a prompt against the `gpt-4o-mini` model, run this:
 
 ```python
 import llm
 
-model = llm.get_model("gpt-3.5-turbo")
+model = llm.get_model("gpt-4o-mini")
 model.key = 'YOUR_API_KEY_HERE'
 response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
@@ -52,7 +52,7 @@ response = model.prompt(
 For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
 
 ```python
-model = llm.get_model("gpt-3.5-turbo")
+model = llm.get_model("gpt-4o-mini")
 model.key = "... key here ..."
 print(model.prompt("Names for otters", temperature=0.2))
 ```
@@ -94,7 +94,7 @@ LLM supports *conversations*, where you ask follow-up questions of a model as pa
 To start a new conversation, use the `model.conversation()` method:
 
 ```python
-model = llm.get_model("gpt-3.5-turbo")
+model = llm.get_model("gpt-4o-mini")
 model.key = 'YOUR_API_KEY_HERE'
 conversation = model.conversation()
 ```
@@ -124,7 +124,7 @@ The `llm.set_alias()` function can be used to define a new alias:
 ```python
 import llm
 
-llm.set_alias("turbo", "gpt-3.5-turbo")
+llm.set_alias("4o-mini", "gpt-4o-mini")
 ```
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
@@ -139,5 +139,5 @@ Raises `KeyError` if the alias does not exist.
 ```python
 import llm
 
-llm.remove_alias("turbo")
+llm.remove_alias("4o-mini")
 ```
