@@ -5,6 +5,7 @@ from llm.cli import cli
 from llm.migrations import migrate
 import json
 import os
+import pathlib
 import pytest
 import re
 import sqlite_utils
@@ -556,3 +557,16 @@ def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir2 = llm.user_dir()
     assert user_dir == str(user_dir2)
     assert os.path.exists(user_dir)
+
+
+def test_model_defaults(tmpdir, monkeypatch):
+    user_dir = str(tmpdir / "u")
+    monkeypatch.setenv("LLM_USER_PATH", user_dir)
+    config_path = pathlib.Path(user_dir) / "default_model.txt"
+    assert not config_path.exists()
+    assert llm.get_default_model() == "gpt-4o-mini"
+    assert llm.get_model().model_id == "gpt-4o-mini"
+    llm.set_default_model("gpt-4o")
+    assert config_path.exists()
+    assert llm.get_default_model() == "gpt-4o"
+    assert llm.get_model().model_id == "gpt-4o"
