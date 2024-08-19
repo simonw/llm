@@ -325,7 +325,7 @@ class Chat(Model):
                 stream=False,
                 **kwargs,
             )
-            response.response_json = remove_dict_none_values(completion.dict())
+            response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].message.content
 
     def get_client(self):
@@ -412,7 +412,7 @@ class Completion(Chat):
                 stream=False,
                 **kwargs,
             )
-            response.response_json = remove_dict_none_values(completion.dict())
+            response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].text
 
 
