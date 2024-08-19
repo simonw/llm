@@ -339,8 +339,7 @@ class Chat(Model):
         if self.api_engine:
             kwargs["engine"] = self.api_engine
         if self.needs_key:
-            if self.key:
-                kwargs["api_key"] = self.key
+            kwargs["api_key"] = self.get_key()
         else:
             # OpenAI-compatible models don't need a key, but the
             # openai client library requires one
