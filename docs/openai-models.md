@@ -28,7 +28,7 @@ from click.testing import CliRunner
 from llm.cli import cli
 result = CliRunner().invoke(cli, ["models", "list"])
 models = [line for line in result.output.split("\n") if line.startswith("OpenAI ")]
-cog.out("```\n{}```".format("\n".join(models)))
+cog.out("```\n{}\n```".format("\n".join(models)))
 ]]] -->
 ```
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
@@ -41,7 +41,8 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
 OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)```
+OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
+```
 <!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
