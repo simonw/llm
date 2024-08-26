@@ -32,7 +32,7 @@ The `model_id` is the name LLM will use for the model. The `model_name` is the n
 
 The `api_base` key can be used to point the OpenAI client library at a different API endpoint.
 
-To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/), add this to your `extra-openai-models.yaml` file:
+To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/), add this to the `extra-openai-models.yaml` file in your [user directory](setup.html#setting-a-custom-directory-location]. :
 
 ```yaml
 - model_id: orca-openai-compat
