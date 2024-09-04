@@ -260,7 +260,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     expected = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
@@ -274,7 +274,7 @@ def test_llm_default_prompt(
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
 
@@ -288,7 +288,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             "prompt_json": {
@@ -299,12 +299,12 @@ def test_llm_default_prompt(
             "options_json": {},
             "response": "Bob, Alice, Eve",
             "response_json": {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4o-mini",
                 "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-3.5-turbo",
+            "conversation_model": "gpt-4o-mini",
         }.items()
     )
 
