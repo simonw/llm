@@ -73,6 +73,8 @@ def register_models(register):
             chat_model.needs_key = None
         if extra_model.get("api_key_name"):
             chat_model.needs_key = extra_model["api_key_name"]
+        if extra_model.get("api_key_env_var"):
+            chat_model.key_env_var = extra_model["api_key_env_var"]
         register(
             chat_model,
             aliases=aliases,
