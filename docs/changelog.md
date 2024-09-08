@@ -177,7 +177,7 @@ To create embeddings for every JPEG in a directory stored in a `photos` collecti
 llm install llm-clip
 llm embed-multi photos --files photos/ '*.jpg' --binary -m clip
 ```
-Now you can search for photos of racoons using:
+Now you can search for photos of raccoons using:
 ```
 llm similar photos -c 'raccoon'
 ```
