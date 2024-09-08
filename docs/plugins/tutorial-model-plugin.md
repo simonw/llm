@@ -135,7 +135,7 @@ We can try that out by pasting it into the interactive Python interpreter and ru
 
 To execute the model, we start with a word. We look at the options for words that might come next and pick one of those at random. Then we repeat that process until we have produced the desired number of output words.
 
-Some words might not have any following words from our training sentence. For our implementation we wil fall back on picking a random word from our collection.
+Some words might not have any following words from our training sentence. For our implementation we will fall back on picking a random word from our collection.
 
 We will implement this as a [Python generator](https://realpython.com/introduction-to-python-generators/), using the yield keyword to produce each token:
 ```python
