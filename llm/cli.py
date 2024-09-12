@@ -457,7 +457,6 @@ def chat(
         system = None
         print_response(response=response, stream=True, rich=rich)
         response.log_to_db(db)
-        console.print("")
 
 
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
@@ -1661,16 +1660,20 @@ def logs_on():
 
 
 def print_response(response: Response, stream: bool = True, rich: bool = False):
-    if stream is True and rich is False:
-        for chunk in response:
-            console.print(chunk, end="")
-    elif stream is True and rich is True:
-        md = ""
-        with Live(Markdown(""), console=console) as live:
+    if stream:
+        if rich:
+            md = ""
+            with Live(Markdown(""), console=console) as live:
+                for chunk in response:
+                    md += chunk
+                    live.update(Markdown(md))
+        else:
             for chunk in response:
-                md += chunk
-                live.update(Markdown(md))
-    elif stream is False and rich is True:
-        console.print(Markdown(response.text()))
+                console.print(chunk, end="")
+                sys.stdout.flush()
+            console.print()
     else:
-        console.print(response.text())
+        if rich:
+            console.print(Markdown(response.text()))
+        else:
+            console.print(response.text())
