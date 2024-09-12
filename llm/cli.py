@@ -1659,19 +1659,19 @@ def logs_on():
     return not (user_dir() / "logs-off").exists()
 
 
-def print_response(response: Response, stream: bool = True, rich: bool = False):
-    if stream:
-        if rich:
-            md = ""
-            with Live(Markdown(""), console=console) as live:
-                for chunk in response:
-                    md += chunk
-                    live.update(Markdown(md))
-        else:
+def print_response(response, stream=True, rich=False):
+
+    if stream and rich:
+        md = ""
+        with Live(Markdown(""), console=console) as live:
             for chunk in response:
-                console.print(chunk, end="")
-                sys.stdout.flush()
-            console.print()
+                md += chunk
+                live.update(Markdown(md))
+    if stream and not rich:
+        for chunk in response:
+            console.print(chunk, end="")
+            sys.stdout.flush()
+        console.print()
     else:
         if rich:
             console.print(Markdown(response.text()))
