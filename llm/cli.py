@@ -1660,18 +1660,19 @@ def logs_on():
 
 
 def print_response(response, stream=True, rich=False):
-
-    if stream and rich:
-        md = ""
-        with Live(Markdown(""), console=console) as live:
+    # These nested ifs are necessary!? Only way this works.
+    if stream:
+        if rich:
+            md = ""
+            with Live(Markdown(""), console=console) as live:
+                for chunk in response:
+                    md += chunk
+                    live.update(Markdown(md))
+        else:
             for chunk in response:
-                md += chunk
-                live.update(Markdown(md))
-    if stream and not rich:
-        for chunk in response:
-            console.print(chunk, end="")
-            sys.stdout.flush()
-        console.print()
+                console.print(chunk, end="")
+                sys.stdout.flush()
+            console.print()
     else:
         if rich:
             console.print(Markdown(response.text()))
