@@ -345,6 +345,8 @@ def chat(
     # Left and right arrow keys to move cursor:
     readline.parse_and_bind("\\e[D: backward-char")
     readline.parse_and_bind("\\e[C: forward-char")
+    # User must be able to use backslash.
+    readline.parse_and_bind("\\\\: self-insert")
     log_path = logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
