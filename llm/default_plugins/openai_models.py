@@ -35,6 +35,9 @@ def register_models(register):
     # GPT-4o
     register(Chat("gpt-4o"), aliases=("4o",))
     register(Chat("gpt-4o-mini"), aliases=("4o-mini",))
+    # o1
+    register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
+    register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -248,7 +251,6 @@ class SharedOptions(llm.Options):
 class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
-    can_stream: bool = True
 
     default_max_tokens = None
 
@@ -268,6 +270,8 @@ class Chat(Model):
         api_version=None,
         api_engine=None,
         headers=None,
+        can_stream=True,
+        allows_system_prompt=True,
     ):
         self.model_id = model_id
         self.key = key
@@ -277,12 +281,16 @@ class Chat(Model):
         self.api_version = api_version
         self.api_engine = api_engine
         self.headers = headers
+        self.can_stream = can_stream
+        self.allows_system_prompt = allows_system_prompt
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
     def execute(self, prompt, stream, response, conversation=None):
         messages = []
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
         current_system = None
         if conversation is not None:
             for prev_response in conversation.responses:
