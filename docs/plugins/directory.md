@@ -18,6 +18,7 @@ These plugins all help you run LLMs directly on your own computer:
 
 These plugins can be used to interact with remotely hosted models via their API:
 
+- **[llm-cerebras]**(https://github.com/irthomasthomas/llm-cerebras) adds support for the [Cerebras](https://cerebras.ai/) fast inference API models.
 - **[llm-mistral](https://github.com/simonw/llm-mistral)** adds support for [Mistral AI](https://mistral.ai/)'s language and embedding models.
 - **[llm-gemini](https://github.com/simonw/llm-gemini)** adds support for Google's [Gemini](https://ai.google.dev/docs) models.
 - **[llm-claude](https://github.com/tomviner/llm-claude)** by Tom Viner adds support for Claude 2.1 and Claude Instant 2.1 by Anthropic.
