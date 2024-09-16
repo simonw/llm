@@ -64,6 +64,8 @@ llm "Five cute names for a pet penguin"
 4. Flappy
 5. Chilly
 ```
+Note: Even with a paid account, your [account](https://platform.openai.com/settings/organization/billing/overview) needs prepaid credits to for the API key to work.
+
 Read the [usage instructions](https://llm.datasette.io/en/stable/usage.html) for more.
 
 ## Installing a model that runs on your own machine
