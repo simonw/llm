@@ -316,6 +316,42 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     assert result.exit_code == 0
     assert result.output == "Hi.\n"
 
+def test_openai_completion_richtext(mocked_openai_completion_richtext, user_path):
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-3.5-turbo-instruct",
+            "Do a rich text test",
+            "--no-stream",
+            "--key",
+            "x",
+            "--rich",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert isinstance(result.output, str)
+    assert result.output.strip() == "This is a rich text test"
+
+    # Check it was logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+    expected = {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Do a rich text test",
+        "system": None,
+        "prompt_json": '{"messages": ["Do a rich text test"]}',
+        "options_json": "{}",
+        "response": "\n\nThis is a `rich` _text_ **test**",
+    }
+    row = rows[0]
+    assert expected.items() <= row.items()
+
 
 def test_openai_completion(mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"

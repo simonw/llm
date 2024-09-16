@@ -33,6 +33,9 @@ import base64
 import pathlib
 import pydantic
 import readline
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
 from runpy import run_module
 import shutil
 import sqlite_utils
@@ -46,6 +49,8 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
+
+console = Console()
 
 
 def _validate_metadata_json(ctx, param, value):
@@ -123,6 +128,13 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
+@click.option(
+    "--rich",
+    "-r",
+    is_flag=True,
+    default=False,
+    help="Format output as rich markdown text",
+)
 def prompt(
     prompt,
     system,
@@ -137,6 +149,7 @@ def prompt(
     conversation_id,
     key,
     save,
+    rich,
 ):
     """
     Execute a prompt
@@ -274,13 +287,7 @@ def prompt(
 
     try:
         response = prompt_method(prompt, system, **validated_options)
-        if should_stream:
-            for chunk in response:
-                print(chunk, end="")
-                sys.stdout.flush()
-            print("")
-        else:
-            print(response.text())
+        print_response(response=response, stream=should_stream, rich=rich)
     except Exception as ex:
         raise click.ClickException(str(ex))
 
@@ -328,6 +335,13 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
+@click.option(
+    "--rich",
+    "-r",
+    is_flag=True,
+    default=False,
+    help="Format output as rich markdown text",
+)
 def chat(
     system,
     model_id,
@@ -338,6 +352,7 @@ def chat(
     options,
     no_stream,
     key,
+    rich,
 ):
     """
     Hold an ongoing chat with a model.
@@ -440,11 +455,8 @@ def chat(
         response = conversation.prompt(prompt, system, **validated_options)
         # System prompt only sent for the first message:
         system = None
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+        print_response(response=response, stream=True, rich=rich)
         response.log_to_db(db)
-        print("")
 
 
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
@@ -1645,3 +1657,24 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def print_response(response, stream=True, rich=False):
+    # These nested ifs are necessary!? Only way this works.
+    if stream:
+        if rich:
+            md = ""
+            with Live(Markdown(""), console=console) as live:
+                for chunk in response:
+                    md += chunk
+                    live.update(Markdown(md))
+        else:
+            for chunk in response:
+                console.print(chunk, end="")
+                sys.stdout.flush()
+            console.print()
+    else:
+        if rich:
+            console.print(Markdown(response.text()))
+        else:
+            console.print(response.text())
