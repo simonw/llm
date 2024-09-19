@@ -9,18 +9,28 @@ import yaml
 
 
 @pytest.mark.parametrize(
-    "prompt,system,defaults,params,expected_prompt,expected_system,expected_error",
+    "prompt,system,defaults,options,params,expected_prompt,expected_system,expected_error",
     (
-        ("S: $input", None, None, {}, "S: input", None, None),
-        ("S: $input", "system", None, {}, "S: input", "system", None),
-        ("No vars", None, None, {}, "No vars", None, None),
-        ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
-        ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
-        ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
+        ("S: $input", None, None, {}, {}, "S: input", None, None),
+        ("S: $input", "system", None, {}, {}, "S: input", "system", None),
+        ("No vars", None, None, {}, {}, "No vars", None, None),
+        (
+            "$one and $two",
+            None,
+            None,
+            {},
+            {},
+            None,
+            None,
+            "Missing variables: one, two",
+        ),
+        ("$one and $two", None, None, {}, {"one": 1, "two": 2}, "1 and 2", None, None),
+        ("$one and $two", None, {"one": 1}, {}, {"two": 2}, "1 and 2", None, None),
         (
             "$one and $two",
             None,
             {"one": 99},
+            {},
             {"one": 1, "two": 2},
             "1 and 2",
             None,
@@ -29,9 +39,18 @@ import yaml
     ),
 )
 def test_template_evaluate(
-    prompt, system, defaults, params, expected_prompt, expected_system, expected_error
+    prompt,
+    system,
+    defaults,
+    options,
+    params,
+    expected_prompt,
+    expected_system,
+    expected_error,
 ):
-    t = Template(name="t", prompt=prompt, system=system, defaults=defaults)
+    t = Template(
+        name="t", prompt=prompt, system=system, defaults=defaults, options=options
+    )
     if expected_error:
         with pytest.raises(Template.MissingVariables) as ex:
             prompt, system = t.evaluate("input", params)
