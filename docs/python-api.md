@@ -7,22 +7,25 @@ Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
-To run a prompt against the `gpt-3.5-turbo` model, run this:
+To run a prompt against the `gpt-4o-mini` model, run this:
 
 ```python
 import llm
 
-model = llm.get_model("gpt-3.5-turbo")
-model.key = 'YOUR_API_KEY_HERE'
+model = llm.get_model("gpt-4o-mini")
+# Optional, you can configure the key in other ways:
+model.key = "sk-..."
 response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
 ```
-The `llm.get_model()` function accepts model names or aliases - so `chatgpt` would work here too.
+The `llm.get_model()` function accepts model names or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
+
+In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
 
 The `__str__()` method of `response` also returns the text of the response, so you can do this instead:
 
 ```python
-print(response)
+print(llm.get_model().prompt("Five surprising names for a pet pelican"))
 ```
 
 You can run this command to see a list of available models and their aliases:
@@ -52,27 +55,28 @@ response = model.prompt(
 For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
 
 ```python
-model = llm.get_model("gpt-3.5-turbo")
-model.key = "... key here ..."
+model = llm.get_model()
 print(model.prompt("Names for otters", temperature=0.2))
 ```
 
 ### Models from plugins
 
-Any models you have installed as plugins will also be available through this mechanism, for example to use Google's PaLM 2 model with [llm-palm](https://github.com/simonw/llm-palm)
+Any models you have installed as plugins will also be available through this mechanism, for example to use Anthropic's Claude 3.5 Sonnet model with [llm-claude-3](https://github.com/simonw/llm-claude-3):
 
 ```bash
-pip install llm-palm
+pip install llm-claude-3
 ```
+Then in your Python code:
 ```python
 import llm
 
-model = llm.get_model("palm")
+model = llm.get_model("claude-3.5-sonnet")
+# Use this if you have not set the key using 'llm keys set claude':
 model.key = 'YOUR_API_KEY_HERE'
 response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
 ```
-You can omit the `model.key = ` line for models that do not use an API key
+Some models do not use API keys at all.
 
 ## Streaming responses
 
@@ -94,8 +98,7 @@ LLM supports *conversations*, where you ask follow-up questions of a model as pa
 To start a new conversation, use the `model.conversation()` method:
 
 ```python
-model = llm.get_model("gpt-3.5-turbo")
-model.key = 'YOUR_API_KEY_HERE'
+model = llm.get_model()
 conversation = model.conversation()
 ```
 You can then use the `conversation.prompt()` method to execute prompts against this conversation:
@@ -124,7 +127,7 @@ The `llm.set_alias()` function can be used to define a new alias:
 ```python
 import llm
 
-llm.set_alias("turbo", "gpt-3.5-turbo")
+llm.set_alias("mini", "gpt-4o-mini")
 ```
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
@@ -141,3 +144,35 @@ import llm
 
 llm.remove_alias("turbo")
 ```
+
+### set_default_model(alias)
+
+This sets the default model to the given model ID or alias. Any changes to defaults will be persisted in the LLM configuration folder, and will affect all programs using LLM on the system, including the `llm` CLI tool.
+
+```python
+import llm
+
+llm.set_default_model("claude-3.5-sonnet")
+```
+
+### get_default_model()
+
+This returns the currently configured default model, or `gpt-4o-mini` if no default has been set.
+
+```python
+import llm
+
+model_id = llm.get_default_model()
+```
+
+To detect if no default has been set you can use this pattern:
+
+```python
+if llm.get_default_model(default=None) is None:
+    print("No default has been set")
+```
+Here the `default=` parameter specifies the value that should be returned if there is no configured default.
+
+### set_default_embedding_model(alias) and get_default_embedding_model()
+
+These two methods work the same as `set_default_model()` and `get_default_model()` but for the default {ref}`embedding model <embeddings>` instead.

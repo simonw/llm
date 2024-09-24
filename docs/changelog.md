@@ -1,5 +1,16 @@
 # Changelog
 
+(v0_16)=
+## 0.16 (2024-09-12)
+
+- OpenAI models now use the internal `self.get_key()` mechanism, which means they can be used from Python code in a way that will pick up keys that have been configured using `llm keys set` or the `OPENAI_API_KEY` environment variable. [#552](https://github.com/simonw/llm/issues/552). This code now works correctly:
+    ```python
+    import llm
+    print(llm.get_model("gpt-4o-mini").prompt("hi"))
+    ```
+- New documented API methods: `llm.get_default_model()`, `llm.set_default_model(alias)`, `llm.get_default_embedding_model(alias)`, `llm.set_default_embedding_model()`. [#553](https://github.com/simonw/llm/issues/553)
+- Support for OpenAI's new [o1 family](https://openai.com/o1/) of preview models, `llm -m o1-preview "prompt"` and `llm -m o1-mini "prompt"`. These models are currently only available to [tier 5](https://platform.openai.com/docs/guides/rate-limits/usage-tiers?context=tier-five) OpenAI API users, though this may change in the future. [#570](https://github.com/simonw/llm/issues/570)
+
 (v0_15)=
 ## 0.15 (2024-07-18)
 
@@ -177,7 +188,7 @@ To create embeddings for every JPEG in a directory stored in a `photos` collecti
 llm install llm-clip
 llm embed-multi photos --files photos/ '*.jpg' --binary -m clip
 ```
-Now you can search for photos of racoons using:
+Now you can search for photos of raccoons using:
 ```
 llm similar photos -c 'raccoon'
 ```

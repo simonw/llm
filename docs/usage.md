@@ -345,6 +345,26 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   logit_bias: dict, str
   seed: int
   json_object: boolean
+OpenAI Chat: o1-preview
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
+OpenAI Chat: o1-mini
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   temperature: float
     What sampling temperature to use, between 0 and 2. Higher values like

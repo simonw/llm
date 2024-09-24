@@ -38,6 +38,7 @@ __all__ = [
     "ModelError",
     "NeedsKeyException",
 ]
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def get_plugins(all=False):
@@ -144,8 +145,9 @@ class UnknownModelError(KeyError):
     pass
 
 
-def get_model(name):
+def get_model(name: Optional[str] = None) -> Model:
     aliases = get_model_aliases()
+    name = name or get_default_model()
     try:
         return aliases[name]
     except KeyError:
@@ -256,3 +258,27 @@ def cosine_similarity(a, b):
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b)
+
+
+def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    path = user_dir() / filename
+    if path.exists():
+        return path.read_text().strip()
+    else:
+        return default
+
+
+def set_default_model(model, filename="default_model.txt"):
+    path = user_dir() / filename
+    if model is None and path.exists():
+        path.unlink()
+    else:
+        path.write_text(model)
+
+
+def get_default_embedding_model():
+    return get_default_model("default_embedding_model.txt", None)
+
+
+def set_default_embedding_model(model):
+    set_default_model(model, "default_embedding_model.txt")
