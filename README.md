@@ -103,7 +103,7 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 
 You can use the `-s/--system` option to set a system prompt, providing instructions for processing other input to the tool.
 
-To describe how the code a file works, try this:
+To describe how the code in a file works, try this:
 
 ```bash
 cat mycode.py | llm -s "Explain this code"
