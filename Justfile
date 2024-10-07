@@ -17,7 +17,7 @@
   echo "  cog"
   pipenv run cog --check \
     -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
-    README.md docs/*.md
+    README.md docs/**/*.md docs/*.md
   echo "  mypy"
   pipenv run mypy llm
   echo "  ruff"

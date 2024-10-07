@@ -5,6 +5,7 @@ import click
 import datetime
 import httpx
 import openai
+from openai.types.chat import ChatCompletion
 import os
 
 try:
@@ -19,6 +20,7 @@ except ImportError:
 from typing import List, Iterable, Iterator, Optional, Union
 import json
 import yaml
+from ..tool import format_error
 
 
 @hookimpl
@@ -248,9 +250,43 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
+class ChatCompletionHandler:
+    client: openai.OpenAI
+    model: str
+    stream: bool
+    completion: Optional[ChatCompletion] = None
+
+    def __init__(self, client: openai.OpenAI, model: str, stream: bool):
+        self.client = client
+        self.model = model
+        self.stream = stream
+
+    def run(self, messages, **kwargs):
+        if self.stream:
+            with self.client.beta.chat.completions.stream(
+                model=self.model,
+                messages=messages,
+                **kwargs,
+            ) as stream:
+                for event in stream:
+                    if event.type == "content.delta":
+                        yield event.delta
+            self.completion = stream.get_final_completion()
+        else:
+            self.completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+            if self.completion.choices[0].message.content:
+                yield self.completion.choices[0].message.content
+
+
 class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
+    supports_tool_calling = True
 
     default_max_tokens = None
 
@@ -311,32 +347,50 @@ class Chat(Model):
         messages.append({"role": "user", "content": prompt.prompt})
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
+        if self.tools:
+            kwargs["tools"] = [tool.schema for tool in self.tools.values()]
         client = self.get_client()
-        if stream:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=True,
-                **kwargs,
-            )
-            chunks = []
-            for chunk in completion:
-                chunks.append(chunk)
-                content = chunk.choices[0].delta.content
-                if content is not None:
-                    yield content
-            response.response_json = remove_dict_none_values(combine_chunks(chunks))
-        else:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=False,
-                **kwargs,
-            )
-            response.response_json = remove_dict_none_values(completion.model_dump())
-            yield completion.choices[0].message.content
 
-    def get_client(self):
+        handler = ChatCompletionHandler(
+            client, self.model_name or self.model_id, stream
+        )
+        yield from handler.run(messages, **kwargs)
+
+        response_json = remove_dict_none_values(handler.completion.model_dump())
+        tool_calls = handler.completion.choices[0].message.tool_calls
+
+        if not tool_calls:
+            response.response_json = response_json
+        else:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "tool_calls": [tc.model_dump() for tc in tool_calls],
+                }
+            )
+            for tool_call in tool_calls:
+                tool = self.tools.get(tool_call.function.name)
+                if not tool:
+                    tool_response = format_error(
+                        f"Attempt to call non-existent function '{tool_call.function.name}'"
+                    )
+                else:
+                    tool_response = tool.safe_call(tool_call.function.arguments)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": tool_response,
+                        "tool_call_id": tool_call.id,
+                    }
+                )
+            kwargs.pop("tools")
+            yield from handler.run(messages, **kwargs)
+            response.response_json = [
+                response_json,
+                remove_dict_none_values(handler.completion.model_dump()),
+            ]
+
+    def get_client(self) -> openai.OpenAI:
         kwargs = {}
         if self.api_base:
             kwargs["base_url"] = self.api_base
@@ -369,6 +423,8 @@ class Chat(Model):
 
 
 class Completion(Chat):
+    supports_tool_calling = False
+
     class Options(SharedOptions):
         logprobs: Optional[int] = Field(
             description="Include the log probabilities of most likely N per token",

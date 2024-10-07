@@ -5,7 +5,10 @@ import pluggy
 import sys
 from . import hookspecs
 
-DEFAULT_PLUGINS = ("llm.default_plugins.openai_models",)
+DEFAULT_PLUGINS = (
+    "llm.default_plugins.openai_models",
+    "llm.default_plugins.file_tools",
+)
 
 pm = pluggy.PluginManager("llm")
 pm.add_hookspecs(hookspecs)

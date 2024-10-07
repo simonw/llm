@@ -514,7 +514,7 @@ def test_openai_localai_configuration(mocked_localai, user_path):
 
 
 EXPECTED_OPTIONS = """
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt) (supports tool calling)
   temperature: float
     What sampling temperature to use, between 0 and 2. Higher values like
     0.8 will make the output more random, while lower values like 0.2 will

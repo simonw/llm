@@ -74,6 +74,7 @@ Commands:
   plugins       List installed plugins
   similar       Return top N similar IDs from a collection
   templates     Manage stored prompt templates
+  tools         Manage available tools
   uninstall     Uninstall Python packages from the LLM environment
 ```
 
@@ -92,6 +93,7 @@ Options:
   -o, --option <TEXT TEXT>...  key/value options for the model
   -t, --template TEXT          Template to use
   -p, --param <TEXT TEXT>...   Parameters for template
+  --enable-tools               Enable tool usage for supported models
   --no-stream                  Do not stream output
   -n, --no-log                 Don't log to database
   --log                        Log prompt and response to the database
@@ -117,6 +119,7 @@ Options:
   -t, --template TEXT          Template to use
   -p, --param <TEXT TEXT>...   Parameters for template
   -o, --option <TEXT TEXT>...  key/value options for the model
+  --enable-tools               Enable tool usage for supported models
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
   --help                       Show this message and exit.
@@ -296,6 +299,32 @@ Usage: llm models default [OPTIONS] [MODEL]
 
 Options:
   --help  Show this message and exit.
+```
+
+(help-tools)=
+### llm tools --help
+```
+Usage: llm tools [OPTIONS] COMMAND [ARGS]...
+
+  Manage available tools
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*  List available tools
+```
+
+(help-tools-list)=
+#### llm tools list --help
+```
+Usage: llm tools list [OPTIONS]
+
+  List available tools
+
+Options:
+  --schema  Show JSON schema for each tool
+  --help    Show this message and exit.
 ```
 
 (help-templates)=

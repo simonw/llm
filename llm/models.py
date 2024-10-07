@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
+from functools import cached_property
 from itertools import islice
 import re
 import time
@@ -9,6 +10,7 @@ from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
 from ulid import ULID
+import llm
 
 CONVERSATION_NAME_LENGTH = 32
 
@@ -246,9 +248,16 @@ class Model(ABC, _get_key_mixin):
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
     can_stream: bool = False
+    supports_tool_calling: bool = False
 
     class Options(_Options):
         pass
+
+    @cached_property
+    def tools(self) -> Dict[str, llm.Tool]:
+        if self.supports_tool_calling:
+            return llm.get_tools()
+        return {}
 
     def conversation(self):
         return Conversation(model=self)

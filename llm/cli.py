@@ -20,6 +20,7 @@ from llm import (
     get_model,
     get_model_aliases,
     get_models_with_aliases,
+    get_tools,
     user_dir,
     set_alias,
     set_default_model,
@@ -58,6 +59,19 @@ def _validate_metadata_json(ctx, param, value):
         return obj
     except json.JSONDecodeError:
         raise click.BadParameter("Metadata must be valid JSON")
+
+
+def _validate_tools(model, enable_tools: bool):
+    if enable_tools:
+        if not model.supports_tool_calling:
+            click.secho(
+                f"Model {model.model_id} does not support tool calling",
+                err=True,
+                dim=True,
+                italic=True,
+            )
+    else:
+        model.supports_tool_calling = False
 
 
 @click.group(
@@ -104,6 +118,9 @@ def cli():
     type=(str, str),
     help="Parameters for template",
 )
+@click.option(
+    "--enable-tools", is_flag=True, help="Enable tool usage for supported models"
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--log", is_flag=True, help="Log prompt and response to the database")
@@ -130,6 +147,7 @@ def prompt(
     options,
     template,
     param,
+    enable_tools,
     no_stream,
     no_log,
     log,
@@ -241,6 +259,8 @@ def prompt(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
+    _validate_tools(model, enable_tools)
+
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
         model.key = get_key(key, model.needs_key, model.key_env_var)
@@ -326,6 +346,9 @@ def prompt(
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "--enable-tools", is_flag=True, help="Enable tool usage for supported models"
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
 def chat(
@@ -336,6 +359,7 @@ def chat(
     template,
     param,
     options,
+    enable_tools,
     no_stream,
     key,
 ):
@@ -380,6 +404,8 @@ def chat(
         model = get_model(model_id)
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
+
+    _validate_tools(model, enable_tools)
 
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
@@ -811,6 +837,8 @@ def models_list(options):
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+        if model_with_aliases.model.supports_tool_calling:
+            extra += " (supports tool calling)"
         output = str(model_with_aliases.model) + extra
         if options and model_with_aliases.model.Options.schema()["properties"]:
             for name, field in model_with_aliases.model.Options.schema()[
@@ -853,6 +881,25 @@ def models_default(model):
         set_default_model(model.model_id)
     except KeyError:
         raise click.ClickException("Unknown model: {}".format(model))
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def tools():
+    "Manage available tools"
+
+
+@tools.command(name="list")
+@click.option("--schema", is_flag=True, help="Show JSON schema for each tool")
+def tools_list(schema):
+    "List available tools"
+    for name, tool in get_tools().items():
+        click.echo(f"{name}: {tool.__doc__}")
+        if schema:
+            click.echo(json.dumps(tool.schema, indent=2))
 
 
 @cli.group(
