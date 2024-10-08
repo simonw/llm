@@ -133,19 +133,21 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
             "Summarize this: Input text",
             None,
         ),
-        (
+        pytest.param(
             "boo",
             ["-s", "s"],
             None,
             None,
             "Error: Cannot use -t/--template and --system together",
+            marks=pytest.mark.httpx_mock(assert_all_responses_were_requested=False),
         ),
-        (
+        pytest.param(
             "prompt: 'Say $hello'",
             [],
             None,
             None,
             "Error: Missing variables: hello",
+            marks=pytest.mark.httpx_mock(assert_all_responses_were_requested=False),
         ),
         (
             "prompt: 'Say $hello'",
@@ -183,4 +185,4 @@ def test_template_basic(
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
-        mocked_openai_chat.reset(assert_all_responses_were_requested=False)
+        mocked_openai_chat.reset()
