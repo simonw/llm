@@ -203,7 +203,7 @@ class Collection:
                     select id from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(
-                        ",".join("?" for _ in items_and_hashes)
+                        ",".join("?" for _ in items_and_hashes),
                     ),
                     [collection_id]
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],

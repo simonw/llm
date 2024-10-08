@@ -41,7 +41,7 @@ class Conversation:
         prompt: Optional[str],
         system: Optional[str] = None,
         stream: bool = True,
-        **options
+        **options,
     ):
         return Response(
             Prompt(
@@ -272,7 +272,7 @@ class Model(ABC, _get_key_mixin):
         prompt: Optional[str],
         system: Optional[str] = None,
         stream: bool = True,
-        **options
+        **options,
     ):
         return self.response(
             Prompt(prompt, system=system, model=self, options=self.Options(**options)),

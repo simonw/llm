@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm"
+version = "0.16"
+description = """
+A CLI utility and Python library for interacting with Large Language Models,
+including OpenAI, PaLM and local models installed on your own machine.
+"""
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [
+    { name = "Simon Willison" },
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "click",
+    "click-default-group>=1.2.3",
+    "openai>=1.0",
+    "pip",
+    "pluggy",
+    "pydantic>=1.10.2",
+    "pyreadline3; sys_platform == 'win32'",
+    "python-ulid",
+    "PyYAML",
+    "setuptools",
+    "sqlite-migrate>=0.1a2",
+    "sqlite-utils>=3.37",
+]
+
+[project.urls]
+Homepage = "https://github.com/simonw/llm"
+CI = "https://github.com/simonw/llm/actions"
+Changelog = "https://github.com/simonw/llm/releases"
+Documentation = "https://llm.datasette.io/"
+Issues = "https://github.com/simonw/llm/issues"
+
+[project.scripts]
+llm = "llm.cli:cli"
+
+[tool.uv]
+dev-dependencies = [
+    "cogapp",
+    "mypy>=1.10.0",
+    "numpy",
+    "pytest",
+    "pytest-httpx",
+    "ruff",
+    "types-PyYAML",
+]
+
+[tool.ruff]
+line-length = 88
+
+[[tool.mypy.overrides]]
+module = [
+    "pluggy.*",
+    "click_default_group.*",
+    "sqlite_migrate.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:The `schema` method is deprecated.*:DeprecationWarning",
+    "ignore:Support for class-based `config` is deprecated*:DeprecationWarning",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/llm",
+]

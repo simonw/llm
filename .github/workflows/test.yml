@@ -15,39 +15,42 @@ jobs:
         pydantic: ["==1.10.2", ">=2.0.0"]
     steps:
     - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: pip
-        cache-dependency-path: setup.py
     - name: Install dependencies
       run: |
-        pip install -e '.[test]'
-        pip install 'pydantic${{ matrix.pydantic }}'
+        uv sync --dev --python ${{ matrix.python-version }} --python-preference only-system
+        uv pip install 'pydantic${{ matrix.pydantic }}'
     - name: Run tests
       run: |
-        pytest
+        uv run pytest
     - name: Check if cog needs to be run
       if: matrix.os != 'windows-latest'
       run: |
-        cog --check \
+        uv run cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
           docs/**/*.md docs/*.md
     - name: Run Black
       if: matrix.os != 'windows-latest'
       run: |
-        black --check .
+        uv run ruff format --check .
     - name: Run mypy
       if: matrix.os != 'windows-latest'
       run: |
-        mypy llm
+        uv run mypy llm
     - name: Run ruff
       if: matrix.os != 'windows-latest'
       run: |
-        ruff check .
+        uv run ruff check .
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |
-        llm install llm-cluster llm-mistral
-        ./tests/test-llm-load-plugins.sh
+        uv pip install llm-cluster llm-mistral
+        uv run ./tests/test-llm-load-plugins.sh
