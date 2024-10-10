@@ -37,7 +37,7 @@ setup(
     """,
     install_requires=[
         "click",
-        "openai>=1.0",
+        "openai>=1.40.0",
         "click-default-group>=1.2.3",
         "sqlite-utils>=3.37",
         "sqlite-migrate>=0.1a2",
@@ -53,15 +53,14 @@ setup(
         "test": [
             "pytest",
             "numpy",
-            "pytest-httpx",
+            "pytest-httpx==0.30.0",  # XXX hold back until https://github.com/simonw/llm/pull/580
             "cogapp",
             "mypy>=1.10.0",
             "black>=24.1.0",
             "ruff",
-            "types-click",
             "types-PyYAML",
             "types-setuptools",
         ]
     },
-    python_requires=">=3.8",
+    python_requires=">=3.9",
 )

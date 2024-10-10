@@ -3,6 +3,7 @@ from .errors import (
     ModelError,
     NeedsKeyException,
 )
+from .tool import Tool
 from .models import (
     Conversation,
     Model,
@@ -37,6 +38,7 @@ __all__ = [
     "Template",
     "ModelError",
     "NeedsKeyException",
+    "Tool",
 ]
 DEFAULT_MODEL = "gpt-4o-mini"
 
@@ -113,6 +115,16 @@ def get_embedding_models():
 
     pm.hook.register_embedding_models(register=register)
     return models
+
+
+def get_tools() -> Dict[str, Tool]:
+    tools = {}
+
+    def register(tool):
+        tools[tool.__name__] = tool
+
+    pm.hook.register_tools(register=register)
+    return tools
 
 
 def get_embedding_model(name):

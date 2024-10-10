@@ -225,7 +225,7 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt) (supports tool calling)
   temperature: float
     What sampling temperature to use, between 0 and 2. Higher values like
     0.8 will make the output more random, while lower values like 0.2 will
@@ -255,7 +255,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     Integer seed to attempt to sample deterministically
   json_object: boolean
     Output a valid JSON object {...}. Prompt must mention JSON.
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -265,7 +265,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
+OpenAI Chat: gpt-4 (aliases: 4, gpt4) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -275,7 +275,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
+OpenAI Chat: gpt-4-32k (aliases: 4-32k) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -285,7 +285,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-1106-preview
+OpenAI Chat: gpt-4-1106-preview (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -295,7 +295,7 @@ OpenAI Chat: gpt-4-1106-preview
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-0125-preview
+OpenAI Chat: gpt-4-0125-preview (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -305,7 +305,7 @@ OpenAI Chat: gpt-4-0125-preview
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-turbo-2024-04-09
+OpenAI Chat: gpt-4-turbo-2024-04-09 (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -315,7 +315,7 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -325,7 +325,7 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o (aliases: 4o) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -335,7 +335,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini) (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -345,7 +345,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: o1-preview
+OpenAI Chat: o1-preview (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
@@ -355,7 +355,7 @@ OpenAI Chat: o1-preview
   logit_bias: dict, str
   seed: int
   json_object: boolean
-OpenAI Chat: o1-mini
+OpenAI Chat: o1-mini (supports tool calling)
   temperature: float
   max_tokens: int
   top_p: float
