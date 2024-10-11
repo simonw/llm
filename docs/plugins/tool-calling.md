@@ -6,40 +6,40 @@ A plugin that implements a new LLM model can consume installed tools if the mode
 
 ## Registering new tools
 
-Tools are simply fully annotated Python functions, decorated with the `llm.Tool` decorator.
-The function must have a docstring that describes what it does, and each paramater needs
-an `Annotation` string that describes that parameter.
+Tools are `llm.Tool` instances holding a Python callable and a JSON schema describing the function parameters.
+The callable must have a docstring that describes what it does.
+If a parameter JSON schema is not provided, `llm.Tool` will introspect the callable and attempt to generate one.
+For this to work, each paramater needs a `typing.Annotation` that contains the parameter type and a text description.
 The function must return a string. It can raise a descriptive exception to be returned to the LLM if the tool fails.
 If it raises `llm.ModelError`, that exception will be forwarded to the user.
 
 ```python
-import random
-import sys
 from typing import Annotated
 import llm
 
-
 @llm.hookimpl
 def register_tools(register):
-    register(random_number)
+    register(llm.Tool(best_restaurant_in))
 
-
-@llm.Tool
-def random_number(
-    minimum: Annotated[int, "The minimum value of the random number, default is 0"] = 0,
-    maximum: Annotated[
-        int, f"The maximum value of the random number, default is {sys.maxsize}."
-    ] = sys.maxsize,
+def best_restaurant_in(
+    location: Annotated[str, "The city the restaurant is located in."]
 ) -> str:
-    """Generate a random number."""
-    return str(random.randrange(maximum))
+    """Find the best restaurant in the given location."""
+    return "CitiesBestRestaurant"
 ```
 
 Now when the user enables tool calling, if the model supports tool calling
-(e.g. the default OpenAI chat models do), then the model can invoke the tool.
+(the default OpenAI chat models do), then the model can invoke the tool.
 ```shell-session
-$ llm --enable-tools -m 4o-mini 'Generate a random number, maximum 1000'
-The generated random number is 485.
+$ llm --enable-tools -m 4o-mini 'What is the best restaurant in Asbury Park, NJ?'
+The best restaurant in Asbury Park, NJ, is called "Cities Best Restaurant."
+```
+
+You can generate a parameters JSON schema using [pydantic.ModelBase.model_json_schema()](https://docs.pydantic.dev/latest/api/base_model/#pydantic.BaseModel.model_json_schema), or write one by hand and pass it in to the `llm.Tool` initializer.
+Here are some examples of both:
+
+```{literalinclude} llm-sampletools/llm_sampletools.py
+:language: python
 ```
 
 ## Using tools in models
@@ -50,8 +50,8 @@ then you can set `supports_tool_calling = True` in your model class.
 You can then use the `Model.tools` property to access tools registered by your or other plugins.
 The `tools` property contains a `dict` of tool names mapped to `llm.Tool` instances.
 The `Tool.schema` property contains a Python dict representing the JSON schema for that tool function.
-`Tool` is callable - you can also call `Tool.safe_call(json_args: str)` to invoke the tool with a JSON
-string representing the keyword arguments - this handles any tool invocation exceptions.
+`Tool` is callable - it should be passed a JSON string representing the callables parameters.
+The Tool handles any exceptions raised other than `llm.ModelError`.
 
 Here is a skeleton implementation for a hypothetical LLM API that supports tool calling.
 ```python
@@ -75,7 +75,7 @@ class MyToolCallingModel(llm.Model):
                 tool = self.tools.get(tool_call.function.name)
                 if tool:
                     # Invoke the tool with the JSON string arguments.
-                    tool_response = tool.safe_call(tool_call.function.arguments)
+                    tool_response = tool(tool_call.function.arguments)
                     messages.append({"role": "tool", "content": tool_response, "tool_call_id": tool_call.id})
             # Send the tool results back to the LLM
             completion = llmapi.chat.completion(messages=messages)

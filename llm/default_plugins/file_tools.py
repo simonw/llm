@@ -6,10 +6,9 @@ import llm
 
 @llm.hookimpl
 def register_tools(register):
-    register(read_files)
+    register(llm.Tool(read_files))
 
 
-@llm.Tool
 def read_files(
     filenames: Annotated[
         list[str],

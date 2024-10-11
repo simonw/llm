@@ -2,6 +2,7 @@ import enum
 from typing import Annotated, Union
 import json
 import os
+import functools
 
 import pytest
 from pytest_httpx import IteratorStream
@@ -9,7 +10,7 @@ from click.testing import CliRunner
 
 from llm.tool import Tool
 from llm.cli import cli
-from llm.default_plugins.file_tools import read_files
+from llm.default_plugins import file_tools
 
 
 def test_no_parameters():
@@ -22,7 +23,7 @@ def test_no_parameters():
         "type": "function",
         "function": {"name": "tool", "description": "tool description"},
     }
-    assert tool() == "output"
+    assert tool("{}") == "output"
 
 
 def test_missing_description():
@@ -33,11 +34,11 @@ def test_missing_description():
             return "output"
 
 
-def test_missing_return():
+def test_invalid_return():
     with pytest.raises(ValueError, match=" return"):
 
         @Tool
-        def tool():
+        def tool() -> int:
             "tool description"
 
 
@@ -65,16 +66,16 @@ def test_unsupported_parameters():
             "tool description"
 
 
-def test_safe_call():
+def test_call():
     @Tool
     def tool(a: Annotated[int, "a desc"]) -> str:
         "tool description"
         return "output"
 
-    assert tool.safe_call(json.dumps({"a": 1})) == "output"
+    assert tool(json.dumps({"a": 1})) == "output"
 
-    assert "exception" in tool.safe_call("{}")
-    assert "exception" in tool.safe_call(json.dumps({"a": 1, "b": 2}))
+    assert "exception" in tool("{}")
+    assert "exception" in tool(json.dumps({"a": 1, "b": 2}))
 
 
 def test_annotated_parameters():
@@ -104,7 +105,7 @@ def test_annotated_parameters():
             },
         },
     }
-    assert tool(True) == "output"
+    assert tool(json.dumps({"a": True})) == "output"
 
 
 def test_enum_parameters():
@@ -140,7 +141,7 @@ def test_enum_parameters():
             },
         },
     }
-    assert tool(MyEnum.A) == "output"
+    assert tool(json.dumps({"a": MyEnum.A.value})) == "output"
 
 
 def test_list_parameters():
@@ -178,7 +179,7 @@ def test_list_parameters():
             },
         },
     }
-    assert tool([], [1], ["s"]) == "output"
+    assert tool(json.dumps({"a": [], "b": [1], "c": ["s"]})) == "output"
 
 
 def test_unsupported_list_parameters():
@@ -223,7 +224,7 @@ def test_object_tool():
             },
         },
     }
-    assert tool(True, 3) == "output"
+    assert tool(json.dumps({"a": True, "b": 3})) == "output"
 
 
 def stream_tool_call(datafile):
@@ -234,10 +235,14 @@ def stream_tool_call(datafile):
 
 @pytest.fixture
 def read_files_mock(monkeypatch):
-    def mock_read_files(filename):
+    def mock_read_files(filenames):
         return "some license text"
 
-    monkeypatch.setattr(read_files, "function", mock_read_files)
+    monkeypatch.setattr(
+        file_tools,
+        "read_files",
+        functools.update_wrapper(mock_read_files, file_tools.read_files),
+    )
 
 
 def test_tool_completion_stream(httpx_mock, read_files_mock, logs_db):

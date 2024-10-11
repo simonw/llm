@@ -1,0 +1,10 @@
+[project]
+name = "llm-sampletools"
+version = "0.1"
+dependencies = [
+    "llm",
+    "pydantic>=2.0",
+]
+
+[project.entry-points.llm]
+markov = "llm_sampletools"

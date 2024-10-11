@@ -120,8 +120,8 @@ def get_embedding_models():
 def get_tools() -> Dict[str, Tool]:
     tools = {}
 
-    def register(tool):
-        tools[tool.__name__] = tool
+    def register(tool: Tool):
+        tools[tool.name] = tool
 
     pm.hook.register_tools(register=register)
     return tools

@@ -47,7 +47,7 @@ class HelloWorld(llm.Model):
 
 ## register_tools(register)
 
-This hook can be used to register one or more Python functions as tools.
+This hook can be used to register one or more Python callables as `llm.Tool`s.
 Models that support tool calling will be able to use these tools
 
 {ref}`tool-calling` describes this hook in more detail.

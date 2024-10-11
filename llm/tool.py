@@ -1,9 +1,8 @@
 import enum
 import inspect
 import json
-from typing import Any, Annotated, Union, get_origin, get_args
+from typing import Any, Annotated, Union, Optional, get_origin, get_args
 from collections.abc import Callable
-from functools import update_wrapper
 import click
 import llm
 
@@ -72,48 +71,48 @@ def format_error(message: str) -> str:
 
 
 class Tool:
+    name: str
     schema: dict[str, Any]
+    function: Callable[..., str]
 
-    def __init__(self, function: Callable[..., str]) -> None:
-        update_wrapper(self, function)
+    def __init__(
+        self,
+        function: Callable[..., str],
+        parameters_schema: Optional[dict[str, Any]] = None,
+        description: Optional[str] = None,
+        name: Optional[str] = None,
+    ):
         self.function = function
-        signature = inspect.signature(function)
-        if not function.__doc__:
-            raise ValueError("Tool functions must have a doc comment description")
-        if signature.return_annotation is not str:
-            raise ValueError("Tool functions must return a string")
-
+        self.name = name or function.__name__
+        self.description = description or function.__doc__
+        if not self.description:
+            raise ValueError(
+                "Tool functions must have a docstring or provide a description"
+            )
         self.schema = {
             "type": "function",
             "function": {
-                "name": function.__name__,
-                "description": function.__doc__,
+                "name": self.name,
+                "description": self.description,
             },
         }
-        if signature.parameters:
-            self.schema["function"]["parameters"] = {
-                "type": "object",
-                "properties": {
-                    name: convert_parameter(param)
-                    for name, param in signature.parameters.items()
-                },
-                "required": [
-                    name
-                    for name, param in signature.parameters.items()
-                    if param.default is inspect.Parameter.empty
-                ],
-                "additionalProperties": False,
-            }
+        signature = inspect.signature(self.function)
+        if (
+            signature.return_annotation is not inspect.Parameter.empty
+            and signature.return_annotation is not str
+        ):
+            raise ValueError("Tool functions must return a string")
+        if not parameters_schema and signature.parameters:
+            parameters_schema = self.introspect_function(signature)
+        if parameters_schema:
+            self.schema["function"]["parameters"] = parameters_schema
 
-    def __call__(self, /, *args, **kwargs) -> str:
-        return self.function(*args, **kwargs)
-
-    def safe_call(self, json_args: str) -> str:
+    def __call__(self, json_parameters: str) -> str:
         try:
-            args = json.loads(json_args)
+            args = json.loads(json_parameters)
             params = ", ".join(f"{k}={v}" for k, v in args.items())
             click.secho(
-                f"Tool: {self.function.__name__}({params})",
+                f"Tool: {self.name}({params})",
                 err=True,
                 italic=True,
                 dim=True,
@@ -123,3 +122,18 @@ class Tool:
             raise
         except Exception as e:
             return format_exception(e)
+
+    def introspect_function(self, signature: inspect.Signature) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                name: convert_parameter(param)
+                for name, param in signature.parameters.items()
+            },
+            "required": [
+                name
+                for name, param in signature.parameters.items()
+                if param.default is inspect.Parameter.empty
+            ],
+            "additionalProperties": False,
+        }

@@ -897,7 +897,7 @@ def tools():
 def tools_list(schema):
     "List available tools"
     for name, tool in get_tools().items():
-        click.echo(f"{name}: {tool.__doc__}")
+        click.echo(f"{name}: {tool.description}")
         if schema:
             click.echo(json.dumps(tool.schema, indent=2))
 

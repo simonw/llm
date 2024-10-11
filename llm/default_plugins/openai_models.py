@@ -378,7 +378,7 @@ class Chat(Model):
                         f"Attempt to call non-existent function '{tool_call.function.name}'"
                     )
                 else:
-                    tool_response = tool.safe_call(tool_call.function.arguments)
+                    tool_response = tool(tool_call.function.arguments)
                 messages.append(
                     {
                         "role": "tool",
