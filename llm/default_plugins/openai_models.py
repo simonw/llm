@@ -361,7 +361,10 @@ class Chat(Model):
 
         if not tool_calls:
             response.response_json = response_json
-        else:
+            return
+
+        response.response_json = [response_json]
+        while tool_calls:
             messages.append(
                 {
                     "role": "assistant",
@@ -383,12 +386,11 @@ class Chat(Model):
                         "tool_call_id": tool_call.id,
                     }
                 )
-            kwargs.pop("tools")
             yield from handler.run(messages, **kwargs)
-            response.response_json = [
-                response_json,
-                remove_dict_none_values(handler.completion.model_dump()),
-            ]
+            response.response_json.append(
+                remove_dict_none_values(handler.completion.model_dump())
+            )
+            tool_calls = handler.completion.choices[0].message.tool_calls
 
     def get_client(self) -> openai.OpenAI:
         kwargs = {}
