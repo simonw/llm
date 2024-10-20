@@ -183,4 +183,4 @@ def test_template_basic(
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
-        mocked_openai_chat.reset(assert_all_responses_were_requested=False)
+        mocked_openai_chat.reset()
