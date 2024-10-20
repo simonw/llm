@@ -570,3 +570,16 @@ def test_model_defaults(tmpdir, monkeypatch):
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
     assert llm.get_model().model_id == "gpt-4o"
+
+
+def test_interactive_llm_empty_prompt():
+    runner = CliRunner()
+    # use a pty for stdin
+    master, _ = os.openpty()
+    input = os.fdopen(master, "r")
+    args = ["--no-stream"]
+    result = runner.invoke(cli, args, input=input, catch_exceptions=False)
+    assert result.exit_code == 0
+    # ensure the result is the help message
+    assert result.output.startswith("Usage:")
+    input.close()
