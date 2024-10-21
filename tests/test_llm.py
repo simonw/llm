@@ -572,6 +572,9 @@ def test_model_defaults(tmpdir, monkeypatch):
     assert llm.get_model().model_id == "gpt-4o"
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="ptys are not supported on Windows"
+)
 def test_interactive_llm_empty_prompt():
     runner = CliRunner()
     # use a pty for stdin
