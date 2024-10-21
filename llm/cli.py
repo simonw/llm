@@ -143,6 +143,11 @@ def prompt(
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
     """
+    # If no prompt is provided, and we are in a TTY, show the help
+    if sys.stdin.isatty() and not prompt:
+        click.echo(click.Context(cli).get_help())
+        return
+
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
@@ -153,8 +158,7 @@ def prompt(
 
         # Is there extra prompt available on stdin?
         stdin_prompt = None
-        if not sys.stdin.isatty():
-            stdin_prompt = sys.stdin.read()
+        stdin_prompt = sys.stdin.read()
 
         if stdin_prompt:
             bits = [stdin_prompt]
@@ -162,9 +166,6 @@ def prompt(
                 bits.append(prompt)
             prompt = " ".join(bits)
 
-        if prompt is None and not save and sys.stdin.isatty():
-            # Hang waiting for input to stdin (unless --save)
-            prompt = sys.stdin.read()
         return prompt
 
     if save:

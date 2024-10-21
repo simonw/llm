@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- Instead of reading stdin, print usage message when no arguments are provided and no redirect. [#502] 
+
 (v0_16)=
 ## 0.16 (2024-09-12)
 

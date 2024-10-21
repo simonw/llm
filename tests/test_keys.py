@@ -52,6 +52,7 @@ def test_keys_list(monkeypatch, tmpdir, args):
     assert result2.output.strip() == "openai"
 
 
+@pytest.mark.httpx_mock(can_send_already_matched_responses=True)
 def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     user_dir = tmpdir / "user-dir"
     pathlib.Path(user_dir).mkdir()

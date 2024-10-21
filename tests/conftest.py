@@ -139,6 +139,23 @@ def register_embed_demo_model(embed_demo, mock_model):
         pm.unregister(name="undo-mock-models-plugin")
 
 
+@pytest.fixture(autouse=True)
+def fix_httpx_mock(httpx_mock):
+    """As of version 0.31.0 httpx_mock takes no arguments in reset method.
+    https://github.com/Colin-b/pytest_httpx/blob/develop/CHANGELOG.md#0310
+    """
+    org_reset = httpx_mock.reset
+
+    def better_reset(self, assert_all_responses_were_requested: bool = False):
+        """Reset the mock, regardless of httpx_mock version."""
+        try:
+            org_reset()
+        except TypeError:
+            org_reset(assert_all_responses_were_requested)
+
+    httpx_mock.reset = better_reset.__get__(httpx_mock)
+
+
 @pytest.fixture
 def mocked_openai_chat(httpx_mock):
     httpx_mock.add_response(
