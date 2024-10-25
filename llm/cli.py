@@ -32,7 +32,6 @@ from .plugins import pm
 import base64
 import pathlib
 import pydantic
-import readline
 from runpy import run_module
 import shutil
 import sqlite_utils
@@ -42,6 +41,7 @@ import textwrap
 from typing import cast, Optional, Iterable, Union, Tuple
 import warnings
 import yaml
+import platform
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -342,9 +342,11 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
-    # Left and right arrow keys to move cursor:
-    readline.parse_and_bind("\\e[D: backward-char")
-    readline.parse_and_bind("\\e[C: forward-char")
+    if platform.system() == "Darwin":
+        import readline
+        # Left and right arrow keys to move cursor:
+        readline.parse_and_bind("\\e[D: backward-char")
+        readline.parse_and_bind("\\e[C: forward-char")
     log_path = logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
