@@ -4,6 +4,7 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    Attachment,
     Conversation,
     Model,
     ModelWithAliases,

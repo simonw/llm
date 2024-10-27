@@ -4,6 +4,7 @@ from dataclasses import asdict
 import io
 import json
 from llm import (
+    Attachment,
     Collection,
     Conversation,
     Response,
@@ -30,7 +31,9 @@ from llm import (
 from .migrations import migrate
 from .plugins import pm
 import base64
+import httpx
 import pathlib
+import puremagic
 import pydantic
 import readline
 from runpy import run_module
@@ -46,6 +49,54 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
+
+
+class AttachmentType(click.ParamType):
+    name = "attachment"
+
+    def convert(self, value, param, ctx):
+        if value == "-":
+            content = sys.stdin.buffer.read()
+            # Try to guess type
+            try:
+                mimetype = puremagic.from_string(content, mime=True)
+            except puremagic.PureError:
+                raise click.BadParameter("Could not determine mimetype of stdin")
+            return Attachment(mimetype, None, None, content)
+        if "://" in value:
+            # Confirm URL exists and try to guess type
+            try:
+                response = httpx.head(value)
+                response.raise_for_status()
+                mimetype = response.headers.get("content-type")
+            except httpx.HTTPError as ex:
+                raise click.BadParameter(str(ex))
+            return Attachment(mimetype, None, value, None)
+        # Check that the file exists
+        path = pathlib.Path(value)
+        if not path.exists():
+            self.fail(f"File {value} does not exist", param, ctx)
+        # Try to guess type
+        mimetype = puremagic.from_file(str(path), mime=True)
+        return Attachment(mimetype, str(path), None, None)
+
+
+def attachment_types_callback(ctx, param, values):
+    collected = []
+    for value, mimetype in values:
+        if "://" in value:
+            attachment = Attachment(mimetype, None, value, None)
+        elif value == "-":
+            content = sys.stdin.buffer.read()
+            attachment = Attachment(mimetype, None, None, content)
+        else:
+            # Look for file
+            path = pathlib.Path(value)
+            if not path.exists():
+                raise click.BadParameter(f"File {value} does not exist")
+            attachment = Attachment(mimetype, str(path), None, None)
+        collected.append(attachment)
+    return collected
 
 
 def _validate_metadata_json(ctx, param, value):
@@ -89,6 +140,23 @@ def cli():
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="Attachment with explicit mimetype",
+)
+@click.option(
     "options",
     "-o",
     "--option",
@@ -127,6 +195,8 @@ def prompt(
     prompt,
     system,
     model_id,
+    attachments,
+    attachment_types,
     options,
     template,
     param,
@@ -142,6 +212,14 @@ def prompt(
     Execute a prompt
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
+
+    Examples:
+
+    \b
+        llm 'Capital of France?'
+        llm 'Capital of France?' -m gpt-4o
+        llm 'Capital of France?' -s 'answer in Spanish'
+        llm 'Extract text from this image' -a image.jpg
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
@@ -262,6 +340,8 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    resolved_attachments = [*attachments, *attachment_types]
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         validated_options["stream"] = False
@@ -273,7 +353,9 @@ def prompt(
         prompt_method = conversation.prompt
 
     try:
-        response = prompt_method(prompt, system, **validated_options)
+        response = prompt_method(
+            prompt, *resolved_attachments, system=system, **validated_options
+        )
         if should_stream:
             for chunk in response:
                 print(chunk, end="")

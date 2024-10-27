@@ -1,7 +1,10 @@
+import base64
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
+import httpx
 from itertools import islice
+import puremagic
 import re
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
@@ -14,16 +17,51 @@ CONVERSATION_NAME_LENGTH = 32
 
 
 @dataclass
+class Attachment:
+    type: Optional[str] = None
+    path: Optional[str] = None
+    url: Optional[str] = None
+    content: Optional[bytes] = None
+
+    def resolve_type(self):
+        if self.type:
+            return self.type
+        # Derive it from path or url or content
+        if self.path:
+            return puremagic.from_file(self.path, mime=True)
+        if self.url:
+            return puremagic.from_url(self.url, mime=True)
+        if self.content:
+            return puremagic.from_string(self.content, mime=True)
+        raise ValueError("Attachment has no type and no content to derive it from")
+
+    def base64_content(self):
+        content = self.content
+        if not content:
+            if self.path:
+                content = open(self.path, "rb").read()
+            elif self.url:
+                response = httpx.get(self.url)
+                response.raise_for_status()
+                content = response.content
+        return base64.b64encode(content).decode("utf-8")
+
+
+@dataclass
 class Prompt:
     prompt: str
     model: "Model"
-    system: Optional[str]
-    prompt_json: Optional[str]
-    options: "Options"
+    attachments: Optional[List[Attachment]] = field(default_factory=list)
+    system: Optional[str] = None
+    prompt_json: Optional[str] = None
+    options: "Options" = field(default_factory=dict)
 
-    def __init__(self, prompt, model, system=None, prompt_json=None, options=None):
+    def __init__(
+        self, prompt, model, attachments, system=None, prompt_json=None, options=None
+    ):
         self.prompt = prompt
         self.model = model
+        self.attachments = list(attachments)
         self.system = system
         self.prompt_json = prompt_json
         self.options = options or {}
@@ -39,6 +77,7 @@ class Conversation:
     def prompt(
         self,
         prompt: Optional[str],
+        *attachments: Attachment,
         system: Optional[str] = None,
         stream: bool = True,
         **options
@@ -46,8 +85,9 @@ class Conversation:
         return Response(
             Prompt(
                 prompt,
-                system=system,
                 model=self.model,
+                attachments=attachments,
+                system=system,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -158,14 +198,22 @@ class Response(ABC):
         db["responses"].insert(response)
 
     @classmethod
-    def fake(cls, model: "Model", prompt: str, system: str, response: str):
+    def fake(
+        cls,
+        model: "Model",
+        prompt: str,
+        *attachments: List[Attachment],
+        system: str,
+        response: str
+    ):
         "Utility method to help with writing tests"
         response_obj = cls(
             model=model,
             prompt=Prompt(
                 prompt,
-                system=system,
                 model=model,
+                attachments=attachments,
+                system=system,
             ),
             stream=False,
         )
@@ -183,8 +231,9 @@ class Response(ABC):
             model=model,
             prompt=Prompt(
                 prompt=row["prompt"],
-                system=row["system"],
                 model=model,
+                attachments=[],
+                system=row["system"],
                 options=model.Options(**json.loads(row["options_json"])),
             ),
             stream=False,
@@ -242,10 +291,15 @@ class _get_key_mixin:
 
 class Model(ABC, _get_key_mixin):
     model_id: str
+
+    # API key handling
     key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
+
+    # Model characteristics
     can_stream: bool = False
+    attachment_types = set()
 
     class Options(_Options):
         pass
@@ -269,13 +323,33 @@ class Model(ABC, _get_key_mixin):
 
     def prompt(
         self,
-        prompt: Optional[str],
+        prompt: str,
+        *attachments: Attachment,
         system: Optional[str] = None,
         stream: bool = True,
         **options
     ):
+        # Validate attachments
+        if attachments and not self.attachment_types:
+            raise ValueError(
+                "This model does not support attachments, but some were provided"
+            )
+        for attachment in attachments:
+            attachment_type = attachment.resolve_type()
+            if attachment_type not in self.attachment_types:
+                raise ValueError(
+                    "This model does not support attachments of type '{}', only {}".format(
+                        attachment_type, ", ".join(self.attachment_types)
+                    )
+                )
         return self.response(
-            Prompt(prompt, system=system, model=self, options=self.Options(**options)),
+            Prompt(
+                prompt,
+                attachments=attachments,
+                system=system,
+                model=self,
+                options=self.Options(**options),
+            ),
             stream=stream,
         )
 
