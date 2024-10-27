@@ -33,8 +33,8 @@ def register_models(register):
     register(Chat("gpt-4-turbo-2024-04-09"))
     register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
     # GPT-4o
-    register(Chat("gpt-4o"), aliases=("4o",))
-    register(Chat("gpt-4o-mini"), aliases=("4o-mini",))
+    register(Chat("gpt-4o", vision=True), aliases=("4o",))
+    register(Chat("gpt-4o-mini", vision=True), aliases=("4o-mini",))
     # o1
     register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
     register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
@@ -271,6 +271,7 @@ class Chat(Model):
         api_engine=None,
         headers=None,
         can_stream=True,
+        vision=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
@@ -282,7 +283,16 @@ class Chat(Model):
         self.api_engine = api_engine
         self.headers = headers
         self.can_stream = can_stream
+        self.vision = vision
         self.allows_system_prompt = allows_system_prompt
+
+        if vision:
+            self.attachment_types = {
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+            }
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
@@ -308,7 +318,18 @@ class Chat(Model):
                 messages.append({"role": "assistant", "content": prev_response.text()})
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
-        messages.append({"role": "user", "content": prompt.prompt})
+        if not prompt.attachments:
+            messages.append({"role": "user", "content": prompt.prompt})
+        else:
+            vision_message = [{"type": "text", "text": prompt.prompt}]
+            for attachment in prompt.attachments:
+                url = attachment.url
+                if not url:
+                    base64_image = attachment.base64_content()
+                    url = f"data:{attachment.resolve_type()};base64,{base64_image}"
+                vision_message.append({"type": "image_url", "image_url": {"url": url}})
+            messages.append({"role": "user", "content": vision_message})
+
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
         client = self.get_client()
