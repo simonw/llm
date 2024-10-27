@@ -2,6 +2,7 @@ import base64
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
+import hashlib
 import httpx
 from itertools import islice
 import puremagic
@@ -22,6 +23,17 @@ class Attachment:
     path: Optional[str] = None
     url: Optional[str] = None
     content: Optional[bytes] = None
+
+    def hash_id(self):
+        # Hash of the binary content, or of '{"url": "https://..."}' for URL attachments
+        if self.content:
+            return hashlib.sha256(self.content).hexdigest()
+        elif self.path:
+            return hashlib.sha256(open(self.path, "rb").read()).hexdigest()
+        else:
+            return hashlib.sha256(
+                json.dumps({"url": self.url}).encode("utf-8")
+            ).hexdigest()
 
     def resolve_type(self):
         if self.type:
@@ -178,8 +190,9 @@ class Response(ABC):
             },
             ignore=True,
         )
+        response_id = str(ULID()).lower()
         response = {
-            "id": str(ULID()).lower(),
+            "id": response_id,
             "model": self.model.model_id,
             "prompt": self.prompt.prompt,
             "system": self.prompt.system,
@@ -196,6 +209,26 @@ class Response(ABC):
             "datetime_utc": self.datetime_utc(),
         }
         db["responses"].insert(response)
+        # Persist any attachments - loop through with index
+        for index, attachment in enumerate(self.prompt.attachments):
+            attachment_id = attachment.hash_id()
+            db["attachments"].insert(
+                {
+                    "id": attachment_id,
+                    "type": attachment.resolve_type(),
+                    "path": attachment.path,
+                    "url": attachment.url,
+                    "content": attachment.content,
+                },
+                replace=True,
+            )
+            db["prompt_attachments"].insert(
+                {
+                    "response_id": response_id,
+                    "attachment_id": attachment_id,
+                    "order": index,
+                },
+            )
 
     @classmethod
     def fake(
