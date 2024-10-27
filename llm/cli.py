@@ -76,6 +76,7 @@ class AttachmentType(click.ParamType):
         path = pathlib.Path(value)
         if not path.exists():
             self.fail(f"File {value} does not exist", param, ctx)
+        path = path.resolve()
         # Try to guess type
         mimetype = puremagic.from_file(str(path), mime=True)
         return Attachment(mimetype, str(path), None, None)
@@ -94,6 +95,7 @@ def attachment_types_callback(ctx, param, values):
             path = pathlib.Path(value)
             if not path.exists():
                 raise click.BadParameter(f"File {value} does not exist")
+            path = path.resolve()
             attachment = Attachment(mimetype, str(path), None, None)
         collected.append(attachment)
     return collected
