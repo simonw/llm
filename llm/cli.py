@@ -854,6 +854,11 @@ def logs_list(
 
     if json_output:
         # Output as JSON if requested
+        for row in rows:
+            row["attachments"] = [
+                {k: v for k, v in attachment.items() if k != "response_id"}
+                for attachment in attachments_by_id.get(row["id"], [])
+            ]
         click.echo(json.dumps(list(rows), indent=2))
     elif response:
         # Just output the last response
