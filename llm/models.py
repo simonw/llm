@@ -81,10 +81,10 @@ class Attachment:
 class Prompt:
     prompt: str
     model: "Model"
-    attachments: Optional[List[Attachment]] = field(default_factory=list)
-    system: Optional[str] = None
-    prompt_json: Optional[str] = None
-    options: "Options" = field(default_factory=dict)
+    attachments: Optional[List[Attachment]]
+    system: Optional[str]
+    prompt_json: Optional[str]
+    options: "Options"
 
     def __init__(
         self,
@@ -115,7 +115,7 @@ class Conversation:
         self,
         prompt: Optional[str],
         *,
-        attachments: Attachment = None,
+        attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
         **options
@@ -371,7 +371,7 @@ class Model(ABC, _get_key_mixin):
 
     # Model characteristics
     can_stream: bool = False
-    attachment_types = set()
+    attachment_types: Set = set()
 
     class Options(_Options):
         pass
@@ -397,7 +397,7 @@ class Model(ABC, _get_key_mixin):
         self,
         prompt: str,
         *,
-        attachments: Attachment = None,
+        attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
         **options
