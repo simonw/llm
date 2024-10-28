@@ -312,23 +312,39 @@ class Chat(Model):
                         {"role": "system", "content": prev_response.prompt.system}
                     )
                     current_system = prev_response.prompt.system
-                messages.append(
-                    {"role": "user", "content": prev_response.prompt.prompt}
-                )
+                if prev_response.attachments:
+                    attachment_message = [
+                        {"type": "text", "text": prev_response.prompt.prompt}
+                    ]
+                    for attachment in prev_response.attachments:
+                        url = attachment.url
+                        if not url:
+                            base64_image = attachment.base64_content()
+                            url = f"data:{attachment.resolve_type()};base64,{base64_image}"
+                        attachment_message.append(
+                            {"type": "image_url", "image_url": {"url": url}}
+                        )
+                    messages.append({"role": "user", "content": attachment_message})
+                else:
+                    messages.append(
+                        {"role": "user", "content": prev_response.prompt.prompt}
+                    )
                 messages.append({"role": "assistant", "content": prev_response.text()})
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         if not prompt.attachments:
             messages.append({"role": "user", "content": prompt.prompt})
         else:
-            vision_message = [{"type": "text", "text": prompt.prompt}]
+            attachment_message = [{"type": "text", "text": prompt.prompt}]
             for attachment in prompt.attachments:
                 url = attachment.url
                 if not url:
                     base64_image = attachment.base64_content()
                     url = f"data:{attachment.resolve_type()};base64,{base64_image}"
-                vision_message.append({"type": "image_url", "image_url": {"url": url}})
-            messages.append({"role": "user", "content": vision_message})
+                attachment_message.append(
+                    {"type": "image_url", "image_url": {"url": url}}
+                )
+            messages.append({"role": "user", "content": attachment_message})
 
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
