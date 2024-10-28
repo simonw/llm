@@ -695,6 +695,21 @@ where responses_fts match :query{extra_where}
 order by responses_fts.rank desc{limit}
 """
 
+ATTACHMENTS_SQL = """
+select
+    response_id,
+    attachments.id,
+    attachments.type,
+    attachments.path,
+    attachments.url,
+    length(attachments.content) as content_length
+from attachments
+join prompt_attachments
+    on attachments.id = prompt_attachments.attachment_id
+where prompt_attachments.response_id in ({})
+order by prompt_attachments."order"
+"""
+
 
 @logs.command(name="list")
 @click.option(
@@ -816,6 +831,14 @@ def logs_list(
     # ... except for searches where we don't do this
     if not query:
         rows.reverse()
+
+    # Fetch any attachments
+    ids = [row["id"] for row in rows]
+    attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
+    attachments_by_id = {}
+    for attachment in attachments:
+        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
     for row in rows:
         if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
@@ -864,6 +887,35 @@ def logs_list(
                 if row["system"] is not None:
                     click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            attachments = attachments_by_id.get(row["id"])
+            # ### Attachments
+
+            # 1. **image/jpeg**: `/path/example.jpg`
+            # 2. **image/png**: `https://example.com/image.png`
+            # 3. **application/pdf**: `<binary 1,003,425 bytes>`
+            if attachments:
+                click.echo("\n### Attachments\n")
+                for i, attachment in enumerate(attachments, 1):
+                    if attachment["path"]:
+                        path = attachment["path"]
+                        click.echo(
+                            "{}. **{}**: `{}`".format(i, attachment["type"], path)
+                        )
+                    elif attachment["url"]:
+                        click.echo(
+                            "{}. **{}**: {}".format(
+                                i, attachment["type"], attachment["url"]
+                            )
+                        )
+                    elif attachment["content_length"]:
+                        click.echo(
+                            "{}. **{}**: `<binary {} bytes>`".format(
+                                i,
+                                attachment["type"],
+                                f"{attachment['content_length']:,}",
+                            )
+                        )
+
             click.echo("\n## Response:\n\n{}\n".format(row["response"]))
 
 
