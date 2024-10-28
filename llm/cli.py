@@ -521,7 +521,7 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system, **validated_options)
+        response = conversation.prompt(prompt, system=system, **validated_options)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
