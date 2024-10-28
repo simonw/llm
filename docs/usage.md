@@ -45,49 +45,30 @@ Some models support options. You can pass these using `-o/--option name value` -
 ```bash
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
+### Attachments
 
-(usage-completion-prompts)=
-## Completion prompts
+Some models are multi-modal, which means they can accept input in more than just text. GPT-4o and GPT-4o mini can accept images, and models such as Google Gemini 1.5 can accept audio and video as well.
 
-Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
-
-An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
-
-You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+LLM calls these **attachments**. You can pass attachments using the `-a` option like this:
 
 ```bash
-llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+llm "describe this image" -a https://static.simonwillison.net/static/2024/pelicans.jpg
 ```
-
-(conversation)=
-## Continuing a conversation
-
-By default, the tool will start a new conversation each time you run it.
-
-You can opt to continue the previous conversation by passing the `-c/--continue` option:
+Attachments can be passed using URLs or file paths, and you can attach more than one attachment to a single prompt:
 ```bash
-llm 'More names' -c
+llm "describe these images" -a image1.jpg -a image2.jpg
 ```
-This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
-
-`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
-
-To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
+You can also pipe an attachment to LLM by using `-` as the filename:
 ```bash
-llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
+cat image.jpg | llm "describe this image" -a -
 ```
-You can find these conversation IDs using the `llm logs` command.
-
-## Using with a shell
-
-To learn more about your computer's operating system based on the output of `uname -a`, run this:
+LLM will attempt to automatically detect the content type of the image. If this doesn't work you can instead use the `--attachment-type` option (`--at` for short) which takes the URL/path plus an explicit content type:
 ```bash
-llm "Tell me about my operating system: $(uname -a)"
+cat myfile | llm "describe this image" --at - image/jpeg
 ```
-This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
 
 (system-prompts)=
-## System prompts
+### System prompts
 
 You can use `-s/--system '...'` to set a system prompt.
 ```bash
@@ -119,6 +100,46 @@ And then use the new template like this:
 cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
+
+(conversation)=
+### Continuing a conversation
+
+By default, the tool will start a new conversation each time you run it.
+
+You can opt to continue the previous conversation by passing the `-c/--continue` option:
+```bash
+llm 'More names' -c
+```
+This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
+
+`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
+
+To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
+```bash
+llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
+```
+You can find these conversation IDs using the `llm logs` command.
+
+### Tips for using LLM with Bash or Zsh
+
+To learn more about your computer's operating system based on the output of `uname -a`, run this:
+```bash
+llm "Tell me about my operating system: $(uname -a)"
+```
+This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
+
+(usage-completion-prompts)=
+### Completion prompts
+
+Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
+
+An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
+
+You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+
+```bash
+llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+```
 
 (usage-chat)=
 

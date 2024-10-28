@@ -221,7 +221,15 @@ def prompt(
         llm 'Capital of France?'
         llm 'Capital of France?' -m gpt-4o
         llm 'Capital of France?' -s 'answer in Spanish'
+
+    Multi-modal models can be called with attachments like this:
+
+    \b
         llm 'Extract text from this image' -a image.jpg
+        llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
+        cat image | llm 'describe image' -a -
+        # With an explicit mimetype:
+        cat image | llm 'describe image' --at - image/jpeg
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
@@ -356,7 +364,7 @@ def prompt(
 
     try:
         response = prompt_method(
-            prompt, *resolved_attachments, system=system, **validated_options
+            prompt, attachments=resolved_attachments, system=system, **validated_options
         )
         if should_stream:
             for chunk in response:
