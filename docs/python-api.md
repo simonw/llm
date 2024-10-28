@@ -49,6 +49,9 @@ response = model.prompt(
     system="Answer like GlaDOS"
 )
 ```
+
+(python-api-attachments)=
+
 ### Attachments
 
 Model that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.

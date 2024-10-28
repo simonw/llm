@@ -1,5 +1,39 @@
 # Changelog
 
+(v0_17a0)=
+## 0.17a0 (2024-10-28)
+
+Alpha support for **attachments**, allowing multi-modal models to accept images, audio, video and other formats. [#578](https://github.com/simonw/llm/issues/578)
+
+Attachments {ref}`in the CLI <usage-attachments>` can be URLs:
+
+```bash
+llm "describe this image" \
+  -a https://static.simonwillison.net/static/2024/pelicans.jpg
+```
+Or file paths:
+```bash
+llm "extract text" -a image1.jpg -a image2.jpg
+```
+Or binary data, which may need to use `--attachment-type` to specify the MIME type:
+```bash
+cat image | llm "extract text" --attachment-type - image/jpeg
+```
+
+Attachments are also available {ref}`in the Python API <python-api-attachments>`:
+
+```python
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt(
+    "Describe these images",
+    attachments=[
+        llm.Attachment(path="pelican.jpg"),
+        llm.Attachment(url="https://static.simonwillison.net/static/2024/pelicans.jpg"),
+    ]
+)
+```
+Plugins that provide alternative models can support attachments, see {ref}`advanced-model-plugins-attachments` for details.
+
 (v0_16)=
 ## 0.16 (2024-09-12)
 

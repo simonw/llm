@@ -45,6 +45,7 @@ Some models support options. You can pass these using `-o/--option name value` -
 ```bash
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
+(usage-attachments)=
 ### Attachments
 
 Some models are multi-modal, which means they can accept input in more than just text. GPT-4o and GPT-4o mini can accept images, and models such as Google Gemini 1.5 can accept audio and video as well.
@@ -56,7 +57,7 @@ llm "describe this image" -a https://static.simonwillison.net/static/2024/pelica
 ```
 Attachments can be passed using URLs or file paths, and you can attach more than one attachment to a single prompt:
 ```bash
-llm "describe these images" -a image1.jpg -a image2.jpg
+llm "extract text" -a image1.jpg -a image2.jpg
 ```
 You can also pipe an attachment to LLM by using `-` as the filename:
 ```bash
