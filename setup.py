@@ -54,7 +54,7 @@ setup(
         "test": [
             "pytest",
             "numpy",
-            "pytest-httpx",
+            "pytest-httpx>=0.33.0",
             "cogapp",
             "mypy>=1.10.0",
             "black>=24.1.0",
