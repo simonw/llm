@@ -447,15 +447,23 @@ def chat(
         print("")
 
 
+def get_most_recent_active_conversation(db):
+    return next(db.query("""
+        SELECT conversation_id, MAX(datetime_utc) as last_active
+        FROM responses
+        GROUP BY conversation_id
+        ORDER BY last_active DESC
+        LIMIT 1
+    """), {}).get("conversation_id")
+
+
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     if conversation_id is None:
         # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
-        if matches:
-            conversation_id = matches[0]["id"]
-        else:
+        conversation_id = get_most_recent_active_conversation(db)
+        if conversation_id is None:
             return None
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
