@@ -15,18 +15,20 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: pip
-        cache-dependency-path: setup.py
     - name: Install dependencies
-      run: |
-        pip install '.[test]'
+      run: uv sync --dev --python ${{ matrix.python-version }} --python-preference only-system
     - name: Run tests
       run: |
-        pytest
+        uv run pytest
   deploy:
     runs-on: ubuntu-latest
     environment: release
@@ -39,13 +41,10 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.13'
-        cache: pip
-        cache-dependency-path: setup.py
     - name: Install dependencies
-      run: |
-        pip install setuptools wheel build
+      run: uv sync --dev --python ${{ matrix.python-version }} --python-preference only-system
     - name: Build
       run: |
-        python -m build
+        uv build
     - name: Publish
       uses: pypa/gh-action-pypi-publish@release/v1

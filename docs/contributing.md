@@ -1,22 +1,13 @@
 # Contributing
 
-To contribute to this tool, first checkout the code. Then create a new virtual environment:
+To contribute to this tool, first checkout the code. Then install [uv](https://docs.astral.sh/uv/) and create a new virtual environment with dependencies installed:
 ```bash
 cd llm
-python -m venv venv
-source venv/bin/activate
-```
-Or if you are using `pipenv`:
-```bash
-pipenv shell
-```
-Now install the dependencies and test dependencies:
-```bash
-pip install -e '.[test]'
+uv sync --dev
 ```
 To run the tests:
 ```bash
-pytest
+uv run pytest
 ```
 ## Debugging tricks
 
@@ -42,7 +33,7 @@ Documentation for this project uses [MyST](https://myst-parser.readthedocs.io/) 
 To build the documentation locally, run the following:
 ```bash
 cd docs
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 make livehtml
 ```
 This will start a live preview server, using [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/).
@@ -58,7 +49,7 @@ You'll need [Just](https://github.com/casey/just) installed to run this command.
 To release a new version:
 
 1. Update `docs/changelog.md` with the new changes.
-2. Update the version number in `setup.py`
+2. Update the version number in `pyproject.toml`
 3. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
 4. Wait for the package to push to PyPI and then...
 5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
