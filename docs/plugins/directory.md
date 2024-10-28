@@ -7,7 +7,8 @@ The following plugins are available for LLM. Here's {ref}`how to install them <i
 
 These plugins all help you run LLMs directly on your own computer:
 
-- **[llm-llama-cpp](https://github.com/simonw/llm-llama-cpp)** uses [llama.cpp](https://github.com/ggerganov/llama.cpp) to run models published in the GGUF format.
+
+- **[llm-gguf](https://github.com/simonw/llm-gguf)** uses [llama.cpp](https://github.com/ggerganov/llama.cpp) to run models published in the GGUF format.
 - **[llm-mlc](https://github.com/simonw/llm-mlc)** can run local models released by the [MLC project](https://mlc.ai/mlc-llm/), including models that can take advantage of the GPU on Apple Silicon M1/M2 devices.
 - **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)** adds support for various models released by the [GPT4All](https://gpt4all.io/) project that are optimized to run locally on your own machine. These models include versions of Vicuna, Orca, Falcon and MPT - here's [a full list of models](https://observablehq.com/@simonw/gpt4all-models).
 - **[llm-mpt30b](https://github.com/simonw/llm-mpt30b)** adds support for the [MPT-30B](https://huggingface.co/mosaicml/mpt-30b) local model.
@@ -52,6 +53,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-cmd](https://github.com/simonw/llm-cmd)** accepts a prompt for a shell command, runs that prompt and populates the result in your shell so you can review it, edit it and then hit `<enter>` to execute or `ctrl+c` to cancel.
 - **[llm-python](https://github.com/simonw/llm-python)** adds a `llm python` command for running a Python interpreter in the same virtual environment as LLM. This is useful for debugging, and also provides a convenient way to interact with the LLM {ref}`python-api` if you installed LLM using Homebrew or `pipx`.
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
+- **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
 
 ## Just for fun
 
