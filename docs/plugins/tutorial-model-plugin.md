@@ -1,5 +1,5 @@
 (tutorial-model-plugin)=
-# Writing a plugin to support a new model
+# Model plugin tutorial
 
 This tutorial will walk you through developing a new plugin for LLM that adds support for a new Large Language Model.
 

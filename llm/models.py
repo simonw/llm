@@ -50,7 +50,7 @@ class Attachment:
             return puremagic.from_string(self.content, mime=True)
         raise ValueError("Attachment has no type and no content to derive it from")
 
-    def base64_content(self):
+    def content_bytes(self):
         content = self.content
         if not content:
             if self.path:
@@ -59,7 +59,10 @@ class Attachment:
                 response = httpx.get(self.url)
                 response.raise_for_status()
                 content = response.content
-        return base64.b64encode(content).decode("utf-8")
+        return content
+
+    def base64_content(self):
+        return base64.b64encode(self.content_bytes()).decode("utf-8")
 
     @classmethod
     def from_row(cls, row):

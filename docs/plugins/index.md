@@ -17,5 +17,6 @@ installing-plugins
 directory
 plugin-hooks
 tutorial-model-plugin
+advanced-model-plugins
 plugin-utilities
 ```
