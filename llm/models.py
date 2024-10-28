@@ -45,7 +45,9 @@ class Attachment:
         if self.path:
             return puremagic.from_file(self.path, mime=True)
         if self.url:
-            return puremagic.from_url(self.url, mime=True)
+            response = httpx.head(self.url)
+            response.raise_for_status()
+            return response.headers.get("content-type")
         if self.content:
             return puremagic.from_string(self.content, mime=True)
         raise ValueError("Attachment has no type and no content to derive it from")

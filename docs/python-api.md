@@ -49,6 +49,24 @@ response = model.prompt(
     system="Answer like GlaDOS"
 )
 ```
+### Attachments
+
+Model that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
+
+This example shows two attachments - one from a file path and one from a URL:
+```python
+import llm
+
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt(
+    "Describe these images",
+    attachments=[
+        llm.Attachment(path="pelican.jpg"),
+        llm.Attachment(url="https://static.simonwillison.net/static/2024/pelicans.jpg"),
+    ]
+)
+```
+Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly.
 
 ### Model options
 
@@ -113,6 +131,16 @@ response2 = conversation.prompt("Now do skunks")
 print(response2.text())
 ```
 You will get back five fun facts about skunks.
+
+The `conversation.prompt()` method supports attachments as well:
+```python
+response = conversation.prompt(
+    "Describe these birds",
+    attachments=[
+        llm.Attachment(url="https://static.simonwillison.net/static/2024/pelicans.jpg")
+    ]
+)
+```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
 
