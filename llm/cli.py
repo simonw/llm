@@ -62,7 +62,7 @@ class AttachmentType(click.ParamType):
                 mimetype = puremagic.from_string(content, mime=True)
             except puremagic.PureError:
                 raise click.BadParameter("Could not determine mimetype of stdin")
-            return Attachment(mimetype, None, None, content)
+            return Attachment(type=mimetype, path=None, url=None, content=content)
         if "://" in value:
             # Confirm URL exists and try to guess type
             try:
@@ -79,7 +79,7 @@ class AttachmentType(click.ParamType):
         path = path.resolve()
         # Try to guess type
         mimetype = puremagic.from_file(str(path), mime=True)
-        return Attachment(mimetype, str(path), None, None)
+        return Attachment(type=mimetype, path=str(path), url=None, content=None)
 
 
 def attachment_types_callback(ctx, param, values):
@@ -552,7 +552,7 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     for response in db["responses"].rows_where(
         "conversation_id = ?", [conversation_id]
     ):
-        conversation.responses.append(Response.from_row(response))
+        conversation.responses.append(Response.from_row(db, response))
     return conversation
 
 

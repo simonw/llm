@@ -23,17 +23,20 @@ class Attachment:
     path: Optional[str] = None
     url: Optional[str] = None
     content: Optional[bytes] = None
+    _id: Optional[str] = None
 
-    def hash_id(self):
+    def id(self):
         # Hash of the binary content, or of '{"url": "https://..."}' for URL attachments
-        if self.content:
-            return hashlib.sha256(self.content).hexdigest()
-        elif self.path:
-            return hashlib.sha256(open(self.path, "rb").read()).hexdigest()
-        else:
-            return hashlib.sha256(
-                json.dumps({"url": self.url}).encode("utf-8")
-            ).hexdigest()
+        if self._id is None:
+            if self.content:
+                self._id = hashlib.sha256(self.content).hexdigest()
+            elif self.path:
+                self._id = hashlib.sha256(open(self.path, "rb").read()).hexdigest()
+            else:
+                self._id = hashlib.sha256(
+                    json.dumps({"url": self.url}).encode("utf-8")
+                ).hexdigest()
+        return self._id
 
     def resolve_type(self):
         if self.type:
@@ -57,6 +60,16 @@ class Attachment:
                 response.raise_for_status()
                 content = response.content
         return base64.b64encode(content).decode("utf-8")
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            _id=row["id"],
+            type=row["type"],
+            path=row["path"],
+            url=row["url"],
+            content=row["content"],
+        )
 
 
 @dataclass
@@ -211,7 +224,7 @@ class Response(ABC):
         db["responses"].insert(response)
         # Persist any attachments - loop through with index
         for index, attachment in enumerate(self.prompt.attachments):
-            attachment_id = attachment.hash_id()
+            attachment_id = attachment.id()
             db["attachments"].insert(
                 {
                     "id": attachment_id,
@@ -255,7 +268,7 @@ class Response(ABC):
         return response_obj
 
     @classmethod
-    def from_row(cls, row):
+    def from_row(cls, db, row):
         from llm import get_model
 
         model = get_model(row["model"])
@@ -276,6 +289,19 @@ class Response(ABC):
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
         response._chunks = [row["response"]]
+        # Attachments
+        response.attachments = [
+            Attachment.from_row(arow)
+            for arow in db.query(
+                """
+                select attachments.* from attachments
+                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
+                where prompt_attachments.response_id = ?
+                order by prompt_attachments."order"
+            """,
+                [row["id"]],
+            )
+        ]
         return response
 
     def __repr__(self):
