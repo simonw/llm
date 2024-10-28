@@ -888,11 +888,6 @@ def logs_list(
                     click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
             attachments = attachments_by_id.get(row["id"])
-            # ### Attachments
-
-            # 1. **image/jpeg**: `/path/example.jpg`
-            # 2. **image/png**: `https://example.com/image.png`
-            # 3. **application/pdf**: `<binary 1,003,425 bytes>`
             if attachments:
                 click.echo("\n### Attachments\n")
                 for i, attachment in enumerate(attachments, 1):
@@ -909,7 +904,7 @@ def logs_list(
                         )
                     elif attachment["content_length"]:
                         click.echo(
-                            "{}. **{}**: `<binary {} bytes>`".format(
+                            "{}. **{}**: `<{} bytes>`".format(
                                 i,
                                 attachment["type"],
                                 f"{attachment['content_length']:,}",
