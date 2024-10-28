@@ -212,6 +212,31 @@ def mocked_openai_completion(httpx_mock):
     return httpx_mock
 
 
+@pytest.fixture
+def mocked_openai_completion_richtext(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/completions",
+        json={
+            "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
+            "object": "text_completion",
+            "created": 1589478378,
+            "model": "gpt-3.5-turbo-instruct",
+            "choices": [
+                {
+                    "text": "\n\nThis is a `rich` _text_ **test**",
+                    "index": 0,
+                    "logprobs": None,
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    return httpx_mock
+
+
 def stream_completion_events():
     choices_chunks = [
         [
