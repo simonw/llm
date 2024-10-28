@@ -97,7 +97,7 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       llm 'Extract text from this image' -a image.jpg
       llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
       cat image | llm 'describe image' -a -
-      # With an explicit content type:
+      # With an explicit mimetype:
       cat image | llm 'describe image' --at - image/jpeg
 
 Options:
