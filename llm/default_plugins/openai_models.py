@@ -515,7 +515,12 @@ def redact_data_urls(input_dict):
     """
     if isinstance(input_dict, dict):
         for key, value in input_dict.items():
-            if key == "image_url" and isinstance(value, dict) and "url" in value:
+            if (
+                key == "image_url"
+                and isinstance(value, dict)
+                and "url" in value
+                and value["url"].startswith("data:")
+            ):
                 value["url"] = "data:..."
             else:
                 redact_data_urls(value)
