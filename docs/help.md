@@ -86,20 +86,37 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 
   Documentation: https://llm.datasette.io/en/stable/usage.html
 
+  Examples:
+
+      llm 'Capital of France?'
+      llm 'Capital of France?' -m gpt-4o
+      llm 'Capital of France?' -s 'answer in Spanish'
+
+  Multi-modal models can be called with attachments like this:
+
+      llm 'Extract text from this image' -a image.jpg
+      llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
+      cat image | llm 'describe image' -a -
+      # With an explicit content type:
+      cat image | llm 'describe image' --at - image/jpeg
+
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  --no-stream                  Do not stream output
-  -n, --no-log                 Don't log to database
-  --log                        Log prompt and response to the database
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  --key TEXT                   API key to use
-  --save TEXT                  Save prompt with this template name
-  --help                       Show this message and exit.
+  -s, --system TEXT               System prompt to use
+  -m, --model TEXT                Model to use
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype
+  -o, --option <TEXT TEXT>...     key/value options for the model
+  -t, --template TEXT             Template to use
+  -p, --param <TEXT TEXT>...      Parameters for template
+  --no-stream                     Do not stream output
+  -n, --no-log                    Don't log to database
+  --log                           Log prompt and response to the database
+  -c, --continue                  Continue the most recent conversation.
+  --cid, --conversation TEXT      Continue the conversation with the given ID.
+  --key TEXT                      API key to use
+  --save TEXT                     Save prompt with this template name
+  --help                          Show this message and exit.
 ```
 
 (help-chat)=
