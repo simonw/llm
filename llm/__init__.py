@@ -29,6 +29,7 @@ __all__ = [
     "get_model",
     "get_key",
     "user_dir",
+    "Attachment",
     "Collection",
     "Conversation",
     "Model",
