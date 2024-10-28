@@ -23,7 +23,10 @@ def test_chat_basic(mock_model, logs_db):
     mock_model.enqueue(["one world"])
     mock_model.enqueue(["one again"])
     result = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock"], input="Hi\nHi two\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nHi two\nquit\n",
+        catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output == (

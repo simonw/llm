@@ -85,11 +85,18 @@ class Prompt:
     options: "Options" = field(default_factory=dict)
 
     def __init__(
-        self, prompt, model, attachments, system=None, prompt_json=None, options=None
+        self,
+        prompt,
+        model,
+        *,
+        attachments=None,
+        system=None,
+        prompt_json=None,
+        options=None
     ):
         self.prompt = prompt
         self.model = model
-        self.attachments = list(attachments)
+        self.attachments = list(attachments or [])
         self.system = system
         self.prompt_json = prompt_json
         self.options = options or {}
@@ -105,7 +112,8 @@ class Conversation:
     def prompt(
         self,
         prompt: Optional[str],
-        *attachments: Attachment,
+        *,
+        attachments: Attachment = None,
         system: Optional[str] = None,
         stream: bool = True,
         **options
@@ -386,7 +394,8 @@ class Model(ABC, _get_key_mixin):
     def prompt(
         self,
         prompt: str,
-        *attachments: Attachment,
+        *,
+        attachments: Attachment = None,
         system: Optional[str] = None,
         stream: bool = True,
         **options
@@ -396,7 +405,7 @@ class Model(ABC, _get_key_mixin):
             raise ValueError(
                 "This model does not support attachments, but some were provided"
             )
-        for attachment in attachments:
+        for attachment in attachments or []:
             attachment_type = attachment.resolve_type()
             if attachment_type not in self.attachment_types:
                 raise ValueError(
