@@ -290,7 +290,8 @@ def prompt(
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
         migrate(db)
-        response.log_to_db(db)
+        parent_id = get_parent_id(response, db)
+        response.log_to_db(db, parent_id)
 
 
 @cli.command()
@@ -443,7 +444,8 @@ def chat(
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
-        response.log_to_db(db)
+        parent_id = get_parent_id(response, id)
+        response.log_to_db(db, parent_id)
         print("")
 
 
@@ -457,27 +459,168 @@ def get_most_recent_active_conversation(db):
     """), {}).get("conversation_id")
 
 
+def get_head(db):
+    try:
+        return db['state'].get('head')['value']
+    except sqlite_utils.db.NotFoundError:
+        return None
+
+
+def get_response_parent(response, db):
+    if response.parent_id:
+        # Use explicit parent if set
+        return next(db.query("SELECT * FROM responses WHERE id = ?", [response.parent_id]), None)
+
+    if not response.conversation:
+        return {'id': None}
+
+    # Fall back to previous response in conversation
+    return next(db.query("""
+        SELECT * FROM responses
+        WHERE conversation_id = ?
+        AND datetime_utc < ?
+        ORDER BY datetime_utc DESC
+        LIMIT 1
+    """, [response.conversation.id, response.datetime_utc()]), None)
+
+
+def get_parent_id(response, db):
+    parent = get_response_parent(response, db)
+    if parent:
+        return parent['id']
+    return None
+
+
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     if conversation_id is None:
-        # Return the most recent conversation, or None if there are none
         conversation_id = get_most_recent_active_conversation(db)
         if conversation_id is None:
             return None
+
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
         raise click.ClickException(
             "No conversation found with id={}".format(conversation_id)
         )
-    # Inflate that conversation
+
+    # Get all responses for lookup purposes
+    responses = {
+        r["id"]: r for r in db["responses"].rows_where(
+            "conversation_id = ?", [conversation_id]
+        )
+    }
+
+    if not responses:
+        return Conversation.from_row(row)
+
+    # Start from head or most recent
+    head = get_head(db) or max(responses.values(), key=lambda r: r["datetime_utc"])["id"]
+
+    # Build the response chain by following parents
+    response_chain = []
+    while head and head in responses:
+        current = Response.from_row(responses[head])
+        response_chain.append(current)
+        head = get_parent_id(current, db)
+
+    # Create conversation and add responses in chronological order
     conversation = Conversation.from_row(row)
-    for response in db["responses"].rows_where(
-        "conversation_id = ?", [conversation_id]
-    ):
-        conversation.responses.append(Response.from_row(response))
+    conversation.responses = list(reversed(response_chain))
     return conversation
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="show",
+    default_if_no_args=True,
+)
+def head():
+    "Manage the current response (head) in a conversation"
+    pass
+
+
+@head.command(name="set")
+@click.argument("response_id")
+def head_set(response_id):
+    "Set the current head to a specific response ID"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+
+    # Verify the response exists
+    try:
+        _ = db["responses"].get(response_id)
+    except sqlite_utils.db.NotFoundError:
+        raise click.ClickException(f"Response {response_id} not found")
+
+    # Set or update the head in current_state
+    db["state"].upsert(
+        {"key": "head", "value": response_id},
+        pk="key"
+    )
+    click.echo(f"Head is now at response {response_id}")
+
+
+@head.command(name="back")
+def head_back():
+    "Move head to parent of current response"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+
+    # Get current head
+    try:
+        head_id = db["state"].get("head")["value"]
+    except sqlite_utils.db.NotFoundError:
+        raise click.ClickException("No current head set")
+
+    try:
+        current = db["responses"].get(head_id)
+    except sqlite_utils.db.NotFoundError:
+        raise click.ClickException(f"Current head response {head_id} not found")
+
+    # Try to get parent_id, fall back to chronological if needed
+    parent_id = current.get("parent_id")
+    if not parent_id:
+        # Find the most recent response before this one
+        parent = next(db.query("""
+            SELECT id FROM responses
+            WHERE conversation_id = ?
+            AND datetime_utc < ?
+            ORDER BY datetime_utc DESC
+            LIMIT 1
+        """, [current["conversation_id"], current["datetime_utc"]]), None)
+
+        if parent:
+            parent_id = parent["id"]
+        else:
+            raise click.ClickException("No parent response found")
+
+    # Update head
+    db["state"].upsert(
+        {"key": "head", "value": parent_id},
+        pk="key"
+    )
+    click.echo(f"Head moved back to response {parent_id}")
+
+
+@head.command(name="show")
+def head_show():
+    "Show the current head response"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+
+    try:
+        head_id = db["state"].get("head")["value"]
+        response = db["responses"].get(head_id)
+        click.echo(f"Current head is at response {head_id}")
+        click.echo("\nPrompt:")
+        click.echo(response["prompt"])
+        click.echo("\nResponse:")
+        click.echo(response["response"])
+    except sqlite_utils.db.NotFoundError:
+        click.echo("No head currently set")
 
 
 @cli.group(
@@ -766,15 +909,16 @@ def logs_list(
         should_show_conversation = True
         for row in rows:
             click.echo(
-                "# {}{}\n{}".format(
+                "# {} (RID: {}){}{}\n".format(
                     row["datetime_utc"].split(".")[0],
+                    "{}".format(row["id"]),
                     (
-                        "    conversation: {}".format(row["conversation_id"])
+                        ", CID: {}, ".format(row["conversation_id"])
                         if should_show_conversation
                         else ""
                     ),
                     (
-                        "\nModel: **{}**\n".format(row["model"])
+                        "Model: **{}**".format(row["model"])
                         if should_show_conversation
                         else ""
                     ),

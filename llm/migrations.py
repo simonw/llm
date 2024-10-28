@@ -201,3 +201,20 @@ def m010_create_new_log_tables(db):
 @migration
 def m011_fts_for_responses(db):
     db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+
+
+@migration
+def m012_current_conversation(db):
+    """Add table to track current conversation"""
+    db["state"].create(
+        {
+            "key": str,
+            "value": str,
+        },
+        pk="key"
+    )
+
+
+@migration
+def m013_current_conversation(db):
+    db["responses"].add_column("parent_id", str)

@@ -82,6 +82,7 @@ class Response(ABC):
         self._done = False
         self.response_json = None
         self.conversation = conversation
+        self.parent_id = None
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
@@ -124,7 +125,7 @@ class Response(ABC):
         self._force()
         return self._start_utcnow.isoformat()
 
-    def log_to_db(self, db):
+    def log_to_db(self, db, parent_id=None):
         conversation = self.conversation
         if not conversation:
             conversation = Conversation(model=self.model)
@@ -154,8 +155,14 @@ class Response(ABC):
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
+            "parent_id": parent_id,
         }
         db["responses"].insert(response)
+
+        db['state'].upsert(
+            {'key': 'head', 'value': response['id']},
+            pk='key'
+        )
 
     @classmethod
     def fake(cls, model: "Model", prompt: str, system: str, response: str):
@@ -190,6 +197,7 @@ class Response(ABC):
             stream=False,
         )
         response.id = row["id"]
+        response.parent_id = row["parent_id"]
         response._prompt_json = json.loads(row["prompt_json"] or "null")
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
