@@ -41,8 +41,6 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
 OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-OpenAI Chat: o1-preview
-OpenAI Chat: o1-mini
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
@@ -132,3 +130,23 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
 OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
 ```
 Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.
+
+
+## Adding Azure OpenAI models
+
+Azure OpenAI models can be configured directly, by adding them to a `extra-openai-models.yaml` configuration file.
+
+Create a file called `extra-openai-models.yaml` in directory `dirname "$(llm logs path)"` as described above.
+
+You can configure your own deployments like this:
+
+```yaml
+- model_id: my-gpt-3.5
+  model_name: <your azure deployemnt name>
+  api_base: https://<azure subdomain>.openai.azure.com
+  api_type: azure
+  api_version: 2023-05-15
+  api_key_name: <your azure key name>
+  aliases: ["my3.5"]
+```
+
