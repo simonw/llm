@@ -312,7 +312,7 @@ class Chat(Model):
                         {"role": "system", "content": prev_response.prompt.system}
                     )
                     current_system = prev_response.prompt.system
-                if prev_response.attachments:
+                if hasattr(prev_response, 'attachments') and prev_response.attachments:
                     attachment_message = [
                         {"type": "text", "text": prev_response.prompt.prompt}
                     ]
