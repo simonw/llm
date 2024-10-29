@@ -1,23 +1,25 @@
 # Changelog
 
-(v0_17a0)=
-## 0.17a0 (2024-10-28)
+(v0_17)=
+## 0.17 (2024-10-29)
 
-Alpha support for **attachments**, allowing multi-modal models to accept images, audio, video and other formats. [#578](https://github.com/simonw/llm/issues/578)
+Support for **attachments**, allowing multi-modal models to accept images, audio, video and other formats. [#578](https://github.com/simonw/llm/issues/578)
+
+The default OpenAI `gpt-4o` and `gpt-4o-mini` models can both now be prompted with JPEG, GIF, PNG and WEBP images.
 
 Attachments {ref}`in the CLI <usage-attachments>` can be URLs:
 
 ```bash
-llm "describe this image" \
+llm -m gpt-4o "describe this image" \
   -a https://static.simonwillison.net/static/2024/pelicans.jpg
 ```
 Or file paths:
 ```bash
-llm "extract text" -a image1.jpg -a image2.jpg
+llm -m gpt-4o-mini "extract text" -a image1.jpg -a image2.jpg
 ```
 Or binary data, which may need to use `--attachment-type` to specify the MIME type:
 ```bash
-cat image | llm "extract text" --attachment-type - image/jpeg
+cat image | llm -m gpt-4o-mini "extract text" --attachment-type - image/jpeg
 ```
 
 Attachments are also available {ref}`in the Python API <python-api-attachments>`:
@@ -33,6 +35,15 @@ response = model.prompt(
 )
 ```
 Plugins that provide alternative models can support attachments, see {ref}`advanced-model-plugins-attachments` for details.
+
+The latest **[llm-claude-3](https://github.com/simonw/llm-claude-3)** plugin now supports attachments for Anthropic's Claude 3 and 3.5 models. The **[llm-gemini](https://github.com/simonw/llm-gemini)** plugin supports attachments for Google's Gemini 1.5 models.
+
+Also in this release: OpenAI models now record their `"usage"` data in the database even when the response was streamed. These records can be viewed using `llm logs --json`. [#591](https://github.com/simonw/llm/issues/591)
+
+(v0_17a0)=
+## 0.17a0 (2024-10-28)
+
+Alpha support for **attachments**. [#578](https://github.com/simonw/llm/issues/578)
 
 (v0_16)=
 ## 0.16 (2024-09-12)
