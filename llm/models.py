@@ -160,7 +160,7 @@ class Response(ABC):
         self._done = False
         self.response_json = None
         self.conversation = conversation
-        self.attachments = []
+        self.attachments: List[Attachment] = []
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
