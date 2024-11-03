@@ -28,6 +28,7 @@ from llm import (
     remove_alias,
 )
 
+# Import additional required libraries for functionality
 from .migrations import migrate
 from .plugins import pm
 import base64
@@ -46,15 +47,39 @@ from typing import cast, Optional, Iterable, Union, Tuple
 import warnings
 import yaml
 
+# Suppress specific resource-related warnings
 warnings.simplefilter("ignore", ResourceWarning)
 
+# Default template used in prompt construction
 DEFAULT_TEMPLATE = "prompt: "
 
 
 class AttachmentType(click.ParamType):
+    """
+    Custom Click parameter type to handle various attachment inputs:
+    - Files from local paths
+    - URLs
+    - Standard input (stdin)
+    """
+
     name = "attachment"
 
     def convert(self, value, param, ctx):
+        """
+        Convert the input value to an Attachment object.
+
+        Args:
+            value (str): The value provided as an attachment.
+            param: The Click parameter instance.
+            ctx: The Click context object.
+
+        Returns:
+            Attachment: The processed attachment object.
+
+        Raises:
+            click.BadParameter: If the mimetype could not be determined or the URL/file is invalid.
+        """
+        # Handle stdin case
         if value == "-":
             content = sys.stdin.buffer.read()
             # Try to guess type
@@ -72,6 +97,7 @@ class AttachmentType(click.ParamType):
             except httpx.HTTPError as ex:
                 raise click.BadParameter(str(ex))
             return Attachment(mimetype, None, value, None)
+        
         # Check that the file exists
         path = pathlib.Path(value)
         if not path.exists():
@@ -83,6 +109,17 @@ class AttachmentType(click.ParamType):
 
 
 def attachment_types_callback(ctx, param, values):
+    """
+    Callback to process multiple attachment inputs with explicit mimetypes.
+
+    Args:
+        ctx: The Click context object.
+        param: The Click parameter instance.
+        values: List of (path or URL, mimetype) tuples.
+
+    Returns:
+        list: A list of processed Attachment objects.
+    """
     collected = []
     for value, mimetype in values:
         if "://" in value:
@@ -102,6 +139,20 @@ def attachment_types_callback(ctx, param, values):
 
 
 def _validate_metadata_json(ctx, param, value):
+    """
+    Validate and parse metadata JSON input.
+
+    Args:
+        ctx: The Click context object.
+        param: The Click parameter instance.
+        value (str): The JSON string to validate.
+
+    Returns:
+        dict: Parsed JSON object if valid.
+
+    Raises:
+        click.BadParameter: If the JSON string is invalid or not a dictionary.
+    """
     if value is None:
         return value
     try:
@@ -218,9 +269,15 @@ def prompt(
     Examples:
 
     \b
-        llm 'Capital of France?'
-        llm 'Capital of France?' -m gpt-4o
-        llm 'Capital of France?' -s 'answer in Spanish'
+    Examples:
+        - Basic prompt:
+            $ llm 'Capital of France?'
+        - Specify a model:
+            $ llm 'Capital of France?' -m gpt-4
+        - Use a system prompt:
+            $ llm 'Capital of France?' -s 'answer in Spanish'
+        - Multi-modal example with attachments:
+            $ llm 'Describe' -a image.jpg
 
     Multi-modal models can be called with attachments like this:
 
@@ -231,12 +288,21 @@ def prompt(
         # With an explicit mimetype:
         cat image | llm 'describe image' --at - image/jpeg
     """
+    
+    # Ensure logging options do not conflict
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
+    # Load model aliases for resolving model IDs
     model_aliases = get_model_aliases()
 
     def read_prompt():
+        """
+        Read the prompt input, combining any provided stdin data with the prompt argument.
+
+        Returns:
+            str: The combined prompt string.
+        """
         nonlocal prompt
 
         # Is there extra prompt available on stdin?
@@ -256,8 +322,8 @@ def prompt(
         return prompt
 
     if save:
-        # We are saving their prompt/system/etc to a new template
-        # Fields to save: prompt, system, model - and more in the future
+    # Save the prompt/system/model to a new template file
+    # Disallowed options for saving: template, continue, conversation ID
         disallowed_options = []
         for option, var in (
             ("--template", template),
@@ -274,6 +340,7 @@ def prompt(
         to_save = {}
         if model_id:
             try:
+                # Map model alias to the model ID
                 to_save["model"] = model_aliases[model_id].model_id
             except KeyError:
                 raise click.ClickException("'{}' is not a known model".format(model_id))
@@ -284,6 +351,7 @@ def prompt(
             to_save["system"] = system
         if param:
             to_save["defaults"] = dict(param)
+        # Write the template data to a YAML file
         path.write_text(
             yaml.dump(
                 to_save,
@@ -295,6 +363,7 @@ def prompt(
         return
 
     if template:
+        # Load and evaluate the specified template with parameters
         params = dict(param)
         # Cannot be used with system
         if system:
@@ -302,12 +371,13 @@ def prompt(
         template_obj = load_template(template)
         prompt = read_prompt()
         try:
+            # Evaluate the template with the provided parameters
             prompt, system = template_obj.evaluate(prompt, params)
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-
+            
     conversation = None
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
@@ -316,14 +386,14 @@ def prompt(
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
-    # Figure out which model we are using
+    # Determine the model to use
     if model_id is None:
         if conversation:
             model_id = conversation.model.model_id
         else:
             model_id = get_default_model()
 
-    # Now resolve the model
+    #  Resolve the model using aliases
     try:
         model = model_aliases[model_id]
     except KeyError:
@@ -334,13 +404,12 @@ def prompt(
         model.key = get_key(key, model.needs_key, model.key_env_var)
 
     if conversation:
-        # To ensure it can see the key
+        # Ensure the conversation can access the model's key
         conversation.model = model
 
-    # Validate options
+    # Validate options using pydantic
     validated_options = {}
     if options:
-        # Validate with pydantic
         try:
             validated_options = dict(
                 (key, value)
@@ -350,19 +419,23 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    # Combine attachments and handle streaming
     resolved_attachments = [*attachments, *attachment_types]
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         validated_options["stream"] = False
 
+    # Read the prompt input 
     prompt = read_prompt()
 
+    # Use the conversation's prompt method if available
     prompt_method = model.prompt
     if conversation:
         prompt_method = conversation.prompt
 
     try:
+        # Send the prompt to the model and handle the response
         response = prompt_method(
             prompt, attachments=resolved_attachments, system=system, **validated_options
         )
@@ -376,7 +449,7 @@ def prompt(
     except Exception as ex:
         raise click.ClickException(str(ex))
 
-    # Log to the database
+    # Log the response to the database if logging is enabled
     if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
@@ -384,7 +457,7 @@ def prompt(
         migrate(db)
         response.log_to_db(db)
 
-
+# Chat command setup
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
@@ -460,7 +533,7 @@ def chat(
         if model_id is None and template_obj.model:
             model_id = template_obj.model
 
-    # Figure out which model we are using
+    # Determine the model to use
     if model_id is None:
         if conversation:
             model_id = conversation.model.model_id
@@ -495,14 +568,18 @@ def chat(
             )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
-
+        
+    # Set streaming flag
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         validated_options["stream"] = False
 
+    # Inform the user about the chat session
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    
+    # Handle multi-line input
     in_multi = False
     accumulated = []
     end_token = "!end"
@@ -529,9 +606,10 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
+        
+        # Send the prompt and stream the response
         response = conversation.prompt(prompt, system=system, **validated_options)
-        # System prompt only sent for the first message:
-        system = None
+        system = None # Reset system prompt after first use
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
@@ -540,6 +618,25 @@ def chat(
 
 
 def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
+    """
+    Load a conversation by its ID from the logs database.
+
+    If no ID is provided, the function retrieves the most recent conversation. 
+    It also gathers all associated responses for the given conversation and returns 
+    an inflated Conversation object.
+
+    Args:
+        conversation_id (Optional[str]): The ID of the conversation to load. If None, 
+        the most recent conversation is retrieved.
+
+    Returns:
+        Optional[Conversation]: A Conversation object with all related responses, 
+        or None if no conversation is found.
+
+    Raises:
+        click.ClickException: If the specified conversation ID does not exist in the database.
+    """
+    # Connect to the SQLite database using the provided logs database path
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     if conversation_id is None:
@@ -550,45 +647,68 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
         else:
             return None
     try:
+        # Attempt to retrieve the conversation row from the database
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
+        # If the conversation is not found, raise a Click exception with a friendly message
         raise click.ClickException(
             "No conversation found with id={}".format(conversation_id)
         )
+        
     # Inflate that conversation
     conversation = Conversation.from_row(row)
+    # Load and append all responses associated with this conversation
     for response in db["responses"].rows_where(
         "conversation_id = ?", [conversation_id]
     ):
         conversation.responses.append(Response.from_row(db, response))
-    return conversation
+    return conversation # Return the populated Conversation object
 
-
+# CLI group for managing API keys
 @cli.group(
-    cls=DefaultGroup,
-    default="list",
+    cls=DefaultGroup, # Use DefaultGroup to handle default command behavior
+    default="list", # Default command to execute if no arguments are provided
     default_if_no_args=True,
 )
 def keys():
-    "Manage stored API keys for different models"
+    """
+    Manage stored API keys for different models.
 
+    This command group provides subcommands to list, view the path, and set API keys
+    used for interacting with different models.
+    """
 
+# Command to list all stored API keys
 @keys.command(name="list")
 def keys_list():
-    "List names of all stored keys"
-    path = user_dir() / "keys.json"
-    if not path.exists():
+    """
+    List the names of all stored API keys.
+
+    Example usage:
+        $ llm keys list
+
+    This command outputs all stored API key names, excluding any comments or notes.
+    """
+    path = user_dir() / "keys.json" # Path to the keys.json file
+    if not path.exists(): # Check if the file exists
         click.echo("No keys found")
         return
-    keys = json.loads(path.read_text())
-    for key in sorted(keys.keys()):
-        if key != "// Note":
+    keys = json.loads(path.read_text()) # Read and parse the keys.json file
+    for key in sorted(keys.keys()): 
+        if key != "// Note": # Exclude any notes or comments in the file
             click.echo(key)
 
-
+# Command to output the path to the keys.json file
 @keys.command(name="path")
 def keys_path_command():
-    "Output the path to the keys.json file"
+    """
+    Output the path to the keys.json file.
+
+    Example usage:
+        $ llm keys path
+
+    This command prints the file path where API keys are stored.
+    """
     click.echo(user_dir() / "keys.json")
 
 
@@ -597,14 +717,20 @@ def keys_path_command():
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
 def keys_set(name, value):
     """
-    Save a key in the keys.json file
+    Save a key in the keys.json file.
+
+    This command allows you to securely store an API key for later use.
+    The key is saved in the keys.json file with restricted file permissions.
+
+    Args:
+        name (str): The name or identifier for the API key.
+        value (str): The value of the API key, entered securely.
 
     Example usage:
-
-    \b
         $ llm keys set openai
         Enter key: ...
     """
+
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
     path = user_dir() / "keys.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -618,25 +744,40 @@ def keys_set(name, value):
     current[name] = value
     path.write_text(json.dumps(current, indent=2) + "\n")
 
-
+# CLI group for exploring and managing logged prompts and responses
 @cli.group(
     cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
 def logs():
-    "Tools for exploring logged prompts and responses"
+    """
+    Tools for exploring logged prompts and responses.
 
+    This command group provides options to check the status of logging, 
+    view logs, and manage logging settings.
+    """
 
+# Command to output the path to the logs database
 @logs.command(name="path")
 def logs_path():
+    
     "Output the path to the logs.db file"
     click.echo(logs_db_path())
 
 
 @logs.command(name="status")
 def logs_status():
-    "Show current status of database logging"
+    """
+    Show the current status of database logging.
+
+    Example usage:
+        $ llm logs status
+
+    This command indicates whether logging is currently enabled or disabled,
+    and provides details about the logs database, including the number of
+    logged conversations and responses, as well as the database file size.
+    """
     path = logs_db_path()
     if not path.exists():
         click.echo("No log database found at {}".format(path))
@@ -645,6 +786,8 @@ def logs_status():
         click.echo("Logging is ON for all prompts".format())
     else:
         click.echo("Logging is OFF".format())
+        
+    # Connect to the database and display logging details
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo("Found log database at {}".format(path))
@@ -654,10 +797,18 @@ def logs_status():
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
 
-
+# Command to enable logging
 @logs.command(name="on")
 def logs_turn_on():
-    "Turn on logging for all prompts"
+    """
+    Turn on logging for all prompts.
+
+    Example usage:
+        $ llm logs on
+
+    This command deletes the 'logs-off' file, which enables logging for all 
+    future prompts and responses.
+    """
     path = user_dir() / "logs-off"
     if path.exists():
         path.unlink()
@@ -665,7 +816,15 @@ def logs_turn_on():
 
 @logs.command(name="off")
 def logs_turn_off():
-    "Turn off logging for all prompts"
+    """
+    Turn off logging for all prompts.
+
+    Example usage:
+        $ llm logs off
+
+    This command creates a 'logs-off' file, which disables logging for all 
+    future prompts and responses.
+    """
     path = user_dir() / "logs-off"
     path.touch()
 
@@ -768,7 +927,27 @@ def logs_list(
     conversation_id,
     json_output,
 ):
-    "Show recent logged prompts and their responses"
+    """
+    Show recent logged prompts and their responses.
+
+    This command lists entries from the logs database, allowing for filters
+    such as model type, search queries, and conversation ID. The output can
+    be formatted in a truncated, human-readable form or as JSON.
+
+    Args:
+        count (int, optional): Number of entries to display. Defaults to 3, use 0 for all.
+        path (str, optional): Custom path to the log database file.
+        model (str, optional): Filter results by model or alias.
+        query (str, optional): Search query for full-text search in logs.
+        truncate (bool, optional): Whether to truncate long strings in the output.
+        response (bool, optional): If true, output only the last response.
+        current_conversation (bool, optional): Show logs from the current conversation.
+        conversation_id (str, optional): Specific conversation ID to filter logs.
+        json_output (bool, optional): If true, output logs as JSON.
+
+    Raises:
+        click.ClickException: If the log database file is not found.
+    """
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -827,6 +1006,7 @@ def logs_list(
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
+    # Format the final SQL query
     final_sql = sql.format(**sql_format)
     rows = list(
         db.query(
@@ -840,7 +1020,7 @@ def logs_list(
     if not query:
         rows.reverse()
 
-    # Fetch any attachments
+    # Fetch any attachments associated with the responses
     ids = [row["id"] for row in rows]
     attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
     attachments_by_id = {}
@@ -933,7 +1113,12 @@ def logs_list(
     default_if_no_args=True,
 )
 def models():
-    "Manage available models"
+    """
+    Manage available models.
+
+    This group provides commands for listing available models and 
+    setting a default model.
+    """
 
 
 _type_lookup = {
@@ -949,7 +1134,15 @@ _type_lookup = {
     "--options", is_flag=True, help="Show options for each model, if available"
 )
 def models_list(options):
-    "List available models"
+    """
+    List available models.
+
+    This command lists all models, optionally showing their configuration options.
+    
+    Args:
+        options (bool): If set, displays the available options for each model.
+    """
+
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         extra = ""
@@ -987,7 +1180,19 @@ def models_list(options):
 @models.command(name="default")
 @click.argument("model", required=False)
 def models_default(model):
-    "Show or set the default model"
+    """
+    Show or set the default model.
+
+    This command displays the current default model or sets a new 
+    default model if one is provided.
+    
+    Args:
+        model (str, optional): The model to set as default. If omitted, 
+        the current default model is displayed.
+
+    Raises:
+        click.ClickException: If the specified model is unknown.
+    """
     if not model:
         click.echo(get_default_model())
         return
@@ -1005,12 +1210,22 @@ def models_default(model):
     default_if_no_args=True,
 )
 def templates():
-    "Manage stored prompt templates"
+    """
+    Manage stored prompt templates.
+
+    This group provides commands for listing, editing, and showing 
+    prompt templates stored as YAML files.
+    """
 
 
 @templates.command(name="list")
 def templates_list():
-    "List available prompt templates"
+    """
+    List available prompt templates.
+
+    This command scans the templates directory and displays each template 
+    with its name and a truncated version of its content.
+    """
     path = template_dir()
     pairs = []
     for file in path.glob("*.yaml"):
@@ -1041,13 +1256,25 @@ def templates_list():
     default_if_no_args=True,
 )
 def aliases():
-    "Manage model aliases"
+    """
+    Manage model aliases.
+
+    This group of commands allows you to set, list, and remove aliases 
+    for models, making it easier to refer to models using custom names.
+    """
 
 
 @aliases.command(name="list")
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def aliases_list(json_):
-    "List current aliases"
+    """
+    List current aliases.
+
+    This command displays all defined aliases and the model IDs they refer to.
+    
+    Options:
+        --json: Outputs the alias list in JSON format.
+    """
     to_output = []
     for alias, model in get_model_aliases().items():
         if alias != model.model_id:
@@ -1104,7 +1331,12 @@ def aliases_remove(alias):
 
 @aliases.command(name="path")
 def aliases_path():
-    "Output the path to the aliases.json file"
+    """
+    Output the path to the aliases.json file.
+
+    This command shows the location of the JSON file where model aliases 
+    are stored on the system.
+    """
     click.echo(user_dir() / "aliases.json")
 
 
@@ -1116,6 +1348,19 @@ def plugins_list(all):
 
 
 def display_truncated(text):
+    """
+    Display truncated text to fit within the console width.
+
+    This utility function truncates a string if it exceeds the width of the console 
+    and appends '...' to indicate truncation.
+    
+    Args:
+        text (str): The text to truncate.
+
+    Returns:
+        str: Truncated text or the original text if no truncation is needed.
+    """
+
     console_width = shutil.get_terminal_size()[0]
     if len(text) > console_width:
         return text[: console_width - 3] + "..."
@@ -1126,7 +1371,14 @@ def display_truncated(text):
 @templates.command(name="show")
 @click.argument("name")
 def templates_show(name):
-    "Show the specified prompt template"
+    """
+    Show the specified prompt template.
+
+    This command displays the content of a prompt template, formatted as YAML.
+    
+    Args:
+        name (str): The name of the template to display.
+    """
     template = load_template(name)
     click.echo(
         yaml.dump(
@@ -1140,7 +1392,15 @@ def templates_show(name):
 @templates.command(name="edit")
 @click.argument("name")
 def templates_edit(name):
-    "Edit the specified prompt template using the default $EDITOR"
+    """
+    Edit the specified prompt template using the default $EDITOR.
+
+    This command opens the specified prompt template in the user's default editor 
+    for modifications. If the template does not exist, a default one is created.
+    
+    Args:
+        name (str): The name of the template to edit.
+    """
     # First ensure it exists
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
@@ -1152,7 +1412,12 @@ def templates_edit(name):
 
 @templates.command(name="path")
 def templates_path():
-    "Output the path to the templates directory"
+    """
+    Output the path to the templates directory.
+
+    This command shows the location of the directory where prompt templates 
+    are stored on the system.
+    """
     click.echo(template_dir())
 
 
@@ -1177,7 +1442,23 @@ def templates_path():
     help="Disable the cache",
 )
 def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
-    """Install packages from PyPI into the same environment as LLM"""
+    """
+    Install packages from PyPI into the LLM environment.
+
+    This command uses pip to install Python packages. The --upgrade, --editable, 
+    --force-reinstall, and --no-cache-dir options provide additional control over 
+    the installation process.
+
+    Args:
+        packages (tuple): The packages to install (can be multiple).
+    
+    Options:
+        -U, --upgrade: Upgrade packages to the latest version.
+        -e, --editable: Install a project in editable mode from the specified path.
+        --force-reinstall: Reinstall packages even if they are up-to-date.
+        --no-cache-dir: Disable the cache for the installation.
+    """
+
     args = ["pip", "install"]
     if upgrade:
         args += ["--upgrade"]
@@ -1196,7 +1477,18 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
 @click.argument("packages", nargs=-1, required=True)
 @click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
 def uninstall(packages, yes):
-    """Uninstall Python packages from the LLM environment"""
+    """
+    Uninstall Python packages from the LLM environment.
+
+    This command uses pip to uninstall Python packages. Use the -y option to 
+    suppress confirmation prompts.
+
+    Args:
+        packages (tuple): The packages to uninstall (can be multiple).
+    
+    Options:
+        -y, --yes: Skip confirmation prompts when uninstalling.
+    """
     sys.argv = ["pip", "uninstall"] + list(packages) + (["-y"] if yes else [])
     run_module("pip", run_name="__main__")
 
@@ -1239,7 +1531,27 @@ def uninstall(packages, yes):
 def embed(
     collection, id, input, model, store, database, content, binary, metadata, format_
 ):
-    """Embed text and store or return the result"""
+    """
+    Embed text and store or return the result.
+
+    This command generates embeddings for the provided text and either stores them 
+    in a database or outputs them in the specified format. You can provide text via 
+    a file, content string, or standard input.
+
+    Args:
+        collection (str): The name of the collection to store embeddings.
+        id (str): The ID to associate with the embedding.
+
+    Options:
+        -i, --input: Path to a file containing the text to embed.
+        -m, --model: The embedding model to use.
+        --store: Store the text in the database.
+        -d, --database: Path to the embeddings database.
+        -c, --content: The text content to embed.
+        --binary: Treat input as binary data.
+        --metadata: JSON metadata to associate with the embedding.
+        -f, --format: Output format (json, blob, base64, hex).
+    """
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
 
@@ -1376,20 +1688,28 @@ def embed_multi(
     database,
 ):
     """
-    Store embeddings for multiple strings at once
+    Store embeddings for multiple strings at once.
 
-    Input can be CSV, TSV or a JSON list of objects.
+    This command generates embeddings for multiple strings and stores them in the 
+    specified collection. You can provide input data from files, a SQL query, or 
+    a directory of files.
 
-    The first column is treated as an ID - all other columns
-    are assumed to be text that should be concatenated together
-    in order to calculate the embeddings.
+    Args:
+        collection (str): The name of the collection to store embeddings.
+        input_path (str): Path to the input file containing text data.
 
-    Input data can come from one of three sources:
-
-    \b
-    1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
-    2. A SQL query against a SQLite database
-    3. A directory of files
+    Options:
+        --format: Format of the input file (json, csv, tsv, nl).
+        --files: Directory and glob pattern to embed files.
+        --encoding: Encoding(s) to use when reading files.
+        --binary: Treat input as binary data.
+        --sql: SQL query to use for reading input data.
+        --attach: Attach additional databases.
+        --batch-size: Batch size for running embeddings.
+        --prefix: Prefix to add to each ID.
+        -m, --model: Embedding model to use.
+        --store: Store the text itself in the database.
+        -d, --database: Path to the embeddings database.
     """
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
@@ -1528,17 +1848,21 @@ def embed_multi(
 )
 def similar(collection, id, input, content, binary, number, database):
     """
-    Return top N similar IDs from a collection
+    Return top N similar IDs from a collection.
 
-    Example usage:
+    This command finds and returns the top N most similar embeddings 
+    from a specified collection based on the provided content or ID.
 
-    \b
-        llm similar my-collection -c "I like cats"
+    Args:
+        collection (str): Name of the collection to search.
+        id (str, optional): ID of the existing embedding for comparison.
 
-    Or to find content similar to a specific stored ID:
-
-    \b
-        llm similar my-collection 1234
+    Options:
+        -i, --input: Path to a file for embedding comparison.
+        -c, --content: Text content for embedding comparison.
+        --binary: Indicates if the input should be treated as binary data.
+        -n, --number: Number of similar results to return (default is 10).
+        -d, --database: Path to the embeddings database.
     """
     if not id and not content and not input:
         raise click.ClickException("Must provide content or an ID for the comparison")
@@ -1607,7 +1931,18 @@ def embed_models_list():
     "--remove-default", is_flag=True, help="Reset to specifying no default model"
 )
 def embed_models_default(model, remove_default):
-    "Show or set the default embedding model"
+    """
+    Show or set the default embedding model.
+
+    This command lets you view or change the default embedding model. 
+    Use --remove-default to reset to having no default.
+
+    Args:
+        model (str, optional): Model to set as the default.
+
+    Options:
+        --remove-default: Reset to having no default model set.
+    """
     if not model and not remove_default:
         default = get_default_embedding_model()
         if default is None:
@@ -1651,7 +1986,16 @@ def collections_path():
 )
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def embed_db_collections(database, json_):
-    "View a list of collections"
+    """
+    View a list of collections.
+
+    This command displays all available collections and the number of embeddings in each. 
+    Optionally, output the results as JSON.
+
+    Options:
+        -d, --database: Path to the embeddings database.
+        --json: Output the list as JSON.
+    """
     database = database or (user_dir() / "embeddings.db")
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
@@ -1692,12 +2036,15 @@ def embed_db_collections(database, json_):
 )
 def collections_delete(collection, database):
     """
-    Delete the specified collection
+    Delete the specified collection.
 
-    Example usage:
+    Use this command to delete an entire collection of embeddings from the database.
 
-    \b
-        llm collections delete my-collection
+    Args:
+        collection (str): Name of the collection to delete.
+
+    Options:
+        -d, --database: Path to the embeddings database.
     """
     database = database or (user_dir() / "embeddings.db")
     db = sqlite_utils.Database(str(database))
@@ -1709,22 +2056,61 @@ def collections_delete(collection, database):
 
 
 def template_dir():
+    """
+    Returns the path to the directory where prompt templates are stored.
+    
+    Creates the directory if it does not exist.
+
+    Returns:
+        Path: The path to the templates directory.
+    """
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _truncate_string(s, max_length=100):
+    """
+    Truncate a string to a specified maximum length.
+
+    Args:
+        s (str): The string to truncate.
+        max_length (int): The maximum allowed length of the string.
+
+    Returns:
+        str: The truncated string, appended with "..." if truncated.
+    """
+
     if len(s) > max_length:
         return s[: max_length - 3] + "..."
     return s
 
 
 def logs_db_path():
+    """
+    Returns the path to the logs database file.
+
+    Returns:
+        Path: The path to the logs database file.
+    """
+
     return user_dir() / "logs.db"
 
 
 def load_template(name):
+    """
+    Load a template from a YAML file.
+
+    Args:
+        name (str): The name of the template to load.
+
+    Returns:
+        Template: The loaded template object.
+
+    Raises:
+        ClickException: If the template file does not exist or if the YAML is invalid.
+    """
+
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise click.ClickException(f"Invalid template: {name}")
@@ -1744,6 +2130,18 @@ def load_template(name):
 
 
 def get_history(chat_id):
+    """
+    Retrieve the history of a chat based on its ID.
+
+    Args:
+        chat_id (int or None): The ID of the chat, or None to return the most recent chat.
+
+    Returns:
+        Tuple[int, List[dict]]: The chat ID and a list of log entries.
+
+    Raises:
+        ClickException: If the chat history cannot be retrieved.
+    """
     if chat_id is None:
         return None, []
     log_path = logs_db_path()
@@ -1763,6 +2161,16 @@ def get_history(chat_id):
 
 
 def render_errors(errors):
+    """
+    Render error messages from a list of validation errors.
+
+    Args:
+        errors (List[dict]): A list of error dictionaries.
+
+    Returns:
+        str: A formatted string containing the error messages.
+    """
+
     output = []
     for error in errors:
         output.append(", ".join(error["loc"]))
@@ -1774,6 +2182,16 @@ pm.hook.register_commands(cli=cli)
 
 
 def _human_readable_size(size_bytes):
+    """
+    Convert a size in bytes to a human-readable string.
+
+    Args:
+        size_bytes (int): The size in bytes.
+
+    Returns:
+        str: The size formatted as a human-readable string.
+    """
+
     if size_bytes == 0:
         return "0B"
 
@@ -1788,4 +2206,11 @@ def _human_readable_size(size_bytes):
 
 
 def logs_on():
+    """
+    Check if logging is enabled.
+
+    Returns:
+        bool: True if logging is enabled, False otherwise.
+    """
+
     return not (user_dir() / "logs-off").exists()

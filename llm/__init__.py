@@ -44,6 +44,9 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def get_plugins(all=False):
+    """
+    Retrieve a list of registered plugins, optionally including built-in ones.
+    """
     plugins = []
     plugin_to_distinfo = dict(pm.list_plugin_distinfo())
     for plugin in pm.get_plugins():
@@ -64,6 +67,10 @@ def get_plugins(all=False):
 
 
 def get_models_with_aliases() -> List["ModelWithAliases"]:
+    """
+    Get a list of models with their aliases, including user-defined aliases.
+    """
+
     model_aliases = []
 
     # Include aliases from aliases.json
@@ -86,6 +93,9 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
+    """
+    Get a list of embedding models with their aliases, including user-defined aliases.
+    """
     model_aliases = []
 
     # Include aliases from aliases.json
@@ -108,6 +118,9 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
 
 
 def get_embedding_models():
+    """
+    Get a list of embedding models with their aliases, including user-defined aliases.
+    """
     models = []
 
     def register(model, aliases=None):
@@ -118,6 +131,9 @@ def get_embedding_models():
 
 
 def get_embedding_model(name):
+    """
+    Get an embedding model by name or alias.
+    """
     aliases = get_embedding_model_aliases()
     try:
         return aliases[name]
@@ -126,6 +142,9 @@ def get_embedding_model(name):
 
 
 def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
+    """
+    Return a dictionary of embedding model aliases mapped to their models.
+    """
     model_aliases = {}
     for model_with_aliases in get_embedding_models_with_aliases():
         for alias in model_with_aliases.aliases:
@@ -135,6 +154,9 @@ def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
 
 
 def get_model_aliases() -> Dict[str, Model]:
+    """
+    Return a dictionary of model aliases mapped to their models.
+    """
     model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
         for alias in model_with_aliases.aliases:
@@ -144,10 +166,17 @@ def get_model_aliases() -> Dict[str, Model]:
 
 
 class UnknownModelError(KeyError):
+    """
+    Exception raised when a model is not found.
+    """
     pass
 
 
 def get_model(name: Optional[str] = None) -> Model:
+    """
+    Retrieve a model by name or alias, defaulting to the default model.
+    """
+    
     aliases = get_model_aliases()
     name = name or get_default_model()
     try:
@@ -184,6 +213,10 @@ def get_key(
 
 
 def load_keys():
+    """
+    Retrieve a model by name or alias, defaulting to the default model.
+    """
+
     path = user_dir() / "keys.json"
     if path.exists():
         return json.loads(path.read_text())
@@ -192,6 +225,10 @@ def load_keys():
 
 
 def user_dir():
+    """
+    Retrieve a model by name or alias, defaulting to the default model.
+    """
+
     llm_user_path = os.environ.get("LLM_USER_PATH")
     if llm_user_path:
         path = pathlib.Path(llm_user_path)
@@ -248,14 +285,23 @@ def remove_alias(alias):
 
 
 def encode(values):
+    """
+    Encode a list of float values into binary format.
+    """    
     return struct.pack("<" + "f" * len(values), *values)
 
 
 def decode(binary):
+    """
+    Decode binary data into a list of float values.
+    """
     return struct.unpack("<" + "f" * (len(binary) // 4), binary)
 
 
 def cosine_similarity(a, b):
+    """
+    Calculate the cosine similarity between two vectors.
+    """
     dot_product = sum(x * y for x, y in zip(a, b))
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
@@ -263,6 +309,9 @@ def cosine_similarity(a, b):
 
 
 def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    """
+    Get the default model from a file or return a specified default.
+    """
     path = user_dir() / filename
     if path.exists():
         return path.read_text().strip()
@@ -271,6 +320,9 @@ def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
 
 
 def set_default_model(model, filename="default_model.txt"):
+    """
+    Set the default model and save it to a file.
+    """
     path = user_dir() / filename
     if model is None and path.exists():
         path.unlink()
@@ -279,8 +331,15 @@ def set_default_model(model, filename="default_model.txt"):
 
 
 def get_default_embedding_model():
+    """
+    Retrieve the default embedding model from a file.
+    """
     return get_default_model("default_embedding_model.txt", None)
 
 
 def set_default_embedding_model(model):
     set_default_model(model, "default_embedding_model.txt")
+    """
+    Set and save the default embedding model.
+    """
+
