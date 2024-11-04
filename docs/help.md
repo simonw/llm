@@ -150,9 +150,10 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  List names of all stored keys
-  path   Output the path to the keys.json file
-  set    Save a key in the keys.json file
+  list*   List names of all stored keys
+  path    Output the path to the keys.json file
+  remove  Remove a key from the keys.json file
+  set     Save a key in the keys.json file
 ```
 
 (help-keys-list)=

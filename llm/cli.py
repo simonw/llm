@@ -618,6 +618,33 @@ def keys_set(name, value):
     current[name] = value
     path.write_text(json.dumps(current, indent=2) + "\n")
 
+@keys.command(name="remove")
+@click.argument("name")
+def keys_remove(name):
+    """
+    Remove a key from the keys.json file
+
+    Example usage:
+
+    \b
+        $ llm keys remove openai
+        Key 'openai' removed
+    """
+    path = user_dir() / "keys.json"
+    if not path.exists():
+        click.echo("No keys found")
+        return
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        click.echo("Error reading keys file")
+        return
+    if name not in current:
+        click.echo(f"Key '{name}' not found")
+        return
+    del current[name]
+    click.echo(f"Key '{name}' removed")
+    path.write_text(json.dumps(current, indent=2) + "\n")
 
 @cli.group(
     cls=DefaultGroup,
