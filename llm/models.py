@@ -387,12 +387,10 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
         return response
 
     def __repr__(self):
-        text = '... not yet awaited ...'
+        text = "... not yet awaited ..."
         if self._done:
             text = "".join(self._chunks)
-        return "<Response prompt='{}' text='{}'>".format(
-            self.prompt.prompt, text
-        )
+        return "<Response prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
 class Options(BaseModel):
@@ -695,6 +693,7 @@ class EmbeddingModel(ABC, _get_key_mixin):
 @dataclass
 class ModelWithAliases:
     model: Model
+    async_model: AsyncModel
     aliases: Set[str]
 
 

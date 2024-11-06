@@ -23,21 +23,43 @@ import yaml
 
 @hookimpl
 def register_models(register):
-    register(Chat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt"))
-    register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
-    register(Chat("gpt-4"), aliases=("4", "gpt4"))
-    register(Chat("gpt-4-32k"), aliases=("4-32k",))
+    register(
+        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+    )
+    register(
+        Chat("gpt-3.5-turbo-16k"),
+        AsyncChat("gpt-3.5-turbo-16k"),
+        aliases=("chatgpt-16k", "3.5-16k"),
+    )
+    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
+    register(Chat("gpt-4-32k"), AsyncChat("gpt-4-32k"), aliases=("4-32k",))
     # GPT-4 Turbo models
-    register(Chat("gpt-4-1106-preview"))
-    register(Chat("gpt-4-0125-preview"))
-    register(Chat("gpt-4-turbo-2024-04-09"))
-    register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
+    register(Chat("gpt-4-1106-preview"), AsyncChat("gpt-4-1106-preview"))
+    register(Chat("gpt-4-0125-preview"), AsyncChat("gpt-4-0125-preview"))
+    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
+    register(
+        Chat("gpt-4-turbo"),
+        AsyncChat("gpt-4-turbo"),
+        aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
+    )
     # GPT-4o
-    register(Chat("gpt-4o", vision=True), aliases=("4o",))
-    register(Chat("gpt-4o-mini", vision=True), aliases=("4o-mini",))
+    register(
+        Chat("gpt-4o", vision=True), AsyncChat("gpt-4o", vision=True), aliases=("4o",)
+    )
+    register(
+        Chat("gpt-4o-mini", vision=True),
+        AsyncChat("gpt-4o", vision=True),
+        aliases=("4o-mini",),
+    )
     # o1
-    register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
-    register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
+    register(
+        Chat("o1-preview", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-preview", can_stream=False, allows_system_prompt=False),
+    )
+    register(
+        Chat("o1-mini", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-mini", can_stream=False, allows_system_prompt=False),
+    )
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),

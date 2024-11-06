@@ -333,8 +333,8 @@ def prompt(
             model = get_async_model(model_id)
         else:
             model = get_model(model_id)
-    except KeyError:
-        raise click.ClickException("'{}' is not a known model".format(model_id))
+    except UnknownModelError as ex:
+        raise click.ClickException(ex)
 
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:

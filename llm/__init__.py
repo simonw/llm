@@ -76,11 +76,11 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
         for alias, model_id in configured_aliases.items():
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
-    def register(model, aliases=None):
+    def register(model, async_model=None, aliases=None):
         alias_list = list(aliases or [])
         if model.model_id in extra_model_aliases:
             alias_list.extend(extra_model_aliases[model.model_id])
-        model_aliases.append(ModelWithAliases(model, alias_list))
+        model_aliases.append(ModelWithAliases(model, async_model, alias_list))
 
     pm.hook.register_models(register=register)
 
@@ -136,21 +136,48 @@ def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
     return model_aliases
 
 
+def get_async_model_aliases() -> Dict[str, AsyncModel]:
+    async_model_aliases = {}
+    for model_with_aliases in get_models_with_aliases():
+        if model_with_aliases.async_model:
+            for alias in model_with_aliases.aliases:
+                async_model_aliases[alias] = model_with_aliases.async_model
+            async_model_aliases[model_with_aliases.model.model_id] = (
+                model_with_aliases.async_model
+            )
+    return async_model_aliases
+
+
 def get_model_aliases() -> Dict[str, Model]:
     model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
-        for alias in model_with_aliases.aliases:
-            model_aliases[alias] = model_with_aliases.model
-        model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
+        if model_with_aliases.model:
+            for alias in model_with_aliases.aliases:
+                model_aliases[alias] = model_with_aliases.model
+            model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
-
-
-def get_async_model(model_id: str) -> AsyncModel:
-    return get_model(model_id).get_async_model()
 
 
 class UnknownModelError(KeyError):
     pass
+
+
+def get_async_model(name: Optional[str] = None) -> AsyncModel:
+    aliases = get_async_model_aliases()
+    name = name or get_default_model()
+    try:
+        return aliases[name]
+    except KeyError:
+        # Does a sync model exist?
+        sync_model = None
+        try:
+            sync_model = get_model(name)
+        except UnknownModelError:
+            pass
+        if sync_model:
+            raise UnknownModelError("Unknown async model (sync model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
 
 
 def get_model(name: Optional[str] = None) -> Model:
@@ -159,7 +186,16 @@ def get_model(name: Optional[str] = None) -> Model:
     try:
         return aliases[name]
     except KeyError:
-        raise UnknownModelError("Unknown model: " + name)
+        # Does an async model exist?
+        async_model = None
+        try:
+            async_model = get_async_model(name)
+        except UnknownModelError:
+            pass
+        if async_model:
+            raise UnknownModelError("Unknown model (async model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
 
 
 def get_key(
