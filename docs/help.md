@@ -41,11 +41,16 @@ cog.out(all_help(cli))
 ```
 Usage: llm [OPTIONS] COMMAND [ARGS]...
 
-  Access large language models from the command-line
+  Access Large Language Models from the command-line
 
   Documentation: https://llm.datasette.io/
 
-  To get started, obtain an OpenAI key and set it like this:
+  LLM can run models from many different providers. Consult the plugin directory
+  for a list of available models:
+
+  https://llm.datasette.io/en/stable/plugins/directory.html
+
+  To get started with OpenAI, obtain an API key from them and:
 
       $ llm keys set openai
       Enter key: ...
