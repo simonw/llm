@@ -279,7 +279,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/png, image/gif, image/webp, image/jpeg
+    image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -292,7 +292,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
   Attachment types:
-    image/png, image/gif, image/webp, image/jpeg
+    image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: gpt-4o-audio-preview
   Options:
     temperature: float
