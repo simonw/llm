@@ -387,8 +387,11 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
         return response
 
     def __repr__(self):
+        text = '... not yet awaited ...'
+        if self._done:
+            text = "".join(self._chunks)
         return "<Response prompt='{}' text='{}'>".format(
-            self.prompt.prompt, self.text()
+            self.prompt.prompt, text
         )
 
 
