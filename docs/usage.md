@@ -367,6 +367,16 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   logit_bias: dict, str
   seed: int
   json_object: boolean
+OpenAI Chat: gpt-4o-audio-preview
+  temperature: float
+  max_tokens: int
+  top_p: float
+  frequency_penalty: float
+  presence_penalty: float
+  stop: str
+  logit_bias: dict, str
+  seed: int
+  json_object: boolean
 OpenAI Chat: o1-preview
   temperature: float
   max_tokens: int
