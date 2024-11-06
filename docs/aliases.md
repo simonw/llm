@@ -19,6 +19,8 @@ result = CliRunner().invoke(cli, ["aliases", "list"])
 cog.out("```\n{}```".format(result.output))
 ]]] -->
 ```
+4o                  : gpt-4o
+4o-mini             : gpt-4o-mini
 3.5                 : gpt-3.5-turbo
 chatgpt             : gpt-3.5-turbo
 chatgpt-16k         : gpt-3.5-turbo-16k
@@ -29,8 +31,6 @@ gpt4                : gpt-4
 gpt-4-turbo-preview : gpt-4-turbo
 4-turbo             : gpt-4-turbo
 4t                  : gpt-4-turbo
-4o                  : gpt-4o
-4o-mini             : gpt-4o-mini
 3.5-instruct        : gpt-3.5-turbo-instruct
 chatgpt-instruct    : gpt-3.5-turbo-instruct
 ada                 : ada-002 (embedding)

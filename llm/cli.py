@@ -961,11 +961,11 @@ def models_list(options):
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
-        output = str(model_with_aliases.model) + extra
-        if options and model_with_aliases.model.Options.schema()["properties"]:
-            for name, field in model_with_aliases.model.Options.schema()[
-                "properties"
-            ].items():
+        model = model_with_aliases.model
+        output = str(model) + extra
+        if options and model.Options.model_json_schema()["properties"]:
+            output += "\n  Options:"
+            for name, field in model.Options.model_json_schema()["properties"].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
                     any_of = [{"type": field["type"]}]
@@ -976,17 +976,24 @@ def models_list(options):
                         if item["type"] != "null"
                     ]
                 )
-                bits = ["\n  ", name, ": ", types]
+                bits = ["\n    ", name, ": ", types]
                 description = field.get("description", "")
                 if description and (
-                    model_with_aliases.model.__class__
-                    not in models_that_have_shown_options
+                    model.__class__ not in models_that_have_shown_options
                 ):
                     wrapped = textwrap.wrap(description, 70)
-                    bits.append("\n    ")
-                    bits.extend("\n    ".join(wrapped))
+                    bits.append("\n      ")
+                    bits.extend("\n      ".join(wrapped))
                 output += "".join(bits)
-            models_that_have_shown_options.add(model_with_aliases.model.__class__)
+            models_that_have_shown_options.add(model.__class__)
+        if options and model.attachment_types:
+            attachment_types = ", ".join(sorted(model.attachment_types))
+            wrapper = textwrap.TextWrapper(
+                width=min(max(shutil.get_terminal_size().columns, 30), 70),
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
+            output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
         click.echo(output)
 
 
