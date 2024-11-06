@@ -35,6 +35,7 @@ def register_models(register):
     # GPT-4o
     register(Chat("gpt-4o", vision=True), aliases=("4o",))
     register(Chat("gpt-4o-mini", vision=True), aliases=("4o-mini",))
+    register(Chat("gpt-4o-audio-preview", audio=True))
     # o1
     register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
     register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
@@ -248,6 +249,25 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
+def _attachment(attachment):
+    url = attachment.url
+    base64_content = ""
+    if not url or attachment.resolve_type().startswith("audio/"):
+        base64_content = attachment.base64_content()
+        url = f"data:{attachment.resolve_type()};base64,{base64_content}"
+    if attachment.resolve_type().startswith("image/"):
+        return {"type": "image_url", "image_url": {"url": url}}
+    else:
+        format_ = "wav" if attachment.resolve_type() == "audio/wave" else "mp3"
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64_content,
+                "format": format_,
+            },
+        }
+
+
 class Chat(Model):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
@@ -272,6 +292,7 @@ class Chat(Model):
         headers=None,
         can_stream=True,
         vision=False,
+        audio=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
@@ -286,13 +307,25 @@ class Chat(Model):
         self.vision = vision
         self.allows_system_prompt = allows_system_prompt
 
+        self.attachment_types = set()
+
         if vision:
-            self.attachment_types = {
-                "image/png",
-                "image/jpeg",
-                "image/webp",
-                "image/gif",
-            }
+            self.attachment_types.update(
+                {
+                    "image/png",
+                    "image/jpeg",
+                    "image/webp",
+                    "image/gif",
+                }
+            )
+
+        if audio:
+            self.attachment_types.update(
+                {
+                    "audio/wave",
+                    "audio/mpeg",
+                }
+            )
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
@@ -317,13 +350,7 @@ class Chat(Model):
                         {"type": "text", "text": prev_response.prompt.prompt}
                     ]
                     for attachment in prev_response.attachments:
-                        url = attachment.url
-                        if not url:
-                            base64_image = attachment.base64_content()
-                            url = f"data:{attachment.resolve_type()};base64,{base64_image}"
-                        attachment_message.append(
-                            {"type": "image_url", "image_url": {"url": url}}
-                        )
+                        attachment_message.append(_attachment(attachment))
                     messages.append({"role": "user", "content": attachment_message})
                 else:
                     messages.append(
@@ -337,13 +364,7 @@ class Chat(Model):
         else:
             attachment_message = [{"type": "text", "text": prompt.prompt}]
             for attachment in prompt.attachments:
-                url = attachment.url
-                if not url:
-                    base64_image = attachment.base64_content()
-                    url = f"data:{attachment.resolve_type()};base64,{base64_image}"
-                attachment_message.append(
-                    {"type": "image_url", "image_url": {"url": url}}
-                )
+                attachment_message.append(_attachment(attachment))
             messages.append({"role": "user", "content": attachment_message})
 
         kwargs = self.build_kwargs(prompt, stream)
@@ -374,7 +395,7 @@ class Chat(Model):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].message.content
-        response._prompt_json = redact_data_urls({"messages": messages})
+        response._prompt_json = redact_data({"messages": messages})
 
     def get_client(self):
         kwargs = {}
@@ -466,7 +487,7 @@ class Completion(Chat):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].text
-        response._prompt_json = redact_data_urls({"messages": messages})
+        response._prompt_json = redact_data({"messages": messages})
 
 
 def not_nulls(data) -> dict:
@@ -520,10 +541,12 @@ def combine_chunks(chunks: List) -> dict:
     return combined
 
 
-def redact_data_urls(input_dict):
+def redact_data(input_dict):
     """
     Recursively search through the input dictionary for any 'image_url' keys
     and modify the 'url' value to be just 'data:...'.
+
+    Also redact input_audio.data keys
     """
     if isinstance(input_dict, dict):
         for key, value in input_dict.items():
@@ -534,9 +557,11 @@ def redact_data_urls(input_dict):
                 and value["url"].startswith("data:")
             ):
                 value["url"] = "data:..."
+            elif key == "input_audio" and isinstance(value, dict) and "data" in value:
+                value["data"] = "..."
             else:
-                redact_data_urls(value)
+                redact_data(value)
     elif isinstance(input_dict, list):
         for item in input_dict:
-            redact_data_urls(item)
+            redact_data(item)
     return input_dict
