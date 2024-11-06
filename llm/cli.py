@@ -384,13 +384,13 @@ def prompt(
                         sys.stdout.flush()
                     print("")
                 else:
-                    response = await prompt_method(
+                    response = prompt_method(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
                         **validated_options,
                     )
-                    print(response.text())
+                    print(await response.text())
 
             asyncio.run(inner())
         else:
