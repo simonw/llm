@@ -22,13 +22,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - uses: extractions/setup-just@v2
-
       - name: Install dependencies
         run: pip install -e '.[test]'
 
       - name: Run cog
-        run: just cog
+        run: |
+          cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md
 
       - name: Check for changes
         id: check-changes
