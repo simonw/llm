@@ -526,7 +526,7 @@ class AsyncChat(_Shared, AsyncModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].message.content
-        response._prompt_json = redact_data_urls({"messages": messages})
+        response._prompt_json = redact_data({"messages": messages})
 
 
 class Completion(Chat):
