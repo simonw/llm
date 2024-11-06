@@ -247,176 +247,206 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
-  seed: int
-    Integer seed to attempt to sample deterministically
-  json_object: boolean
-    Output a valid JSON object {...}. Prompt must mention JSON.
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-1106-preview
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-0125-preview
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-turbo-2024-04-09
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
 OpenAI Chat: gpt-4o (aliases: 4o)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    json_object: boolean
+      Output a valid JSON object {...}. Prompt must mention JSON.
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: gpt-4o-audio-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wave
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4 (aliases: 4, gpt4)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-32k (aliases: 4-32k)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-1106-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-0125-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-turbo-2024-04-09
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
 OpenAI Chat: o1-preview
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
 OpenAI Chat: o1-mini
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
-  seed: int
-    Integer seed to attempt to sample deterministically
-  logprobs: int
-    Include the log probabilities of most likely N per token
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    logprobs: int
+      Include the log probabilities of most likely N per token
 
 ```
 <!-- [[[end]]] -->
