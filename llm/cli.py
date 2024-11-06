@@ -963,9 +963,9 @@ def models_list(options):
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         model = model_with_aliases.model
         output = str(model) + extra
-        if options and model.Options.model_json_schema()["properties"]:
+        if options and model.Options.schema()["properties"]:
             output += "\n  Options:"
-            for name, field in model.Options.model_json_schema()["properties"].items():
+            for name, field in model.Options.schema()["properties"].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
                     any_of = [{"type": field["type"]}]
