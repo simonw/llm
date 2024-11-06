@@ -53,25 +53,42 @@ You should usually access the type and the content through one of these methods:
 
 A `id()` method returns a database ID for this content, which is either a SHA256 hash of the binary content or, in the case of attachments hosted at an external URL, a hash of `{"url": url}` instead. This is an implementation detail which you should not need to access directly.
 
-Here's how the OpenAI plugin handles attachments:
+Note that it's possible for a prompt with an attachments to not include a text prompt at all, in which case `prompt.prompt` will be `None`.
+
+Here's how the OpenAI plugin handles attachments, including the case where no `prompt.prompt` was provided:
 
 ```python
-messages = []
 if not prompt.attachments:
     messages.append({"role": "user", "content": prompt.prompt})
 else:
-    attachment_message = [{"type": "text", "text": prompt.prompt}]
+    attachment_message = []
+    if prompt.prompt:
+        attachment_message.append({"type": "text", "text": prompt.prompt})
     for attachment in prompt.attachments:
-        url = attachment.url
-        if not url:
-            base64_image = attachment.base64_content()
-            url = f"data:{attachment.resolve_type()};base64,{base64_image}"
-        attachment_message.append(
-            {"type": "image_url", "image_url": {"url": url}}
-        )
+        attachment_message.append(_attachment(attachment))
     messages.append({"role": "user", "content": attachment_message})
+
+
+# And the code for creating the attachment message
+def _attachment(attachment):
+    url = attachment.url
+    base64_content = ""
+    if not url or attachment.resolve_type().startswith("audio/"):
+        base64_content = attachment.base64_content()
+        url = f"data:{attachment.resolve_type()};base64,{base64_content}"
+    if attachment.resolve_type().startswith("image/"):
+        return {"type": "image_url", "image_url": {"url": url}}
+    else:
+        format_ = "wav" if attachment.resolve_type() == "audio/wave" else "mp3"
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64_content,
+                "format": format_,
+            },
+        }
 ```
-As you can see, it uses `attachment.url` if that is available and otherwise falls back to using the `base64_content()` method to embed the image directly in the JSON sent to the API.
+As you can see, it uses `attachment.url` if that is available and otherwise falls back to using the `base64_content()` method to embed the image directly in the JSON sent to the API. For the OpenAI API audio attachments are always included as base64-encoded strings.
 
 ### Attachments from previous conversations
 
@@ -82,17 +99,13 @@ Here's how the OpenAI plugin does that:
 ```python
 for prev_response in conversation.responses:
     if prev_response.attachments:
-        attachment_message = [
-            {"type": "text", "text": prev_response.prompt.prompt}
-        ]
-        for attachment in prev_response.attachments:
-            url = attachment.url
-            if not url:
-                base64_image = attachment.base64_content()
-                url = f"data:{attachment.resolve_type()};base64,{base64_image}"
+        attachment_message = []
+        if prev_response.prompt.prompt:
             attachment_message.append(
-                {"type": "image_url", "image_url": {"url": url}}
+                {"type": "text", "text": prev_response.prompt.prompt}
             )
+        for attachment in prev_response.attachments:
+            attachment_message.append(_attachment(attachment))
         messages.append({"role": "user", "content": attachment_message})
     else:
         messages.append(

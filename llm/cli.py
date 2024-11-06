@@ -250,7 +250,13 @@ def prompt(
                 bits.append(prompt)
             prompt = " ".join(bits)
 
-        if prompt is None and not save and sys.stdin.isatty():
+        if (
+            prompt is None
+            and not save
+            and sys.stdin.isatty()
+            and not attachments
+            and not attachment_types
+        ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
         return prompt

@@ -346,9 +346,11 @@ class Chat(Model):
                     )
                     current_system = prev_response.prompt.system
                 if prev_response.attachments:
-                    attachment_message = [
-                        {"type": "text", "text": prev_response.prompt.prompt}
-                    ]
+                    attachment_message = []
+                    if prev_response.prompt.prompt:
+                        attachment_message.append(
+                            {"type": "text", "text": prev_response.prompt.prompt}
+                        )
                     for attachment in prev_response.attachments:
                         attachment_message.append(_attachment(attachment))
                     messages.append({"role": "user", "content": attachment_message})
@@ -362,7 +364,9 @@ class Chat(Model):
         if not prompt.attachments:
             messages.append({"role": "user", "content": prompt.prompt})
         else:
-            attachment_message = [{"type": "text", "text": prompt.prompt}]
+            attachment_message = []
+            if prompt.prompt:
+                attachment_message.append({"type": "text", "text": prompt.prompt})
             for attachment in prompt.attachments:
                 attachment_message.append(_attachment(attachment))
             messages.append({"role": "user", "content": attachment_message})
