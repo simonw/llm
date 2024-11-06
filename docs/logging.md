@@ -166,6 +166,20 @@ CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [response],
   content=[responses]
 );
+CREATE TABLE [attachments] (
+  [id] TEXT PRIMARY KEY,
+  [type] TEXT,
+  [path] TEXT,
+  [url] TEXT,
+  [content] BLOB
+);
+CREATE TABLE [prompt_attachments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [attachment_id])
+);
 ```
 <!-- [[[end]]] -->
 `responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table.
