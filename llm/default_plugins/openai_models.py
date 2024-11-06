@@ -1,4 +1,4 @@
-from llm import EmbeddingModel, Model, hookimpl
+from llm import AsyncModel, EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
 import click
@@ -254,6 +254,9 @@ class Chat(Model):
 
     default_max_tokens = None
 
+    def get_async_model(self):
+        return AsyncChat(self.model_id, self.key)
+
     class Options(SharedOptions):
         json_object: Optional[bool] = Field(
             description="Output a valid JSON object {...}. Prompt must mention JSON.",
@@ -297,10 +300,8 @@ class Chat(Model):
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None):
+    def build_messages(self, prompt, conversation):
         messages = []
-        if prompt.system and not self.allows_system_prompt:
-            raise NotImplementedError("Model does not support system prompts")
         current_system = None
         if conversation is not None:
             for prev_response in conversation.responses:
@@ -345,7 +346,12 @@ class Chat(Model):
                     {"type": "image_url", "image_url": {"url": url}}
                 )
             messages.append({"role": "user", "content": attachment_message})
+        return messages
 
+    def execute(self, prompt, stream, response, conversation=None):
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client()
         if stream:
@@ -376,7 +382,7 @@ class Chat(Model):
             yield completion.choices[0].message.content
         response._prompt_json = redact_data_urls({"messages": messages})
 
-    def get_client(self):
+    def get_client(self, async_=False):
         kwargs = {}
         if self.api_base:
             kwargs["base_url"] = self.api_base
@@ -396,7 +402,10 @@ class Chat(Model):
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
-        return openai.OpenAI(**kwargs)
+        if async_:
+            return openai.AsyncOpenAI(**kwargs)
+        else:
+            return openai.OpenAI(**kwargs)
 
     def build_kwargs(self, prompt, stream):
         kwargs = dict(not_nulls(prompt.options))
@@ -408,6 +417,45 @@ class Chat(Model):
         if stream:
             kwargs["stream_options"] = {"include_usage": True}
         return kwargs
+
+
+class AsyncChat(AsyncModel, Chat):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+
+    async def execute(self, prompt, stream, response, conversation=None):
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client(async_=True)
+        if stream:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=True,
+                **kwargs,
+            )
+            chunks = []
+            async for chunk in completion:
+                chunks.append(chunk)
+                try:
+                    content = chunk.choices[0].delta.content
+                except IndexError:
+                    content = None
+                if content is not None:
+                    yield content
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+        else:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(completion.model_dump())
+            yield completion.choices[0].message.content
+        response._prompt_json = redact_data_urls({"messages": messages})
 
 
 class Completion(Chat):

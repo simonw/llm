@@ -1,3 +1,4 @@
+import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
@@ -11,6 +12,7 @@ from llm import (
     Template,
     UnknownModelError,
     encode,
+    get_async_model,
     get_default_model,
     get_default_embedding_model,
     get_embedding_models_with_aliases,
@@ -193,6 +195,7 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
+@click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
 def prompt(
     prompt,
     system,
@@ -209,6 +212,7 @@ def prompt(
     conversation_id,
     key,
     save,
+    async_,
 ):
     """
     Execute a prompt
@@ -325,7 +329,10 @@ def prompt(
 
     # Now resolve the model
     try:
-        model = model_aliases[model_id]
+        if async_:
+            model = get_async_model(model_id)
+        else:
+            model = get_model(model_id)
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
@@ -363,21 +370,48 @@ def prompt(
         prompt_method = conversation.prompt
 
     try:
-        response = prompt_method(
-            prompt, attachments=resolved_attachments, system=system, **validated_options
-        )
-        if should_stream:
-            for chunk in response:
-                print(chunk, end="")
-                sys.stdout.flush()
-            print("")
+        if async_:
+
+            async def inner():
+                if should_stream:
+                    async for chunk in prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    ):
+                        print(chunk, end="")
+                        sys.stdout.flush()
+                    print("")
+                else:
+                    response = await prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    )
+                    print(response.text())
+
+            asyncio.run(inner())
         else:
-            print(response.text())
+            response = prompt_method(
+                prompt,
+                attachments=resolved_attachments,
+                system=system,
+                **validated_options,
+            )
+            if should_stream:
+                for chunk in response:
+                    print(chunk, end="")
+                    sys.stdout.flush()
+                print("")
+            else:
+                print(response.text())
     except Exception as ex:
         raise click.ClickException(str(ex))
 
     # Log to the database
-    if (logs_on() or log) and not no_log:
+    if (logs_on() or log) and not no_log and not async_:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)

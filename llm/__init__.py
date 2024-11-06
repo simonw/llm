@@ -4,6 +4,7 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    AsyncModel,
     Attachment,
     Conversation,
     Model,
@@ -26,6 +27,7 @@ import struct
 
 __all__ = [
     "hookimpl",
+    "get_async_model",
     "get_model",
     "get_key",
     "user_dir",
@@ -141,6 +143,10 @@ def get_model_aliases() -> Dict[str, Model]:
             model_aliases[alias] = model_with_aliases.model
         model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
+
+
+def get_async_model(model_id: str) -> AsyncModel:
+    return get_model(model_id).get_async_model()
 
 
 class UnknownModelError(KeyError):
