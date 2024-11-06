@@ -59,7 +59,9 @@ def register_models(register):
         api_version = extra_model.get("api_version")
         api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
-        can_stream = extra_model.get("can_stream")
+        kwargs = {}
+        if extra_model.get("can_stream") is False:
+            kwargs["can_stream"] = False
         if extra_model.get("completion"):
             klass = Completion
         else:
@@ -72,7 +74,7 @@ def register_models(register):
             api_version=api_version,
             api_engine=api_engine,
             headers=headers,
-            can_stream=can_stream,
+            **kwargs,
         )
         if api_base:
             chat_model.needs_key = None
