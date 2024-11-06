@@ -514,7 +514,7 @@ def combine_chunks(chunks: List) -> dict:
 
     for item in chunks:
         if item.usage:
-            usage = dict(item.usage)
+            usage = item.usage.dict()
         for choice in item.choices:
             if choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
                 logprobs.append(
