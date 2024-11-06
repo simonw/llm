@@ -45,6 +45,8 @@ You can set `api_key_name` to the name of a key stored using the {ref}`api-keys`
 
 Add `completion: true` if the model is a completion model that uses a `/completion` as opposed to a `/completion/chat` endpoint.
 
+If a model does not support streaming, add `can_stream: false` to disable the streaming option.
+
 Having configured the model like this, run `llm models` to check that it installed correctly. You can then run prompts against it like so:
 
 ```bash
