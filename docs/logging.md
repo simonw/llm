@@ -136,7 +136,7 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts"):
+for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
