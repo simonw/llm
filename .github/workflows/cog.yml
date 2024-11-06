@@ -1,0 +1,48 @@
+name: Run Cog
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-cog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e '.[test]'
+
+      - name: Run cog
+        run: |
+          cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if [ -n "$(git diff)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push if changed
+        if: steps.check-changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git commit -m "Ran cog"
+          git push
