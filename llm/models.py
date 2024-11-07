@@ -202,6 +202,43 @@ class _BaseResponse(ABC, Generic[ModelT, ConversationT]):
         self._force()
         return self._start_utcnow.isoformat()
 
+    @classmethod
+    def from_row(cls, db, row):
+        from llm import get_model
+
+        model = get_model(row["model"])
+
+        response = cls(
+            model=model,
+            prompt=Prompt(
+                prompt=row["prompt"],
+                model=model,
+                attachments=[],
+                system=row["system"],
+                options=model.Options(**json.loads(row["options_json"])),
+            ),
+            stream=False,
+        )
+        response.id = row["id"]
+        response._prompt_json = json.loads(row["prompt_json"] or "null")
+        response.response_json = json.loads(row["response_json"] or "null")
+        response._done = True
+        response._chunks = [row["response"]]
+        # Attachments
+        response.attachments = [
+            Attachment.from_row(arow)
+            for arow in db.query(
+                """
+                select attachments.* from attachments
+                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
+                where prompt_attachments.response_id = ?
+                order by prompt_attachments."order"
+            """,
+                [row["id"]],
+            )
+        ]
+        return response
+
 
 class Response(_BaseResponse["Model", Optional["Conversation"]]):
     def _force(self):
