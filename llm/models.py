@@ -26,6 +26,13 @@ import json
 from pydantic import BaseModel
 from ulid import ULID
 
+ModelT = TypeVar("ModelT", bound=Union["Model", "AsyncModel"])
+ConversationT = TypeVar(
+    "ConversationT", bound=Optional[Union["Conversation", "AsyncConversation"]]
+)
+ResponseT = TypeVar("ResponseT")
+
+
 CONVERSATION_NAME_LENGTH = 32
 
 
@@ -131,7 +138,7 @@ class Conversation:
         system: Optional[str] = None,
         stream: bool = True,
         **options
-    ):
+    ) -> "Response":
         return Response(
             Prompt(
                 prompt,
@@ -156,10 +163,44 @@ class Conversation:
         )
 
 
-ModelT = TypeVar("ModelT", bound=Union["Model", "AsyncModel"])
-ConversationT = TypeVar(
-    "ConversationT", bound=Optional[Union["Conversation", "AsyncConversation"]]
-)
+@dataclass
+class AsyncConversation:
+    model: "AsyncModel"
+    id: str = field(default_factory=lambda: str(ULID()).lower())
+    name: Optional[str] = None
+    responses: List["AsyncResponse"] = field(default_factory=list)
+
+    def prompt(
+        self,
+        prompt: Optional[str],
+        *,
+        attachments: Optional[List[Attachment]] = None,
+        system: Optional[str] = None,
+        stream: bool = True,
+        **options
+    ) -> "AsyncResponse":
+        return AsyncResponse(
+            Prompt(
+                prompt,
+                model=self.model,
+                attachments=attachments,
+                system=system,
+                options=self.model.Options(**options),
+            ),
+            self.model,
+            stream,
+            conversation=self,
+        )
+
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_model
+
+        return cls(
+            model=get_model(row["model"]),
+            id=row["id"],
+            name=row["name"],
+        )
 
 
 class _BaseResponse(ABC, Generic[ModelT, ConversationT]):
@@ -168,7 +209,7 @@ class _BaseResponse(ABC, Generic[ModelT, ConversationT]):
         prompt: Prompt,
         model: ModelT,
         stream: bool,
-        conversation: ConversationT = None,
+        conversation: Optional[ConversationT] = None,
     ):
         self.prompt = prompt
         self._prompt_json = None
@@ -182,25 +223,6 @@ class _BaseResponse(ABC, Generic[ModelT, ConversationT]):
         self._start: Optional[float] = None
         self._end: Optional[float] = None
         self._start_utcnow: Optional[datetime.datetime] = None
-
-    def __str__(self) -> str:
-        return self.text()
-
-    def text(self) -> str:
-        self._force()
-        return "".join(self._chunks)
-
-    def json(self) -> Optional[Dict[str, Any]]:
-        self._force()
-        return self.response_json
-
-    def duration_ms(self) -> int:
-        self._force()
-        return int((self._end - self._start) * 1000)
-
-    def datetime_utc(self) -> str:
-        self._force()
-        return self._start_utcnow.isoformat()
 
     @classmethod
     def from_row(cls, db, row):
@@ -241,9 +263,28 @@ class _BaseResponse(ABC, Generic[ModelT, ConversationT]):
 
 
 class Response(_BaseResponse["Model", Optional["Conversation"]]):
+    def __str__(self) -> str:
+        return self.text()
+
     def _force(self):
         if not self._done:
             list(self)
+
+    def text(self) -> str:
+        self._force()
+        return "".join(self._chunks)
+
+    def json(self) -> Optional[Dict[str, Any]]:
+        self._force()
+        return self.response_json
+
+    def duration_ms(self) -> int:
+        self._force()
+        return int(((self._end or 0) - (self._start or 0)) * 1000)
+
+    def datetime_utc(self) -> str:
+        self._force()
+        return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
@@ -332,7 +373,7 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
                 yield chunk
             return
 
-        async for chunk in self.model.execute(
+        async for chunk in await self.model.execute(
             self.prompt,
             stream=self.stream,
             response=self,
@@ -356,16 +397,16 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
 
     async def duration_ms(self) -> int:
         await self._force()
-        return int((self._end - self._start) * 1000)
+        return int(((self._end or 0) - (self._start or 0)) * 1000)
 
     async def datetime_utc(self) -> str:
         await self._force()
-        return self._start_utcnow.isoformat()
+        return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
     @classmethod
     def fake(
         cls,
-        model: "Model",
+        model: "AsyncModel",
         prompt: str,
         *attachments: List[Attachment],
         system: str,
@@ -466,10 +507,6 @@ class _get_key_mixin:
         if self.key_env_var:
             message += " or set the {} environment variable".format(self.key_env_var)
         raise NeedsKeyException(message)
-
-
-ResponseT = TypeVar("ResponseT")
-ConversationT = TypeVar("ConversationT")
 
 
 class _BaseModel(ABC, _get_key_mixin, Generic[ResponseT, ConversationT]):
@@ -595,81 +632,6 @@ class AsyncModel(_BaseModel["AsyncResponse", "AsyncConversation"]):
 
     def response(self, prompt: Prompt, stream: bool = True) -> "AsyncResponse":
         return AsyncResponse(prompt, self, stream)
-
-
-class Model(ABC, _get_key_mixin):
-    model_id: str
-
-    # API key handling
-    key: Optional[str] = None
-    needs_key: Optional[str] = None
-    key_env_var: Optional[str] = None
-
-    # Model characteristics
-    can_stream: bool = False
-    attachment_types: Set = set()
-
-    class Options(_Options):
-        pass
-
-    def conversation(self):
-        return Conversation(model=self)
-
-    @abstractmethod
-    def execute(
-        self,
-        prompt: Prompt,
-        stream: bool,
-        response: Response,
-        conversation: Optional[Conversation],
-    ) -> Iterator[str]:
-        """
-        Execute a prompt and yield chunks of text, or yield a single big chunk.
-        Any additional useful information about the execution should be assigned to the response.
-        """
-        pass
-
-    def prompt(
-        self,
-        prompt: str,
-        *,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        stream: bool = True,
-        **options
-    ):
-        # Validate attachments
-        if attachments and not self.attachment_types:
-            raise ValueError(
-                "This model does not support attachments, but some were provided"
-            )
-        for attachment in attachments or []:
-            attachment_type = attachment.resolve_type()
-            if attachment_type not in self.attachment_types:
-                raise ValueError(
-                    "This model does not support attachments of type '{}', only {}".format(
-                        attachment_type, ", ".join(self.attachment_types)
-                    )
-                )
-        return self.response(
-            Prompt(
-                prompt,
-                attachments=attachments,
-                system=system,
-                model=self,
-                options=self.Options(**options),
-            ),
-            stream=stream,
-        )
-
-    def response(self, prompt: Prompt, stream: bool = True) -> Response:
-        return Response(prompt, self, stream)
-
-    def __str__(self) -> str:
-        return "{}: {}".format(self.__class__.__name__, self.model_id)
-
-    def __repr__(self):
-        return "<Model '{}'>".format(self.model_id)
 
 
 class EmbeddingModel(ABC, _get_key_mixin):
