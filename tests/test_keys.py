@@ -85,8 +85,7 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     runner = CliRunner()
 
     # Called without --key an no environment variable uses stored key
-    result = runner.invoke(
-        cli, ["hello", "--no-stream"], catch_exceptions=False)
+    result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result.exit_code == 0
     assert_key("from-keys-file")
 
@@ -94,15 +93,13 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
 
     # Called without --key and without keys.json uses environment variable
     keys_path.write_text("{}", "utf-8")
-    result2 = runner.invoke(
-        cli, ["hello", "--no-stream"], catch_exceptions=False)
+    result2 = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result2.exit_code == 0
     assert_key("from-env")
     keys_path.write_text(json.dumps(KEYS), "utf-8")
 
     # Called without --key and with keys.json still uses environment variable
-    result = runner.invoke(
-        cli, ["hello", "--no-stream"], catch_exceptions=False)
+    result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result.exit_code == 0
     assert_key("from-env")
 
