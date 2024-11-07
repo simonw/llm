@@ -373,7 +373,7 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
                 yield chunk
             return
 
-        async for chunk in await self.model.execute(
+        async for chunk in self.model.execute(
             self.prompt,
             stream=self.stream,
             response=self,

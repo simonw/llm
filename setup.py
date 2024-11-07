@@ -55,6 +55,7 @@ setup(
             "pytest",
             "numpy",
             "pytest-httpx>=0.33.0",
+            "pytest-asyncio",
             "cogapp",
             "mypy>=1.10.0",
             "black>=24.1.0",
