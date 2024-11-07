@@ -8,3 +8,5 @@ venv
 *.egg-info
 .DS_Store
 .idea/
+.direnv/
+.envrc
