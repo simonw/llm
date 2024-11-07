@@ -171,7 +171,7 @@ def get_async_model(name: Optional[str] = None) -> AsyncModel:
         # Does a sync model exist?
         sync_model = None
         try:
-            sync_model = get_model(name)
+            sync_model = get_model(name, _skip_async=True)
         except UnknownModelError:
             pass
         if sync_model:
@@ -180,13 +180,15 @@ def get_async_model(name: Optional[str] = None) -> AsyncModel:
             raise UnknownModelError("Unknown model: " + name)
 
 
-def get_model(name: Optional[str] = None) -> Model:
+def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
     aliases = get_model_aliases()
     name = name or get_default_model()
     try:
         return aliases[name]
     except KeyError:
         # Does an async model exist?
+        if _skip_async:
+            raise UnknownModelError("Unknown model: " + name)
         async_model = None
         try:
             async_model = get_async_model(name)
