@@ -116,6 +116,7 @@ Options:
   --cid, --conversation TEXT      Continue the conversation with the given ID.
   --key TEXT                      API key to use
   --save TEXT                     Save prompt with this template name
+  --async                         Run prompt asynchronously
   --help                          Show this message and exit.
 ```
 
