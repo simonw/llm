@@ -5,10 +5,10 @@ from .errors import NeedsKeyException
 import hashlib
 import httpx
 from itertools import islice
-import puremagic
 import re
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
+from .utils import mimetype_from_path, mimetype_from_string
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -43,13 +43,13 @@ class Attachment:
             return self.type
         # Derive it from path or url or content
         if self.path:
-            return puremagic.from_file(self.path, mime=True)
+            return mimetype_from_path(self.path)
         if self.url:
             response = httpx.head(self.url)
             response.raise_for_status()
             return response.headers.get("content-type")
         if self.content:
-            return puremagic.from_string(self.content, mime=True)
+            return mimetype_from_string(self.content)
         raise ValueError("Attachment has no type and no content to derive it from")
 
     def content_bytes(self):

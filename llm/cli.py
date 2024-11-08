@@ -30,10 +30,10 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm
+from .utils import mimetype_from_path, mimetype_from_string
 import base64
 import httpx
 import pathlib
-import puremagic
 import pydantic
 import readline
 from runpy import run_module
@@ -58,9 +58,8 @@ class AttachmentType(click.ParamType):
         if value == "-":
             content = sys.stdin.buffer.read()
             # Try to guess type
-            try:
-                mimetype = puremagic.from_string(content, mime=True)
-            except puremagic.PureError:
+            mimetype = mimetype_from_string(content)
+            if mimetype is None:
                 raise click.BadParameter("Could not determine mimetype of stdin")
             return Attachment(type=mimetype, path=None, url=None, content=content)
         if "://" in value:
@@ -78,7 +77,9 @@ class AttachmentType(click.ParamType):
             self.fail(f"File {value} does not exist", param, ctx)
         path = path.resolve()
         # Try to guess type
-        mimetype = puremagic.from_file(str(path), mime=True)
+        mimetype = mimetype_from_path(str(path))
+        if mimetype is None:
+            raise click.BadParameter(f"Could not determine mimetype of {value}")
         return Attachment(type=mimetype, path=str(path), url=None, content=None)
 
 
