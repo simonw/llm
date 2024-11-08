@@ -365,28 +365,45 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
             async for _ in self:
                 pass
 
-    async def __aiter__(self) -> AsyncIterator[str]:
-        self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.utcnow()
+    def __aiter__(self):
+        # __aiter__ should return self directly, not be async
+        return self
+
+    async def __anext__(self) -> str:
+        if self._start is None:
+            self._start = time.monotonic()
+            self._start_utcnow = datetime.datetime.utcnow()
         if self._done:
-            for chunk in self._chunks:
-                yield chunk
-            return
+            if not self._chunks:
+                raise StopAsyncIteration
+            chunk = self._chunks.pop(0)
+            if not self._chunks:
+                raise StopAsyncIteration
+            return chunk
+        try:
+            iterator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+            )
+            async for chunk in iterator:
+                self._chunks.append(chunk)
+                return chunk
 
-        async for chunk in self.model.execute(
-            self.prompt,
-            stream=self.stream,
-            response=self,
-            conversation=self.conversation,
-        ):
-            yield chunk
-            self._chunks.append(chunk)
-        if self.conversation:
-            self.conversation.responses.append(self)
-        self._end = time.monotonic()
-        self._done = True
+            if self.conversation:
+                self.conversation.responses.append(self)
+            self._end = time.monotonic()
+            self._done = True
 
-    # Override base methods to make them async
+            raise StopAsyncIteration
+        except StopAsyncIteration:
+            if self.conversation:
+                self.conversation.responses.append(self)
+            self._end = time.monotonic()
+            self._done = True
+            raise
+
     async def text(self) -> str:
         await self._force()
         return "".join(self._chunks)
