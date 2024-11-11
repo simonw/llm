@@ -190,6 +190,10 @@ Usage: llm keys get [OPTIONS] NAME
 
   Return the value of a stored key
 
+  Example usage:
+
+      export OPENAI_API_KEY=$(llm keys get openai)
+
 Options:
   --help  Show this message and exit.
 ```

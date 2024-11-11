@@ -607,7 +607,14 @@ def keys_path_command():
 @keys.command(name="get")
 @click.argument("name")
 def keys_get(name):
-    "Return the value of a stored key"
+    """
+    Return the value of a stored key
+
+    Example usage:
+
+    \b
+        export OPENAI_API_KEY=$(llm keys get openai)
+    """
     path = user_dir() / "keys.json"
     if not path.exists():
         raise click.ClickException("No keys found")
