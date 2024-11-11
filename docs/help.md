@@ -156,6 +156,7 @@ Options:
 
 Commands:
   list*  List names of all stored keys
+  get    Return the value of a stored key
   path   Output the path to the keys.json file
   set    Save a key in the keys.json file
 ```
@@ -177,6 +178,17 @@ Options:
 Usage: llm keys path [OPTIONS]
 
   Output the path to the keys.json file
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-keys-get)=
+#### llm keys get --help
+```
+Usage: llm keys get [OPTIONS] NAME
+
+  Return the value of a stored key
 
 Options:
   --help  Show this message and exit.

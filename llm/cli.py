@@ -604,6 +604,20 @@ def keys_path_command():
     click.echo(user_dir() / "keys.json")
 
 
+@keys.command(name="get")
+@click.argument("name")
+def keys_get(name):
+    "Return the value of a stored key"
+    path = user_dir() / "keys.json"
+    if not path.exists():
+        raise click.ClickException("No keys found")
+    keys = json.loads(path.read_text())
+    try:
+        click.echo(keys[name])
+    except KeyError:
+        raise click.ClickException("No key found with name '{}'".format(name))
+
+
 @keys.command(name="set")
 @click.argument("name")
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
