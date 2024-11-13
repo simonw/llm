@@ -31,7 +31,7 @@ from llm import (
 )
 
 from .migrations import migrate
-from .plugins import pm
+from .plugins import pm, load_plugins
 import base64
 import httpx
 import pathlib
@@ -1816,8 +1816,6 @@ def render_errors(errors):
         output.append("  " + error["msg"])
     return "\n".join(output)
 
-
-from .plugins import load_plugins
 
 load_plugins()
 

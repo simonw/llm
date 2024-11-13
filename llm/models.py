@@ -10,7 +10,7 @@ import re
 import time
 from typing import (
     Any,
-    AsyncIterator,
+    AsyncGenerator,
     Dict,
     Generic,
     Iterable,
@@ -380,23 +380,22 @@ class AsyncResponse(_BaseResponse["AsyncModel", Optional["AsyncConversation"]]):
             if not self._chunks:
                 raise StopAsyncIteration
             return chunk
-        try:
-            iterator = self.model.execute(
+
+        # Get and store the generator if we don't have it yet
+        if not hasattr(self, "_generator"):
+            generator = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
             )
-            async for chunk in iterator:
-                self._chunks.append(chunk)
-                return chunk
+            self._generator = generator
 
-            if self.conversation:
-                self.conversation.responses.append(self)
-            self._end = time.monotonic()
-            self._done = True
-
-            raise StopAsyncIteration
+        # Use the generator
+        try:
+            chunk = await self._generator.__anext__()
+            self._chunks.append(chunk)
+            return chunk
         except StopAsyncIteration:
             if self.conversation:
                 self.conversation.responses.append(self)
@@ -619,12 +618,12 @@ class AsyncModel(_BaseModel["AsyncResponse", "AsyncConversation"]):
         stream: bool,
         response: "AsyncResponse",
         conversation: Optional["AsyncConversation"],
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         """
-        Execute a prompt and yield chunks of text, or yield a single big chunk.
-        Any additional useful information about the execution should be assigned to the response.
+        Returns an async generator that executes the prompt and yields chunks of text,
+        or yields a single big chunk.
         """
-        pass
+        yield ""
 
     def prompt(
         self,

@@ -16,7 +16,7 @@ except ImportError:
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
 
-from typing import List, Iterable, Iterator, Optional, Union
+from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
@@ -483,7 +483,9 @@ class AsyncChat(_Shared, AsyncModel):
             default=None,
         )
 
-    async def execute(self, prompt, stream, response, conversation=None):
+    async def execute(
+        self, prompt, stream, response, conversation=None
+    ) -> AsyncGenerator[str, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
