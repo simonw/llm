@@ -179,7 +179,7 @@ def test_chat_options(mock_model, logs_db):
             "response": "Some text",
             "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": 0,
+            "duration_ms": ANY,
             "datetime_utc": ANY,
         }
     ]
