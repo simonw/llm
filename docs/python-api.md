@@ -112,6 +112,8 @@ The `response.text()` method described earlier does this for you - it runs throu
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
 
+(python-api-async)=
+
 ## Async models
 
 Some plugins provide async versions of their supported models, suitable for use with Python [asyncio](https://docs.python.org/3/library/asyncio.html).
