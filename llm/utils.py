@@ -127,3 +127,49 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+
+def apply_replacements(obj, replacements):
+    if isinstance(obj, dict):
+        return {k: apply_replacements(v, replacements) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [apply_replacements(item, replacements) for item in obj]
+    elif isinstance(obj, str):
+        replaced_parts = []
+        last_index = 0
+        found = False
+
+        for value, key in replacements.items():
+            index = obj.find(key)
+            while index != -1:
+                found = True
+                if index > last_index:
+                    replaced_parts.append(obj[last_index:index])
+                replaced_parts.append(value)
+                last_index = index + len(key)
+                index = obj.find(key, last_index)
+
+        if found:
+            if last_index < len(obj):
+                replaced_parts.append(obj[last_index:])
+            return {"$r": replaced_parts}
+        else:
+            return obj
+    else:
+        return obj
+
+
+def reverse_replacements(obj, replacements):
+    if isinstance(obj, dict):
+        if "$r" in obj:
+            # Reconstruct the original string from the list
+            return "".join(
+                (replacements[part] if isinstance(part, int) else part)
+                for part in obj["$r"]
+            )
+        else:
+            return {k: reverse_replacements(v, replacements) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [reverse_replacements(item, replacements) for item in obj]
+    else:
+        return obj

@@ -8,13 +8,14 @@ from itertools import islice
 import re
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
-from .utils import mimetype_from_path, mimetype_from_string
+from .utils import mimetype_from_path, mimetype_from_string, apply_replacements
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
+PROMPT_THRESHOLD = 100
 
 
 @dataclass
@@ -218,12 +219,51 @@ class Response(ABC):
             ignore=True,
         )
         response_id = str(ULID()).lower()
+
+        # if prompt/system are long we stash them in contexts
+        prompt = self.prompt.prompt
+        system = self.prompt.system
+        prompt_id = None
+        system_id = None
+        replacements = {}
+
+        for context, column in (
+            (prompt, "prompt"),
+            (system, "system"),
+        ):
+            if context is not None and len(context) > PROMPT_THRESHOLD:
+                hash = hashlib.sha256(context.encode("utf-8")).hexdigest()
+                rows = list(db.query("select id from contexts where hash = ?", [hash]))
+                if rows:
+                    context_id = rows[0]["id"]
+                else:
+                    context_id = (
+                        db["contexts"]
+                        .insert(
+                            {
+                                "hash": hash,
+                                "context": context,
+                            },
+                            ignore=True,
+                        )
+                        .last_pk
+                    )
+                replacements[context_id] = context
+                if column == "prompt":
+                    prompt_id = context_id
+                    prompt = None
+                else:
+                    system_id = context_id
+                    system = None
+
         response = {
             "id": response_id,
             "model": self.model.model_id,
-            "prompt": self.prompt.prompt,
-            "system": self.prompt.system,
-            "prompt_json": self._prompt_json,
+            "prompt": prompt,
+            "system": system,
+            "prompt_id": prompt_id,
+            "system_id": system_id,
+            "prompt_json": apply_replacements(self._prompt_json, replacements),
             "options_json": {
                 key: value
                 for key, value in dict(self.prompt.options).items()
@@ -290,10 +330,10 @@ class Response(ABC):
         response = cls(
             model=model,
             prompt=Prompt(
-                prompt=row["prompt"],
+                prompt=row["prompt_context"] or row["prompt"],
                 model=model,
                 attachments=[],
-                system=row["system"],
+                system=row["system_context"] or row["system"],
                 options=model.Options(**json.loads(row["options_json"])),
             ),
             stream=False,

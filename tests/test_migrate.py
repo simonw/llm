@@ -10,6 +10,8 @@ EXPECTED = {
     "model": str,
     "prompt": str,
     "system": str,
+    "prompt_id": int,
+    "system_id": int,
     "prompt_json": str,
     "options_json": str,
     "response": str,
@@ -24,7 +26,15 @@ def test_migrate_blank():
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     assert set(db.table_names()).issuperset(
-        {"_llm_migrations", "conversations", "responses", "responses_fts"}
+        {
+            "_llm_migrations",
+            "conversations",
+            "responses",
+            "responses_fts",
+            "contexts",
+            "attachments",
+            "prompt_attachments",
+        }
     )
     assert db["responses"].columns_dict == EXPECTED
 

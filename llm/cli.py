@@ -1,5 +1,6 @@
 import click
 from click_default_group import DefaultGroup
+from collections import defaultdict
 from dataclasses import asdict
 import io
 import json
@@ -30,7 +31,7 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm
-from .utils import mimetype_from_path, mimetype_from_string
+from .utils import mimetype_from_path, mimetype_from_string, reverse_replacements
 import base64
 import httpx
 import pathlib
@@ -569,9 +570,12 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
         )
     # Inflate that conversation
     conversation = Conversation.from_row(row)
-    for response in db["responses"].rows_where(
-        "conversation_id = ?", [conversation_id]
-    ):
+    sql = LOGS_SQL.format(
+        extra_where=" where responses.conversation_id = ?",
+        limit="",
+        columns=LOGS_COLUMNS,
+    )
+    for response in db.query(sql, [conversation_id]):
         conversation.responses.append(Response.from_row(db, response))
     return conversation
 
@@ -707,6 +711,8 @@ LOGS_COLUMNS = """    responses.id,
     responses.model,
     responses.prompt,
     responses.system,
+    responses.prompt_id,
+    responses.system_id,
     responses.prompt_json,
     responses.options_json,
     responses.response,
@@ -714,6 +720,8 @@ LOGS_COLUMNS = """    responses.id,
     responses.conversation_id,
     responses.duration_ms,
     responses.datetime_utc,
+    pc.context AS prompt_context,
+    sc.context AS system_context,
     conversations.name as conversation_name,
     conversations.model as conversation_model"""
 
@@ -722,18 +730,40 @@ select
 {columns}
 from
     responses
+left join contexts pc on responses.prompt_id = pc.id
+left join contexts sc on responses.system_id = sc.id
 left join conversations on responses.conversation_id = conversations.id{extra_where}
 order by responses.id desc{limit}
 """
 LOGS_SQL_SEARCH = """
+with matching_responses as (
+    -- Direct matches in responses_fts
+    select
+        responses.id,
+        responses_fts.rank as rank
+    from responses
+    join responses_fts on responses_fts.rowid = responses.rowid
+    where responses_fts match :query
+    union
+    -- Matches in linked contexts (prompt_id only)
+    select
+        responses.id,
+        contexts_fts.rank as rank
+    from responses
+    join contexts on responses.prompt_id = contexts.id
+    join contexts_fts on contexts_fts.rowid = contexts.rowid
+    where contexts_fts match :query
+)
 select
-{columns}
+    {columns}
 from
-    responses
+    matching_responses
+join responses on responses.id = matching_responses.id
 left join conversations on responses.conversation_id = conversations.id
-join responses_fts on responses_fts.rowid = responses.rowid
-where responses_fts match :query{extra_where}
-order by responses_fts.rank desc{limit}
+left join contexts pc on responses.prompt_id = pc.id
+left join contexts sc on responses.system_id = sc.id
+{extra_where}
+order by matching_responses.rank desc{limit}
 """
 
 ATTACHMENTS_SQL = """
@@ -861,12 +891,9 @@ def logs_list(
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
-    rows = list(
-        db.query(
-            final_sql,
-            {"model": model_id, "query": query, "conversation_id": conversation_id},
-        )
-    )
+    params = {"model": model_id, "query": query, "conversation_id": conversation_id}
+
+    rows = list(db.query(final_sql, params))
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
     # ... except for searches where we don't do this
@@ -881,6 +908,13 @@ def logs_list(
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
     for row in rows:
+        replacements = defaultdict(str)
+        if row["prompt_context"]:
+            replacements[row["prompt_id"]] = row["prompt_context"]
+            row["prompt"] = row.pop("prompt_context")
+        if row["system_context"]:
+            replacements[row["system_id"]] = row["system_context"]
+            row["system"] = row.pop("system_context")
         if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
             row["response"] = _truncate_string(row["response"])
@@ -892,6 +926,9 @@ def logs_list(
                     del row[key]
                 else:
                     row[key] = json.loads(row[key])
+
+        if replacements and row["prompt_json"]:
+            row["prompt_json"] = reverse_replacements(row["prompt_json"], replacements)
 
     if json_output:
         # Output as JSON if requested

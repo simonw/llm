@@ -62,6 +62,8 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "prompt_id": None,
+            "system_id": None,
         },
         {
             "id": ANY,
@@ -75,6 +77,8 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "prompt_id": None,
+            "system_id": None,
         },
     ]
     # Now continue that conversation
@@ -113,6 +117,8 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "prompt_id": None,
+            "system_id": None,
         }
     ]
 
@@ -150,6 +156,8 @@ def test_chat_system(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "prompt_id": None,
+            "system_id": None,
         }
     ]
 
@@ -178,6 +186,8 @@ def test_chat_options(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": 0,
             "datetime_utc": ANY,
+            "prompt_id": None,
+            "system_id": None,
         }
     ]
 

@@ -136,7 +136,10 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
+for table in (
+    "conversations", "responses", "responses_fts", "attachments",
+    "prompt_attachments", "contexts"
+):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -148,11 +151,13 @@ CREATE TABLE [conversations] (
   [name] TEXT,
   [model] TEXT
 );
-CREATE TABLE [responses] (
+CREATE TABLE "responses" (
   [id] TEXT PRIMARY KEY,
   [model] TEXT,
   [prompt] TEXT,
   [system] TEXT,
+  [prompt_id] INTEGER REFERENCES [contexts]([id]),
+  [system_id] INTEGER REFERENCES [contexts]([id]),
   [prompt_json] TEXT,
   [options_json] TEXT,
   [response] TEXT,
@@ -179,6 +184,11 @@ CREATE TABLE [prompt_attachments] (
   [order] INTEGER,
   PRIMARY KEY ([response_id],
   [attachment_id])
+);
+CREATE TABLE [contexts] (
+  [id] INTEGER PRIMARY KEY,
+  [hash] TEXT,
+  [context] TEXT
 );
 ```
 <!-- [[[end]]] -->

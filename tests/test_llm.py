@@ -179,7 +179,11 @@ def test_logs_search(user_path, query, extra_args, expected):
     _insert("doc2", "alpaca")
     _insert("doc3", "llama llama")
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"] + extra_args)
+    result = runner.invoke(
+        cli,
+        ["logs", "list", "-q", query, "--json"] + extra_args,
+        catch_exceptions=False,
+    )
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert [record["id"] for record in records] == expected

@@ -227,3 +227,50 @@ def m012_attachments_tables(db):
         ),
         pk=("response_id", "attachment_id"),
     )
+
+
+@migration
+def m013_contexts_table(db):
+    with db.conn:
+        db["contexts"].create(
+            {
+                "id": int,
+                "hash": str,
+                "context": str,
+            },
+            pk="id",
+        )
+        db["contexts"].create_index(["hash"], unique=True)
+        # Add optional foreign keys prompt_id / system_id to responses
+        db["responses"].add_column("prompt_id", int)
+        db["responses"].add_column("system_id", int)
+        db["responses"].add_foreign_key("prompt_id", "contexts", "id")
+        db["responses"].add_foreign_key("system_id", "contexts", "id")
+        db["responses"].transform(
+            column_order=(
+                "id",
+                "model",
+                "prompt",
+                "system",
+                "prompt_id",
+                "system_id",
+                "prompt_json",
+                "options_json",
+                "response",
+                "response_json",
+                "conversation_id",
+                "duration_ms",
+                "datetime_utc",
+            ),
+        )
+
+
+@migration
+def m014_contexts_fts(db):
+    db["contexts"].enable_fts(["context"], create_triggers=True)
+
+
+@migration
+def m15_reindex_responses(db):
+    # The .transform() may have recreated rowids so they no longer match
+    db["responses"].populate_fts(["prompt", "response"])
