@@ -552,9 +552,6 @@ class Model(_BaseModel):
             stream,
         )
 
-    def response(self, prompt: Prompt, stream: bool = True) -> "Response":
-        return Response(prompt, self, stream)
-
 
 class AsyncModel(_BaseModel):
     def conversation(self) -> AsyncConversation:
@@ -591,9 +588,6 @@ class AsyncModel(_BaseModel):
             self,
             stream,
         )
-
-    def response(self, prompt: Prompt, stream: bool = True) -> "AsyncResponse":
-        return AsyncResponse(prompt, self, stream)
 
 
 class EmbeddingModel(ABC, _get_key_mixin):
