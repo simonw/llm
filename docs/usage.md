@@ -305,7 +305,7 @@ OpenAI Chat: gpt-4o-audio-preview
     seed: int
     json_object: boolean
   Attachment types:
-    audio/mpeg, audio/wave
+    audio/mpeg, audio/wav
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
