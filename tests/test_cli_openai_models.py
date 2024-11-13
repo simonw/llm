@@ -65,9 +65,8 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
         method="HEAD",
         url=f"https://www.example.com/example.{filetype}",
         content=b"binary-data",
-        headers={"Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wave"},
+        headers={"Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wav"},
     )
-    # Another mock for the correct model
     if model == "gpt-4o-audio-preview":
         httpx_mock.add_response(
             method="POST",
@@ -116,7 +115,7 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
             url=f"https://www.example.com/example.{filetype}",
             content=b"binary-data",
             headers={
-                "Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wave"
+                "Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wav"
             },
         )
     runner = CliRunner()
@@ -140,7 +139,7 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
         )
     else:
         assert result.exit_code == 1
-        long = "audio/mpeg" if filetype == "mp3" else "audio/wave"
+        long = "audio/mpeg" if filetype == "mp3" else "audio/wav"
         assert (
             f"This model does not support attachments of type '{long}'" in result.output
         )

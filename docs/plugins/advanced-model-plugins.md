@@ -79,7 +79,7 @@ def _attachment(attachment):
     if attachment.resolve_type().startswith("image/"):
         return {"type": "image_url", "image_url": {"url": url}}
     else:
-        format_ = "wav" if attachment.resolve_type() == "audio/wave" else "mp3"
+        format_ = "wav" if attachment.resolve_type() == "audio/wav" else "mp3"
         return {
             "type": "input_audio",
             "input_audio": {
