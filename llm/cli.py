@@ -29,7 +29,7 @@ from llm import (
 )
 
 from .migrations import migrate
-from .plugins import pm
+from .plugins import pm, load_plugins
 from .utils import mimetype_from_path, mimetype_from_string
 import base64
 import httpx
@@ -1809,8 +1809,6 @@ def render_errors(errors):
         output.append("  " + error["msg"])
     return "\n".join(output)
 
-
-from .plugins import load_plugins
 
 load_plugins()
 
