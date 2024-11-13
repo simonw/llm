@@ -41,11 +41,16 @@ cog.out(all_help(cli))
 ```
 Usage: llm [OPTIONS] COMMAND [ARGS]...
 
-  Access large language models from the command-line
+  Access Large Language Models from the command-line
 
   Documentation: https://llm.datasette.io/
 
-  To get started, obtain an OpenAI key and set it like this:
+  LLM can run models from many different providers. Consult the plugin directory
+  for a list of available models:
+
+  https://llm.datasette.io/en/stable/plugins/directory.html
+
+  To get started with OpenAI, obtain an API key from them and:
 
       $ llm keys set openai
       Enter key: ...
@@ -152,6 +157,7 @@ Options:
 
 Commands:
   list*  List names of all stored keys
+  get    Return the value of a stored key
   path   Output the path to the keys.json file
   set    Save a key in the keys.json file
 ```
@@ -173,6 +179,21 @@ Options:
 Usage: llm keys path [OPTIONS]
 
   Output the path to the keys.json file
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-keys-get)=
+#### llm keys get --help
+```
+Usage: llm keys get [OPTIONS] NAME
+
+  Return the value of a stored key
+
+  Example usage:
+
+      export OPENAI_API_KEY=$(llm keys get openai)
 
 Options:
   --help  Show this message and exit.

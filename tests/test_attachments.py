@@ -1,6 +1,8 @@
 from click.testing import CliRunner
 from unittest.mock import ANY
 import llm
+from llm import cli
+import pytest
 
 TINY_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"
@@ -12,20 +14,29 @@ TINY_PNG = (
     b"\x82"
 )
 
+TINY_WAV = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00"
 
-def test_prompt_image(mock_model, logs_db):
+
+@pytest.mark.parametrize(
+    "attachment_type,attachment_content",
+    [
+        ("image/png", TINY_PNG),
+        ("audio/wav", TINY_WAV),
+    ],
+)
+def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_content):
     runner = CliRunner()
     mock_model.enqueue(["two boxes"])
     result = runner.invoke(
-        llm.cli.cli,
-        ["prompt", "-m", "mock", "describe image", "-a", "-"],
-        input=TINY_PNG,
+        cli.cli,
+        ["prompt", "-m", "mock", "describe file", "-a", "-"],
+        input=attachment_content,
         catch_exceptions=False,
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == "two boxes\n"
     assert mock_model.history[0][0].attachments[0] == llm.Attachment(
-        type="image/png", path=None, url=None, content=TINY_PNG, _id=ANY
+        type=attachment_type, path=None, url=None, content=attachment_content, _id=ANY
     )
 
     # Check it was logged correctly
@@ -33,15 +44,15 @@ def test_prompt_image(mock_model, logs_db):
     assert len(conversations) == 1
     conversation = conversations[0]
     assert conversation["model"] == "mock"
-    assert conversation["name"] == "describe image"
+    assert conversation["name"] == "describe file"
     response = list(logs_db["responses"].rows)[0]
     attachment = list(logs_db["attachments"].rows)[0]
     assert attachment == {
         "id": ANY,
-        "type": "image/png",
+        "type": attachment_type,
         "path": None,
         "url": None,
-        "content": TINY_PNG,
+        "content": attachment_content,
     }
     prompt_attachment = list(logs_db["prompt_attachments"].rows)[0]
     assert prompt_attachment["attachment_id"] == attachment["id"]

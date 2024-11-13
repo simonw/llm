@@ -32,10 +32,10 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
+from .utils import mimetype_from_path, mimetype_from_string
 import base64
 import httpx
 import pathlib
-import puremagic
 import pydantic
 import readline
 from runpy import run_module
@@ -60,9 +60,8 @@ class AttachmentType(click.ParamType):
         if value == "-":
             content = sys.stdin.buffer.read()
             # Try to guess type
-            try:
-                mimetype = puremagic.from_string(content, mime=True)
-            except puremagic.PureError:
+            mimetype = mimetype_from_string(content)
+            if mimetype is None:
                 raise click.BadParameter("Could not determine mimetype of stdin")
             return Attachment(type=mimetype, path=None, url=None, content=content)
         if "://" in value:
@@ -80,7 +79,9 @@ class AttachmentType(click.ParamType):
             self.fail(f"File {value} does not exist", param, ctx)
         path = path.resolve()
         # Try to guess type
-        mimetype = puremagic.from_file(str(path), mime=True)
+        mimetype = mimetype_from_path(str(path))
+        if mimetype is None:
+            raise click.BadParameter(f"Could not determine mimetype of {value}")
         return Attachment(type=mimetype, path=str(path), url=None, content=None)
 
 
@@ -123,11 +124,16 @@ def _validate_metadata_json(ctx, param, value):
 @click.version_option()
 def cli():
     """
-    Access large language models from the command-line
+    Access Large Language Models from the command-line
 
     Documentation: https://llm.datasette.io/
 
-    To get started, obtain an OpenAI key and set it like this:
+    LLM can run models from many different providers. Consult the
+    plugin directory for a list of available models:
+
+    https://llm.datasette.io/en/stable/plugins/directory.html
+
+    To get started with OpenAI, obtain an API key from them and:
 
     \b
         $ llm keys set openai
@@ -630,6 +636,27 @@ def keys_list():
 def keys_path_command():
     "Output the path to the keys.json file"
     click.echo(user_dir() / "keys.json")
+
+
+@keys.command(name="get")
+@click.argument("name")
+def keys_get(name):
+    """
+    Return the value of a stored key
+
+    Example usage:
+
+    \b
+        export OPENAI_API_KEY=$(llm keys get openai)
+    """
+    path = user_dir() / "keys.json"
+    if not path.exists():
+        raise click.ClickException("No keys found")
+    keys = json.loads(path.read_text())
+    try:
+        click.echo(keys[name])
+    except KeyError:
+        raise click.ClickException("No key found with name '{}'".format(name))
 
 
 @keys.command(name="set")

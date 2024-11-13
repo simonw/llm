@@ -49,7 +49,7 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
-    attachment_types = {"image/png"}
+    attachment_types = {"image/png", "audio/wav"}
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(

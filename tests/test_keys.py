@@ -40,6 +40,18 @@ def test_keys_set(monkeypatch, tmpdir):
     }
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_keys_get(monkeypatch, tmpdir):
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    runner = CliRunner()
+    result = runner.invoke(cli, ["keys", "set", "openai"], input="fx")
+    assert result.exit_code == 0
+    result2 = runner.invoke(cli, ["keys", "get", "openai"])
+    assert result2.exit_code == 0
+    assert result2.output.strip() == "fx"
+
+
 @pytest.mark.parametrize("args", (["keys", "list"], ["keys"]))
 def test_keys_list(monkeypatch, tmpdir, args):
     user_path = str(tmpdir / "user/keys")

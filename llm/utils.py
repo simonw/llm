@@ -1,8 +1,29 @@
 import click
 import httpx
 import json
+import puremagic
 import textwrap
-from typing import List, Dict
+from typing import List, Dict, Optional
+
+MIME_TYPE_FIXES = {
+    "audio/wave": "audio/wav",
+}
+
+
+def mimetype_from_string(content) -> Optional[str]:
+    try:
+        type_ = puremagic.from_string(content, mime=True)
+        return MIME_TYPE_FIXES.get(type_, type_)
+    except puremagic.PureError:
+        return None
+
+
+def mimetype_from_path(path) -> Optional[str]:
+    try:
+        type_ = puremagic.from_file(path, mime=True)
+        return MIME_TYPE_FIXES.get(type_, type_)
+    except puremagic.PureError:
+        return None
 
 
 def dicts_to_table_string(

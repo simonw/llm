@@ -6,7 +6,7 @@ The command to run a prompt is `llm prompt 'your prompt'`. This is the default c
 (usage-executing-prompts)=
 ## Executing a prompt
 
-These examples use the default OpenAI `gpt-3.5-turbo` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
+These examples use the default OpenAI `gpt-4o-mini` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
 
 You can {ref}`install LLM plugins <installing-plugins>` to use models from other providers, including openly licensed models you can run directly on your own computer.
 
@@ -18,7 +18,7 @@ To disable streaming and only return the response once it has completed:
 ```bash
 llm 'Ten names for cheesecakes' --no-stream
 ```
-To switch from ChatGPT 3.5 (the default) to GPT-4o:
+To switch from ChatGPT 4o-mini (the default) to GPT-4o:
 ```bash
 llm 'Ten names for cheesecakes' -m gpt-4o
 ```
