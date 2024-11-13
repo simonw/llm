@@ -416,6 +416,9 @@ class AsyncResponse(_BaseResponse):
         await self._force()
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
+    def __await__(self):
+        return self.text().__await__()
+
     @classmethod
     def fake(
         cls,
