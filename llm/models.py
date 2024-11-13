@@ -16,7 +16,6 @@ from typing import (
     List,
     Optional,
     Set,
-    TypeVar,
     Union,
 )
 from .utils import mimetype_from_path, mimetype_from_string
@@ -24,13 +23,6 @@ from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
 from ulid import ULID
-
-ModelT = TypeVar("ModelT", bound=Union["Model", "AsyncModel"])
-ConversationT = TypeVar(
-    "ConversationT", bound=Optional[Union["Conversation", "AsyncConversation"]]
-)
-ResponseT = TypeVar("ResponseT")
-
 
 CONVERSATION_NAME_LENGTH = 32
 
