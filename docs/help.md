@@ -323,6 +323,7 @@ Usage: llm models list [OPTIONS]
 
 Options:
   --options  Show options for each model, if available
+  --async    List async models
   --help     Show this message and exit.
 ```
 

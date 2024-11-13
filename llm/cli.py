@@ -1015,14 +1015,19 @@ _type_lookup = {
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
 )
-def models_list(options):
+@click.option("async_", "--async", is_flag=True, help="List async models")
+def models_list(options, async_):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
+        if async_ and not model_with_aliases.async_model:
+            continue
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
-        model = model_with_aliases.model
+        model = (
+            model_with_aliases.model if not async_ else model_with_aliases.async_model
+        )
         output = str(model) + extra
         if options and model.Options.schema()["properties"]:
             output += "\n  Options:"
