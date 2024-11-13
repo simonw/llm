@@ -17,7 +17,7 @@ from .models import (
 )
 from .embeddings import Collection
 from .templates import Template
-from .plugins import pm
+from .plugins import pm, load_plugins
 import click
 from typing import Dict, List, Optional
 import json
@@ -82,6 +82,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
             alias_list.extend(extra_model_aliases[model.model_id])
         model_aliases.append(ModelWithAliases(model, async_model, alias_list))
 
+    load_plugins()
     pm.hook.register_models(register=register)
 
     return model_aliases
@@ -104,6 +105,7 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
             alias_list.extend(extra_model_aliases[model.model_id])
         model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
 
     return model_aliases
@@ -115,6 +117,7 @@ def get_embedding_models():
     def register(model, aliases=None):
         models.append(model)
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
     return models
 

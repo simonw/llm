@@ -1817,6 +1817,10 @@ def render_errors(errors):
     return "\n".join(output)
 
 
+from .plugins import load_plugins
+
+load_plugins()
+
 pm.hook.register_commands(cli=cli)
 
 
