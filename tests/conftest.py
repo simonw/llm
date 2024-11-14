@@ -49,6 +49,7 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
+    attachment_types = {"image/png", "audio/wav"}
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
@@ -69,6 +70,29 @@ class MockModel(llm.Model):
             try:
                 messages = self._queue.pop(0)
                 yield from messages
+                break
+            except IndexError:
+                break
+
+
+class AsyncMockModel(llm.AsyncModel):
+    model_id = "mock"
+
+    def __init__(self):
+        self.history = []
+        self._queue = []
+
+    def enqueue(self, messages):
+        assert isinstance(messages, list)
+        self._queue.append(messages)
+
+    async def execute(self, prompt, stream, response, conversation):
+        self.history.append((prompt, stream, response, conversation))
+        while True:
+            try:
+                messages = self._queue.pop(0)
+                for message in messages:
+                    yield message
                 break
             except IndexError:
                 break
@@ -117,8 +141,13 @@ def mock_model():
     return MockModel()
 
 
+@pytest.fixture
+def async_mock_model():
+    return AsyncMockModel()
+
+
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo, mock_model):
+def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
     class MockModelsPlugin:
         __name__ = "MockModelsPlugin"
 
@@ -130,7 +159,7 @@ def register_embed_demo_model(embed_demo, mock_model):
 
         @llm.hookimpl
         def register_models(self, register):
-            register(mock_model)
+            register(mock_model, async_model=async_mock_model)
 
     pm.register(MockModelsPlugin(), name="undo-mock-models-plugin")
     try:

@@ -42,5 +42,20 @@ class HelloWorld(llm.Model):
     def execute(self, prompt, stream, response):
         return ["hello world"]
 ```
+If your model includes an async version, you can register that too:
 
-{ref}`tutorial-model-plugin` describes how to use this hook in detail.
+```python
+class AsyncHelloWorld(llm.AsyncModel):
+    model_id = "helloworld"
+
+    async def execute(self, prompt, stream, response):
+        return ["hello world"]
+
+@llm.hookimpl
+def register_models(register):
+    register(HelloWorld(), AsyncHelloWorld(), aliases=("hw",))
+```
+This demonstrates how to register a model with both sync and async versions, and how to specify an alias for that model.
+
+The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
+

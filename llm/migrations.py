@@ -201,3 +201,29 @@ def m010_create_new_log_tables(db):
 @migration
 def m011_fts_for_responses(db):
     db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+
+
+@migration
+def m012_attachments_tables(db):
+    db["attachments"].create(
+        {
+            "id": str,
+            "type": str,
+            "path": str,
+            "url": str,
+            "content": bytes,
+        },
+        pk="id",
+    )
+    db["prompt_attachments"].create(
+        {
+            "response_id": str,
+            "attachment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+        pk=("response_id", "attachment_id"),
+    )

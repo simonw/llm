@@ -1,4 +1,4 @@
-from llm import EmbeddingModel, Model, hookimpl
+from llm import AsyncModel, EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
 import click
@@ -16,28 +16,55 @@ except ImportError:
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
 
-from typing import List, Iterable, Iterator, Optional, Union
+from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
 
 @hookimpl
 def register_models(register):
-    register(Chat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt"))
-    register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
-    register(Chat("gpt-4"), aliases=("4", "gpt4"))
-    register(Chat("gpt-4-32k"), aliases=("4-32k",))
-    # GPT-4 Turbo models
-    register(Chat("gpt-4-1106-preview"))
-    register(Chat("gpt-4-0125-preview"))
-    register(Chat("gpt-4-turbo-2024-04-09"))
-    register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
     # GPT-4o
-    register(Chat("gpt-4o"), aliases=("4o",))
-    register(Chat("gpt-4o-mini"), aliases=("4o-mini",))
+    register(
+        Chat("gpt-4o", vision=True), AsyncChat("gpt-4o", vision=True), aliases=("4o",)
+    )
+    register(
+        Chat("gpt-4o-mini", vision=True),
+        AsyncChat("gpt-4o-mini", vision=True),
+        aliases=("4o-mini",),
+    )
+    register(
+        Chat("gpt-4o-audio-preview", audio=True),
+        AsyncChat("gpt-4o-audio-preview", audio=True),
+    )
+    # 3.5 and 4
+    register(
+        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+    )
+    register(
+        Chat("gpt-3.5-turbo-16k"),
+        AsyncChat("gpt-3.5-turbo-16k"),
+        aliases=("chatgpt-16k", "3.5-16k"),
+    )
+    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
+    register(Chat("gpt-4-32k"), AsyncChat("gpt-4-32k"), aliases=("4-32k",))
+    # GPT-4 Turbo models
+    register(Chat("gpt-4-1106-preview"), AsyncChat("gpt-4-1106-preview"))
+    register(Chat("gpt-4-0125-preview"), AsyncChat("gpt-4-0125-preview"))
+    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
+    register(
+        Chat("gpt-4-turbo"),
+        AsyncChat("gpt-4-turbo"),
+        aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
+    )
     # o1
-    register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
-    register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
+    register(
+        Chat("o1-preview", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-preview", can_stream=False, allows_system_prompt=False),
+    )
+    register(
+        Chat("o1-mini", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-mini", can_stream=False, allows_system_prompt=False),
+    )
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -59,6 +86,9 @@ def register_models(register):
         api_version = extra_model.get("api_version")
         api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
+        kwargs = {}
+        if extra_model.get("can_stream") is False:
+            kwargs["can_stream"] = False
         if extra_model.get("completion"):
             klass = Completion
         else:
@@ -71,6 +101,7 @@ def register_models(register):
             api_version=api_version,
             api_engine=api_engine,
             headers=headers,
+            **kwargs,
         )
         if api_base:
             chat_model.needs_key = None
@@ -248,18 +279,26 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
-class Chat(Model):
-    needs_key = "openai"
-    key_env_var = "OPENAI_API_KEY"
+def _attachment(attachment):
+    url = attachment.url
+    base64_content = ""
+    if not url or attachment.resolve_type().startswith("audio/"):
+        base64_content = attachment.base64_content()
+        url = f"data:{attachment.resolve_type()};base64,{base64_content}"
+    if attachment.resolve_type().startswith("image/"):
+        return {"type": "image_url", "image_url": {"url": url}}
+    else:
+        format_ = "wav" if attachment.resolve_type() == "audio/wav" else "mp3"
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64_content,
+                "format": format_,
+            },
+        }
 
-    default_max_tokens = None
 
-    class Options(SharedOptions):
-        json_object: Optional[bool] = Field(
-            description="Output a valid JSON object {...}. Prompt must mention JSON.",
-            default=None,
-        )
-
+class _Shared:
     def __init__(
         self,
         model_id,
@@ -271,6 +310,8 @@ class Chat(Model):
         api_engine=None,
         headers=None,
         can_stream=True,
+        vision=False,
+        audio=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
@@ -282,15 +323,34 @@ class Chat(Model):
         self.api_engine = api_engine
         self.headers = headers
         self.can_stream = can_stream
+        self.vision = vision
         self.allows_system_prompt = allows_system_prompt
+
+        self.attachment_types = set()
+
+        if vision:
+            self.attachment_types.update(
+                {
+                    "image/png",
+                    "image/jpeg",
+                    "image/webp",
+                    "image/gif",
+                }
+            )
+
+        if audio:
+            self.attachment_types.update(
+                {
+                    "audio/wav",
+                    "audio/mpeg",
+                }
+            )
 
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None):
+    def build_messages(self, prompt, conversation):
         messages = []
-        if prompt.system and not self.allows_system_prompt:
-            raise NotImplementedError("Model does not support system prompts")
         current_system = None
         if conversation is not None:
             for prev_response in conversation.responses:
@@ -302,41 +362,34 @@ class Chat(Model):
                         {"role": "system", "content": prev_response.prompt.system}
                     )
                     current_system = prev_response.prompt.system
-                messages.append(
-                    {"role": "user", "content": prev_response.prompt.prompt}
-                )
+                if prev_response.attachments:
+                    attachment_message = []
+                    if prev_response.prompt.prompt:
+                        attachment_message.append(
+                            {"type": "text", "text": prev_response.prompt.prompt}
+                        )
+                    for attachment in prev_response.attachments:
+                        attachment_message.append(_attachment(attachment))
+                    messages.append({"role": "user", "content": attachment_message})
+                else:
+                    messages.append(
+                        {"role": "user", "content": prev_response.prompt.prompt}
+                    )
                 messages.append({"role": "assistant", "content": prev_response.text()})
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
-        messages.append({"role": "user", "content": prompt.prompt})
-        response._prompt_json = {"messages": messages}
-        kwargs = self.build_kwargs(prompt)
-        client = self.get_client()
-        if stream:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=True,
-                **kwargs,
-            )
-            chunks = []
-            for chunk in completion:
-                chunks.append(chunk)
-                content = chunk.choices[0].delta.content
-                if content is not None:
-                    yield content
-            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+        if not prompt.attachments:
+            messages.append({"role": "user", "content": prompt.prompt})
         else:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=False,
-                **kwargs,
-            )
-            response.response_json = remove_dict_none_values(completion.model_dump())
-            yield completion.choices[0].message.content
+            attachment_message = []
+            if prompt.prompt:
+                attachment_message.append({"type": "text", "text": prompt.prompt})
+            for attachment in prompt.attachments:
+                attachment_message.append(_attachment(attachment))
+            messages.append({"role": "user", "content": attachment_message})
+        return messages
 
-    def get_client(self):
+    def get_client(self, async_=False):
         kwargs = {}
         if self.api_base:
             kwargs["base_url"] = self.api_base
@@ -356,16 +409,115 @@ class Chat(Model):
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
-        return openai.OpenAI(**kwargs)
+        if async_:
+            return openai.AsyncOpenAI(**kwargs)
+        else:
+            return openai.OpenAI(**kwargs)
 
-    def build_kwargs(self, prompt):
+    def build_kwargs(self, prompt, stream):
         kwargs = dict(not_nulls(prompt.options))
         json_object = kwargs.pop("json_object", None)
         if "max_tokens" not in kwargs and self.default_max_tokens is not None:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
             kwargs["response_format"] = {"type": "json_object"}
+        if stream:
+            kwargs["stream_options"] = {"include_usage": True}
         return kwargs
+
+
+class Chat(_Shared, Model):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    def execute(self, prompt, stream, response, conversation=None):
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client()
+        if stream:
+            completion = client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=True,
+                **kwargs,
+            )
+            chunks = []
+            for chunk in completion:
+                chunks.append(chunk)
+                try:
+                    content = chunk.choices[0].delta.content
+                except IndexError:
+                    content = None
+                if content is not None:
+                    yield content
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+        else:
+            completion = client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(completion.model_dump())
+            yield completion.choices[0].message.content
+        response._prompt_json = redact_data({"messages": messages})
+
+
+class AsyncChat(_Shared, AsyncModel):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    async def execute(
+        self, prompt, stream, response, conversation=None
+    ) -> AsyncGenerator[str, None]:
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client(async_=True)
+        if stream:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=True,
+                **kwargs,
+            )
+            chunks = []
+            async for chunk in completion:
+                chunks.append(chunk)
+                try:
+                    content = chunk.choices[0].delta.content
+                except IndexError:
+                    content = None
+                if content is not None:
+                    yield content
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+        else:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(completion.model_dump())
+            yield completion.choices[0].message.content
+        response._prompt_json = redact_data({"messages": messages})
 
 
 class Completion(Chat):
@@ -394,8 +546,7 @@ class Completion(Chat):
                 messages.append(prev_response.prompt.prompt)
                 messages.append(prev_response.text())
         messages.append(prompt.prompt)
-        response._prompt_json = {"messages": messages}
-        kwargs = self.build_kwargs(prompt)
+        kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client()
         if stream:
             completion = client.completions.create(
@@ -407,7 +558,10 @@ class Completion(Chat):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
-                content = chunk.choices[0].text
+                try:
+                    content = chunk.choices[0].text
+                except IndexError:
+                    content = None
                 if content is not None:
                     yield content
             combined = combine_chunks(chunks)
@@ -422,6 +576,7 @@ class Completion(Chat):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].text
+        response._prompt_json = redact_data({"messages": messages})
 
 
 def not_nulls(data) -> dict:
@@ -435,8 +590,11 @@ def combine_chunks(chunks: List) -> dict:
     # If any of them have log probability, we're going to persist
     # those later on
     logprobs = []
+    usage = {}
 
     for item in chunks:
+        if item.usage:
+            usage = item.usage.dict()
         for choice in item.choices:
             if choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
                 logprobs.append(
@@ -460,6 +618,7 @@ def combine_chunks(chunks: List) -> dict:
         "content": content,
         "role": role,
         "finish_reason": finish_reason,
+        "usage": usage,
     }
     if logprobs:
         combined["logprobs"] = logprobs
@@ -469,3 +628,29 @@ def combine_chunks(chunks: List) -> dict:
             combined[key] = value
 
     return combined
+
+
+def redact_data(input_dict):
+    """
+    Recursively search through the input dictionary for any 'image_url' keys
+    and modify the 'url' value to be just 'data:...'.
+
+    Also redact input_audio.data keys
+    """
+    if isinstance(input_dict, dict):
+        for key, value in input_dict.items():
+            if (
+                key == "image_url"
+                and isinstance(value, dict)
+                and "url" in value
+                and value["url"].startswith("data:")
+            ):
+                value["url"] = "data:..."
+            elif key == "input_audio" and isinstance(value, dict) and "data" in value:
+                value["data"] = "..."
+            else:
+                redact_data(value)
+    elif isinstance(input_dict, list):
+        for item in input_dict:
+            redact_data(item)
+    return input_dict
