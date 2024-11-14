@@ -127,16 +127,17 @@ model = llm.get_async_model("gpt-4o")
 You can then run a prompt using `await model.prompt(...)`:
 
 ```python
-result = await model.prompt(
+response = await model.prompt(
     "Five surprising names for a pet pelican"
 )
+print(await response.text())
 ```
 Or use `async for chunk in ...` to stream the response as it is generated:
 ```python
 async for chunk in model.prompt(
     "Five surprising names for a pet pelican"
 ):
-    print(chunk, end="")
+    print(chunk, end="", flush=True)
 ```
 
 ## Conversations

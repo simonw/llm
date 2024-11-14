@@ -1,3 +1,4 @@
+import llm
 import pytest
 
 
@@ -10,5 +11,7 @@ async def test_async_model(async_mock_model):
     assert gathered == ["hello world"]
     # Not as an iterator
     async_mock_model.enqueue(["hello world"])
-    text = await async_mock_model.prompt("hello")
+    response = await async_mock_model.prompt("hello")
+    text = await response.text()
     assert text == "hello world"
+    assert isinstance(response, llm.AsyncResponse)

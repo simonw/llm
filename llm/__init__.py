@@ -5,6 +5,7 @@ from .errors import (
 )
 from .models import (
     AsyncModel,
+    AsyncResponse,
     Attachment,
     Conversation,
     Model,
@@ -31,6 +32,7 @@ __all__ = [
     "get_model",
     "get_key",
     "user_dir",
+    "AsyncResponse",
     "Attachment",
     "Collection",
     "Conversation",
