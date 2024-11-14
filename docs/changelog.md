@@ -1,5 +1,12 @@
 # Changelog
 
+(v0_18a0)=
+## 0.18a0 (2024-11-13)
+
+Alpha support for **async models**. [#507](https://github.com/simonw/llm/issues/507)
+
+Multiple [smaller changes](https://github.com/simonw/llm/compare/0.17.1...0.18a0).
+
 (v0_17)=
 ## 0.17 (2024-10-29)
 
