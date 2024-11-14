@@ -5,6 +5,8 @@ The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of de
 
 This document covers more advanced topics.
 
+(advanced-model-plugins-async)=
+
 ## Async models
 
 Plugins can optionally provide an asynchronous version of their model, suitable for use with Python [asyncio](https://docs.python.org/3/library/asyncio.html). This is particularly useful for remote models accessible by an HTTP API.
@@ -52,6 +54,7 @@ def register_models(register):
 ```
 
 (advanced-model-plugins-attachments)=
+
 ## Attachments for multi-modal models
 
 Models such as GPT-4o, Claude 3.5 Sonnet and Google's Gemini 1.5 are multi-modal: they accept input in the form of images and maybe even audio, video and other formats.
