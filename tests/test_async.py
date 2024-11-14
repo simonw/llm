@@ -15,3 +15,16 @@ async def test_async_model(async_mock_model):
     text = await response.text()
     assert text == "hello world"
     assert isinstance(response, llm.AsyncResponse)
+
+
+@pytest.mark.asyncio
+async def test_async_model_conversation(async_mock_model):
+    async_mock_model.enqueue(["joke 1"])
+    conversation = async_mock_model.conversation()
+    response = await conversation.prompt("joke")
+    text = await response.text()
+    assert text == "joke 1"
+    async_mock_model.enqueue(["joke 2"])
+    response2 = await conversation.prompt("again")
+    text2 = await response2.text()
+    assert text2 == "joke 2"

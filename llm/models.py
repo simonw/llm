@@ -660,3 +660,11 @@ def _conversation_name(text):
     if len(text) <= CONVERSATION_NAME_LENGTH:
         return text
     return text[: CONVERSATION_NAME_LENGTH - 1] + "…"
+
+
+@dataclass
+class Usage:
+    model_id: str
+    input_tokens: int
+    output_tokens: int
+    details: Dict[str, int]
