@@ -162,5 +162,8 @@ for prev_response in conversation.responses:
         messages.append(
             {"role": "user", "content": prev_response.prompt.prompt}
         )
-    messages.append({"role": "assistant", "content": prev_response.text()})
+    messages.append({"role": "assistant", "content": prev_response.text_or_raise()})
 ```
+The `response.text_or_raise()` method used there will return the text from the response or raise a `ValueError` exception if the response is an `AsyncResponse` instance that has not yet been fully resolved.
+
+This is a slightly weird hack to work around the common need to share logic for building up the `messages` list across both sync and async models.

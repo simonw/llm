@@ -399,6 +399,11 @@ class AsyncResponse(_BaseResponse):
                 pass
         return self
 
+    def text_or_raise(self) -> str:
+        if not self._done:
+            raise ValueError("Response not yet awaited")
+        return "".join(self._chunks)
+
     async def text(self) -> str:
         await self._force()
         return "".join(self._chunks)
