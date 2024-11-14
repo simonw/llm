@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_18a1)=
+## 0.18a1 (2024-11-14)
+
+- Fixed bug where conversations did not work for async OpenAI models. [#632](https://github.com/simonw/llm/issues/632)
+- `__repr__` methods for `Response` and `AsyncResponse`.
+
 (v0_18a0)=
 ## 0.18a0 (2024-11-13)
 
