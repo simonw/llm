@@ -349,6 +349,12 @@ class Response(_BaseResponse):
         self._end = time.monotonic()
         self._done = True
 
+    def __repr__(self):
+        text = "... not yet done ..."
+        if self._done:
+            text = "".join(self._chunks)
+        return "<Response prompt='{}' text='{}'>".format(self.prompt.prompt, text)
+
 
 class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
@@ -440,7 +446,7 @@ class AsyncResponse(_BaseResponse):
         text = "... not yet awaited ..."
         if self._done:
             text = "".join(self._chunks)
-        return "<Response prompt='{}' text='{}'>".format(self.prompt.prompt, text)
+        return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
 class Options(BaseModel):
