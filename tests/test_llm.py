@@ -555,6 +555,14 @@ def test_llm_models_options(user_path):
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
     assert EXPECTED_OPTIONS.strip() in result.output
+    assert "AsyncMockModel: mock" not in result.output
+
+
+def test_llm_models_async(user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "AsyncMockModel: mock" in result.output
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):

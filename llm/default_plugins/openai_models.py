@@ -1,4 +1,4 @@
-from llm import EmbeddingModel, Model, hookimpl
+from llm import AsyncModel, EmbeddingModel, Model, hookimpl
 import llm
 from llm.utils import dicts_to_table_string, remove_dict_none_values, logging_client
 import click
@@ -16,7 +16,7 @@ except ImportError:
     from pydantic.fields import Field
     from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
 
-from typing import List, Iterable, Iterator, Optional, Union
+from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
@@ -24,22 +24,47 @@ import yaml
 @hookimpl
 def register_models(register):
     # GPT-4o
-    register(Chat("gpt-4o", vision=True), aliases=("4o",))
-    register(Chat("gpt-4o-mini", vision=True), aliases=("4o-mini",))
-    register(Chat("gpt-4o-audio-preview", audio=True))
+    register(
+        Chat("gpt-4o", vision=True), AsyncChat("gpt-4o", vision=True), aliases=("4o",)
+    )
+    register(
+        Chat("gpt-4o-mini", vision=True),
+        AsyncChat("gpt-4o-mini", vision=True),
+        aliases=("4o-mini",),
+    )
+    register(
+        Chat("gpt-4o-audio-preview", audio=True),
+        AsyncChat("gpt-4o-audio-preview", audio=True),
+    )
     # 3.5 and 4
-    register(Chat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt"))
-    register(Chat("gpt-3.5-turbo-16k"), aliases=("chatgpt-16k", "3.5-16k"))
-    register(Chat("gpt-4"), aliases=("4", "gpt4"))
-    register(Chat("gpt-4-32k"), aliases=("4-32k",))
+    register(
+        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+    )
+    register(
+        Chat("gpt-3.5-turbo-16k"),
+        AsyncChat("gpt-3.5-turbo-16k"),
+        aliases=("chatgpt-16k", "3.5-16k"),
+    )
+    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
+    register(Chat("gpt-4-32k"), AsyncChat("gpt-4-32k"), aliases=("4-32k",))
     # GPT-4 Turbo models
-    register(Chat("gpt-4-1106-preview"))
-    register(Chat("gpt-4-0125-preview"))
-    register(Chat("gpt-4-turbo-2024-04-09"))
-    register(Chat("gpt-4-turbo"), aliases=("gpt-4-turbo-preview", "4-turbo", "4t"))
+    register(Chat("gpt-4-1106-preview"), AsyncChat("gpt-4-1106-preview"))
+    register(Chat("gpt-4-0125-preview"), AsyncChat("gpt-4-0125-preview"))
+    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
+    register(
+        Chat("gpt-4-turbo"),
+        AsyncChat("gpt-4-turbo"),
+        aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
+    )
     # o1
-    register(Chat("o1-preview", can_stream=False, allows_system_prompt=False))
-    register(Chat("o1-mini", can_stream=False, allows_system_prompt=False))
+    register(
+        Chat("o1-preview", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-preview", can_stream=False, allows_system_prompt=False),
+    )
+    register(
+        Chat("o1-mini", can_stream=False, allows_system_prompt=False),
+        AsyncChat("o1-mini", can_stream=False, allows_system_prompt=False),
+    )
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -273,18 +298,7 @@ def _attachment(attachment):
         }
 
 
-class Chat(Model):
-    needs_key = "openai"
-    key_env_var = "OPENAI_API_KEY"
-
-    default_max_tokens = None
-
-    class Options(SharedOptions):
-        json_object: Optional[bool] = Field(
-            description="Output a valid JSON object {...}. Prompt must mention JSON.",
-            default=None,
-        )
-
+class _Shared:
     def __init__(
         self,
         model_id,
@@ -335,10 +349,8 @@ class Chat(Model):
     def __str__(self):
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None):
+    def build_messages(self, prompt, conversation):
         messages = []
-        if prompt.system and not self.allows_system_prompt:
-            raise NotImplementedError("Model does not support system prompts")
         current_system = None
         if conversation is not None:
             for prev_response in conversation.responses:
@@ -375,7 +387,60 @@ class Chat(Model):
             for attachment in prompt.attachments:
                 attachment_message.append(_attachment(attachment))
             messages.append({"role": "user", "content": attachment_message})
+        return messages
 
+    def get_client(self, async_=False):
+        kwargs = {}
+        if self.api_base:
+            kwargs["base_url"] = self.api_base
+        if self.api_type:
+            kwargs["api_type"] = self.api_type
+        if self.api_version:
+            kwargs["api_version"] = self.api_version
+        if self.api_engine:
+            kwargs["engine"] = self.api_engine
+        if self.needs_key:
+            kwargs["api_key"] = self.get_key()
+        else:
+            # OpenAI-compatible models don't need a key, but the
+            # openai client library requires one
+            kwargs["api_key"] = "DUMMY_KEY"
+        if self.headers:
+            kwargs["default_headers"] = self.headers
+        if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
+            kwargs["http_client"] = logging_client()
+        if async_:
+            return openai.AsyncOpenAI(**kwargs)
+        else:
+            return openai.OpenAI(**kwargs)
+
+    def build_kwargs(self, prompt, stream):
+        kwargs = dict(not_nulls(prompt.options))
+        json_object = kwargs.pop("json_object", None)
+        if "max_tokens" not in kwargs and self.default_max_tokens is not None:
+            kwargs["max_tokens"] = self.default_max_tokens
+        if json_object:
+            kwargs["response_format"] = {"type": "json_object"}
+        if stream:
+            kwargs["stream_options"] = {"include_usage": True}
+        return kwargs
+
+
+class Chat(_Shared, Model):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    def execute(self, prompt, stream, response, conversation=None):
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client()
         if stream:
@@ -406,38 +471,53 @@ class Chat(Model):
             yield completion.choices[0].message.content
         response._prompt_json = redact_data({"messages": messages})
 
-    def get_client(self):
-        kwargs = {}
-        if self.api_base:
-            kwargs["base_url"] = self.api_base
-        if self.api_type:
-            kwargs["api_type"] = self.api_type
-        if self.api_version:
-            kwargs["api_version"] = self.api_version
-        if self.api_engine:
-            kwargs["engine"] = self.api_engine
-        if self.needs_key:
-            kwargs["api_key"] = self.get_key()
-        else:
-            # OpenAI-compatible models don't need a key, but the
-            # openai client library requires one
-            kwargs["api_key"] = "DUMMY_KEY"
-        if self.headers:
-            kwargs["default_headers"] = self.headers
-        if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
-        return openai.OpenAI(**kwargs)
 
-    def build_kwargs(self, prompt, stream):
-        kwargs = dict(not_nulls(prompt.options))
-        json_object = kwargs.pop("json_object", None)
-        if "max_tokens" not in kwargs and self.default_max_tokens is not None:
-            kwargs["max_tokens"] = self.default_max_tokens
-        if json_object:
-            kwargs["response_format"] = {"type": "json_object"}
+class AsyncChat(_Shared, AsyncModel):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    async def execute(
+        self, prompt, stream, response, conversation=None
+    ) -> AsyncGenerator[str, None]:
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client(async_=True)
         if stream:
-            kwargs["stream_options"] = {"include_usage": True}
-        return kwargs
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=True,
+                **kwargs,
+            )
+            chunks = []
+            async for chunk in completion:
+                chunks.append(chunk)
+                try:
+                    content = chunk.choices[0].delta.content
+                except IndexError:
+                    content = None
+                if content is not None:
+                    yield content
+            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+        else:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(completion.model_dump())
+            yield completion.choices[0].message.content
+        response._prompt_json = redact_data({"messages": messages})
 
 
 class Completion(Chat):

@@ -80,7 +80,10 @@ def test_chat_basic(mock_model, logs_db):
     # Now continue that conversation
     mock_model.enqueue(["continued"])
     result2 = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock", "-c"], input="Continue\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock", "-c"],
+        input="Continue\nquit\n",
+        catch_exceptions=False,
     )
     assert result2.exit_code == 0
     assert result2.output == (
@@ -176,7 +179,7 @@ def test_chat_options(mock_model, logs_db):
             "response": "Some text",
             "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": 0,
+            "duration_ms": ANY,
             "datetime_utc": ANY,
         }
     ]

@@ -99,7 +99,7 @@ print(response.text())
 ```
 Some models do not use API keys at all.
 
-## Streaming responses
+### Streaming responses
 
 For models that support it you can stream responses as they are generated, like this:
 
@@ -111,6 +111,34 @@ for chunk in response:
 The `response.text()` method described earlier does this for you - it runs through the iterator and gathers the results into a string.
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
+
+(python-api-async)=
+
+## Async models
+
+Some plugins provide async versions of their supported models, suitable for use with Python [asyncio](https://docs.python.org/3/library/asyncio.html).
+
+To use an async model, use the `llm.get_async_model()` function instead of `llm.get_model()`:
+
+```python
+import llm
+model = llm.get_async_model("gpt-4o")
+```
+You can then run a prompt using `await model.prompt(...)`:
+
+```python
+response = await model.prompt(
+    "Five surprising names for a pet pelican"
+)
+print(await response.text())
+```
+Or use `async for chunk in ...` to stream the response as it is generated:
+```python
+async for chunk in model.prompt(
+    "Five surprising names for a pet pelican"
+):
+    print(chunk, end="", flush=True)
+```
 
 ## Conversations
 

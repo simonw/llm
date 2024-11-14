@@ -1,3 +1,4 @@
+import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
@@ -11,6 +12,7 @@ from llm import (
     Template,
     UnknownModelError,
     encode,
+    get_async_model,
     get_default_model,
     get_default_embedding_model,
     get_embedding_models_with_aliases,
@@ -199,6 +201,7 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
+@click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
 def prompt(
     prompt,
     system,
@@ -215,6 +218,7 @@ def prompt(
     conversation_id,
     key,
     save,
+    async_,
 ):
     """
     Execute a prompt
@@ -337,9 +341,12 @@ def prompt(
 
     # Now resolve the model
     try:
-        model = model_aliases[model_id]
-    except KeyError:
-        raise click.ClickException("'{}' is not a known model".format(model_id))
+        if async_:
+            model = get_async_model(model_id)
+        else:
+            model = get_model(model_id)
+    except UnknownModelError as ex:
+        raise click.ClickException(ex)
 
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
@@ -375,21 +382,48 @@ def prompt(
         prompt_method = conversation.prompt
 
     try:
-        response = prompt_method(
-            prompt, attachments=resolved_attachments, system=system, **validated_options
-        )
-        if should_stream:
-            for chunk in response:
-                print(chunk, end="")
-                sys.stdout.flush()
-            print("")
+        if async_:
+
+            async def inner():
+                if should_stream:
+                    async for chunk in prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    ):
+                        print(chunk, end="")
+                        sys.stdout.flush()
+                    print("")
+                else:
+                    response = prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    )
+                    print(await response.text())
+
+            asyncio.run(inner())
         else:
-            print(response.text())
+            response = prompt_method(
+                prompt,
+                attachments=resolved_attachments,
+                system=system,
+                **validated_options,
+            )
+            if should_stream:
+                for chunk in response:
+                    print(chunk, end="")
+                    sys.stdout.flush()
+                print("")
+            else:
+                print(response.text())
     except Exception as ex:
         raise click.ClickException(str(ex))
 
     # Log to the database
-    if (logs_on() or log) and not no_log:
+    if (logs_on() or log) and not no_log and not async_:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
@@ -981,14 +1015,19 @@ _type_lookup = {
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
 )
-def models_list(options):
+@click.option("async_", "--async", is_flag=True, help="List async models")
+def models_list(options, async_):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
+        if async_ and not model_with_aliases.async_model:
+            continue
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
-        model = model_with_aliases.model
+        model = (
+            model_with_aliases.model if not async_ else model_with_aliases.async_model
+        )
         output = str(model) + extra
         if options and model.Options.schema()["properties"]:
             output += "\n  Options:"

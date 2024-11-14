@@ -7,7 +7,17 @@ import httpx
 from itertools import islice
 import re
 import time
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Union,
+)
 from .utils import mimetype_from_path, mimetype_from_string
 from abc import ABC, abstractmethod
 import json
@@ -94,7 +104,7 @@ class Prompt:
         attachments=None,
         system=None,
         prompt_json=None,
-        options=None
+        options=None,
     ):
         self.prompt = prompt
         self.model = model
@@ -105,12 +115,25 @@ class Prompt:
 
 
 @dataclass
-class Conversation:
-    model: "Model"
+class _BaseConversation:
+    model: "_BaseModel"
     id: str = field(default_factory=lambda: str(ULID()).lower())
     name: Optional[str] = None
-    responses: List["Response"] = field(default_factory=list)
+    responses: List["_BaseResponse"] = field(default_factory=list)
 
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_model
+
+        return cls(
+            model=get_model(row["model"]),
+            id=row["id"],
+            name=row["name"],
+        )
+
+
+@dataclass
+class Conversation(_BaseConversation):
     def prompt(
         self,
         prompt: Optional[str],
@@ -118,8 +141,8 @@ class Conversation:
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
-        **options
-    ):
+        **options,
+    ) -> "Response":
         return Response(
             Prompt(
                 prompt,
@@ -133,24 +156,45 @@ class Conversation:
             conversation=self,
         )
 
-    @classmethod
-    def from_row(cls, row):
-        from llm import get_model
 
-        return cls(
-            model=get_model(row["model"]),
-            id=row["id"],
-            name=row["name"],
+@dataclass
+class AsyncConversation(_BaseConversation):
+    def prompt(
+        self,
+        prompt: Optional[str],
+        *,
+        attachments: Optional[List[Attachment]] = None,
+        system: Optional[str] = None,
+        stream: bool = True,
+        **options,
+    ) -> "AsyncResponse":
+        return AsyncResponse(
+            Prompt(
+                prompt,
+                model=self.model,
+                attachments=attachments,
+                system=system,
+                options=self.model.Options(**options),
+            ),
+            self.model,
+            stream,
+            conversation=self,
         )
 
 
-class Response(ABC):
+class _BaseResponse:
+    """Base response class shared between sync and async responses"""
+
+    prompt: "Prompt"
+    stream: bool
+    conversation: Optional["_BaseConversation"] = None
+
     def __init__(
         self,
         prompt: Prompt,
-        model: "Model",
+        model: "_BaseModel",
         stream: bool,
-        conversation: Optional[Conversation] = None,
+        conversation: Optional[_BaseConversation] = None,
     ):
         self.prompt = prompt
         self._prompt_json = None
@@ -161,47 +205,46 @@ class Response(ABC):
         self.response_json = None
         self.conversation = conversation
         self.attachments: List[Attachment] = []
+        self._start: Optional[float] = None
+        self._end: Optional[float] = None
+        self._start_utcnow: Optional[datetime.datetime] = None
 
-    def __iter__(self) -> Iterator[str]:
-        self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.utcnow()
-        if self._done:
-            yield from self._chunks
-        for chunk in self.model.execute(
-            self.prompt,
-            stream=self.stream,
-            response=self,
-            conversation=self.conversation,
-        ):
-            yield chunk
-            self._chunks.append(chunk)
-        if self.conversation:
-            self.conversation.responses.append(self)
-        self._end = time.monotonic()
-        self._done = True
+    @classmethod
+    def from_row(cls, db, row):
+        from llm import get_model
 
-    def _force(self):
-        if not self._done:
-            list(self)
+        model = get_model(row["model"])
 
-    def __str__(self) -> str:
-        return self.text()
-
-    def text(self) -> str:
-        self._force()
-        return "".join(self._chunks)
-
-    def json(self) -> Optional[Dict[str, Any]]:
-        self._force()
-        return self.response_json
-
-    def duration_ms(self) -> int:
-        self._force()
-        return int((self._end - self._start) * 1000)
-
-    def datetime_utc(self) -> str:
-        self._force()
-        return self._start_utcnow.isoformat()
+        response = cls(
+            model=model,
+            prompt=Prompt(
+                prompt=row["prompt"],
+                model=model,
+                attachments=[],
+                system=row["system"],
+                options=model.Options(**json.loads(row["options_json"])),
+            ),
+            stream=False,
+        )
+        response.id = row["id"]
+        response._prompt_json = json.loads(row["prompt_json"] or "null")
+        response.response_json = json.loads(row["response_json"] or "null")
+        response._done = True
+        response._chunks = [row["response"]]
+        # Attachments
+        response.attachments = [
+            Attachment.from_row(arow)
+            for arow in db.query(
+                """
+                select attachments.* from attachments
+                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
+                where prompt_attachments.response_id = ?
+                order by prompt_attachments."order"
+            """,
+                [row["id"]],
+            )
+        ]
+        return response
 
     def log_to_db(self, db):
         conversation = self.conversation
@@ -257,14 +300,126 @@ class Response(ABC):
                 },
             )
 
+
+class Response(_BaseResponse):
+    model: "Model"
+    conversation: Optional["Conversation"] = None
+
+    def __str__(self) -> str:
+        return self.text()
+
+    def _force(self):
+        if not self._done:
+            list(self)
+
+    def text(self) -> str:
+        self._force()
+        return "".join(self._chunks)
+
+    def json(self) -> Optional[Dict[str, Any]]:
+        self._force()
+        return self.response_json
+
+    def duration_ms(self) -> int:
+        self._force()
+        return int(((self._end or 0) - (self._start or 0)) * 1000)
+
+    def datetime_utc(self) -> str:
+        self._force()
+        return self._start_utcnow.isoformat() if self._start_utcnow else ""
+
+    def __iter__(self) -> Iterator[str]:
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.utcnow()
+        if self._done:
+            yield from self._chunks
+            return
+
+        for chunk in self.model.execute(
+            self.prompt,
+            stream=self.stream,
+            response=self,
+            conversation=self.conversation,
+        ):
+            yield chunk
+            self._chunks.append(chunk)
+
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+
+
+class AsyncResponse(_BaseResponse):
+    model: "AsyncModel"
+    conversation: Optional["AsyncConversation"] = None
+
+    def __aiter__(self):
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.utcnow()
+        return self
+
+    async def __anext__(self) -> str:
+        if self._done:
+            if not self._chunks:
+                raise StopAsyncIteration
+            chunk = self._chunks.pop(0)
+            if not self._chunks:
+                raise StopAsyncIteration
+            return chunk
+
+        if not hasattr(self, "_generator"):
+            self._generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+            )
+
+        try:
+            chunk = await self._generator.__anext__()
+            self._chunks.append(chunk)
+            return chunk
+        except StopAsyncIteration:
+            if self.conversation:
+                self.conversation.responses.append(self)
+            self._end = time.monotonic()
+            self._done = True
+            raise
+
+    async def _force(self):
+        if not self._done:
+            async for _ in self:
+                pass
+        return self
+
+    async def text(self) -> str:
+        await self._force()
+        return "".join(self._chunks)
+
+    async def json(self) -> Optional[Dict[str, Any]]:
+        await self._force()
+        return self.response_json
+
+    async def duration_ms(self) -> int:
+        await self._force()
+        return int(((self._end or 0) - (self._start or 0)) * 1000)
+
+    async def datetime_utc(self) -> str:
+        await self._force()
+        return self._start_utcnow.isoformat() if self._start_utcnow else ""
+
+    def __await__(self):
+        return self._force().__await__()
+
     @classmethod
     def fake(
         cls,
-        model: "Model",
+        model: "AsyncModel",
         prompt: str,
         *attachments: List[Attachment],
         system: str,
-        response: str
+        response: str,
     ):
         "Utility method to help with writing tests"
         response_obj = cls(
@@ -281,47 +436,11 @@ class Response(ABC):
         response_obj._chunks = [response]
         return response_obj
 
-    @classmethod
-    def from_row(cls, db, row):
-        from llm import get_model
-
-        model = get_model(row["model"])
-
-        response = cls(
-            model=model,
-            prompt=Prompt(
-                prompt=row["prompt"],
-                model=model,
-                attachments=[],
-                system=row["system"],
-                options=model.Options(**json.loads(row["options_json"])),
-            ),
-            stream=False,
-        )
-        response.id = row["id"]
-        response._prompt_json = json.loads(row["prompt_json"] or "null")
-        response.response_json = json.loads(row["response_json"] or "null")
-        response._done = True
-        response._chunks = [row["response"]]
-        # Attachments
-        response.attachments = [
-            Attachment.from_row(arow)
-            for arow in db.query(
-                """
-                select attachments.* from attachments
-                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
-                where prompt_attachments.response_id = ?
-                order by prompt_attachments."order"
-            """,
-                [row["id"]],
-            )
-        ]
-        return response
-
     def __repr__(self):
-        return "<Response prompt='{}' text='{}'>".format(
-            self.prompt.prompt, self.text()
-        )
+        text = "... not yet awaited ..."
+        if self._done:
+            text = "".join(self._chunks)
+        return "<Response prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
 class Options(BaseModel):
@@ -362,22 +481,39 @@ class _get_key_mixin:
         raise NeedsKeyException(message)
 
 
-class Model(ABC, _get_key_mixin):
+class _BaseModel(ABC, _get_key_mixin):
     model_id: str
-
-    # API key handling
     key: Optional[str] = None
     needs_key: Optional[str] = None
     key_env_var: Optional[str] = None
-
-    # Model characteristics
     can_stream: bool = False
     attachment_types: Set = set()
 
     class Options(_Options):
         pass
 
-    def conversation(self):
+    def _validate_attachments(
+        self, attachments: Optional[List[Attachment]] = None
+    ) -> None:
+        if attachments and not self.attachment_types:
+            raise ValueError("This model does not support attachments")
+        for attachment in attachments or []:
+            attachment_type = attachment.resolve_type()
+            if attachment_type not in self.attachment_types:
+                raise ValueError(
+                    f"This model does not support attachments of type '{attachment_type}', "
+                    f"only {', '.join(self.attachment_types)}"
+                )
+
+    def __str__(self) -> str:
+        return "{}: {}".format(self.__class__.__name__, self.model_id)
+
+    def __repr__(self):
+        return "<{} '{}'>".format(self.__class__.__name__, self.model_id)
+
+
+class Model(_BaseModel):
+    def conversation(self) -> Conversation:
         return Conversation(model=self)
 
     @abstractmethod
@@ -388,10 +524,6 @@ class Model(ABC, _get_key_mixin):
         response: Response,
         conversation: Optional[Conversation],
     ) -> Iterator[str]:
-        """
-        Execute a prompt and yield chunks of text, or yield a single big chunk.
-        Any additional useful information about the execution should be assigned to the response.
-        """
         pass
 
     def prompt(
@@ -401,22 +533,10 @@ class Model(ABC, _get_key_mixin):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
-        **options
-    ):
-        # Validate attachments
-        if attachments and not self.attachment_types:
-            raise ValueError(
-                "This model does not support attachments, but some were provided"
-            )
-        for attachment in attachments or []:
-            attachment_type = attachment.resolve_type()
-            if attachment_type not in self.attachment_types:
-                raise ValueError(
-                    "This model does not support attachments of type '{}', only {}".format(
-                        attachment_type, ", ".join(self.attachment_types)
-                    )
-                )
-        return self.response(
+        **options,
+    ) -> Response:
+        self._validate_attachments(attachments)
+        return Response(
             Prompt(
                 prompt,
                 attachments=attachments,
@@ -424,17 +544,46 @@ class Model(ABC, _get_key_mixin):
                 model=self,
                 options=self.Options(**options),
             ),
-            stream=stream,
+            self,
+            stream,
         )
 
-    def response(self, prompt: Prompt, stream: bool = True) -> Response:
-        return Response(prompt, self, stream)
 
-    def __str__(self) -> str:
-        return "{}: {}".format(self.__class__.__name__, self.model_id)
+class AsyncModel(_BaseModel):
+    def conversation(self) -> AsyncConversation:
+        return AsyncConversation(model=self)
 
-    def __repr__(self):
-        return "<Model '{}'>".format(self.model_id)
+    @abstractmethod
+    async def execute(
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: AsyncResponse,
+        conversation: Optional[AsyncConversation],
+    ) -> AsyncGenerator[str, None]:
+        yield ""
+
+    def prompt(
+        self,
+        prompt: str,
+        *,
+        attachments: Optional[List[Attachment]] = None,
+        system: Optional[str] = None,
+        stream: bool = True,
+        **options,
+    ) -> AsyncResponse:
+        self._validate_attachments(attachments)
+        return AsyncResponse(
+            Prompt(
+                prompt,
+                attachments=attachments,
+                system=system,
+                model=self,
+                options=self.Options(**options),
+            ),
+            self,
+            stream,
+        )
 
 
 class EmbeddingModel(ABC, _get_key_mixin):
@@ -495,6 +644,7 @@ class EmbeddingModel(ABC, _get_key_mixin):
 @dataclass
 class ModelWithAliases:
     model: Model
+    async_model: AsyncModel
     aliases: Set[str]
 
 

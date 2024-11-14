@@ -5,12 +5,63 @@ The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of de
 
 This document covers more advanced topics.
 
+(advanced-model-plugins-async)=
+
+## Async models
+
+Plugins can optionally provide an asynchronous version of their model, suitable for use with Python [asyncio](https://docs.python.org/3/library/asyncio.html). This is particularly useful for remote models accessible by an HTTP API.
+
+The async version of a model subclasses `llm.AsyncModel` instead of `llm.Model`. It must implement an `async def execute()` async generator method instead of `def execute()`.
+
+This example shows a subset of the OpenAI default plugin illustrating how this method might work:
+
+
+```python
+from typing import AsyncGenerator
+import llm
+
+class MyAsyncModel(llm.AsyncModel):
+    # This cn duplicate the model_id of the sync model:
+    model_id = "my-model-id"
+
+    async def execute(
+        self, prompt, stream, response, conversation=None
+    ) -> AsyncGenerator[str, None]:
+        if stream:
+            completion = await client.chat.completions.create(
+                model=self.model_id,
+                messages=messages,
+                stream=True,
+            )
+            async for chunk in completion:
+                yield chunk.choices[0].delta.content
+        else:
+            completion = await client.chat.completions.create(
+                model=self.model_name or self.model_id,
+                messages=messages,
+                stream=False,
+            )
+            yield completion.choices[0].message.content
+```
+This async model instance should then be passed to the `register()` method in the `register_models()` plugin hook:
+
+```python
+@hookimpl
+def register_models(register):
+    register(
+        MyModel(), MyAsyncModel(), aliases=("my-model-aliases",)
+    )
+```
+
 (advanced-model-plugins-attachments)=
+
 ## Attachments for multi-modal models
 
 Models such as GPT-4o, Claude 3.5 Sonnet and Google's Gemini 1.5 are multi-modal: they accept input in the form of images and maybe even audio, video and other formats.
 
 LLM calls these **attachments**. Models can specify the types of attachments they accept and then implement special code in the `.execute()` method to handle them.
+
+See {ref}`the Python attachments documentation <python-api-attachments>` for details on using attachments in the Python API.
 
 ### Specifying attachment types
 
