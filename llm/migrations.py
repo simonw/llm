@@ -204,8 +204,8 @@ def m011_fts_for_responses(db):
 
 
 @migration
-def m012_current_conversation(db):
-    """Add table to track current conversation"""
+def m012_track_current_conversation(db):
+    """Add table to track current conversation and parent id to responses table"""
     db["state"].create(
         {
             "key": str,
@@ -213,8 +213,4 @@ def m012_current_conversation(db):
         },
         pk="key"
     )
-
-
-@migration
-def m013_current_conversation(db):
     db["responses"].add_column("parent_id", str)
