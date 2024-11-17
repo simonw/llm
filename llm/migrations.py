@@ -237,3 +237,41 @@ def m013_usage(db):
     db["responses"].add_column("input_tokens", int)
     db["responses"].add_column("output_tokens", int)
     db["responses"].add_column("token_details", str)
+
+
+def m014_fragments_tables(db):
+    db["fragments"].create(
+        {
+            "id": int,
+            "hash": str,
+            "content": str,
+            "alias": str,
+            "datetime_utc": str,
+            "source": str,
+        },
+        pk="id",
+    )
+    db["prompt_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )
+    db["system_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )

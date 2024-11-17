@@ -98,10 +98,12 @@ class Attachment:
 
 @dataclass
 class Prompt:
-    prompt: str
+    _prompt: str
     model: "Model"
+    fragments: Optional[List[str]]
     attachments: Optional[List[Attachment]]
-    system: Optional[str]
+    _system: Optional[str]
+    system_fragments: Optional[List[str]]
     prompt_json: Optional[str]
     options: "Options"
 
@@ -110,17 +112,54 @@ class Prompt:
         prompt,
         model,
         *,
+        fragments=None,
         attachments=None,
         system=None,
+        system_fragments=None,
         prompt_json=None,
         options=None,
     ):
-        self.prompt = prompt
+        self._prompt = prompt
         self.model = model
         self.attachments = list(attachments or [])
-        self.system = system
+        self.fragments = fragments or []
+        self._system = system
+        self.system_fragments = system_fragments or []
         self.prompt_json = prompt_json
         self.options = options or {}
+
+    @property
+    def prompt(self):
+        return "\n".join(self.fragments + [self._prompt])
+
+    @property
+    def system(self):
+        bits = [
+            bit.strip()
+            for bit in (self.system_fragments + [self._system or ""])
+            if bit.strip()
+        ]
+        return "\n\n".join(bits)
+
+    @classmethod
+    def from_row(cls, db, row, model):
+        all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
+        fragments = [
+            row["content"] for row in all_fragments if row["fragment_type"] == "prompt"
+        ]
+        system_fragments = [
+            row["content"] for row in all_fragments if row["fragment_type"] == "system"
+        ]
+        breakpoint()
+        return cls(
+            prompt=row["prompt"],
+            model=model,
+            fragments=fragments,
+            attachments=[],
+            system=row["system"],
+            system_fragments=system_fragments,
+            options=model.Options(**json.loads(row["options_json"])),
+        )
 
 
 @dataclass
@@ -142,8 +181,10 @@ class Conversation(_BaseConversation):
         self,
         prompt: Optional[str],
         *,
+        fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -152,8 +193,10 @@ class Conversation(_BaseConversation):
             Prompt(
                 prompt,
                 model=self.model,
+                fragments=fragments,
                 attachments=attachments,
                 system=system,
+                system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -184,8 +227,10 @@ class AsyncConversation(_BaseConversation):
         self,
         prompt: Optional[str],
         *,
+        fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -194,8 +239,10 @@ class AsyncConversation(_BaseConversation):
             Prompt(
                 prompt,
                 model=self.model,
+                fragments=fragments,
                 attachments=attachments,
                 system=system,
+                system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -218,6 +265,26 @@ class AsyncConversation(_BaseConversation):
         count = len(self.responses)
         s = "s" if count == 1 else ""
         return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
+
+
+FRAGMENT_SQL = """
+select
+    'prompt' as fragment_type,
+    f.content,
+    pf."order" as ord
+from prompt_fragments pf
+join fragments f on pf.fragment_id = f.id
+where pf.response_id = :response_id
+union all
+select
+    'system' as fragment_type,
+    f.content,
+    sf."order" as ord
+from system_fragments sf
+join fragments f on sf.fragment_id = f.id
+where sf.response_id = :response_id
+order by fragment_type desc, ord asc;
+"""
 
 
 class _BaseResponse:
@@ -276,13 +343,7 @@ class _BaseResponse:
 
         response = cls(
             model=model,
-            prompt=Prompt(
-                prompt=row["prompt"],
-                model=model,
-                attachments=[],
-                system=row["system"],
-                options=model.Options(**json.loads(row["options_json"])),
-            ),
+            prompt=Prompt.from_row(db, row, model),
             stream=False,
         )
         response.id = row["id"]
@@ -292,8 +353,8 @@ class _BaseResponse:
         response._chunks = [row["response"]]
         # Attachments
         response.attachments = [
-            Attachment.from_row(arow)
-            for arow in db.query(
+            Attachment.from_row(attachment_row)
+            for attachment_row in db.query(
                 """
                 select attachments.* from attachments
                 join prompt_attachments on attachments.id = prompt_attachments.attachment_id
@@ -701,8 +762,10 @@ class _Model(_BaseModel):
         self,
         prompt: str,
         *,
+        fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         **options,
     ) -> Response:
@@ -711,8 +774,10 @@ class _Model(_BaseModel):
         return Response(
             Prompt(
                 prompt,
+                fragments=fragments,
                 attachments=attachments,
                 system=system,
+                system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
             ),
@@ -755,8 +820,10 @@ class _AsyncModel(_BaseModel):
         self,
         prompt: str,
         *,
+        fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
@@ -765,8 +832,10 @@ class _AsyncModel(_BaseModel):
         return AsyncResponse(
             Prompt(
                 prompt,
+                fragments=fragments,
                 attachments=attachments,
                 system=system,
+                system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
             ),
