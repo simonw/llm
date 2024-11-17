@@ -255,3 +255,42 @@ def m014_schemas(db):
     db["responses"].enable_fts(
         ["prompt", "response"], create_triggers=True, replace=True
     )
+
+
+@migration
+def m015_fragments_tables(db):
+    db["fragments"].create(
+        {
+            "id": int,
+            "hash": str,
+            "content": str,
+            "alias": str,
+            "datetime_utc": str,
+            "source": str,
+        },
+        pk="id",
+    )
+    db["prompt_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )
+    db["system_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )

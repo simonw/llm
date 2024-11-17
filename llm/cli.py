@@ -72,6 +72,23 @@ warnings.simplefilter("ignore", ResourceWarning)
 DEFAULT_TEMPLATE = "prompt: "
 
 
+def resolve_fragments(fragments):
+    # These can be URLs or paths
+    resolved = []
+    for fragment in fragments:
+        if fragment.startswith("http://") or fragment.startswith("https://"):
+            response = httpx.get(fragment, follow_redirects=True)
+            response.raise_for_status()
+            resolved.append(response.text)
+        elif fragment == "-":
+            resolved.append(sys.stdin.read())
+        elif pathlib.Path(fragment).exists():
+            resolved.append(pathlib.Path(fragment).read_text())
+        else:
+            raise click.ClickException(f"Fragment {fragment} not found")
+    return resolved
+
+
 class AttachmentType(click.ParamType):
     name = "attachment"
 
@@ -223,6 +240,16 @@ def cli():
     "--schema-multi",
     help="JSON schema to use for multiple results",
 )
+@click.option(
+    "fragments", "-f", "--fragment", multiple=True, help="Fragment to add to prompt"
+)
+@click.option(
+    "system_fragments",
+    "--sf",
+    "--system-fragment",
+    multiple=True,
+    help="Fragment to add to system prompt",
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -271,6 +298,8 @@ def prompt(
     options,
     schema_input,
     schema_multi,
+    fragments,
+    system_fragments,
     template,
     param,
     no_stream,
@@ -364,6 +393,7 @@ def prompt(
             and not attachments
             and not attachment_types
             and not schema
+            and not fragments
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -521,6 +551,9 @@ def prompt(
     prompt = read_prompt()
     response = None
 
+    fragments = resolve_fragments(fragments)
+    system_fragments = resolve_fragments(system_fragments)
+
     prompt_method = model.prompt
     if conversation:
         prompt_method = conversation.prompt
@@ -535,6 +568,8 @@ def prompt(
                         attachments=resolved_attachments,
                         system=system,
                         schema=schema,
+                        fragments=fragments,
+                        system_fragments=system_fragments,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -544,9 +579,11 @@ def prompt(
                 else:
                     response = prompt_method(
                         prompt,
+                        fragments=fragments,
                         attachments=resolved_attachments,
-                        system=system,
                         schema=schema,
+                        system=system,
+                        system_fragments=system_fragments,
                         **kwargs,
                     )
                     text = await response.text()
@@ -561,9 +598,11 @@ def prompt(
         else:
             response = prompt_method(
                 prompt,
+                fragments=fragments,
                 attachments=resolved_attachments,
                 system=system,
                 schema=schema,
+                system_fragments=system_fragments,
                 **kwargs,
             )
             if should_stream:
