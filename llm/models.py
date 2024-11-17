@@ -316,6 +316,9 @@ class Response(_BaseResponse):
         self._force()
         return "".join(self._chunks)
 
+    def text_or_raise(self) -> str:
+        return self.text()
+
     def json(self) -> Optional[Dict[str, Any]]:
         self._force()
         return self.response_json
