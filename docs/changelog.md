@@ -1,5 +1,18 @@
 # Changelog
 
+(v0_18)=
+## 0.18 (2024-11-17)
+
+- Initial support for async models. Plugins can now provide an `AsyncModel` subclass that can be accessed in the Python API using the new `llm.get_async_model(model_id)` method. See {ref}`async models in the Python API docs<python-api-async>` and {ref}`implementing async models in plugins <advanced-model-plugins-async>`. [#507](https://github.com/simonw/llm/issues/507)
+- OpenAI models all now include async models, so function calls such as `llm.get_async_model("gpt-4o-mini")` will return an async model.
+- `gpt-4o-audio-preview` model can be used to send audio attachments to the GPT-4o audio model. [#608](https://github.com/simonw/llm/issues/608)
+- Attachments can now be sent without requiring a prompt. [#611](https://github.com/simonw/llm/issues/611)
+- `llm models --options` now includes information on whether a model supports attachments. [#612](https://github.com/simonw/llm/issues/612)
+- `llm models --async` shows available async models.
+- Custom OpenAI-compatible models can now be marked as `can_stream: false` in the YAML if they do not support streaming. Thanks, [Chris Mungall](https://github.com/cmungall). [#600](https://github.com/simonw/llm/pull/600)
+- Fixed bug where OpenAI usage data was incorrectly serialized to JSON. [#614](https://github.com/simonw/llm/issues/614)
+- Standardized on `audio/wav` MIME type for audio attachments rather than `audio/wave`. [#603](https://github.com/simonw/llm/issues/603)
+
 (v0_18a1)=
 ## 0.18a1 (2024-11-14)
 
