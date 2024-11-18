@@ -20,7 +20,7 @@ from typing import (
     Set,
     Union,
 )
-from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
+from .utils import ensure_fragment, mimetype_from_path, mimetype_from_string, token_usage_string
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -269,18 +269,18 @@ class AsyncConversation(_BaseConversation):
 FRAGMENT_SQL = """
 select
     'prompt' as fragment_type,
-    f.content,
+    fragments.content,
     pf."order" as ord
 from prompt_fragments pf
-join fragments f on pf.fragment_id = f.id
+join fragments on pf.fragment_id = fragments.id
 where pf.response_id = :response_id
 union all
 select
     'system' as fragment_type,
-    f.content,
+    fragments.content,
     sf."order" as ord
 from system_fragments sf
-join fragments f on sf.fragment_id = f.id
+join fragments on sf.fragment_id = fragments.id
 where sf.response_id = :response_id
 order by fragment_type desc, ord asc;
 """
@@ -388,8 +388,8 @@ class _BaseResponse:
         response = {
             "id": response_id,
             "model": self.model.model_id,
-            "prompt": self.prompt.prompt,
-            "system": self.prompt.system,
+            "prompt": self.prompt._prompt,
+            "system": self.prompt._system,
             "prompt_json": self._prompt_json,
             "options_json": {
                 key: value
@@ -408,6 +408,25 @@ class _BaseResponse:
             ),
         }
         db["responses"].insert(response)
+        # Persist any fragments
+        for i, fragment in enumerate(self.prompt.fragments):
+            fragment_id = ensure_fragment(db, fragment)
+            db["prompt_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "order": i,
+                },
+            )
+        for i, fragment in enumerate(self.prompt.system_fragments):
+            fragment_id = ensure_fragment(db, fragment)
+            db["system_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "order": i,
+                },
+            )
         # Persist any attachments - loop through with index
         for index, attachment in enumerate(self.prompt.attachments):
             attachment_id = attachment.id()

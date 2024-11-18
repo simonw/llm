@@ -1,4 +1,5 @@
 import click
+import hashlib
 import httpx
 import json
 import puremagic
@@ -9,6 +10,22 @@ from typing import List, Dict, Optional
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
 }
+
+
+class FragmentString(str):
+    def __new__(cls, content, source):
+        # We need to use __new__ since str is immutable
+        instance = super().__new__(cls, content)
+        return instance
+
+    def __init__(self, content, source):
+        self.source = source
+
+    def __str__(self):
+        return super().__str__()
+
+    def __repr__(self):
+        return super().__repr__()
 
 
 def mimetype_from_string(content) -> Optional[str]:
@@ -192,3 +209,20 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
         match = matches[-1] if last else matches[0]
         return match.group("code")
     return None
+
+
+def ensure_fragment(db, content):
+    sql = """
+    insert into fragments (hash, content, datetime_utc, source)
+    values (:hash, :content, datetime('now'), :source)
+    on conflict(hash) do nothing
+    """
+    hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    source = None
+    if isinstance(content, FragmentString):
+        source = content.source
+    with db.conn:
+        db.execute(sql, {"hash": hash, "content": content, "source": source})
+        return list(
+            db.query("select id from fragments where hash = :hash", {"hash": hash})
+        )[0]["id"]

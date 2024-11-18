@@ -245,17 +245,24 @@ def m014_fragments_tables(db):
             "id": int,
             "hash": str,
             "content": str,
-            "alias": str,
             "datetime_utc": str,
             "source": str,
         },
         pk="id",
     )
-    db["fragments"].create_index(["alias"], unique=True)
+    db["fragments"].create_index(["hash"], unique=True)
+    db["fragment_aliases"].create(
+        {
+            "alias": str,
+            "fragment_id": int,
+        },
+        foreign_keys=(("fragment_id", "fragments", "id"),),
+        pk="alias",
+    )
     db["prompt_fragments"].create(
         {
             "response_id": str,
-            "fragment_id": str,
+            "fragment_id": int,
             "order": int,
         },
         foreign_keys=(
@@ -267,7 +274,7 @@ def m014_fragments_tables(db):
     db["system_fragments"].create(
         {
             "response_id": str,
-            "fragment_id": str,
+            "fragment_id": int,
             "order": int,
         },
         foreign_keys=(
