@@ -251,6 +251,7 @@ def m014_fragments_tables(db):
         },
         pk="id",
     )
+    db["fragments"].create_index(["alias"], unique=True)
     db["prompt_fragments"].create(
         {
             "response_id": str,
