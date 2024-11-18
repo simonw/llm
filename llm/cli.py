@@ -39,8 +39,10 @@ from llm.models import _BaseConversation
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
+    ensure_fragment,
     extract_fenced_code_block,
     find_unused_key,
+    FragmentString,
     make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
@@ -63,7 +65,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple, Any
+from typing import cast, Optional, Iterable, List, Union, Tuple, Any
 import warnings
 import yaml
 
@@ -72,18 +74,22 @@ warnings.simplefilter("ignore", ResourceWarning)
 DEFAULT_TEMPLATE = "prompt: "
 
 
-def resolve_fragments(fragments):
+def resolve_fragments(fragments: Iterable[str]) -> List[Tuple[str, str]]:
+    """
+    Resolve fragments into a list of (content, source) tuples
+    """
     # These can be URLs or paths
     resolved = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
             response = httpx.get(fragment, follow_redirects=True)
             response.raise_for_status()
-            resolved.append(response.text)
+            resolved.append(FragmentString(response.text, fragment))
         elif fragment == "-":
-            resolved.append(sys.stdin.read())
+            resolved.append(FragmentString(sys.stdin.read(), "-"))
         elif pathlib.Path(fragment).exists():
-            resolved.append(pathlib.Path(fragment).read_text())
+            path = pathlib.Path(fragment)
+            resolved.append(FragmentString(path.read_text(), str(path.resolve())))
         else:
             raise click.ClickException(f"Fragment {fragment} not found")
     return resolved
@@ -1842,6 +1848,92 @@ def aliases_remove(alias):
 def aliases_path():
     "Output the path to the aliases.json file"
     click.echo(user_dir() / "aliases.json")
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def fragments():
+    "Manage fragments"
+
+
+@fragments.command(name="list")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def fragments_list(json_):
+    "List current fragments"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    sql = """
+    select
+        fragments.id,
+        fragments.hash,
+        fragments.content,
+        fragments.datetime_utc,
+        fragments.source,
+        json_group_array(fragment_aliases.alias) filter (
+            where
+            fragment_aliases.alias is not null
+        ) as aliases
+    from
+        fragments
+    left join
+        fragment_aliases on fragment_aliases.fragment_id = fragments.id
+    group by
+        fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source;
+    """
+    results = list(db.query(sql))
+    for result in results:
+        result["aliases"] = json.loads(result["aliases"])
+    click.echo(json.dumps(results, indent=4))
+
+
+@fragments.command(name="set")
+@click.argument("alias")
+@click.argument("fragment")
+def fragments_set(alias, fragment):
+    """
+    Set an alias for a fragment
+
+    Accepts an alias and a file path, URL or '-' for stdin
+
+    Example usage:
+
+    \b
+        llm fragments set docs ./docs.md
+    """
+    resolved = resolve_fragments([fragment])[0]
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    alias_sql = """
+    insert into fragment_aliases (alias, fragment_id)
+    values (:alias, :fragment_id)
+    on conflict(alias) do update set
+        fragment_id = excluded.fragment_id;
+    """
+    with db.conn:
+        fragment_id = ensure_fragment(db, resolved)
+        db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
+
+
+@fragments.command(name="remove")
+@click.argument("alias")
+def fragments_remove(alias):
+    """
+    Remove a fragment alias
+
+    Example usage:
+
+    \b
+        llm fragments remove docs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    with db.conn:
+        db.conn.execute(
+            "delete from fragment_aliases where alias = :alias", {"alias": alias}
+        )
 
 
 @cli.command(name="plugins")
