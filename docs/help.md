@@ -71,6 +71,7 @@ Commands:
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once
+  fragments     Manage fragments
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -117,6 +118,8 @@ Options:
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype
   -o, --option <TEXT TEXT>...     key/value options for the model
+  -f, --fragment TEXT             Fragment to add to prompt
+  --sf, --system-fragment TEXT    Fragment to add to system prompt
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
@@ -483,6 +486,66 @@ Options:
 Usage: llm aliases path [OPTIONS]
 
   Output the path to the aliases.json file
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments)=
+### llm fragments --help
+```
+Usage: llm fragments [OPTIONS] COMMAND [ARGS]...
+
+  Manage fragments
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*   List current fragments
+  remove  Remove a fragment alias
+  set     Set an alias for a fragment
+```
+
+(help-fragments-list)=
+#### llm fragments list --help
+```
+Usage: llm fragments list [OPTIONS]
+
+  List current fragments
+
+Options:
+  --json  Output as JSON
+  --help  Show this message and exit.
+```
+
+(help-fragments-set)=
+#### llm fragments set --help
+```
+Usage: llm fragments set [OPTIONS] ALIAS FRAGMENT
+
+  Set an alias for a fragment
+
+  Accepts an alias and a file path, URL or '-' for stdin
+
+  Example usage:
+
+      llm fragments set docs ./docs.md
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments-remove)=
+#### llm fragments remove --help
+```
+Usage: llm fragments remove [OPTIONS] ALIAS
+
+  Remove a fragment alias
+
+  Example usage:
+
+      llm fragments remove docs
 
 Options:
   --help  Show this message and exit.
