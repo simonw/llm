@@ -141,7 +141,7 @@ class Prompt:
 
     @property
     def prompt(self):
-        return "\n".join(self.fragments + [self._prompt])
+        return "\n".join(self.fragments + ([self._prompt] if self._prompt else []))
 
     @property
     def system(self):

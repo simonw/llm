@@ -141,8 +141,8 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
     else:
         assert result.exit_code == 1
         long = "audio/mpeg" if filetype == "mp3" else "audio/wav"
-        assert (
-            f"This model does not support attachments of type '{long}'" in result.output
+        assert f"This model does not support attachments of type '{long}'" in str(
+            result
         )
 
 
