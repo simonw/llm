@@ -65,10 +65,33 @@ warnings.simplefilter("ignore", ResourceWarning)
 DEFAULT_TEMPLATE = "prompt: "
 
 
-def resolve_fragments(fragments: Iterable[str]) -> List[FragmentString]:
+class FragmentNotFound(Exception):
+    pass
+
+
+def resolve_fragments(
+    db: sqlite_utils.Database, fragments: Iterable[str]
+) -> List[FragmentString]:
     """
     Resolve fragments into a list of (content, source) tuples
     """
+
+    def _load_by_alias(fragment):
+        rows = list(
+            db.query(
+                """
+                select content, source from fragments
+                join fragment_aliases on fragments.id = fragment_aliases.fragment_id
+                where alias = :alias
+                """,
+                {"alias": fragment},
+            )
+        )
+        if rows:
+            row = rows[0]
+            return row["content"], row["source"]
+        return None, None
+
     # These can be URLs or paths
     resolved = []
     for fragment in fragments:
@@ -78,11 +101,20 @@ def resolve_fragments(fragments: Iterable[str]) -> List[FragmentString]:
             resolved.append(FragmentString(response.text, fragment))
         elif fragment == "-":
             resolved.append(FragmentString(sys.stdin.read(), "-"))
-        elif pathlib.Path(fragment).exists():
-            path = pathlib.Path(fragment)
-            resolved.append(FragmentString(path.read_text(), str(path.resolve())))
         else:
-            raise click.ClickException(f"Fragment {fragment} not found")
+            # Try from the DB
+            content, source = _load_by_alias(fragment)
+            if content is not None:
+                resolved.append(FragmentString(content, source))
+            else:
+                # Now try path
+                path = pathlib.Path(fragment)
+                if path.exists():
+                    resolved.append(
+                        FragmentString(path.read_text(), str(path.resolve()))
+                    )
+                else:
+                    raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
 
 
@@ -309,6 +341,11 @@ def prompt(
 
     model_aliases = get_model_aliases()
 
+    log_path = logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
     def read_prompt():
         nonlocal prompt
 
@@ -452,8 +489,11 @@ def prompt(
     prompt = read_prompt()
     response = None
 
-    fragments = resolve_fragments(fragments)
-    system_fragments = resolve_fragments(system_fragments)
+    try:
+        fragments = resolve_fragments(db, fragments)
+        system_fragments = resolve_fragments(db, system_fragments)
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
 
     prompt_method = model.prompt
     if conversation:
@@ -1489,8 +1529,11 @@ def fragments_set(alias, fragment):
     \b
         llm fragments set docs ./docs.md
     """
-    resolved = resolve_fragments([fragment])[0]
     db = sqlite_utils.Database(logs_db_path())
+    try:
+        resolved = resolve_fragments(db, [fragment])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
     migrate(db)
     alias_sql = """
     insert into fragment_aliases (alias, fragment_id)
