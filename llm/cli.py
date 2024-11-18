@@ -65,7 +65,7 @@ warnings.simplefilter("ignore", ResourceWarning)
 DEFAULT_TEMPLATE = "prompt: "
 
 
-def resolve_fragments(fragments: Iterable[str]) -> List[Tuple[str, str]]:
+def resolve_fragments(fragments: Iterable[str]) -> List[FragmentString]:
     """
     Resolve fragments into a list of (content, source) tuples
     """
