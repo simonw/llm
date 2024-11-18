@@ -160,7 +160,6 @@ class Prompt:
         system_fragments = [
             row["content"] for row in all_fragments if row["fragment_type"] == "system"
         ]
-        breakpoint()
         return cls(
             prompt=row["prompt"],
             model=model,
