@@ -122,6 +122,11 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(fragments)=
+### Fragments
+
+You can use the `-f/--fragment` option to reference fragments of context that you would like to load into your prompt. Fragments can be specified as URLs, file paths or as aliases to previously saved fragments.
+
 (conversation)=
 ### Continuing a conversation
 
