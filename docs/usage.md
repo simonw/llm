@@ -115,7 +115,6 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
-
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
@@ -192,7 +191,13 @@ Be warned that different models may support different dialects of the JSON schem
 
 See {ref}`schemas-logs` for tips on using the `llm logs --schema X` command to access JSON objects you have previously logged using this option.
 
+(usage-fragments)=
+### Fragments
+
+You can use the `-f/--fragment` option to reference fragments of context that you would like to load into your prompt. Fragments can be specified as URLs, file paths or as aliases to previously saved fragments.
+
 (usage-conversation)=
+
 ### Continuing a conversation
 
 By default, the tool will start a new conversation each time you run it.
