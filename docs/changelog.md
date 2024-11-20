@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_19a1)=
+## 0.19a1 (2024-11-19)
+
+- `response.usage()` and async response `await response.usage()` methods, returning a `Usage(input=2, output=1, details=None)` dataclass. [#644](https://github.com/simonw/llm/issues/644)
+
 (v0_19a0)=
 ## 0.19a0 (2024-11-19)
 
