@@ -108,8 +108,9 @@ Create a file in that directory called `extra-openai-models.yaml`.
 Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
 
 ```yaml
-- model_id: gpt-3.5-turbo-0613
-  aliases: ["0613"]
+- model_id: gpt-4o-2024-08-06
+  model_name: gpt-4o-2024-08-06
+  aliases: ["4o-latest"]
 ```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
 
@@ -118,7 +119,7 @@ If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `compl
 With this configuration in place, the following command should run a prompt against the new model:
 
 ```bash
-llm -m 0613 'What is the capital of France?'
+llm -m 4o-latest 'What is the capital of France?'
 ```
 Run `llm models` to confirm that the new model is now available:
 ```bash
@@ -130,6 +131,13 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
+OpenAI Chat: gpt-4-1106-preview
+OpenAI Chat: gpt-4-0125-preview
+OpenAI Chat: gpt-4-turbo-2024-04-09
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
+OpenAI Chat: gpt-4o-2024-08-06 (aliases: 4o-latest)
 ```
 Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.
