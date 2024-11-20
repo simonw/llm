@@ -1,5 +1,13 @@
 # Changelog
 
+(v0_19a0)=
+## 0.19a0 (2024-11-19)
+
+- Tokens used by a response are now logged to new `input_tokens` and `output_tokens` integer columns and a `token_details` JSON string column, for the default OpenAI models and models from other plugins that {ref}`implement this feature <advanced-model-plugins-usage>`. [#610](https://github.com/simonw/llm/issues/610)
+- `llm prompt` now takes a `-u/--usage` flag to display token usage at the end of the response.
+- `llm logs -u/--usage` shows token usage information for logged responses.
+- `llm prompt ... --async` responses are now logged to the database. [#641](https://github.com/simonw/llm/issues/641)
+
 (v0_18)=
 ## 0.18 (2024-11-17)
 
