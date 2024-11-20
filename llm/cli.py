@@ -33,7 +33,7 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
-from .utils import mimetype_from_path, mimetype_from_string
+from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
 import base64
 import httpx
 import pathlib
@@ -824,6 +824,7 @@ order by prompt_attachments."order"
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+@click.option("-u", "--usage", is_flag=True, help="Include token usage")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
 @click.option(
     "current_conversation",
@@ -851,6 +852,7 @@ def logs_list(
     model,
     query,
     truncate,
+    usage,
     response,
     current_conversation,
     conversation_id,
@@ -1013,6 +1015,14 @@ def logs_list(
                         )
 
             click.echo("\n## Response:\n\n{}\n".format(row["response"]))
+            if usage:
+                token_usage = token_usage_string(
+                    row["input_tokens"],
+                    row["output_tokens"],
+                    json.loads(row["token_details"]) if row["token_details"] else None,
+                )
+                if token_usage:
+                    click.echo("## Token usage:\n\n{}".format(token_usage))
 
 
 @cli.group(

@@ -18,7 +18,7 @@ from typing import (
     Set,
     Union,
 )
-from .utils import mimetype_from_path, mimetype_from_string
+from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
@@ -261,14 +261,9 @@ class _BaseResponse:
         return response
 
     def token_usage(self) -> str:
-        bits = []
-        if self.input_tokens is not None:
-            bits.append(f"{self.input_tokens} input")
-        if self.output_tokens is not None:
-            bits.append(f"{self.output_tokens} output")
-        if self.token_details:
-            bits.append(json.dumps(self.token_details))
-        return ", ".join(bits)
+        return token_usage_string(
+            self.input_tokens, self.output_tokens, self.token_details
+        )
 
     def log_to_db(self, db):
         conversation = self.conversation
