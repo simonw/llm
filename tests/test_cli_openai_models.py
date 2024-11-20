@@ -174,8 +174,8 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
                 }
             ],
             "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 2,
+                "prompt_tokens": 1000,
+                "completion_tokens": 2000,
                 "total_tokens": 12,
             },
             "system_fingerprint": "fp_49254d0e9b",
@@ -192,7 +192,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     assert result.exit_code == 0
     assert result.output == "Ho ho ho\n"
     if usage:
-        assert result.stderr == "Token usage: 10 input, 2 output\n"
+        assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
     # Confirm it was correctly logged
     assert log_db.exists()
     db = sqlite_utils.Database(str(log_db))

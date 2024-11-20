@@ -147,9 +147,9 @@ def simplify_usage_dict(d):
 def token_usage_string(input_tokens, output_tokens, token_details) -> str:
     bits = []
     if input_tokens is not None:
-        bits.append(f"{input_tokens} input")
+        bits.append(f"{format(input_tokens, ',')} input")
     if output_tokens is not None:
-        bits.append(f"{output_tokens} output")
+        bits.append(f"{format(output_tokens, ',')} output")
     if token_details:
         bits.append(json.dumps(token_details))
     return ", ".join(bits)
