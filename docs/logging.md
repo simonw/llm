@@ -159,7 +159,10 @@ CREATE TABLE [responses] (
   [response_json] TEXT,
   [conversation_id] TEXT REFERENCES [conversations]([id]),
   [duration_ms] INTEGER,
-  [datetime_utc] TEXT
+  [datetime_utc] TEXT,
+  [input_tokens] INTEGER,
+  [output_tokens] INTEGER,
+  [token_details] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],
