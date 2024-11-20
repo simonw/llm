@@ -297,7 +297,7 @@ class _BaseResponse:
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
             "input_tokens": self.input_tokens,
-            "output_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
             "token_details": (
                 json.dumps(self.token_details) if self.token_details else None
             ),

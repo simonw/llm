@@ -79,7 +79,7 @@ def test_chat_basic(mock_model, logs_db):
             "duration_ms": ANY,
             "datetime_utc": ANY,
             "input_tokens": 2,
-            "output_tokens": 2,
+            "output_tokens": 1,
             "token_details": None,
         },
     ]
