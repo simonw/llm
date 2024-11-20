@@ -28,6 +28,13 @@ CONVERSATION_NAME_LENGTH = 32
 
 
 @dataclass
+class Usage:
+    input: Optional[int] = None
+    output: Optional[int] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+@dataclass
 class Attachment:
     type: Optional[str] = None
     path: Optional[str] = None
@@ -355,6 +362,14 @@ class Response(_BaseResponse):
         self._force()
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
+    def usage(self) -> Usage:
+        self._force()
+        return Usage(
+            input=self.input_tokens,
+            output=self.output_tokens,
+            details=self.token_details,
+        )
+
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.utcnow()
@@ -446,6 +461,14 @@ class AsyncResponse(_BaseResponse):
     async def datetime_utc(self) -> str:
         await self._force()
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
+
+    async def usage(self) -> Usage:
+        await self._force()
+        return Usage(
+            input=self.input_tokens,
+            output=self.output_tokens,
+            details=self.token_details,
+        )
 
     def __await__(self):
         return self._force().__await__()

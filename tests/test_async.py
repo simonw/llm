@@ -15,6 +15,10 @@ async def test_async_model(async_mock_model):
     text = await response.text()
     assert text == "hello world"
     assert isinstance(response, llm.AsyncResponse)
+    usage = await response.usage()
+    assert usage.input == 1
+    assert usage.output == 1
+    assert usage.details is None
 
 
 @pytest.mark.asyncio
