@@ -754,6 +754,9 @@ LOGS_COLUMNS = """    responses.id,
     responses.conversation_id,
     responses.duration_ms,
     responses.datetime_utc,
+    responses.input_tokens,
+    responses.output_tokens,
+    responses.token_details,
     conversations.name as conversation_name,
     conversations.model as conversation_model"""
 

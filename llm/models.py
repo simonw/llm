@@ -208,6 +208,20 @@ class _BaseResponse:
         self._start: Optional[float] = None
         self._end: Optional[float] = None
         self._start_utcnow: Optional[datetime.datetime] = None
+        self.input_tokens: Optional[int] = None
+        self.output_tokens: Optional[int] = None
+        self.token_details: Optional[dict] = None
+
+    def set_usage(
+        self,
+        *,
+        input: Optional[int] = None,
+        output: Optional[int] = None,
+        details: Optional[dict] = None,
+    ):
+        self.input_tokens = input
+        self.output_tokens = output
+        self.token_details = details
 
     @classmethod
     def from_row(cls, db, row):
@@ -272,11 +286,16 @@ class _BaseResponse:
                 for key, value in dict(self.prompt.options).items()
                 if value is not None
             },
-            "response": self.text(),
+            "response": self.text_or_raise(),
             "response_json": self.json(),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.input_tokens,
+            "token_details": (
+                json.dumps(self.token_details) if self.token_details else None
+            ),
         }
         db["responses"].insert(response)
         # Persist any attachments - loop through with index
@@ -439,6 +458,9 @@ class AsyncResponse(_BaseResponse):
         response._end = self._end
         response._start = self._start
         response._start_utcnow = self._start_utcnow
+        response.input_tokens = self.input_tokens
+        response.output_tokens = self.output_tokens
+        response.token_details = self.token_details
         return response
 
     @classmethod

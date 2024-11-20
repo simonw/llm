@@ -127,3 +127,18 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+
+def simplify_usage_dict(d):
+    # Recursively remove keys with value 0 and empty dictionaries
+    def remove_empty_and_zero(obj):
+        if isinstance(obj, dict):
+            cleaned = {
+                k: remove_empty_and_zero(v)
+                for k, v in obj.items()
+                if v != 0 and v != {}
+            }
+            return {k: v for k, v in cleaned.items() if v is not None and v != {}}
+        return obj
+
+    return remove_empty_and_zero(d) or {}
