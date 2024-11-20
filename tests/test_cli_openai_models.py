@@ -147,7 +147,8 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
 
 
 @pytest.mark.parametrize("async_", (False, True))
-def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_):
+@pytest.mark.parametrize("usage", (None, "-u", "--usage"))
+def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usage):
     user_path = tmpdir / "user_dir"
     log_db = user_path / "logs.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -173,21 +174,25 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_):
                 }
             ],
             "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 2,
+                "prompt_tokens": 1000,
+                "completion_tokens": 2000,
                 "total_tokens": 12,
             },
             "system_fingerprint": "fp_49254d0e9b",
         },
         headers={"Content-Type": "application/json"},
     )
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    if usage:
+        args.append(usage)
     if async_:
         args.append("--async")
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Ho ho ho\n"
+    if usage:
+        assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
     # Confirm it was correctly logged
     assert log_db.exists()
     db = sqlite_utils.Database(str(log_db))

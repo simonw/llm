@@ -62,6 +62,9 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         },
         {
             "id": ANY,
@@ -75,6 +78,9 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 2,
+            "output_tokens": 1,
+            "token_details": None,
         },
     ]
     # Now continue that conversation
@@ -116,6 +122,9 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 
@@ -153,6 +162,9 @@ def test_chat_system(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 
@@ -181,6 +193,9 @@ def test_chat_options(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 

@@ -227,3 +227,10 @@ def m012_attachments_tables(db):
         ),
         pk=("response_id", "attachment_id"),
     )
+
+
+@migration
+def m013_usage(db):
+    db["responses"].add_column("input_tokens", int)
+    db["responses"].add_column("output_tokens", int)
+    db["responses"].add_column("token_details", str)

@@ -66,13 +66,17 @@ class MockModel(llm.Model):
 
     def execute(self, prompt, stream, response, conversation):
         self.history.append((prompt, stream, response, conversation))
+        gathered = []
         while True:
             try:
                 messages = self._queue.pop(0)
-                yield from messages
+                for message in messages:
+                    gathered.append(message)
+                    yield message
                 break
             except IndexError:
                 break
+        response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
 
 
 class AsyncMockModel(llm.AsyncModel):

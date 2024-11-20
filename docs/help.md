@@ -122,6 +122,7 @@ Options:
   --key TEXT                      API key to use
   --save TEXT                     Save prompt with this template name
   --async                         Run prompt asynchronously
+  -u, --usage                     Show token usage
   --help                          Show this message and exit.
 ```
 
@@ -292,6 +293,7 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -t, --truncate              Truncate long strings in output
+  -u, --usage                 Include token usage
   -r, --response              Just output the last response
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID

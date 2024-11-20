@@ -33,7 +33,7 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
-from .utils import mimetype_from_path, mimetype_from_string
+from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
 import base64
 import httpx
 import pathlib
@@ -203,6 +203,7 @@ def cli():
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
+@click.option("-u", "--usage", is_flag=True, help="Show token usage")
 def prompt(
     prompt,
     system,
@@ -220,6 +221,7 @@ def prompt(
     key,
     save,
     async_,
+    usage,
 ):
     """
     Execute a prompt
@@ -426,14 +428,24 @@ def prompt(
     except Exception as ex:
         raise click.ClickException(str(ex))
 
+    if isinstance(response, AsyncResponse):
+        response = asyncio.run(response.to_sync_response())
+
+    if usage:
+        # Show token usage to stderr in yellow
+        click.echo(
+            click.style(
+                "Token usage: {}".format(response.token_usage()), fg="yellow", bold=True
+            ),
+            err=True,
+        )
+
     # Log to the database
     if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
         migrate(db)
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
         response.log_to_db(db)
 
 
@@ -754,6 +766,9 @@ LOGS_COLUMNS = """    responses.id,
     responses.conversation_id,
     responses.duration_ms,
     responses.datetime_utc,
+    responses.input_tokens,
+    responses.output_tokens,
+    responses.token_details,
     conversations.name as conversation_name,
     conversations.model as conversation_model"""
 
@@ -809,6 +824,7 @@ order by prompt_attachments."order"
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+@click.option("-u", "--usage", is_flag=True, help="Include token usage")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
 @click.option(
     "current_conversation",
@@ -836,6 +852,7 @@ def logs_list(
     model,
     query,
     truncate,
+    usage,
     response,
     current_conversation,
     conversation_id,
@@ -998,6 +1015,14 @@ def logs_list(
                         )
 
             click.echo("\n## Response:\n\n{}\n".format(row["response"]))
+            if usage:
+                token_usage = token_usage_string(
+                    row["input_tokens"],
+                    row["output_tokens"],
+                    json.loads(row["token_details"]) if row["token_details"] else None,
+                )
+                if token_usage:
+                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
 
 
 @cli.group(

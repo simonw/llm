@@ -127,3 +127,29 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+
+def simplify_usage_dict(d):
+    # Recursively remove keys with value 0 and empty dictionaries
+    def remove_empty_and_zero(obj):
+        if isinstance(obj, dict):
+            cleaned = {
+                k: remove_empty_and_zero(v)
+                for k, v in obj.items()
+                if v != 0 and v != {}
+            }
+            return {k: v for k, v in cleaned.items() if v is not None and v != {}}
+        return obj
+
+    return remove_empty_and_zero(d) or {}
+
+
+def token_usage_string(input_tokens, output_tokens, token_details) -> str:
+    bits = []
+    if input_tokens is not None:
+        bits.append(f"{format(input_tokens, ',')} input")
+    if output_tokens is not None:
+        bits.append(f"{format(output_tokens, ',')} output")
+    if token_details:
+        bits.append(json.dumps(token_details))
+    return ", ".join(bits)
