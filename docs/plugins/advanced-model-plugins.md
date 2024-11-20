@@ -167,3 +167,19 @@ for prev_response in conversation.responses:
 The `response.text_or_raise()` method used there will return the text from the response or raise a `ValueError` exception if the response is an `AsyncResponse` instance that has not yet been fully resolved.
 
 This is a slightly weird hack to work around the common need to share logic for building up the `messages` list across both sync and async models.
+
+(advanced-model-plugins-usage)=
+
+## Tracking token usage
+
+Models that charge by the token should track the number of tokens used by each prompt. The ``response.set_usage()`` method can be used to record the number of tokens used by a response - these will then be made available through the Python API and logged to the SQLite database for command-line users.
+
+`response` here is the response object that is passed to `.execute()` as an argument.
+
+Call ``response.set_usage()`` at the end of your `.execute()` method. It accepts keyword arguments `input=`, `output=` and `details=` - all three are optional. `input` and `output` should be integers, and `details` should be a dictionary that provides additional information beyond the input and output token counts.
+
+This example logs 15 input tokens, 340 output tokens and notes that 37 tokens were cached:
+
+```python
+response.set_usage(input=15, output=340, details={"cached": 37})
+```
