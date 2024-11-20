@@ -260,6 +260,16 @@ class _BaseResponse:
         ]
         return response
 
+    def token_usage(self) -> str:
+        bits = []
+        if self.input_tokens is not None:
+            bits.append(f"{self.input_tokens} input")
+        if self.output_tokens is not None:
+            bits.append(f"{self.output_tokens} output")
+        if self.token_details:
+            bits.append(json.dumps(self.token_details))
+        return ", ".join(bits)
+
     def log_to_db(self, db):
         conversation = self.conversation
         if not conversation:

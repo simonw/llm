@@ -203,6 +203,7 @@ def cli():
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
+@click.option("-u", "--usage", is_flag=True, help="Show token usage")
 def prompt(
     prompt,
     system,
@@ -220,6 +221,7 @@ def prompt(
     key,
     save,
     async_,
+    usage,
 ):
     """
     Execute a prompt
@@ -426,14 +428,24 @@ def prompt(
     except Exception as ex:
         raise click.ClickException(str(ex))
 
+    if isinstance(response, AsyncResponse):
+        response = asyncio.run(response.to_sync_response())
+
+    if usage:
+        # Show token usage to stderr in yellow
+        click.echo(
+            click.style(
+                "Token usage: {}".format(response.token_usage()), fg="yellow", bold=True
+            ),
+            err=True,
+        )
+
     # Log to the database
     if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
         migrate(db)
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
         response.log_to_db(db)
 
 

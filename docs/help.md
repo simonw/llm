@@ -122,6 +122,7 @@ Options:
   --key TEXT                      API key to use
   --save TEXT                     Save prompt with this template name
   --async                         Run prompt asynchronously
+  -u, --usage                     Show token usage
   --help                          Show this message and exit.
 ```
 
