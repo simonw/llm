@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from llm.cli import cli
 import pytest
+import sqlite_utils
 
 
 @pytest.fixture
@@ -143,3 +144,53 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
         assert (
             f"This model does not support attachments of type '{long}'" in result.output
         )
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_):
+    user_path = tmpdir / "user_dir"
+    log_db = user_path / "logs.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    assert not log_db.exists()
+    httpx_mock.add_response(
+        method="POST",
+        # chat completion request
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "id": "chatcmpl-AQT9a30kxEaM1bqxRPepQsPlCyGJh",
+            "object": "chat.completion",
+            "created": 1730871958,
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Ho ho ho",
+                        "refusal": None,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+            },
+            "system_fingerprint": "fp_49254d0e9b",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "Ho ho ho\n"
+    # Confirm it was correctly logged
+    assert log_db.exists()
+    db = sqlite_utils.Database(str(log_db))
+    assert db["responses"].count == 1
+    row = next(db["responses"].rows)
+    assert row["response"] == "Ho ho ho"

@@ -426,6 +426,21 @@ class AsyncResponse(_BaseResponse):
     def __await__(self):
         return self._force().__await__()
 
+    async def to_sync_response(self) -> Response:
+        await self._force()
+        response = Response(
+            self.prompt,
+            self.model,
+            self.stream,
+            conversation=self.conversation,
+        )
+        response._chunks = self._chunks
+        response._done = True
+        response._end = self._end
+        response._start = self._start
+        response._start_utcnow = self._start_utcnow
+        return response
+
     @classmethod
     def fake(
         cls,

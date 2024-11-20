@@ -6,6 +6,7 @@ import io
 import json
 from llm import (
     Attachment,
+    AsyncResponse,
     Collection,
     Conversation,
     Response,
@@ -376,6 +377,7 @@ def prompt(
         validated_options["stream"] = False
 
     prompt = read_prompt()
+    response = None
 
     prompt_method = model.prompt
     if conversation:
@@ -386,12 +388,13 @@ def prompt(
 
             async def inner():
                 if should_stream:
-                    async for chunk in prompt_method(
+                    response = prompt_method(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
                         **validated_options,
-                    ):
+                    )
+                    async for chunk in response:
                         print(chunk, end="")
                         sys.stdout.flush()
                     print("")
@@ -403,8 +406,9 @@ def prompt(
                         **validated_options,
                     )
                     print(await response.text())
+                return response
 
-            asyncio.run(inner())
+            response = asyncio.run(inner())
         else:
             response = prompt_method(
                 prompt,
@@ -423,11 +427,13 @@ def prompt(
         raise click.ClickException(str(ex))
 
     # Log to the database
-    if (logs_on() or log) and not no_log and not async_:
+    if (logs_on() or log) and not no_log:
         log_path = logs_db_path()
         (log_path.parent).mkdir(parents=True, exist_ok=True)
         db = sqlite_utils.Database(log_path)
         migrate(db)
+        if isinstance(response, AsyncResponse):
+            response = asyncio.run(response.to_sync_response())
         response.log_to_db(db)
 
 
