@@ -99,6 +99,8 @@ print(response.text())
 ```
 Some models do not use API keys at all.
 
+(python-api-listing-models)=
+
 ### Listing models
 
 The `llm.get_models()` list returns a list of all available models, including those from plugins.

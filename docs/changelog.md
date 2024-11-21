@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_19a2)=
+## 0.19a2 (2024-11-20)
+
+- `llm.get_models()` and `llm.get_async_models()` functions, {ref}`documented here <python-api-listing-models>`. [#640](https://github.com/simonw/llm/issues/640)
+
 (v0_19a1)=
 ## 0.19a1 (2024-11-19)
 
