@@ -596,3 +596,17 @@ def test_model_defaults(tmpdir, monkeypatch):
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
     assert llm.get_model().model_id == "gpt-4o"
+
+
+def test_get_models():
+    models = llm.get_models()
+    assert all(isinstance(model, llm.Model) for model in models)
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids
+
+
+def test_get_async_models():
+    models = llm.get_async_models()
+    assert all(isinstance(model, llm.AsyncModel) for model in models)
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids

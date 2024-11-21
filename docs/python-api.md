@@ -18,7 +18,7 @@ model.key = "sk-..."
 response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
 ```
-The `llm.get_model()` function accepts model names or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
+The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
 
@@ -35,7 +35,7 @@ llm models
 ```
 If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.key = ` line.
 
-Calling `llm.get_model()` with an invalid model name will raise a `llm.UnknownModelError` exception.
+Calling `llm.get_model()` with an invalid model ID will raise a `llm.UnknownModelError` exception.
 
 (python-api-system-prompts)=
 
@@ -98,6 +98,24 @@ response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
 ```
 Some models do not use API keys at all.
+
+### Listing models
+
+The `llm.get_models()` list returns a list of all available models, including those from plugins.
+
+```python
+import llm
+
+for model in llm.get_models():
+    print(model.model_id)
+```
+
+Use `llm.get_async_models()` to list async models:
+
+```python
+for model in llm.get_async_models():
+    print(model.model_id)
+```
 
 ### Streaming responses
 

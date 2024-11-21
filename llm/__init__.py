@@ -167,7 +167,18 @@ class UnknownModelError(KeyError):
     pass
 
 
+def get_models() -> List[Model]:
+    "Get all registered models"
+    return [model for model in get_model_aliases().values()]
+
+
+def get_async_models() -> List[AsyncModel]:
+    "Get all registered async models"
+    return [model for model in get_async_model_aliases().values()]
+
+
 def get_async_model(name: Optional[str] = None) -> AsyncModel:
+    "Get an async model by name or alias"
     aliases = get_async_model_aliases()
     name = name or get_default_model()
     try:
@@ -186,6 +197,7 @@ def get_async_model(name: Optional[str] = None) -> AsyncModel:
 
 
 def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
+    "Get a model by name or alias"
     aliases = get_model_aliases()
     name = name or get_default_model()
     try:
