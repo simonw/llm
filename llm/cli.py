@@ -499,7 +499,7 @@ def chat(
     Hold an ongoing chat with a model.
     """
     # Left and right arrow keys to move cursor:
-    if sys.platform !='win32':
+    if sys.platform != "win32":
         readline.parse_and_bind("\\e[D: backward-char")
         readline.parse_and_bind("\\e[C: forward-char")
     else:
