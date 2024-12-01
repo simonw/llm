@@ -160,6 +160,8 @@ async for chunk in model.prompt(
     print(chunk, end="", flush=True)
 ```
 
+(python-api-conversations)=
+
 ## Conversations
 
 LLM supports *conversations*, where you ask follow-up questions of a model as part of an ongoing conversation.
@@ -194,6 +196,8 @@ response = conversation.prompt(
 ```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+(python-api-response-on-done)=
 
 ## Running code when a response has completed
 

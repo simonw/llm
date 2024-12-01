@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19 (2024-12-01)
+
+- Tokens used by a response are now logged to new `input_tokens` and `output_tokens` integer columns and a `token_details` JSON string column, for the default OpenAI models and models from other plugins that {ref}`implement this feature <advanced-model-plugins-usage>`. [#610](https://github.com/simonw/llm/issues/610)
+- `llm prompt` now takes a `-u/--usage` flag to display token usage at the end of the response.
+- `llm logs -u/--usage` shows token usage information for logged responses.
+- `llm prompt ... --async` responses are now logged to the database. [#641](https://github.com/simonw/llm/issues/641)
+- `llm.get_models()` and `llm.get_async_models()` functions, {ref}`documented here <python-api-listing-models>`. [#640](https://github.com/simonw/llm/issues/640)
+- `response.usage()` and async response `await response.usage()` methods, returning a `Usage(input=2, output=1, details=None)` dataclass. [#644](https://github.com/simonw/llm/issues/644)
+- `response.on_done(callback)` and `await response.on_done(callback)` methods for specifying a callback to be executed when a response has completed, {ref}`documented here <python-api-response-on-done>`. [#653](https://github.com/simonw/llm/issues/653)
+- Fix for bug running `llm chat` on Windows 11. Thanks, [Sukhbinder Singh](https://github.com/sukhbinder). [#495](https://github.com/simonw/llm/issues/495)
+
 (v0_19a2)=
 ## 0.19a2 (2024-11-20)
 
