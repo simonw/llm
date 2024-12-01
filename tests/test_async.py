@@ -32,3 +32,19 @@ async def test_async_model_conversation(async_mock_model):
     response2 = await conversation.prompt("again")
     text2 = await response2.text()
     assert text2 == "joke 2"
+
+
+@pytest.mark.asyncio
+async def test_async_on_done(async_mock_model):
+    async_mock_model.enqueue(["hello world"])
+    response = await async_mock_model.prompt(prompt="hello")
+    caught = []
+
+    def done(response):
+        caught.append(response)
+
+    assert len(caught) == 0
+    await response.on_done(done)
+    await response.text()
+    assert response._done
+    assert len(caught) == 1

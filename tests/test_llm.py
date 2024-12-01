@@ -3,6 +3,7 @@ import datetime
 import llm
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.models import Usage
 import json
 import os
 import pathlib
@@ -610,3 +611,32 @@ def test_get_async_models():
     assert all(isinstance(model, llm.AsyncModel) for model in models)
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
+
+
+def test_mock_model(mock_model):
+    mock_model.enqueue(["hello world"])
+    mock_model.enqueue(["second"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    assert response.text() == "hello world"
+    assert str(response) == "hello world"
+    assert model.history[0][0].prompt == "hello"
+    assert response.usage() == Usage(input=1, output=1, details=None)
+    response2 = model.prompt(prompt="hello again")
+    assert response2.text() == "second"
+    assert response2.usage() == Usage(input=2, output=1, details=None)
+
+
+def test_sync_on_done(mock_model):
+    mock_model.enqueue(["hello world"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    caught = []
+
+    def done(response):
+        caught.append(response)
+
+    response.on_done(done)
+    assert len(caught) == 0
+    str(response)
+    assert len(caught) == 1

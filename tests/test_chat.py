@@ -1,23 +1,8 @@
 from click.testing import CliRunner
-from llm.models import Usage
 import llm.cli
 from unittest.mock import ANY
 import pytest
 import sys
-
-
-def test_mock_model(mock_model):
-    mock_model.enqueue(["hello world"])
-    mock_model.enqueue(["second"])
-    model = llm.get_model("mock")
-    response = model.prompt(prompt="hello")
-    assert response.text() == "hello world"
-    assert str(response) == "hello world"
-    assert model.history[0][0].prompt == "hello"
-    assert response.usage() == Usage(input=1, output=1, details=None)
-    response2 = model.prompt(prompt="hello again")
-    assert response2.text() == "second"
-    assert response2.usage() == Usage(input=2, output=1, details=None)
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

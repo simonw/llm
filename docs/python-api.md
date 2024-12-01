@@ -195,6 +195,47 @@ response = conversation.prompt(
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
 
+## Running code when a response has completed
+
+For some applications, such as tracking the tokens used by an application, it may be useful to execute code as soon as a response has finished being executed
+
+You can do this using the `response.on_done(callback)` method, which causes your callback function to be called as soon as the response has finished (all tokens have been returned).
+
+The signature of the method you provide is `def callback(response)` - it can be optionally an `async def` method when working with asynchronous models.
+
+Example usage:
+
+```python
+import llm
+
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt("a poem about a hippo")
+response.on_done(lambda response: print(response.usage()))
+print(response.text())
+```
+Which outputs:
+```
+Usage(input=20, output=494, details={})
+In a sunlit glade by a bubbling brook,
+Lived a hefty hippo, with a curious look.
+...
+```
+Or using an `asyncio` model, where you need to `await response.on_done(done)` to queue up the callback:
+```python
+import asyncio, llm
+
+async def run():
+    model = llm.get_async_model("gpt-4o-mini")
+    response = model.prompt("a short poem about a brick")
+    async def done(response):
+        print(await response.usage())
+        print(await response.text())
+    await response.on_done(done)
+    print(await response.text())
+
+asyncio.run(run())
+```
+
 ## Other functions
 
 The `llm` top level package includes some useful utility functions.
