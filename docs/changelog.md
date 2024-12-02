@@ -1,5 +1,6 @@
 # Changelog
 
+(v0_19)=
 ## 0.19 (2024-12-01)
 
 - Tokens used by a response are now logged to new `input_tokens` and `output_tokens` integer columns and a `token_details` JSON string column, for the default OpenAI models and models from other plugins that {ref}`implement this feature <advanced-model-plugins-usage>`. [#610](https://github.com/simonw/llm/issues/610)
