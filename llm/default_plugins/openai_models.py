@@ -62,10 +62,6 @@ def register_models(register):
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
     )
     # o1
-    # register(
-    #     Chat("o1", can_stream=False, allows_system_prompt=False, vision=True),
-    #     AsyncChat("o1", can_stream=False, allows_system_prompt=False, vision=True),
-    # )
     register(
         Chat("o1-preview", can_stream=False, allows_system_prompt=False),
         AsyncChat("o1-preview", can_stream=False, allows_system_prompt=False),
