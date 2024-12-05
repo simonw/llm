@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_19_1)=
+## 0.19.1 (2024-12-05)
+
+- FIxed bug where `llm.get_models()` and `llm.get_async_models()` returned the same model multiple times. [#667](https://github.com/simonw/llm/issues/667)
+
 (v0_19)=
 ## 0.19 (2024-12-01)
 
