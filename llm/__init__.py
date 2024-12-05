@@ -169,12 +169,14 @@ class UnknownModelError(KeyError):
 
 def get_models() -> List[Model]:
     "Get all registered models"
-    return [model for model in get_model_aliases().values()]
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.model for mwa in models_with_aliases if mwa.model]
 
 
 def get_async_models() -> List[AsyncModel]:
     "Get all registered async models"
-    return [model for model in get_async_model_aliases().values()]
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.async_model for mwa in models_with_aliases if mwa.async_model]
 
 
 def get_async_model(name: Optional[str] = None) -> AsyncModel:
