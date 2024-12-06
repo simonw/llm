@@ -77,7 +77,6 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     }
     keys_path.write_text(json.dumps(KEYS), "utf-8")
     monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
-    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
     def assert_key(key):
         request = mocked_openai_chat.get_requests()[-1]
@@ -85,10 +84,12 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
 
     runner = CliRunner()
 
-    # Called without --key uses stored key
+    # Called without --key an no environment variable uses stored key
     result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
     assert result.exit_code == 0
     assert_key("from-keys-file")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
 
     # Called without --key and without keys.json uses environment variable
     keys_path.write_text("{}", "utf-8")
@@ -96,6 +97,11 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
     assert result2.exit_code == 0
     assert_key("from-env")
     keys_path.write_text(json.dumps(KEYS), "utf-8")
+
+    # Called without --key and with keys.json still uses environment variable
+    result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert_key("from-env")
 
     # Called with --key name-in-keys.json uses that value
     result3 = runner.invoke(
