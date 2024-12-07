@@ -364,11 +364,11 @@ def prompt(
     if options:
         # Validate with pydantic
         try:
-            validated_options = dict(
-                (key, value)
+            validated_options = {
+                key: value
                 for key, value in model.Options(**dict(options))
                 if value is not None
-            )
+            }
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
@@ -556,11 +556,10 @@ def chat(
     validated_options = {}
     if options:
         try:
-            validated_options = dict(
-                (key, value)
-                for key, value in model.Options(**dict(options))
+            validated_options = {
+                key: value for key, value in model.Options(**dict(options))
                 if value is not None
-            )
+            }
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
@@ -1244,7 +1243,7 @@ def templates_show(name):
     template = load_template(name)
     click.echo(
         yaml.dump(
-            dict((k, v) for k, v in template.dict().items() if v is not None),
+            {k: v for k, v in template.dict().items() if v is not None},
             indent=4,
             default_flow_style=False,
         )
@@ -1512,9 +1511,8 @@ def embed_multi(
     if not input_path and not sql and not files:
         raise click.UsageError("Either --sql or input path or --files is required")
 
-    if files:
-        if input_path or sql or format:
-            raise click.UsageError(
+    if files and (input_path or sql or format):
+          raise click.UsageError(
                 "Cannot use --files with --sql, input path or --format"
             )
 
@@ -1542,7 +1540,7 @@ def embed_multi(
         def count_files():
             i = 0
             for directory, pattern in files:
-                for path in pathlib.Path(directory).glob(pattern):
+                for _ in pathlib.Path(directory).glob(pattern):
                     i += 1
             return i
 
@@ -1578,8 +1576,11 @@ def embed_multi(
         rows = iterate_files()
     elif sql:
         rows = db.query(sql)
-        count_sql = "select count(*) as c from ({})".format(sql)
-        expected_length = next(db.query(count_sql))["c"]
+        count_sql = f"select count(*) as c from ({sql})"
+        try:
+            expected_length = next(db.query(count_sql))["c"]
+        except StopIteration:
+            expected_length = 0
     else:
 
         def load_rows(fp):
