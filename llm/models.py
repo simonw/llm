@@ -385,7 +385,7 @@ class Response(_BaseResponse):
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.utcnow()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
             yield from self._chunks
             return
@@ -434,7 +434,7 @@ class AsyncResponse(_BaseResponse):
 
     def __aiter__(self):
         self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.utcnow()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         return self
 
     async def __anext__(self) -> str:
