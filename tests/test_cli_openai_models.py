@@ -35,9 +35,9 @@ def test_openai_models(mocked_models):
     result = runner.invoke(cli, ["openai", "models", "--key", "x"])
     assert result.exit_code == 0
     assert result.output == (
-        "id                    owned_by    created            \n"
-        "ada:2020-05-03        openai      2020-05-03T20:26:40\n"
-        "babbage:2020-05-03    openai      2020-05-03T20:26:40\n"
+        "id                    owned_by    created                  \n"
+        "ada:2020-05-03        openai      2020-05-03T20:26:40+00:00\n"
+        "babbage:2020-05-03    openai      2020-05-03T20:26:40+00:00\n"
     )
 
 
