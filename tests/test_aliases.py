@@ -39,7 +39,7 @@ def test_cli_aliases_list(args):
         "gpt4        : gpt-4\n"
         "4-32k       : gpt-4-32k\n"
         "e-demo      : embed-demo (embedding)\n"
-        "ada         : ada-002 (embedding)\n"
+        "ada         : text-embedding-ada-002 (embedding)\n"
     ).split("\n"):
         line = line.strip()
         if not line:
@@ -65,7 +65,7 @@ def test_cli_aliases_list_json(args):
             "4": "gpt-4",
             "gpt4": "gpt-4",
             "4-32k": "gpt-4-32k",
-            "ada": "ada-002",
+            "ada": "text-embedding-ada-002",
             "e-demo": "embed-demo",
         }.items()
     )
