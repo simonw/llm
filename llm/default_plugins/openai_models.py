@@ -63,12 +63,12 @@ def register_models(register):
     )
     # o1
     register(
-        Chat("o1-preview", can_stream=False, allows_system_prompt=False),
-        AsyncChat("o1-preview", can_stream=False, allows_system_prompt=False),
+        Chat("o1-preview", allows_system_prompt=False),
+        AsyncChat("o1-preview", allows_system_prompt=False),
     )
     register(
-        Chat("o1-mini", can_stream=False, allows_system_prompt=False),
-        AsyncChat("o1-mini", can_stream=False, allows_system_prompt=False),
+        Chat("o1-mini", allows_system_prompt=False),
+        AsyncChat("o1-mini", allows_system_prompt=False),
     )
     # The -instruct completion model
     register(
