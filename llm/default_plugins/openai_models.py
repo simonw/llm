@@ -37,10 +37,15 @@ def register_models(register):
         AsyncChat("gpt-4o-mini", vision=True),
         aliases=("4o-mini",),
     )
-    register(
-        Chat("gpt-4o-audio-preview", audio=True),
-        AsyncChat("gpt-4o-audio-preview", audio=True),
-    )
+    for audio_model_id in (
+        "gpt-4o-audio-preview",
+        "gpt-4o-audio-preview-2024-12-17",
+        "gpt-4o-audio-preview-2024-10-01",
+    ):
+        register(
+            Chat(audio_model_id, audio=True),
+            AsyncChat(audio_model_id, audio=True),
+        )
     # 3.5 and 4
     register(
         Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
