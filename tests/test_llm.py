@@ -322,6 +322,33 @@ def test_llm_default_prompt(
     )
 
 
+@pytest.mark.parametrize(
+    "args,expect_just_code",
+    (
+        (["-x"], True),
+        (["--extract"], True),
+        (["-x", "--async"], True),
+        (["--extract", "--async"], True),
+        # Use --no-stream here to ensure it passes test same as -x/--extract cases
+        (["--no-stream"], False),
+    ),
+)
+def test_extract_fenced_code(
+    mocked_openai_chat_returning_fenced_code, args, expect_just_code
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code"] + args,
+        catch_exceptions=False,
+    )
+    output = result.output
+    if expect_just_code:
+        assert "```" not in output
+    else:
+        assert "```" in output
+
+
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])

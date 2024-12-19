@@ -1,5 +1,5 @@
 import pytest
-from llm.utils import simplify_usage_dict
+from llm.utils import simplify_usage_dict, extract_first_fenced_code_block
 
 
 @pytest.mark.parametrize(
@@ -40,3 +40,42 @@ from llm.utils import simplify_usage_dict
 )
 def test_simplify_usage_dict(input_data, expected_output):
     assert simplify_usage_dict(input_data) == expected_output
+
+
+@pytest.mark.parametrize(
+    "input,expected",
+    [
+        ["This is a sample text without any code blocks.", None],
+        [
+            "Here is some text.\n\n```\ndef foo():\n    return 'bar'\n```\n\nMore text.",
+            "def foo():\n    return 'bar'\n",
+        ],
+        [
+            "Here is some text.\n\n```python\ndef foo():\n    return 'bar'\n```\n\nMore text.",
+            "def foo():\n    return 'bar'\n",
+        ],
+        [
+            "Here is some text.\n\n````\ndef foo():\n    return 'bar'\n````\n\nMore text.",
+            "def foo():\n    return 'bar'\n",
+        ],
+        [
+            "Here is some text.\n\n````javascript\nfunction foo() {\n    return 'bar';\n}\n````\n\nMore text.",
+            "function foo() {\n    return 'bar';\n}\n",
+        ],
+        [
+            "Here is some text.\n\n```python\ndef foo():\n    return 'bar'\n````\n\nMore text.",
+            None,
+        ],
+        [
+            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\nSecond code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            "def foo():\n    return 'bar'\n",
+        ],
+        [
+            "Here is some text.\n\n```python\ndef foo():\n    return `bar`\n```\n\nMore text.",
+            "def foo():\n    return `bar`\n",
+        ],
+    ],
+)
+def test_extract_first_fenced_code_block(input, expected):
+    actual = extract_first_fenced_code_block(input)
+    assert actual == expected

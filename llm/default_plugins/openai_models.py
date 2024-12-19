@@ -656,10 +656,11 @@ def combine_chunks(chunks: List) -> dict:
     }
     if logprobs:
         combined["logprobs"] = logprobs
-    for key in ("id", "object", "model", "created", "index"):
-        value = getattr(chunks[0], key, None)
-        if value is not None:
-            combined[key] = value
+    if chunks:
+        for key in ("id", "object", "model", "created", "index"):
+            value = getattr(chunks[0], key, None)
+            if value is not None:
+                combined[key] = value
 
     return combined
 

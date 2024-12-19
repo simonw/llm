@@ -33,7 +33,12 @@ from llm import (
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
-from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
+from .utils import (
+    mimetype_from_path,
+    mimetype_from_string,
+    token_usage_string,
+    extract_first_fenced_code_block,
+)
 import base64
 import httpx
 import pathlib
@@ -204,6 +209,7 @@ def cli():
 @click.option("--save", help="Save prompt with this template name")
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
 @click.option("-u", "--usage", is_flag=True, help="Show token usage")
+@click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 def prompt(
     prompt,
     system,
@@ -222,6 +228,7 @@ def prompt(
     save,
     async_,
     usage,
+    extract,
 ):
     """
     Execute a prompt
@@ -243,11 +250,20 @@ def prompt(
         cat image | llm 'describe image' -a -
         # With an explicit mimetype:
         cat image | llm 'describe image' --at - image/jpeg
+
+    The -x/--extract option returns just the content of the first ``` fenced code
+    block, if one is present. If none are present it returns the full response.
+
+    \b
+        llm 'JavaScript function for reversing a string' -x
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
     model_aliases = get_model_aliases()
+
+    if extract:
+        no_stream = True
 
     def read_prompt():
         nonlocal prompt
@@ -407,7 +423,10 @@ def prompt(
                         system=system,
                         **validated_options,
                     )
-                    print(await response.text())
+                    text = await response.text()
+                    if extract:
+                        text = extract_first_fenced_code_block(text) or text
+                    print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -424,7 +443,10 @@ def prompt(
                     sys.stdout.flush()
                 print("")
             else:
-                print(response.text())
+                text = response.text()
+                if extract:
+                    text = extract_first_fenced_code_block(text) or text
+                print(text)
     except Exception as ex:
         raise click.ClickException(str(ex))
 

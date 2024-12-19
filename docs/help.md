@@ -105,6 +105,11 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       # With an explicit mimetype:
       cat image | llm 'describe image' --at - image/jpeg
 
+  The -x/--extract option returns just the content of the first ``` fenced code
+  block, if one is present. If none are present it returns the full response.
+
+      llm 'JavaScript function for reversing a string' -x
+
 Options:
   -s, --system TEXT               System prompt to use
   -m, --model TEXT                Model to use
@@ -123,6 +128,7 @@ Options:
   --save TEXT                     Save prompt with this template name
   --async                         Run prompt asynchronously
   -u, --usage                     Show token usage
+  -x, --extract                   Extract first fenced code block
   --help                          Show this message and exit.
 ```
 

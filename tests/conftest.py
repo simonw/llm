@@ -190,6 +190,27 @@ def mocked_openai_chat(httpx_mock):
     return httpx_mock
 
 
+@pytest.fixture
+def mocked_openai_chat_returning_fenced_code(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": "Code:\n\n````javascript\nfunction foo() {\n  return 'bar';\n}\n````\nDone.",
+                    }
+                }
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    return httpx_mock
+
+
 def stream_events():
     for delta, finish_reason in (
         ({"role": "assistant", "content": ""}, None),

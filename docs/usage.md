@@ -45,6 +45,24 @@ Some models support options. You can pass these using `-o/--option name value` -
 ```bash
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
+
+(usage-extract-fenced-code)=
+### Extracting fenced code blocks
+
+If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
+
+The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
+
+````
+```python
+def my_function():
+    # ...
+```
+````
+It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
+
+The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
+
 (usage-attachments)=
 ### Attachments
 
