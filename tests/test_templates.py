@@ -91,6 +91,12 @@ def test_templates_list(templates_path, args):
             {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
             None,
         ),
+        # -x/--extract should be persisted:
+        (
+            ["--system", "write python", "--extract"],
+            {"system": "write python", "extract": True},
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):

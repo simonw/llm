@@ -26,6 +26,11 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
+If you add `--extract` the setting to  {ref}`extract the first fenced code block <usage-extract-fenced-code>` will be persisted in the template.
+```bash
+llm --system 'write a Python function' --extract --save python-function
+llm -t python-function 'reverse a string'
+```
 ## Using a template
 
 You can execute a named template using the `-t/--template` option:
@@ -100,7 +105,7 @@ curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | \
 Output:
 > In a fantastical steampunk world, Simon Willison decided to merge an old MP3 recording with slides from the talk using iMovie. After exporting the slides as images and importing them into iMovie, he had to disable the default Ken Burns effect using the "Crop" tool. Then, Simon manually synchronized the audio by adjusting the duration of each image. Finally, he published the masterpiece to YouTube, with the whimsical magic of steampunk-infused illustrations leaving his viewers in awe.
 
-## System templates
+### System templates
 
 When working with models that support system prompts (such as `gpt-3.5-turbo` and `gpt-4`) you can set a system prompt using a `system:` key like so:
 
@@ -116,7 +121,7 @@ system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
 ```
 
-## Additional template variables
+### Additional template variables
 
 Templates that work against the user's normal input (content that is either piped to the tool via standard input or passed as a command-line argument) use just the `$input` variable.
 
@@ -157,7 +162,7 @@ I got this:
 > My previous test subject seemed to have learned something new about iMovie. They exported keynote slides as individual images [...] Quite impressive for a human.
 
 (prompt-default-parameters)=
-## Specifying default parameters
+### Specifying default parameters
 
 You can also specify default values for parameters, using a `defaults:` key.
 
@@ -185,7 +190,15 @@ I got this:
 
 > Text, summarize in Yoda's voice, I will: "Hmm, young padawan. Summary of this text, you seek. Hmmm. ...
 
-## Setting a default model for a template
+### Configuring code extraction
+
+To configure the {ref}`extract first fenced code block <usage-extract-fenced-code>` setting for the template, add this:
+
+```yaml
+extract: true
+```
+
+### Setting a default model for a template
 
 Templates executed using `llm -t template-name` will execute using the default model that the user has configured for the tool - or `gpt-3.5-turbo` if they have not configured their own default.
 

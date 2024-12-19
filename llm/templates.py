@@ -9,6 +9,8 @@ class Template(BaseModel):
     system: Optional[str] = None
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
+    # Should first fenced code block be extracted?
+    extract: Optional[bool] = None
 
     class Config:
         extra = "forbid"

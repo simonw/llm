@@ -262,9 +262,6 @@ def prompt(
 
     model_aliases = get_model_aliases()
 
-    if extract:
-        no_stream = True
-
     def read_prompt():
         nonlocal prompt
 
@@ -319,6 +316,8 @@ def prompt(
             to_save["system"] = system
         if param:
             to_save["defaults"] = dict(param)
+        if extract:
+            to_save["extract"] = True
         path.write_text(
             yaml.dump(
                 to_save,
@@ -335,6 +334,7 @@ def prompt(
         if system:
             raise click.ClickException("Cannot use -t/--template and --system together")
         template_obj = load_template(template)
+        extract = template_obj.extract
         prompt = read_prompt()
         try:
             prompt, system = template_obj.evaluate(prompt, params)
@@ -342,6 +342,9 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+
+    if extract:
+        no_stream = True
 
     conversation = None
     if conversation_id or _continue:
