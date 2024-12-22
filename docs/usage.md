@@ -471,6 +471,32 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+OpenAI Chat: o1
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: o1-2024-12-17
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: o1-preview
   Options:
     temperature: float
