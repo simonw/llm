@@ -46,6 +46,8 @@ OpenAI Chat: gpt-4-1106-preview
 OpenAI Chat: gpt-4-0125-preview
 OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+OpenAI Chat: o1
+OpenAI Chat: o1-2024-12-17
 OpenAI Chat: o1-preview
 OpenAI Chat: o1-mini
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)

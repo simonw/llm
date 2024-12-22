@@ -69,6 +69,12 @@ def register_models(register):
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
     )
     # o1
+    for model_id in ("o1", "o1-2024-12-17"):
+        register(
+            Chat(model_id, vision=True),
+            AsyncChat(model_id, vision=True),
+        )
+
     register(
         Chat("o1-preview", allows_system_prompt=False),
         AsyncChat("o1-preview", allows_system_prompt=False),
