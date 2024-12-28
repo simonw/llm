@@ -344,7 +344,7 @@ class Markov(Model):
 ```
 Let's add extra validation rules to our options. Length must be at least 2. Duration must be between 0 and 10.
 
-The `Options` class uses [Pydantic 2](https://pydantic.org/), which can support all sorts of advanced validation rules.
+The `Options` class uses [Pydantic 2](https://pydantic.dev/), which can support all sorts of advanced validation rules.
 
 We can also add inline documentation, which can then be displayed by the `llm models --options` command.
 
