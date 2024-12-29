@@ -265,7 +265,6 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
-Default: gpt-4o-mini
 OpenAI Chat: gpt-4o (aliases: 4o)
   Options:
     temperature: float
@@ -518,6 +517,7 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Integer seed to attempt to sample deterministically
     logprobs: int
       Include the log probabilities of most likely N per token
+Default: gpt-4o-mini
 
 ```
 <!-- [[[end]]] -->
