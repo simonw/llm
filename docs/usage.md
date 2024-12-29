@@ -265,6 +265,7 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
+Default: gpt-4o-mini
 OpenAI Chat: gpt-4o (aliases: 4o)
   Options:
     temperature: float
