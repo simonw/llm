@@ -41,6 +41,10 @@ Or with [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
+Or with [uv](https://docs.astral.sh/uv/guides/tools/)
+```bash
+uv tool install llm
+```
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 ```bash
 # Paste your OpenAI API key into this
