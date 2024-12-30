@@ -446,6 +446,15 @@ def cli():
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
 @click.option(
+    "--input-style",
+    type=click.Choice(["prepend", "append", "fence-prepend", "fence-append"]),
+    default="prepend",
+    help=(
+       "How to combine input given on the standard input, if any, with the prompt on the command line. "
+       "The default is 'prepend', i.e. the standard input is prepended to the command line prompt."
+    ),
+)
+@click.option(
     "options",
     "-o",
     "--option",
@@ -529,6 +538,7 @@ def prompt(
     tools_debug,
     tools_approve,
     chain_limit,
+    input_style,
     options,
     show_model_options,
     schema_input,
@@ -627,10 +637,16 @@ def prompt(
             stdin_prompt = sys.stdin.read()
 
         if stdin_prompt:
+            if "fence" in input_style:
+                stdin_prompt = stdin_prompt.strip('\n')
+                stdin_prompt = f"```\n{stdin_prompt}\n```"
+                sep = "\n\n"
+            else:
+                sep = " "
             bits = [stdin_prompt]
             if prompt:
-                bits.append(prompt)
-            prompt = " ".join(bits)
+                bits.insert(0 if "prepend" in input_style else 1, prompt)
+            prompt = sep.join(bits)
 
         if (
             prompt is None
