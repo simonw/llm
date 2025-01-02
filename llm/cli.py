@@ -54,6 +54,11 @@ from typing import cast, Optional, Iterable, Union, Tuple
 import warnings
 import yaml
 
+try:
+    import trogon  # type: ignore
+except ImportError:
+    trogon = None
+
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
@@ -149,6 +154,10 @@ def cli():
 
         llm 'Five outrageous names for a pet pelican'
     """
+
+
+if trogon is not None:
+    cli = trogon.tui()(cli)
 
 
 @cli.command(name="prompt")

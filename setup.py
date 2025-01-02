@@ -63,7 +63,8 @@ setup(
             "types-click",
             "types-PyYAML",
             "types-setuptools",
-        ]
+        ],
+        "tui": ["trogon"],
     },
     python_requires=">=3.9",
 )

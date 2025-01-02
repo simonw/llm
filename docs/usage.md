@@ -526,3 +526,23 @@ When running a prompt you can pass the full model name or any of the aliases to 
 llm -m 4o \
   'As many names for cheesecakes as you can think of, with detailed descriptions'
 ```
+
+## Experimental TUI
+
+A TUI is a "text user interface" (or "terminal user interface") - a keyboard and mouse driven graphical interface running in your terminal.
+
+``llm`` has experimental support for a TUI for building command-line invocations, built on top of the [Trogon](https://github.com/Textualize/trogon) TUI library.
+
+To enable this feature you will need to install the ``trogon`` dependency. You can do that like so:
+
+```bash
+llm install trogon
+```
+
+Once installed, running the ``llm tui`` command will launch the TUI interface:
+
+```bash
+llm tui
+```
+
+You can then construct a command by selecting options from the menus, and execute it using ``Ctrl+R``.
