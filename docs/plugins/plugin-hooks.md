@@ -59,3 +59,32 @@ This demonstrates how to register a model with both sync and async versions, and
 
 The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
 
+(register-template-types)=
+## register_template_types()
+
+This hook allows plugins to register custom template types that can be used in prompt templates.
+
+```python
+from llm import Template, hookimpl
+
+class CustomTemplate(Template):
+    type: str = "custom"
+    
+    def evaluate(self, input: str, params=None):
+        # Custom processing here
+        prompt, system = super().evaluate(input, params)
+        return f"CUSTOM: {prompt}", system
+    
+    def stringify(self):
+        # Custom string representation for llm templates list
+        return f"custom template: {self.prompt}"
+
+@hookimpl
+def register_template_types():
+    return {
+        "custom": CustomTemplate
+    }
+```
+
+Custom template types can modify how prompts are processed and how they appear in template listings. See {ref}`templates <custom-template-types>` for more details.
+

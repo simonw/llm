@@ -1155,14 +1155,18 @@ def templates_list():
     for file in path.glob("*.yaml"):
         name = file.stem
         template = load_template(name)
-        text = []
-        if template.system:
-            text.append(f"system: {template.system}")
-            if template.prompt:
-                text.append(f" prompt: {template.prompt}")
+        if hasattr(template, "stringify"):
+            text = template.stringify()
         else:
-            text = [template.prompt if template.prompt else ""]
-        pairs.append((name, "".join(text).replace("\n", " ")))
+            text = []
+            if template.system:
+                text.append(f"system: {template.system}")
+                if template.prompt:
+                    text.append(f" prompt: {template.prompt}")
+            else:
+                text = [template.prompt if template.prompt else ""]
+            text = "".join(text)
+        pairs.append((name, text.replace("\n", " ")))
     try:
         max_name_len = max(len(p[0]) for p in pairs)
     except ValueError:
@@ -1875,11 +1879,14 @@ def load_template(name):
         return Template(name=name, prompt=loaded)
     loaded["name"] = name
     try:
-        return Template(**loaded)
+        template_class = Template.get_template_class(loaded.get("type"))
+        return template_class(**loaded)
     except pydantic.ValidationError as ex:
         msg = "A validation error occurred:\n"
         msg += render_errors(ex.errors())
         raise click.ClickException(msg)
+    except ValueError as ex:
+        raise click.ClickException(str(ex))
 
 
 def get_history(chat_id):

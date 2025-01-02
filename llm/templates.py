@@ -1,10 +1,12 @@
 from pydantic import BaseModel
 import string
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple, Type, Literal
+from .plugins import pm
 
 
 class Template(BaseModel):
     name: str
+    type: Optional[str] = None
     prompt: Optional[str] = None
     system: Optional[str] = None
     model: Optional[str] = None
@@ -13,10 +15,27 @@ class Template(BaseModel):
     extract: Optional[bool] = None
 
     class Config:
-        extra = "forbid"
+        extra = "allow"
 
     class MissingVariables(Exception):
         pass
+
+    @classmethod
+    def get_template_class(cls, type: Optional[str]) -> Type["Template"]:
+        """Get the template class for a given type."""
+        if not type:
+            return cls
+        
+        # Get registered template types from plugins
+        template_types = {}
+        for hook_result in pm.hook.register_template_types():
+            if hook_result:
+                template_types.update(hook_result)
+        
+        if type not in template_types:
+            raise ValueError(f"Unknown template type: {type}")
+        
+        return template_types[type]
 
     def evaluate(
         self, input: str, params: Optional[Dict[str, Any]] = None

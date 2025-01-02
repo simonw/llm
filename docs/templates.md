@@ -213,3 +213,52 @@ Example:
 llm -t roast 'How are you today?'
 ```
 > I'm doing great but with your boring questions, I must admit, I've seen more life in a cemetery.
+
+(custom-template-types)=
+### Custom template types
+
+Plugins can register custom template types that provide additional functionality. These templates are identified by a `type:` key in their YAML configuration.
+
+For example, a plugin might provide a custom template type that adds special formatting or processing to the prompts:
+
+```yaml
+type: custom
+prompt: Hello $input
+system: Be helpful
+```
+
+Custom template types can customize how they appear in the template list by implementing a `stringify` method. This allows them to provide a more descriptive or formatted representation of their configuration when users run `llm templates list`.
+
+To create a custom template type in a plugin:
+
+1. Create a class that inherits from `Template`
+2. Set a `type` attribute to identify your template type
+3. Override methods like `evaluate` to customize behavior
+4. Optionally implement `stringify` to control how the template appears in listings
+5. Register your template type using the `register_template_types` hook
+
+For details on implementing the plugin hook, see {ref}`register_template_types() <register-template-types>`.
+
+Example plugin implementation:
+
+```python
+from llm import Template, hookimpl
+
+class CustomTemplate(Template):
+    type: str = "custom"
+    
+    def evaluate(self, input: str, params=None):
+        # Custom processing here
+        prompt, system = super().evaluate(input, params)
+        return f"CUSTOM: {prompt}", system
+    
+    def stringify(self):
+        # Custom string representation
+        return f"custom template: {self.prompt}"
+
+@hookimpl
+def register_template_types():
+    return {
+        "custom": CustomTemplate
+    }
+```
