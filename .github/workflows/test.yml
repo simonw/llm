@@ -25,6 +25,9 @@ jobs:
       run: |
         pip install -e '.[test]'
         pip install 'pydantic${{ matrix.pydantic }}'
+    - name: Optionally install tui dependencies
+      run: |
+        pip install -e '.[tui]'
     - name: Run tests
       run: |
         pytest

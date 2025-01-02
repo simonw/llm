@@ -79,7 +79,19 @@ Commands:
   plugins       List installed plugins
   similar       Return top N similar IDs from a collection
   templates     Manage stored prompt templates
+  tui           Open Textual TUI.
   uninstall     Uninstall Python packages from the LLM environment
+```
+
+(help-tui)=
+### llm tui --help
+```
+Usage: llm tui [OPTIONS]
+
+  Open Textual TUI.
+
+Options:
+  --help  Show this message and exit.
 ```
 
 (help-prompt)=

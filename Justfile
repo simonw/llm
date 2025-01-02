@@ -3,7 +3,7 @@
 
 # Install dependencies and test dependencies
 @init:
-  pipenv run pip install -e '.[test]'
+  pipenv run pip install -e '.[test, tui]'
 
 # Run pytest with supplied options
 @test *options:

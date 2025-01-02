@@ -23,7 +23,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -e '.[test]'
+        run: pip install -e '.[test,tui]'
 
       - name: Run cog
         run: |
