@@ -3,4 +3,4 @@
 skip = .git*,.codespellrc
 check-hidden = true
 ignore-regex = \bthre\.\.\.
-# ignore-words-list =
+ignore-words-list = wit
