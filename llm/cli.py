@@ -1076,11 +1076,14 @@ _type_lookup = {
     "--options", is_flag=True, help="Show options for each model, if available"
 )
 @click.option("async_", "--async", is_flag=True, help="List async models")
-def models_list(options, async_):
+@click.option("-q", "--query", help="Search for models matching this string")
+def models_list(options, async_, query):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
+            continue
+        if query and not model_with_aliases.matches(query):
             continue
         extra = ""
         if model_with_aliases.aliases:

@@ -246,11 +246,18 @@ llm models
 ```
 Example output:
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-PaLM 2: chat-bison-001 (aliases: palm, palm2)
+OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Chat: o1-preview
+OpenAI Chat: o1-mini
+GeminiPro: gemini-1.5-pro-002
+GeminiPro: gemini-1.5-flash-002
+...
+```
+
+Add `-q term` to search for models matching a specific search term:
+```bash
+llm models -q gpt-4o
 ```
 
 Add `--options` to also see documentation for the options supported by each model:
