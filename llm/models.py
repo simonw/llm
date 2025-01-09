@@ -757,6 +757,16 @@ class ModelWithAliases:
     async_model: AsyncModel
     aliases: Set[str]
 
+    def matches(self, query: str) -> bool:
+        query = query.lower()
+        all_strings = []
+        all_strings.extend(self.aliases)
+        if self.model:
+            all_strings.append(str(self.model))
+        if self.async_model:
+            all_strings.append(str(self.async_model.model_id))
+        return any(query in alias.lower() for alias in all_strings)
+
 
 @dataclass
 class EmbeddingModelWithAliases:

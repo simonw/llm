@@ -604,6 +604,14 @@ def test_llm_models_async(user_path):
     assert "AsyncMockModel: mock" in result.output
 
 
+@pytest.mark.parametrize("option", ("-q", "--query"))
+def test_llm_models_query(user_path, option):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", option, "mockmodel"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "MockModel: mock\n"
+
+
 def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir = str(tmpdir / "u")
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
