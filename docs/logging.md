@@ -61,6 +61,11 @@ To get back just the most recent prompt response as plain text, add `-r/--respon
 ```bash
 llm logs -r
 ```
+Use `-x/--extract` to extract and return the first fenced code block from the selected log entries:
+
+```bash
+llm logs -x
+```
 
 Add `--json` to get the log messages in JSON instead:
 
