@@ -990,15 +990,16 @@ def logs_list(
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
         output = json.dumps(list(rows), indent=2)
-    elif response:
-        # Just output the last response
-        if rows:
-            output = rows[-1]["response"]
     elif extract:
+        # Extract and return first code block
         for row in rows:
             output = extract_first_fenced_code_block(row["response"])
             if output is not None:
                 break
+    elif response:
+        # Just output the last response
+        if rows:
+            output = rows[-1]["response"]
 
     if output is not None:
         click.echo(output)

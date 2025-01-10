@@ -125,7 +125,17 @@ def test_logs_response_only(args, log_path):
 
 
 @pytest.mark.parametrize(
-    "args", (["-x"], ["--extract"], ["list", "-x"], ["list", "--extract"])
+    "args",
+    (
+        ["-x"],
+        ["--extract"],
+        ["list", "-x"],
+        ["list", "--extract"],
+        # Using -xr together should have same effect as just -x
+        ["-xr"],
+        ["-x", "-r"],
+        ["--extract", "--response"],
+    ),
 )
 def test_logs_extract_first_code(args, log_path):
     "Test that logs -x/--extract returns the first code block"
