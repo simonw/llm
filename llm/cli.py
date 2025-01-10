@@ -855,6 +855,7 @@ order by prompt_attachments."order"
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option("-u", "--usage", is_flag=True, help="Include token usage")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
+@click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
     "current_conversation",
     "-c",
@@ -883,6 +884,7 @@ def logs_list(
     truncate,
     usage,
     response,
+    extract,
     current_conversation,
     conversation_id,
     json_output,
@@ -979,6 +981,7 @@ def logs_list(
                 else:
                     row[key] = json.loads(row[key])
 
+    output = None
     if json_output:
         # Output as JSON if requested
         for row in rows:
@@ -986,11 +989,20 @@ def logs_list(
                 {k: v for k, v in attachment.items() if k != "response_id"}
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
-        click.echo(json.dumps(list(rows), indent=2))
+        output = json.dumps(list(rows), indent=2)
+    elif extract:
+        # Extract and return first code block
+        for row in rows:
+            output = extract_first_fenced_code_block(row["response"])
+            if output is not None:
+                break
     elif response:
         # Just output the last response
         if rows:
-            click.echo(rows[-1]["response"])
+            output = rows[-1]["response"]
+
+    if output is not None:
+        click.echo(output)
     else:
         # Output neatly formatted human-readable logs
         current_system = None
