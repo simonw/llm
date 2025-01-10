@@ -34,7 +34,7 @@ def log_path(user_path):
             "id": str(ULID()).lower(),
             "system": "system",
             "prompt": "prompt",
-            "response": "response",
+            "response": 'response\n```python\nprint("hello word")\n```',
             "model": "davinci",
             "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
             "conversation_id": "abc123",
@@ -60,35 +60,38 @@ def test_logs_text(log_path, usage):
     output = result.output
     # Replace 2023-08-17T20:53:58 with YYYY-MM-DDTHH:MM:SS
     output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
-
-    assert output == (
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## System:\n\n"
-        "system\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-    ) + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "") + (
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-    ) + (
-        "## Token usage:\n\n2 input, 5 output\n\n" if usage else ""
-    ) + (
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-    ) + (
-        "## Token usage:\n\n2 input, 5 output\n\n" if usage else ""
+    expected = (
+        (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## System:\n\n"
+            "system\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
     )
+    assert output == expected
 
 
 @pytest.mark.parametrize("n", (None, 0, 2))
@@ -118,7 +121,28 @@ def test_logs_response_only(args, log_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
     assert result.exit_code == 0
-    assert result.output == "response\n"
+    assert result.output == 'response\n```python\nprint("hello word")\n```\n'
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["-x"],
+        ["--extract"],
+        ["list", "-x"],
+        ["list", "--extract"],
+        # Using -xr together should have same effect as just -x
+        ["-xr"],
+        ["-x", "-r"],
+        ["--extract", "--response"],
+    ),
+)
+def test_logs_extract_first_code(args, log_path):
+    "Test that logs -x/--extract returns the first code block"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'print("hello word")\n\n'
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

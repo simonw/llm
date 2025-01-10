@@ -67,7 +67,8 @@ def test_simplify_usage_dict(input_data, expected_output):
             None,
         ],
         [
-            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\nSecond code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
             "def foo():\n    return 'bar'\n",
         ],
         [

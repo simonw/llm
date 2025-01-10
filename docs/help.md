@@ -301,6 +301,7 @@ Options:
   -t, --truncate              Truncate long strings in output
   -u, --usage                 Include token usage
   -r, --response              Just output the last response
+  -x, --extract               Extract first fenced code block
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
   --json                      Output logs as JSON
