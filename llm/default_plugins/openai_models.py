@@ -71,8 +71,8 @@ def register_models(register):
     # o1
     for model_id in ("o1", "o1-2024-12-17"):
         register(
-            Chat(model_id, vision=True),
-            AsyncChat(model_id, vision=True),
+            Chat(model_id, vision=True, can_stream=False),
+            AsyncChat(model_id, vision=True, can_stream=False),
         )
 
     register(
