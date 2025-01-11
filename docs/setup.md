@@ -10,6 +10,10 @@ Or using [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
+Or using [uv](https://docs.astral.sh/uv/guides/tools/) ({ref}`more tips below <setup-uvx>`):
+```bash
+uv tool install llm
+```
 Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
@@ -32,6 +36,28 @@ brew upgrade llm
 If the latest version is not yet available on Homebrew you can upgrade like this instead:
 ```bash
 llm install -U llm
+```
+
+(setup-uvx)=
+## Using uvx
+
+If you have [uv](https://docs.astral.sh/uv/) installed you can also use the `uvx` command to try LLM without first installing it like this:
+
+```bash
+export OPENAI_API_KEY='sx-...'
+uvx llm 'fun facts about skunks'
+```
+This will install and run LLM using a temporary virtual environment.
+
+You can use the `--with` option to add extra plugins. To use Anthropic's models, for example:
+```bash
+export ANTHROPIC_API_KEY='...'
+uvx --with llm-claude-3 llm -m claude-3.5-haiku 'fun facts about skunks'
+```
+All of the usual LLM commands will work with `uvx llm`. Here's how to set your OpenAI key without needing an environment variable for example:
+```bash
+uvx llm keys set openai
+# Paste key here
 ```
 
 (homebrew-warning)=
