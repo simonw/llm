@@ -759,7 +759,7 @@ class ModelWithAliases:
 
     def matches(self, query: str) -> bool:
         query = query.lower()
-        all_strings = []
+        all_strings: List[str] = []
         all_strings.extend(self.aliases)
         if self.model:
             all_strings.append(str(self.model))
