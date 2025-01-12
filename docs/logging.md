@@ -61,6 +61,11 @@ To get back just the most recent prompt response as plain text, add `-r/--respon
 ```bash
 llm logs -r
 ```
+Use `-x/--extract` to extract and return the first fenced code block from the selected log entries:
+
+```bash
+llm logs -x
+```
 
 Add `--json` to get the log messages in JSON instead:
 
@@ -136,7 +141,7 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts"):
+for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -159,12 +164,29 @@ CREATE TABLE [responses] (
   [response_json] TEXT,
   [conversation_id] TEXT REFERENCES [conversations]([id]),
   [duration_ms] INTEGER,
-  [datetime_utc] TEXT
+  [datetime_utc] TEXT,
+  [input_tokens] INTEGER,
+  [output_tokens] INTEGER,
+  [token_details] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],
   [response],
   content=[responses]
+);
+CREATE TABLE [attachments] (
+  [id] TEXT PRIMARY KEY,
+  [type] TEXT,
+  [path] TEXT,
+  [url] TEXT,
+  [content] BLOB
+);
+CREATE TABLE [prompt_attachments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [attachment_id])
 );
 ```
 <!-- [[[end]]] -->

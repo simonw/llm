@@ -49,6 +49,7 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
+    attachment_types = {"image/png", "audio/wav"}
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
@@ -65,13 +66,43 @@ class MockModel(llm.Model):
 
     def execute(self, prompt, stream, response, conversation):
         self.history.append((prompt, stream, response, conversation))
+        gathered = []
         while True:
             try:
                 messages = self._queue.pop(0)
-                yield from messages
+                for message in messages:
+                    gathered.append(message)
+                    yield message
                 break
             except IndexError:
                 break
+        response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
+
+
+class AsyncMockModel(llm.AsyncModel):
+    model_id = "mock"
+
+    def __init__(self):
+        self.history = []
+        self._queue = []
+
+    def enqueue(self, messages):
+        assert isinstance(messages, list)
+        self._queue.append(messages)
+
+    async def execute(self, prompt, stream, response, conversation):
+        self.history.append((prompt, stream, response, conversation))
+        gathered = []
+        while True:
+            try:
+                messages = self._queue.pop(0)
+                for message in messages:
+                    gathered.append(message)
+                    yield message
+                break
+            except IndexError:
+                break
+        response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
 
 
 class EmbedDemo(llm.EmbeddingModel):
@@ -117,8 +148,13 @@ def mock_model():
     return MockModel()
 
 
+@pytest.fixture
+def async_mock_model():
+    return AsyncMockModel()
+
+
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo, mock_model):
+def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
     class MockModelsPlugin:
         __name__ = "MockModelsPlugin"
 
@@ -130,7 +166,7 @@ def register_embed_demo_model(embed_demo, mock_model):
 
         @llm.hookimpl
         def register_models(self, register):
-            register(mock_model)
+            register(mock_model, async_model=async_mock_model)
 
     pm.register(MockModelsPlugin(), name="undo-mock-models-plugin")
     try:
@@ -145,9 +181,30 @@ def mocked_openai_chat(httpx_mock):
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "usage": {},
             "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    return httpx_mock
+
+
+@pytest.fixture
+def mocked_openai_chat_returning_fenced_code(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": "Code:\n\n````javascript\nfunction foo() {\n  return 'bar';\n}\n````\nDone.",
+                    }
+                }
+            ],
         },
         headers={"Content-Type": "application/json"},
     )

@@ -1,5 +1,129 @@
 # Changelog
 
+(v0_19_1)=
+## 0.19.1 (2024-12-05)
+
+- FIxed bug where `llm.get_models()` and `llm.get_async_models()` returned the same model multiple times. [#667](https://github.com/simonw/llm/issues/667)
+
+(v0_19)=
+## 0.19 (2024-12-01)
+
+- Tokens used by a response are now logged to new `input_tokens` and `output_tokens` integer columns and a `token_details` JSON string column, for the default OpenAI models and models from other plugins that {ref}`implement this feature <advanced-model-plugins-usage>`. [#610](https://github.com/simonw/llm/issues/610)
+- `llm prompt` now takes a `-u/--usage` flag to display token usage at the end of the response.
+- `llm logs -u/--usage` shows token usage information for logged responses.
+- `llm prompt ... --async` responses are now logged to the database. [#641](https://github.com/simonw/llm/issues/641)
+- `llm.get_models()` and `llm.get_async_models()` functions, {ref}`documented here <python-api-listing-models>`. [#640](https://github.com/simonw/llm/issues/640)
+- `response.usage()` and async response `await response.usage()` methods, returning a `Usage(input=2, output=1, details=None)` dataclass. [#644](https://github.com/simonw/llm/issues/644)
+- `response.on_done(callback)` and `await response.on_done(callback)` methods for specifying a callback to be executed when a response has completed, {ref}`documented here <python-api-response-on-done>`. [#653](https://github.com/simonw/llm/issues/653)
+- Fix for bug running `llm chat` on Windows 11. Thanks, [Sukhbinder Singh](https://github.com/sukhbinder). [#495](https://github.com/simonw/llm/issues/495)
+
+(v0_19a2)=
+## 0.19a2 (2024-11-20)
+
+- `llm.get_models()` and `llm.get_async_models()` functions, {ref}`documented here <python-api-listing-models>`. [#640](https://github.com/simonw/llm/issues/640)
+
+(v0_19a1)=
+## 0.19a1 (2024-11-19)
+
+- `response.usage()` and async response `await response.usage()` methods, returning a `Usage(input=2, output=1, details=None)` dataclass. [#644](https://github.com/simonw/llm/issues/644)
+
+(v0_19a0)=
+## 0.19a0 (2024-11-19)
+
+- Tokens used by a response are now logged to new `input_tokens` and `output_tokens` integer columns and a `token_details` JSON string column, for the default OpenAI models and models from other plugins that {ref}`implement this feature <advanced-model-plugins-usage>`. [#610](https://github.com/simonw/llm/issues/610)
+- `llm prompt` now takes a `-u/--usage` flag to display token usage at the end of the response.
+- `llm logs -u/--usage` shows token usage information for logged responses.
+- `llm prompt ... --async` responses are now logged to the database. [#641](https://github.com/simonw/llm/issues/641)
+
+(v0_18)=
+## 0.18 (2024-11-17)
+
+- Initial support for async models. Plugins can now provide an `AsyncModel` subclass that can be accessed in the Python API using the new `llm.get_async_model(model_id)` method. See {ref}`async models in the Python API docs<python-api-async>` and {ref}`implementing async models in plugins <advanced-model-plugins-async>`. [#507](https://github.com/simonw/llm/issues/507)
+- OpenAI models all now include async models, so function calls such as `llm.get_async_model("gpt-4o-mini")` will return an async model.
+- `gpt-4o-audio-preview` model can be used to send audio attachments to the GPT-4o audio model. [#608](https://github.com/simonw/llm/issues/608)
+- Attachments can now be sent without requiring a prompt. [#611](https://github.com/simonw/llm/issues/611)
+- `llm models --options` now includes information on whether a model supports attachments. [#612](https://github.com/simonw/llm/issues/612)
+- `llm models --async` shows available async models.
+- Custom OpenAI-compatible models can now be marked as `can_stream: false` in the YAML if they do not support streaming. Thanks, [Chris Mungall](https://github.com/cmungall). [#600](https://github.com/simonw/llm/pull/600)
+- Fixed bug where OpenAI usage data was incorrectly serialized to JSON. [#614](https://github.com/simonw/llm/issues/614)
+- Standardized on `audio/wav` MIME type for audio attachments rather than `audio/wave`. [#603](https://github.com/simonw/llm/issues/603)
+
+(v0_18a1)=
+## 0.18a1 (2024-11-14)
+
+- Fixed bug where conversations did not work for async OpenAI models. [#632](https://github.com/simonw/llm/issues/632)
+- `__repr__` methods for `Response` and `AsyncResponse`.
+
+(v0_18a0)=
+## 0.18a0 (2024-11-13)
+
+Alpha support for **async models**. [#507](https://github.com/simonw/llm/issues/507)
+
+Multiple [smaller changes](https://github.com/simonw/llm/compare/0.17.1...0.18a0).
+
+(v0_17)=
+## 0.17 (2024-10-29)
+
+Support for **attachments**, allowing multi-modal models to accept images, audio, video and other formats. [#578](https://github.com/simonw/llm/issues/578)
+
+The default OpenAI `gpt-4o` and `gpt-4o-mini` models can both now be prompted with JPEG, GIF, PNG and WEBP images.
+
+Attachments {ref}`in the CLI <usage-attachments>` can be URLs:
+
+```bash
+llm -m gpt-4o "describe this image" \
+  -a https://static.simonwillison.net/static/2024/pelicans.jpg
+```
+Or file paths:
+```bash
+llm -m gpt-4o-mini "extract text" -a image1.jpg -a image2.jpg
+```
+Or binary data, which may need to use `--attachment-type` to specify the MIME type:
+```bash
+cat image | llm -m gpt-4o-mini "extract text" --attachment-type - image/jpeg
+```
+
+Attachments are also available {ref}`in the Python API <python-api-attachments>`:
+
+```python
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt(
+    "Describe these images",
+    attachments=[
+        llm.Attachment(path="pelican.jpg"),
+        llm.Attachment(url="https://static.simonwillison.net/static/2024/pelicans.jpg"),
+    ]
+)
+```
+Plugins that provide alternative models can support attachments, see {ref}`advanced-model-plugins-attachments` for details.
+
+The latest **[llm-claude-3](https://github.com/simonw/llm-claude-3)** plugin now supports attachments for Anthropic's Claude 3 and 3.5 models. The **[llm-gemini](https://github.com/simonw/llm-gemini)** plugin supports attachments for Google's Gemini 1.5 models.
+
+Also in this release: OpenAI models now record their `"usage"` data in the database even when the response was streamed. These records can be viewed using `llm logs --json`. [#591](https://github.com/simonw/llm/issues/591)
+
+(v0_17a0)=
+## 0.17a0 (2024-10-28)
+
+Alpha support for **attachments**. [#578](https://github.com/simonw/llm/issues/578)
+
+(v0_16)=
+## 0.16 (2024-09-12)
+
+- OpenAI models now use the internal `self.get_key()` mechanism, which means they can be used from Python code in a way that will pick up keys that have been configured using `llm keys set` or the `OPENAI_API_KEY` environment variable. [#552](https://github.com/simonw/llm/issues/552). This code now works correctly:
+    ```python
+    import llm
+    print(llm.get_model("gpt-4o-mini").prompt("hi"))
+    ```
+- New documented API methods: `llm.get_default_model()`, `llm.set_default_model(alias)`, `llm.get_default_embedding_model(alias)`, `llm.set_default_embedding_model()`. [#553](https://github.com/simonw/llm/issues/553)
+- Support for OpenAI's new [o1 family](https://openai.com/o1/) of preview models, `llm -m o1-preview "prompt"` and `llm -m o1-mini "prompt"`. These models are currently only available to [tier 5](https://platform.openai.com/docs/guides/rate-limits/usage-tiers?context=tier-five) OpenAI API users, though this may change in the future. [#570](https://github.com/simonw/llm/issues/570)
+
+(v0_15)=
+## 0.15 (2024-07-18)
+
+- Support for OpenAI's [new GPT-4o mini](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/) model: `llm -m gpt-4o-mini 'rave about pelicans in French'` [#536](https://github.com/simonw/llm/issues/536)
+- `gpt-4o-mini` is now the default model if you do not {ref}`specify your own default <setup-default-model>`, replacing GPT-3.5 Turbo. GPT-4o mini is both cheaper and better than GPT-3.5 Turbo.
+- Fixed a bug where `llm logs -q 'flourish' -m haiku` could not combine both the `-q` search query and the `-m` model specifier. [#515](https://github.com/simonw/llm/issues/515)
+
 (v0_14)=
 ## 0.14 (2024-05-13)
 
@@ -170,7 +294,7 @@ To create embeddings for every JPEG in a directory stored in a `photos` collecti
 llm install llm-clip
 llm embed-multi photos --files photos/ '*.jpg' --binary -m clip
 ```
-Now you can search for photos of racoons using:
+Now you can search for photos of raccoons using:
 ```
 llm similar photos -c 'raccoon'
 ```

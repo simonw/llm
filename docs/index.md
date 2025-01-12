@@ -41,15 +41,22 @@ Or with [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
+Or with [uv](https://docs.astral.sh/uv/guides/tools/)
+```bash
+uv tool install llm
+```
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 ```bash
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt
+# Run a prompt (with the default gpt-4o-mini model)
 llm "Ten fun names for a pet pelican"
 
-# Run a system prompt against a file
+# Extract text from an image
+llm "extract text" -a scanned-document.jpg
+
+# Use a system prompt against a file
 cat myfile.py | llm -s "Explain this code"
 ```
 Or you can {ref}`install a plugin <installing-plugins>` and use models that can run on your local device:
@@ -62,10 +69,10 @@ llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
 To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
 ```bash
-llm chat -m chatgpt
+llm chat -m gpt-4o
 ```
 ```
-Chatting with gpt-3.5-turbo
+Chatting with gpt-4o
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 > Tell me a joke about a pelican

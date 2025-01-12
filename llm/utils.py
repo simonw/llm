@@ -1,8 +1,30 @@
 import click
 import httpx
 import json
+import puremagic
+import re
 import textwrap
-from typing import List, Dict
+from typing import List, Dict, Optional
+
+MIME_TYPE_FIXES = {
+    "audio/wave": "audio/wav",
+}
+
+
+def mimetype_from_string(content) -> Optional[str]:
+    try:
+        type_ = puremagic.from_string(content, mime=True)
+        return MIME_TYPE_FIXES.get(type_, type_)
+    except puremagic.PureError:
+        return None
+
+
+def mimetype_from_path(path) -> Optional[str]:
+    try:
+        type_ = puremagic.from_file(path, mime=True)
+        return MIME_TYPE_FIXES.get(type_, type_)
+    except puremagic.PureError:
+        return None
 
 
 def dicts_to_table_string(
@@ -106,3 +128,64 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+
+def simplify_usage_dict(d):
+    # Recursively remove keys with value 0 and empty dictionaries
+    def remove_empty_and_zero(obj):
+        if isinstance(obj, dict):
+            cleaned = {
+                k: remove_empty_and_zero(v)
+                for k, v in obj.items()
+                if v != 0 and v != {}
+            }
+            return {k: v for k, v in cleaned.items() if v is not None and v != {}}
+        return obj
+
+    return remove_empty_and_zero(d) or {}
+
+
+def token_usage_string(input_tokens, output_tokens, token_details) -> str:
+    bits = []
+    if input_tokens is not None:
+        bits.append(f"{format(input_tokens, ',')} input")
+    if output_tokens is not None:
+        bits.append(f"{format(output_tokens, ',')} output")
+    if token_details:
+        bits.append(json.dumps(token_details))
+    return ", ".join(bits)
+
+
+def extract_first_fenced_code_block(text: str) -> Optional[str]:
+    """
+    Extracts and returns the first Markdown fenced code block found in the given text.
+
+    The function handles fenced code blocks that:
+    - Use at least three backticks (`).
+    - May include a language tag immediately after the opening backticks.
+    - Use more than three backticks as long as the closing fence has the same number.
+
+    If no fenced code block is found, the function returns None.
+
+    Args:
+        text (str): The input text to search for a fenced code block.
+
+    Returns:
+        Optional[str]: The content of the first fenced code block, or None if not found.
+    """
+    # Regex pattern to match fenced code blocks
+    # - ^ or \n ensures that the fence is at the start of a line
+    # - (`{3,}) captures the opening backticks (at least three)
+    # - (\w+)? optionally captures the language tag
+    # - \n matches the newline after the opening fence
+    # - (.*?) non-greedy match for the code block content
+    # - \1 ensures that the closing fence has the same number of backticks
+    # - (?=\n|$) ensures that the closing fence is followed by a newline or end of string
+    pattern = re.compile(
+        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\n(?P<code>.*?)^(?P=fence)(?=\n|$)""",
+        re.DOTALL,
+    )
+    match = pattern.search(text)
+    if match:
+        return match.group("code")
+    return None

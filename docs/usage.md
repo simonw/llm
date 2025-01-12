@@ -6,7 +6,7 @@ The command to run a prompt is `llm prompt 'your prompt'`. This is the default c
 (usage-executing-prompts)=
 ## Executing a prompt
 
-These examples use the default OpenAI `gpt-3.5-turbo` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
+These examples use the default OpenAI `gpt-4o-mini` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
 
 You can {ref}`install LLM plugins <installing-plugins>` to use models from other providers, including openly licensed models you can run directly on your own computer.
 
@@ -18,11 +18,11 @@ To disable streaming and only return the response once it has completed:
 ```bash
 llm 'Ten names for cheesecakes' --no-stream
 ```
-To switch from ChatGPT 3.5 (the default) to GPT-4o:
+To switch from ChatGPT 4o-mini (the default) to GPT-4o:
 ```bash
 llm 'Ten names for cheesecakes' -m gpt-4o
 ```
-You can use `-m 4t` as an even shorter shortcut.
+You can use `-m 4o` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
@@ -46,48 +46,48 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
-(usage-completion-prompts)=
-## Completion prompts
+(usage-extract-fenced-code)=
+### Extracting fenced code blocks
 
-Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
+If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
 
-An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
+The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
 
-You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+````
+```python
+def my_function():
+    # ...
+```
+````
+It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
+
+The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
+
+(usage-attachments)=
+### Attachments
+
+Some models are multi-modal, which means they can accept input in more than just text. GPT-4o and GPT-4o mini can accept images, and models such as Google Gemini 1.5 can accept audio and video as well.
+
+LLM calls these **attachments**. You can pass attachments using the `-a` option like this:
 
 ```bash
-llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+llm "describe this image" -a https://static.simonwillison.net/static/2024/pelicans.jpg
 ```
-
-(conversation)=
-## Continuing a conversation
-
-By default, the tool will start a new conversation each time you run it.
-
-You can opt to continue the previous conversation by passing the `-c/--continue` option:
+Attachments can be passed using URLs or file paths, and you can attach more than one attachment to a single prompt:
 ```bash
-llm 'More names' -c
+llm "extract text" -a image1.jpg -a image2.jpg
 ```
-This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
-
-`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
-
-To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
+You can also pipe an attachment to LLM by using `-` as the filename:
 ```bash
-llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
+cat image.jpg | llm "describe this image" -a -
 ```
-You can find these conversation IDs using the `llm logs` command.
-
-## Using with a shell
-
-To learn more about your computer's operating system based on the output of `uname -a`, run this:
+LLM will attempt to automatically detect the content type of the image. If this doesn't work you can instead use the `--attachment-type` option (`--at` for short) which takes the URL/path plus an explicit content type:
 ```bash
-llm "Tell me about my operating system: $(uname -a)"
+cat myfile | llm "describe this image" --at - image/jpeg
 ```
-This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
 
 (system-prompts)=
-## System prompts
+### System prompts
 
 You can use `-s/--system '...'` to set a system prompt.
 ```bash
@@ -119,6 +119,46 @@ And then use the new template like this:
 cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
+
+(conversation)=
+### Continuing a conversation
+
+By default, the tool will start a new conversation each time you run it.
+
+You can opt to continue the previous conversation by passing the `-c/--continue` option:
+```bash
+llm 'More names' -c
+```
+This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
+
+`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
+
+To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
+```bash
+llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
+```
+You can find these conversation IDs using the `llm logs` command.
+
+### Tips for using LLM with Bash or Zsh
+
+To learn more about your computer's operating system based on the output of `uname -a`, run this:
+```bash
+llm "Tell me about my operating system: $(uname -a)"
+```
+This pattern of using `$(command)` inside a double quoted string is a useful way to quickly assemble prompts.
+
+(usage-completion-prompts)=
+### Completion prompts
+
+Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
+
+An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
+
+You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+
+```bash
+llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+```
 
 (usage-chat)=
 
@@ -206,11 +246,18 @@ llm models
 ```
 Example output:
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-PaLM 2: chat-bison-001 (aliases: palm, palm2)
+OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Chat: o1-preview
+OpenAI Chat: o1-mini
+GeminiPro: gemini-1.5-pro-002
+GeminiPro: gemini-1.5-flash-002
+...
+```
+
+Add `-q term` to search for models matching a specific search term:
+```bash
+llm models -q gpt-4o
 ```
 
 Add `--options` to also see documentation for the options supported by each model:
@@ -225,146 +272,285 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
-  seed: int
-    Integer seed to attempt to sample deterministically
-  json_object: boolean
-    Output a valid JSON object {...}. Prompt must mention JSON.
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-1106-preview
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-0125-preview
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-turbo-2024-04-09
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
 OpenAI Chat: gpt-4o (aliases: 4o)
-  temperature: float
-  max_tokens: int
-  top_p: float
-  frequency_penalty: float
-  presence_penalty: float
-  stop: str
-  logit_bias: dict, str
-  seed: int
-  json_object: boolean
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    json_object: boolean
+      Output a valid JSON object {...}. Prompt must mention JSON.
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: gpt-4o-audio-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wav
+OpenAI Chat: gpt-4o-audio-preview-2024-12-17
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wav
+OpenAI Chat: gpt-4o-audio-preview-2024-10-01
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wav
+OpenAI Chat: gpt-4o-mini-audio-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wav
+OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    audio/mpeg, audio/wav
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4 (aliases: 4, gpt4)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-32k (aliases: 4-32k)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-1106-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-0125-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-turbo-2024-04-09
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: o1
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: o1-2024-12-17
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: o1-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+OpenAI Chat: o1-mini
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
-  seed: int
-    Integer seed to attempt to sample deterministically
-  logprobs: int
-    Include the log probabilities of most likely N per token
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    logprobs: int
+      Include the log probabilities of most likely N per token
+Default: gpt-4o-mini
 
 ```
 <!-- [[[end]]] -->

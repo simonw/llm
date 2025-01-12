@@ -41,11 +41,16 @@ cog.out(all_help(cli))
 ```
 Usage: llm [OPTIONS] COMMAND [ARGS]...
 
-  Access large language models from the command-line
+  Access Large Language Models from the command-line
 
   Documentation: https://llm.datasette.io/
 
-  To get started, obtain an OpenAI key and set it like this:
+  LLM can run models from many different providers. Consult the plugin directory
+  for a list of available models:
+
+  https://llm.datasette.io/en/stable/plugins/directory.html
+
+  To get started with OpenAI, obtain an API key from them and:
 
       $ llm keys set openai
       Enter key: ...
@@ -86,20 +91,45 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 
   Documentation: https://llm.datasette.io/en/stable/usage.html
 
+  Examples:
+
+      llm 'Capital of France?'
+      llm 'Capital of France?' -m gpt-4o
+      llm 'Capital of France?' -s 'answer in Spanish'
+
+  Multi-modal models can be called with attachments like this:
+
+      llm 'Extract text from this image' -a image.jpg
+      llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
+      cat image | llm 'describe image' -a -
+      # With an explicit mimetype:
+      cat image | llm 'describe image' --at - image/jpeg
+
+  The -x/--extract option returns just the content of the first ``` fenced code
+  block, if one is present. If none are present it returns the full response.
+
+      llm 'JavaScript function for reversing a string' -x
+
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  --no-stream                  Do not stream output
-  -n, --no-log                 Don't log to database
-  --log                        Log prompt and response to the database
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  --key TEXT                   API key to use
-  --save TEXT                  Save prompt with this template name
-  --help                       Show this message and exit.
+  -s, --system TEXT               System prompt to use
+  -m, --model TEXT                Model to use
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype
+  -o, --option <TEXT TEXT>...     key/value options for the model
+  -t, --template TEXT             Template to use
+  -p, --param <TEXT TEXT>...      Parameters for template
+  --no-stream                     Do not stream output
+  -n, --no-log                    Don't log to database
+  --log                           Log prompt and response to the database
+  -c, --continue                  Continue the most recent conversation.
+  --cid, --conversation TEXT      Continue the conversation with the given ID.
+  --key TEXT                      API key to use
+  --save TEXT                     Save prompt with this template name
+  --async                         Run prompt asynchronously
+  -u, --usage                     Show token usage
+  -x, --extract                   Extract first fenced code block
+  --help                          Show this message and exit.
 ```
 
 (help-chat)=
@@ -134,6 +164,7 @@ Options:
 
 Commands:
   list*  List names of all stored keys
+  get    Return the value of a stored key
   path   Output the path to the keys.json file
   set    Save a key in the keys.json file
 ```
@@ -155,6 +186,21 @@ Options:
 Usage: llm keys path [OPTIONS]
 
   Output the path to the keys.json file
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-keys-get)=
+#### llm keys get --help
+```
+Usage: llm keys get [OPTIONS] NAME
+
+  Return the value of a stored key
+
+  Example usage:
+
+      export OPENAI_API_KEY=$(llm keys get openai)
 
 Options:
   --help  Show this message and exit.
@@ -253,7 +299,9 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -t, --truncate              Truncate long strings in output
+  -u, --usage                 Include token usage
   -r, --response              Just output the last response
+  -x, --extract               Extract first fenced code block
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
   --json                      Output logs as JSON
@@ -283,8 +331,10 @@ Usage: llm models list [OPTIONS]
   List available models
 
 Options:
-  --options  Show options for each model, if available
-  --help     Show this message and exit.
+  --options         Show options for each model, if available
+  --async           List async models
+  -q, --query TEXT  Search for models matching this string
+  --help            Show this message and exit.
 ```
 
 (help-models-default)=

@@ -5,7 +5,7 @@ You can load an embedding model using its model ID or alias like this:
 ```python
 import llm
 
-embedding_model = llm.get_embedding_model("ada-002")
+embedding_model = llm.get_embedding_model("3-small")
 ```
 To embed a string, returning a Python list of floating point numbers, use the `.embed()` method:
 ```python
@@ -45,14 +45,14 @@ import llm
 
 # This collection will use an in-memory database that will be
 # discarded when the Python process exits
-collection = llm.Collection("entries", model_id="ada-002")
+collection = llm.Collection("entries", model_id="3-small")
 
 # Or you can persist the database to disk like this:
 db = sqlite_utils.Database("my-embeddings.db")
-collection = llm.Collection("entries", db, model_id="ada-002")
+collection = llm.Collection("entries", db, model_id="3-small")
 
 # You can pass a model directly using model= instead of model_id=
-embedding_model = llm.get_embedding_model("ada-002")
+embedding_model = llm.get_embedding_model("3-small")
 collection = llm.Collection("entries", db, model=embedding_model)
 ```
 If the collection already exists in the database you can omit the `model` or `model_id` argument - the model ID will be read from the `collections` table.
