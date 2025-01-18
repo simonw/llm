@@ -37,7 +37,7 @@ setup(
     """,
     install_requires=[
         "click",
-        "openai>=1.0",
+        "openai>=1.55.3",
         "click-default-group>=1.2.3",
         "sqlite-utils>=3.37",
         "sqlite-migrate>=0.1a2",
