@@ -1142,7 +1142,8 @@ def models_list(options, async_, query):
             )
             output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
         click.echo(output)
-    click.echo(f"Default: {get_default_model()}")
+    if not query:
+        click.echo(f"Default: {get_default_model()}")
 
 
 @models.command(name="default")
