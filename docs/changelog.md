@@ -1,5 +1,21 @@
 # Changelog
 
+(v0_20)=
+## 0.20 (2025-01-22)
+
+- New model, `o1`. This model does not yet support streaming. [#676](https://github.com/simonw/lm/issues/676)
+- `o1-preview` and `o1-mini` models now support streaming.
+- New model, `gpt-4o-audio-preview`. [#677](https://github.com/simonw/llm/issues/677)
+- `llm prompt -x/--extract` option, which returns just the content of the first fenced code block in the response. Try `llm prompt -x 'Python function to reverse a string'`. [#681](https://github.com/simonw/llm/issues/681)
+  - Creating a template using `llm ... --save x` now supports the `-x/--extract` option, which is saved to the template. YAML templates can set this option using `extract: true`.
+  - New `llm logs -x/--extract` option extracts the first fenced code block from matching logged responses.
+- New `llm models -q 'search'` option returning models that case-insensitively match the search query. [#700](https://github.com/simonw/llm/issues/700)
+- Installation documentation now also includes `uv`. Thanks, [Ariel Marcus](https://github.com/ajmarcus). [#690](https://github.com/simonw/llm/pull/690) and [#702](https://github.com/simonw/llm/issues/702)
+- `llm models` command now shows the current default model at the bottom of the listing. Thanks, [Amjith Ramanujam](https://github.com/amjith). [#688](https://github.com/simonw/llm/pull/688)
+- {ref}`Plugin directory <plugin-directory>` now includes `llm-venice`, `llm-bedrock`, `llm-deepseek` and `llm-cmd-comp`.
+- Fixed bug where some dependency version combinations could cause a `Client.__init__() got an unexpected keyword argument 'proxies'` error. [#709](https://github.com/simonw/llm/issues/709)
+- OpenAI embedding models are now available using their full names of `text-embedding-ada-002`, `text-embedding-3-small` and `text-embedding-3-large` - the previous names are still supported as aliases. Thanks, [web-sst](https://github.com/web-sst). [#654](https://github.com/simonw/llm/pull/654)
+
 (v0_19_1)=
 ## 0.19.1 (2024-12-05)
 
