@@ -3,7 +3,7 @@
 (v0_20)=
 ## 0.20 (2025-01-22)
 
-- New model, `o1`. This model does not yet support streaming. [#676](https://github.com/simonw/lm/issues/676)
+- New model, `o1`. This model does not yet support streaming. [#676](https://github.com/simonw/llm/issues/676)
 - `o1-preview` and `o1-mini` models now support streaming.
 - New model, `gpt-4o-audio-preview`. [#677](https://github.com/simonw/llm/issues/677)
 - `llm prompt -x/--extract` option, which returns just the content of the first fenced code block in the response. Try `llm prompt -x 'Python function to reverse a string'`. [#681](https://github.com/simonw/llm/issues/681)
