@@ -79,7 +79,7 @@ class NewModel(llm.Model):
 ```
 These content types are detected when an attachment is passed to LLM using `llm -a filename`, or can be specified by the user using the `--attachment-type filename image/png` option.
 
-**Note:** *MP3 files will have their attachment type detected as `audio/mpeg`, not `audio/mp3`.
+**Note:** MP3 files will have their attachment type detected as `audio/mpeg`, not `audio/mp3`.
 
 LLM will use the `attachment_types` attribute to validate that provided attachments should be accepted before passing them to the model.
 
