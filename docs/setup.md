@@ -29,6 +29,10 @@ For `pipx`:
 ```bash
 pipx upgrade llm
 ```
+For `uv`:
+```bash
+uv tool upgrade llm
+```
 For Homebrew:
 ```bash
 brew upgrade llm
