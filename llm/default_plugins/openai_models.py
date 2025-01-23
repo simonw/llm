@@ -134,14 +134,14 @@ def register_models(register):
 @hookimpl
 def register_embedding_models(register):
     register(
-        OpenAIEmbeddingModel("ada-002", "text-embedding-ada-002"), aliases=("ada",)
+        OpenAIEmbeddingModel("text-embedding-ada-002", "text-embedding-ada-002"), aliases=("ada","ada-002",)
     )
-    register(OpenAIEmbeddingModel("3-small", "text-embedding-3-small"))
-    register(OpenAIEmbeddingModel("3-large", "text-embedding-3-large"))
+    register(OpenAIEmbeddingModel("text-embedding-3-small", "text-embedding-3-small"), aliases=("3-small",))
+    register(OpenAIEmbeddingModel("text-embedding-3-large", "text-embedding-3-large"), aliases=("3-large",))
     # With varying dimensions
-    register(OpenAIEmbeddingModel("3-small-512", "text-embedding-3-small", 512))
-    register(OpenAIEmbeddingModel("3-large-256", "text-embedding-3-large", 256))
-    register(OpenAIEmbeddingModel("3-large-1024", "text-embedding-3-large", 1024))
+    register(OpenAIEmbeddingModel("text-embedding-3-small-512", "text-embedding-3-small", 512), aliases=("3-small-512",))
+    register(OpenAIEmbeddingModel("text-embedding-3-large-256", "text-embedding-3-large", 256), aliases=("3-large-256",))
+    register(OpenAIEmbeddingModel("text-embedding-3-large-1024", "text-embedding-3-large", 1024), aliases=("3-large-1024",))
 
 
 class OpenAIEmbeddingModel(EmbeddingModel):
