@@ -71,6 +71,18 @@ response = model.prompt(
 ```
 Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly.
 
+You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
+
+```python
+model = llm.get_model("gpt-4o-mini")
+print(model.attachment_types)
+# {'image/gif', 'image/png', 'image/jpeg', 'image/webp'}
+
+if "image/jpeg" in model.attachment_types:
+    # Use a JPEG attachment here
+    ...
+```
+
 ### Model options
 
 For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
