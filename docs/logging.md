@@ -64,7 +64,11 @@ llm logs -r
 Use `-x/--extract` to extract and return the first fenced code block from the selected log entries:
 
 ```bash
-llm logs -x
+llm logs --extract
+```
+Or `--xl/--extract-last` for the last fenced code block:
+```bash
+llm logs --extract-last
 ```
 
 Add `--json` to get the log messages in JSON instead:

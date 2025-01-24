@@ -61,6 +61,8 @@ def my_function():
 ````
 It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
 
+Use `--xl/--extract-last` to return the last fenced code block instead of the first.
+
 The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
 
 (usage-attachments)=
