@@ -37,7 +37,7 @@ from .utils import (
     mimetype_from_path,
     mimetype_from_string,
     token_usage_string,
-    extract_first_fenced_code_block,
+    extract_fenced_code_block,
 )
 import base64
 import httpx
@@ -210,6 +210,13 @@ def cli():
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
 @click.option("-u", "--usage", is_flag=True, help="Show token usage")
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
+@click.option(
+    "extract_last",
+    "--xl",
+    "--extract-last",
+    is_flag=True,
+    help="Extract last fenced code block",
+)
 def prompt(
     prompt,
     system,
@@ -229,6 +236,7 @@ def prompt(
     async_,
     usage,
     extract,
+    extract_last,
 ):
     """
     Execute a prompt
@@ -318,6 +326,8 @@ def prompt(
             to_save["defaults"] = dict(param)
         if extract:
             to_save["extract"] = True
+        if extract_last:
+            to_save["extract_last"] = True
         path.write_text(
             yaml.dump(
                 to_save,
@@ -335,6 +345,7 @@ def prompt(
             raise click.ClickException("Cannot use -t/--template and --system together")
         template_obj = load_template(template)
         extract = template_obj.extract
+        extract_last = template_obj.extract_last
         prompt = read_prompt()
         try:
             prompt, system = template_obj.evaluate(prompt, params)
@@ -343,7 +354,7 @@ def prompt(
         if model_id is None and template_obj.model:
             model_id = template_obj.model
 
-    if extract:
+    if extract or extract_last:
         no_stream = True
 
     conversation = None
@@ -427,8 +438,10 @@ def prompt(
                         **validated_options,
                     )
                     text = await response.text()
-                    if extract:
-                        text = extract_first_fenced_code_block(text) or text
+                    if extract or extract_last:
+                        text = (
+                            extract_fenced_code_block(text, last=extract_last) or text
+                        )
                     print(text)
                 return response
 
@@ -447,8 +460,8 @@ def prompt(
                 print("")
             else:
                 text = response.text()
-                if extract:
-                    text = extract_first_fenced_code_block(text) or text
+                if extract or extract_last:
+                    text = extract_fenced_code_block(text, last=extract_last) or text
                 print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
@@ -863,6 +876,13 @@ order by prompt_attachments."order"
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
+    "extract_last",
+    "--xl",
+    "--extract-last",
+    is_flag=True,
+    help="Extract last fenced code block",
+)
+@click.option(
     "current_conversation",
     "-c",
     "--current",
@@ -891,6 +911,7 @@ def logs_list(
     usage,
     response,
     extract,
+    extract_last,
     current_conversation,
     conversation_id,
     json_output,
@@ -996,10 +1017,10 @@ def logs_list(
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
         output = json.dumps(list(rows), indent=2)
-    elif extract:
+    elif extract or extract_last:
         # Extract and return first code block
         for row in rows:
-            output = extract_first_fenced_code_block(row["response"])
+            output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
     elif response:

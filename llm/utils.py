@@ -156,9 +156,9 @@ def token_usage_string(input_tokens, output_tokens, token_details) -> str:
     return ", ".join(bits)
 
 
-def extract_first_fenced_code_block(text: str) -> Optional[str]:
+def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
     """
-    Extracts and returns the first Markdown fenced code block found in the given text.
+    Extracts and returns Markdown fenced code block found in the given text.
 
     The function handles fenced code blocks that:
     - Use at least three backticks (`).
@@ -169,9 +169,10 @@ def extract_first_fenced_code_block(text: str) -> Optional[str]:
 
     Args:
         text (str): The input text to search for a fenced code block.
+        last (bool): Extract the last code block if True, otherwise the first.
 
     Returns:
-        Optional[str]: The content of the first fenced code block, or None if not found.
+        Optional[str]: The content of the fenced code block, or None if not found.
     """
     # Regex pattern to match fenced code blocks
     # - ^ or \n ensures that the fence is at the start of a line
@@ -179,13 +180,15 @@ def extract_first_fenced_code_block(text: str) -> Optional[str]:
     # - (\w+)? optionally captures the language tag
     # - \n matches the newline after the opening fence
     # - (.*?) non-greedy match for the code block content
-    # - \1 ensures that the closing fence has the same number of backticks
+    # - (?P=fence) ensures that the closing fence has the same number of backticks
+    # - [ ]* allows for optional spaces between the closing fence and newline
     # - (?=\n|$) ensures that the closing fence is followed by a newline or end of string
     pattern = re.compile(
-        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\n(?P<code>.*?)^(?P=fence)(?=\n|$)""",
+        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\n|$)""",
         re.DOTALL,
     )
-    match = pattern.search(text)
-    if match:
+    matches = list(pattern.finditer(text))
+    if matches:
+        match = matches[-1] if last else matches[0]
         return match.group("code")
     return None

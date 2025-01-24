@@ -1,5 +1,5 @@
 import pytest
-from llm.utils import simplify_usage_dict, extract_first_fenced_code_block
+from llm.utils import simplify_usage_dict, extract_fenced_code_block
 
 
 @pytest.mark.parametrize(
@@ -43,40 +43,61 @@ def test_simplify_usage_dict(input_data, expected_output):
 
 
 @pytest.mark.parametrize(
-    "input,expected",
+    "input,last,expected",
     [
-        ["This is a sample text without any code blocks.", None],
+        ["This is a sample text without any code blocks.", False, None],
         [
             "Here is some text.\n\n```\ndef foo():\n    return 'bar'\n```\n\nMore text.",
+            False,
             "def foo():\n    return 'bar'\n",
         ],
         [
             "Here is some text.\n\n```python\ndef foo():\n    return 'bar'\n```\n\nMore text.",
+            False,
             "def foo():\n    return 'bar'\n",
         ],
         [
             "Here is some text.\n\n````\ndef foo():\n    return 'bar'\n````\n\nMore text.",
+            False,
             "def foo():\n    return 'bar'\n",
         ],
         [
             "Here is some text.\n\n````javascript\nfunction foo() {\n    return 'bar';\n}\n````\n\nMore text.",
+            False,
             "function foo() {\n    return 'bar';\n}\n",
         ],
         [
             "Here is some text.\n\n```python\ndef foo():\n    return 'bar'\n````\n\nMore text.",
+            False,
             None,
         ],
         [
             "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
             "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            False,
             "def foo():\n    return 'bar'\n",
         ],
         [
+            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            True,
+            "function foo() {\n    return 'bar';\n}\n",
+        ],
+        [
+            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+            # This one has trailing whitespace after the second code block:
+            # https://github.com/simonw/llm/pull/718#issuecomment-2613177036
+            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n``` ",
+            True,
+            "function foo() {\n    return 'bar';\n}\n",
+        ],
+        [
             "Here is some text.\n\n```python\ndef foo():\n    return `bar`\n```\n\nMore text.",
+            False,
             "def foo():\n    return `bar`\n",
         ],
     ],
 )
-def test_extract_first_fenced_code_block(input, expected):
-    actual = extract_first_fenced_code_block(input)
+def test_extract_fenced_code_block(input, last, expected):
+    actual = extract_fenced_code_block(input, last=last)
     assert actual == expected
