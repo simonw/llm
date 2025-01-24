@@ -172,7 +172,7 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
         last (bool): Extract the last code block if True, otherwise the first.
 
     Returns:
-        Optional[str]: The content of the first fenced code block, or None if not found.
+        Optional[str]: The content of the fenced code block, or None if not found.
     """
     # Regex pattern to match fenced code blocks
     # - ^ or \n ensures that the fence is at the start of a line
