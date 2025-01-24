@@ -129,6 +129,7 @@ Options:
   --async                         Run prompt asynchronously
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
+  --xl, --extract-last            Extract last fenced code block
   --help                          Show this message and exit.
 ```
 
@@ -302,6 +303,7 @@ Options:
   -u, --usage                 Include token usage
   -r, --response              Just output the last response
   -x, --extract               Extract first fenced code block
+  --xl, --extract-last        Extract last fenced code block
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
   --json                      Output logs as JSON
