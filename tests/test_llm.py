@@ -145,6 +145,25 @@ def test_logs_extract_first_code(args, log_path):
     assert result.output == 'print("hello word")\n\n'
 
 
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["--xl"],
+        ["--extract-last"],
+        ["list", "--xl"],
+        ["list", "--extract-last"],
+        ["--xl", "-r"],
+        ["-x", "--xl"],
+    ),
+)
+def test_logs_extract_last_code(args, log_path):
+    "Test that logs --xl/--extract-last returns the last code block"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'print("hello word")\n\n'
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):

@@ -438,10 +438,10 @@ def prompt(
                         **validated_options,
                     )
                     text = await response.text()
-                    if extract:
-                        text = extract_fenced_code_block(text) or text
-                    if extract_last:
-                        text = extract_fenced_code_block(text, last=True) or text
+                    if extract or extract_last:
+                        text = (
+                            extract_fenced_code_block(text, last=extract_last) or text
+                        )
                     print(text)
                 return response
 
@@ -460,10 +460,8 @@ def prompt(
                 print("")
             else:
                 text = response.text()
-                if extract:
-                    text = extract_fenced_code_block(text) or text
-                if extract_last:
-                    text = extract_fenced_code_block(text, last=True) or text
+                if extract or extract_last:
+                    text = extract_fenced_code_block(text, last=extract_last) or text
                 print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
