@@ -84,6 +84,14 @@ def test_simplify_usage_dict(input_data, expected_output):
             "function foo() {\n    return 'bar';\n}\n",
         ],
         [
+            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+            # This one has trailing whitespace after the second code block:
+            # https://github.com/simonw/llm/pull/718#issuecomment-2613177036
+            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n``` ",
+            True,
+            "function foo() {\n    return 'bar';\n}\n",
+        ],
+        [
             "Here is some text.\n\n```python\ndef foo():\n    return `bar`\n```\n\nMore text.",
             False,
             "def foo():\n    return `bar`\n",
