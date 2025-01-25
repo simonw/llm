@@ -1,4 +1,5 @@
 (plugin-directory)=
+
 # Plugin directory
 
 The following plugins are available for LLM. Here's {ref}`how to install them <installing-plugins>`.
@@ -6,7 +7,6 @@ The following plugins are available for LLM. Here's {ref}`how to install them <i
 ## Local models
 
 These plugins all help you run LLMs directly on your own computer:
-
 
 - **[llm-gguf](https://github.com/simonw/llm-gguf)** uses [llama.cpp](https://github.com/ggerganov/llama.cpp) to run models published in the GGUF format.
 - **[llm-mlc](https://github.com/simonw/llm-mlc)** can run local models released by the [MLC project](https://mlc.ai/mlc-llm/), including models that can take advantage of the GPU on Apple Silicon M1/M2 devices.
@@ -60,6 +60,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-python](https://github.com/simonw/llm-python)** adds a `llm python` command for running a Python interpreter in the same virtual environment as LLM. This is useful for debugging, and also provides a convenient way to interact with the LLM {ref}`python-api` if you installed LLM using Homebrew or `pipx`.
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
+- **[llm-edit](https://github.com/ajac-zero/llm-edit)** adds a `llm edit` command that allows LLM to quickly edit existing files or generate new files. The command can be passed additional context files to improve the model response.
 
 ## Just for fun
 
