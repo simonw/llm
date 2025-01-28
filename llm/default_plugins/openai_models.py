@@ -94,7 +94,7 @@ def register_models(register):
     if not extra_path.exists():
         return
     with open(extra_path) as f:
-        extra_models = yaml.safe_load(f)
+        extra_models = yaml.safe_load(f) or []
     for extra_model in extra_models:
         model_id = extra_model["model_id"]
         aliases = extra_model.get("aliases", [])
