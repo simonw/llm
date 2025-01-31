@@ -192,3 +192,28 @@ def test_template_basic(
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
         mocked_openai_chat.reset()
+
+
+def test_templates_list_multiple_paths(templates_path, tmp_path, monkeypatch):
+    # Create a template in the default directory
+    (templates_path / "one.yaml").write_text("template one", "utf-8")
+    (templates_path / "two.yaml").write_text("template two", "utf-8")
+
+    # Create a second template directory
+    second_path = tmp_path / "more_templates"
+    second_path.mkdir()
+    (second_path / "three.yaml").write_text("template three", "utf-8")
+    # Add a template that would shadow one in the default directory, but shouldn't
+    (second_path / "two.yaml").write_text("template two override", "utf-8")
+
+    # Set LLM_TEMPLATE_PATH
+    monkeypatch.setenv("LLM_TEMPLATE_PATH", str(second_path))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "list"])
+    assert result.exit_code == 0
+
+    # Should see templates from both directories, with default directory taking precedence
+    assert "one   : template one" in result.output
+    assert "two   : template two" in result.output  # Not the override version
+    assert "three : template three" in result.output

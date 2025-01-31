@@ -3,6 +3,7 @@ import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
+import os
 import json
 from llm import (
     Attachment,
@@ -50,7 +51,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple
+from typing import cast, Optional, Iterable, Union, Tuple, List
 import warnings
 import yaml
 
@@ -310,7 +311,7 @@ def prompt(
             raise click.ClickException(
                 "--save cannot be used with {}".format(", ".join(disallowed_options))
             )
-        path = template_dir() / f"{save}.yaml"
+        path = user_template_dir() / f"{save}.yaml"
         to_save = {}
         if model_id:
             try:
@@ -1194,19 +1195,26 @@ def templates():
 @templates.command(name="list")
 def templates_list():
     "List available prompt templates"
-    path = template_dir()
     pairs = []
-    for file in path.glob("*.yaml"):
-        name = file.stem
-        template = load_template(name)
-        text = []
-        if template.system:
-            text.append(f"system: {template.system}")
-            if template.prompt:
-                text.append(f" prompt: {template.prompt}")
-        else:
-            text = [template.prompt if template.prompt else ""]
-        pairs.append((name, "".join(text).replace("\n", " ")))
+    seen_names = set()
+
+    # Search through all template directories
+    for path in template_dirs():
+        if path.exists():
+            for file in path.glob("*.yaml"):
+                name = file.stem
+                if name not in seen_names:
+                    seen_names.add(name)
+                    template = load_template(name)
+                    text = []
+                    if template.system:
+                        text.append(f"system: {template.system}")
+                        if template.prompt:
+                            text.append(f" prompt: {template.prompt}")
+                    else:
+                        text = [template.prompt if template.prompt else ""]
+                    pairs.append((name, "".join(text).replace("\n", " ")))
+
     try:
         max_name_len = max(len(p[0]) for p in pairs)
     except ValueError:
@@ -1325,7 +1333,7 @@ def templates_show(name):
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
     # First ensure it exists
-    path = template_dir() / f"{name}.yaml"
+    path = user_template_dir() / f"{name}.yaml"
     if not path.exists():
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
     click.edit(filename=path)
@@ -1336,7 +1344,7 @@ def templates_edit(name):
 @templates.command(name="path")
 def templates_path():
     "Output the path to the templates directory"
-    click.echo(template_dir())
+    click.echo(user_template_dir())
 
 
 @cli.command()
@@ -1891,10 +1899,31 @@ def collections_delete(collection, database):
     collection_obj.delete()
 
 
-def template_dir():
+def user_template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def template_dirs() -> List[pathlib.Path]:
+    """
+    Returns a list of directories to search for templates.
+    The first directory is the user's template directory, followed by any additional
+    directories specified in LLM_TEMPLATE_PATH.
+    """
+    paths = []
+    # User's template directory always comes first
+    paths.append(user_template_dir())
+
+    # Add any additional template paths from LLM_TEMPLATE_PATH
+    template_path = os.environ.get("LLM_TEMPLATE_PATH")
+    if template_path:
+        for path in [p.strip() for p in template_path.split(",") if p.strip()]:
+            path_obj = pathlib.Path(path)
+            if path_obj.exists():
+                paths.append(path_obj)
+
+    return paths
 
 
 def _truncate_string(s, max_length=100):
@@ -1907,23 +1936,27 @@ def logs_db_path():
     return user_dir() / "logs.db"
 
 
-def load_template(name):
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        raise click.ClickException(f"Invalid template: {name}")
-    try:
-        loaded = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as ex:
-        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
-    if isinstance(loaded, str):
-        return Template(name=name, prompt=loaded)
-    loaded["name"] = name
-    try:
-        return Template(**loaded)
-    except pydantic.ValidationError as ex:
-        msg = "A validation error occurred:\n"
-        msg += render_errors(ex.errors())
-        raise click.ClickException(msg)
+def load_template(name: str) -> Template:
+    """
+    Load a template by name, searching through all template directories
+    """
+    for template_dir in template_dirs():
+        path = template_dir / f"{name}.yaml"
+        if path.exists():
+            try:
+                loaded = yaml.safe_load(path.read_text())
+            except yaml.YAMLError as ex:
+                raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+            if isinstance(loaded, str):
+                return Template(name=name, prompt=loaded)
+            loaded["name"] = name
+            try:
+                return Template(**loaded)
+            except pydantic.ValidationError as ex:
+                msg = "A validation error occurred:\n"
+                msg += render_errors(ex.errors())
+                raise click.ClickException(msg)
+    raise click.ClickException(f"Invalid template: {name}")
 
 
 def get_history(chat_id):

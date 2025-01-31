@@ -213,3 +213,20 @@ Example:
 llm -t roast 'How are you today?'
 ```
 > I'm doing great but with your boring questions, I must admit, I've seen more life in a cemetery.
+
+## Template directories
+
+By default, templates are stored in the user's template directory, which can be found by running:
+
+```bash
+$ llm templates path
+/Users/simon/Library/Application Support/io.datasette.llm/templates
+```
+
+You can also specify additional directories to search for templates using the `LLM_TEMPLATE_PATH` environment variable. This is a comma-separated list of directories:
+
+```bash
+export LLM_TEMPLATE_PATH="/path/to/templates,/another/path/to/templates"
+```
+
+When searching for templates, LLM will look in the user's template directory first, followed by any additional directories specified in `LLM_TEMPLATE_PATH`. If a template with the same name exists in multiple directories, the one in the directory that appears first in the search path will be used.
