@@ -1136,7 +1136,7 @@ def models_list(options, async_, query):
             for name, field in model.Options.schema()["properties"].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
-                    any_of = [{"type": field["type"]}]
+                    any_of = [{"type": field.get("type", "str")}]
                 types = ", ".join(
                     [
                         _type_lookup.get(item.get("type"), item.get("type", "str"))
