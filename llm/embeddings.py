@@ -332,8 +332,7 @@ class Collection:
         Args:
             name (str): Name of the collection
         """
-        rows = list(db["collections"].rows_where("name = ?", [name]))
-        return bool(rows)
+        return any(db["collections"].rows_where("name = ?", [name]))
 
     def delete(self):
         """
