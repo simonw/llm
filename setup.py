@@ -58,7 +58,7 @@ setup(
             "pytest-asyncio",
             "cogapp",
             "mypy>=1.10.0",
-            "black>=24.1.0",
+            "black==24.10.0",
             "ruff",
             "types-click",
             "types-PyYAML",
