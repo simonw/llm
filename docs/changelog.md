@@ -1,5 +1,12 @@
 # Changelog
 
+(v0_21)=
+## 0.21 (2025-01-31)
+
+- New model: `o3-mini`. [#728](https://github.com/simonw/llm/issues/728)
+- The `o3-mini` and `o1` models now support a `reasoning_effort` option which can be set to `low`, `medium` or `high`.
+- `llm prompt` and `llm logs` now have a `--xl/--extract-last` option for extracting the last fenced code block in the response - a complement to the existing `--x/--extract` option. [#717](https://github.com/simonw/llm/issues/717)
+
 (v0_20)=
 ## 0.20 (2025-01-22)
 
