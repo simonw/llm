@@ -50,6 +50,7 @@ OpenAI Chat: o1
 OpenAI Chat: o1-2024-12-17
 OpenAI Chat: o1-preview
 OpenAI Chat: o1-mini
+OpenAI Chat: o3-mini
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->

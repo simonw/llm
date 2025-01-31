@@ -8,6 +8,7 @@ from llm.utils import (
 )
 import click
 import datetime
+from enum import Enum
 import httpx
 import openai
 import os
@@ -71,8 +72,8 @@ def register_models(register):
     # o1
     for model_id in ("o1", "o1-2024-12-17"):
         register(
-            Chat(model_id, vision=True, can_stream=False),
-            AsyncChat(model_id, vision=True, can_stream=False),
+            Chat(model_id, vision=True, can_stream=False, reasoning=True),
+            AsyncChat(model_id, vision=True, can_stream=False, reasoning=True),
         )
 
     register(
@@ -82,6 +83,10 @@ def register_models(register):
     register(
         Chat("o1-mini", allows_system_prompt=False),
         AsyncChat("o1-mini", allows_system_prompt=False),
+    )
+    register(
+        Chat("o3-mini", reasoning=True),
+        AsyncChat("o3-mini", reasoning=True),
     )
     # The -instruct completion model
     register(
@@ -322,6 +327,27 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
+class ReasoningEffortEnum(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class OptionsForReasoning(SharedOptions):
+    json_object: Optional[bool] = Field(
+        description="Output a valid JSON object {...}. Prompt must mention JSON.",
+        default=None,
+    )
+    reasoning_effort: Optional[ReasoningEffortEnum] = Field(
+        description=(
+            "Constraints effort on reasoning for reasoning models. Currently supported "
+            "values are low, medium, and high. Reducing reasoning effort can result in "
+            "faster responses and fewer tokens used on reasoning in a response."
+        ),
+        default=None,
+    )
+
+
 def _attachment(attachment):
     url = attachment.url
     base64_content = ""
@@ -355,6 +381,7 @@ class _Shared:
         can_stream=True,
         vision=False,
         audio=False,
+        reasoning=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
@@ -370,6 +397,9 @@ class _Shared:
         self.allows_system_prompt = allows_system_prompt
 
         self.attachment_types = set()
+
+        if reasoning:
+            self.Options = OptionsForReasoning
 
         if vision:
             self.attachment_types.update(

@@ -484,6 +484,7 @@ OpenAI Chat: o1
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    reasoning_effort: str
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: o1-2024-12-17
@@ -497,6 +498,7 @@ OpenAI Chat: o1-2024-12-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    reasoning_effort: str
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: o1-preview
@@ -521,6 +523,18 @@ OpenAI Chat: o1-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+OpenAI Chat: o3-mini
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    reasoning_effort: str
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float

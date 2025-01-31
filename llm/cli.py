@@ -1139,9 +1139,9 @@ def models_list(options, async_, query):
                     any_of = [{"type": field["type"]}]
                 types = ", ".join(
                     [
-                        _type_lookup.get(item["type"], item["type"])
+                        _type_lookup.get(item.get("type"), item.get("type", "str"))
                         for item in any_of
-                        if item["type"] != "null"
+                        if item.get("type") != "null"
                     ]
                 )
                 bits = ["\n    ", name, ": ", types]
