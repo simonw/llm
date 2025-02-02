@@ -238,7 +238,7 @@ The `prompt` argument is a `Prompt` object that contains the text that the user 
 
 The prompt and the response will be logged to a SQLite database automatically by LLM. You can see the single most recent addition to the logs using:
 ```
-llm logs -n 1
+llm logs -n 1 --json
 ```
 The output should look something like this:
 ```json
@@ -274,7 +274,7 @@ Here's how to include that full `transitions` table in the `response_json` in th
 
 Now when you run the logs command you'll see that too:
 ```bash
-llm logs -n 1
+llm logs -n 1 --json
 ```
 ```json
 [
@@ -430,7 +430,7 @@ That `--no-stream` option causes the `stream` argument passed to `execute()` to 
 
 Options are also logged to the database. You can see those here:
 ```bash
-llm logs -n 1
+llm logs -n 1 --json
 ```
 ```json
 [
@@ -507,7 +507,7 @@ llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/arc
 
 ## GitHub repositories
 
-The same trick works for regular GitHub repositories as well: the "Download ZIP" button can be found by clicking the green "Code" button at the top of the repository. The URL which that provide scan then be used to install the plugin that lives in that repository.
+The same trick works for regular GitHub repositories as well: the "Download ZIP" button can be found by clicking the green "Code" button at the top of the repository. The URL which that provides can then be used to install the plugin that lives in that repository.
 
 ## Publishing plugins to PyPI
 
