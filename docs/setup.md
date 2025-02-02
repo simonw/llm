@@ -56,7 +56,7 @@ This will install and run LLM using a temporary virtual environment.
 You can use the `--with` option to add extra plugins. To use Anthropic's models, for example:
 ```bash
 export ANTHROPIC_API_KEY='...'
-uvx --with llm-claude-3 llm -m claude-3.5-haiku 'fun facts about skunks'
+uvx --with llm-anthropic llm -m claude-3.5-haiku 'fun facts about skunks'
 ```
 All of the usual LLM commands will work with `uvx llm`. Here's how to set your OpenAI key without needing an environment variable for example:
 ```bash

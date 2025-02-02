@@ -21,8 +21,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 
 - **[llm-mistral](https://github.com/simonw/llm-mistral)** adds support for [Mistral AI](https://mistral.ai/)'s language and embedding models.
 - **[llm-gemini](https://github.com/simonw/llm-gemini)** adds support for Google's [Gemini](https://ai.google.dev/docs) models.
-- **[llm-claude](https://github.com/tomviner/llm-claude)** by Tom Viner adds support for Claude 2.1 and Claude Instant 2.1 by Anthropic.
-- **[llm-claude-3](https://github.com/simonw/llm-claude-3)** supports Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family) of models.
+- **[llm-anthropic](https://github.com/simonw/llm-anthropic)** supports Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family), [3.5 Sonnet](https://www.anthropic.com/news/claude-3-5-sonnet) and beyond.
 - **[llm-command-r](https://github.com/simonw/llm-command-r)** supports Cohere's Command R and [Command R Plus](https://txt.cohere.com/command-r-plus-microsoft-azure/) API models.
 - **[llm-reka](https://github.com/simonw/llm-reka)** supports the [Reka](https://www.reka.ai/) family of models via their API.
 - **[llm-perplexity](https://github.com/hex/llm-perplexity)** by Alexandru Geana supports the [Perplexity Labs](https://docs.perplexity.ai/) API models, including `llama-3-sonar-large-32k-online` which can search for things online and `llama-3-70b-instruct`.

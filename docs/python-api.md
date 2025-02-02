@@ -94,10 +94,10 @@ print(model.prompt("Names for otters", temperature=0.2))
 
 ### Models from plugins
 
-Any models you have installed as plugins will also be available through this mechanism, for example to use Anthropic's Claude 3.5 Sonnet model with [llm-claude-3](https://github.com/simonw/llm-claude-3):
+Any models you have installed as plugins will also be available through this mechanism, for example to use Anthropic's Claude 3.5 Sonnet model with [llm-anthropic](https://github.com/simonw/llm-anthropic):
 
 ```bash
-pip install llm-claude-3
+pip install llm-anthropic
 ```
 Then in your Python code:
 ```python
