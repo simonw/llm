@@ -54,7 +54,7 @@ response = model.prompt(
 
 ### Attachments
 
-Model that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
+Models that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
 
 This example shows two attachments - one from a file path and one from a URL:
 ```python
@@ -69,7 +69,18 @@ response = model.prompt(
     ]
 )
 ```
-Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly.
+Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly. You may optionqlly specify a content type - if tou do not it will be detected automatically:
+
+```python
+image = llm.Attachment(
+    content=b"...",
+    type="image/png"
+)
+response = model.prompt(
+    "extract text",
+    attachments=[image]
+)
+```
 
 You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
 
