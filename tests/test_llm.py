@@ -164,6 +164,31 @@ def test_logs_extract_last_code(args, log_path):
     assert result.output == 'print("hello word")\n\n'
 
 
+def test_logs_prompts(log_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "--prompts", "-p", str(log_path)])
+    assert result.exit_code == 0
+    output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", result.output)
+    expected = (
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+    )
+    assert output == expected
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):
