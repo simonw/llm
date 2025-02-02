@@ -207,6 +207,7 @@ llm chat -t cheesecake
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!attach file' to attach a file to this chat
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -227,6 +228,7 @@ If your pasted text might itself contain a `!end` line, you can set a custom del
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!attach file' to attach a file to this chat
 > !multi custom-end
  Explain this error:
 
@@ -237,6 +239,19 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>
 
  !end custom-end
+```
+
+You can attach files (text documents, images, audios, etc.) to the chat, type `!attach file` passing the path of the file to attach the file
+to the chat.
+
+```
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!attach file' to attach a file to this chat
+> !attach /path/to/image.jpeg
+Attachment '/path/to/image.jpeg' added to chat
+> Describe the image
 ```
 
 ## Listing available models

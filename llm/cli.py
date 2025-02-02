@@ -612,9 +612,12 @@ def chat(
     if not should_stream:
         validated_options["stream"] = False
 
+    attachments = []
+
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    click.echo("Type '!attach file' to attach a file to this chat")
     in_multi = False
     accumulated = []
     end_token = "!end"
@@ -625,6 +628,26 @@ def chat(
             bits = prompt.strip().split()
             if len(bits) > 1:
                 end_token = "!end {}".format(" ".join(bits[1:]))
+            continue
+        if prompt.strip().startswith("!attach"):
+            cmd = prompt.strip().split()
+            if len(cmd) != 2:
+                print("Usage: !attach file")
+                continue
+            value = cmd[1]
+            # Check that the file exists
+            path = pathlib.Path(value)
+            if not path.exists():
+                print(f"File '{value}' does not exist")
+                continue
+            path = path.resolve()
+            # Try to guess type
+            mimetype = mimetype_from_path(str(path))
+            if mimetype is None:
+                print(f"Could not determine mimetype of '{value}'")
+                continue
+            attachments.append(Attachment(type=mimetype, path=str(path), url=None, content=None))
+            print(f"Attachment '{value}' added to chat")
             continue
         if in_multi:
             if prompt.strip() == end_token:
@@ -641,7 +664,7 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system=system, **validated_options)
+        response = conversation.prompt(prompt, system=system, attachments=attachments, **validated_options)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
