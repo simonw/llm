@@ -4,6 +4,7 @@ from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
 import json
+import re
 from llm import (
     Attachment,
     AsyncResponse,
@@ -874,6 +875,9 @@ order by prompt_attachments."order"
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option("-u", "--usage", is_flag=True, help="Include token usage")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
+@click.option(
+    "--prompts", is_flag=True, help="Output prompts, end-truncated if necessary"
+)
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
     "extract_last",
@@ -910,6 +914,7 @@ def logs_list(
     truncate,
     usage,
     response,
+    prompts,
     extract,
     extract_last,
     current_conversation,
@@ -922,6 +927,18 @@ def logs_list(
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    if prompts and (json_output or response):
+        invalid = " or ".join(
+            [
+                flag[0]
+                for flag in (("--json", json_output), ("--response", response))
+                if flag[1]
+            ]
+        )
+        raise click.ClickException(
+            "Cannot use --prompts and {} together".format(invalid)
+        )
 
     if response and not current_conversation and not conversation_id:
         current_conversation = True
@@ -1035,6 +1052,27 @@ def logs_list(
         current_system = None
         should_show_conversation = True
         for row in rows:
+            if prompts:
+                system = _truncate_string(row["system"], 120, end=True)
+                prompt = _truncate_string(row["prompt"], 120, end=True)
+                cid = row["conversation_id"]
+                attachments = attachments_by_id.get(row["id"])
+                lines = [
+                    "- model: {}".format(row["model"]),
+                    "  datetime: {}".format(row["datetime_utc"]).split(".")[0],
+                    "  conversation: {}".format(cid),
+                ]
+                if system:
+                    lines.append("  system: {}".format(system))
+                if prompt:
+                    lines.append("  prompt: {}".format(prompt))
+                if attachments:
+                    lines.append("  attachments:")
+                    for attachment in attachments:
+                        path = attachment["path"] or attachment["url"]
+                        lines.append("  - {}: {}".format(attachment["type"], path))
+                click.echo("\n".join(lines))
+                continue
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
@@ -1897,10 +1935,17 @@ def template_dir():
     return path
 
 
-def _truncate_string(s, max_length=100):
-    if len(s) > max_length:
+def _truncate_string(s, max_length=100, end=False):
+    if not s:
+        return s
+    if end:
+        s = re.sub(r"\s+", " ", s)
+        if len(s) <= max_length:
+            return s
         return s[: max_length - 3] + "..."
-    return s
+    if len(s) <= max_length:
+        return s
+    return s[: max_length - 3] + "..."
 
 
 def logs_db_path():

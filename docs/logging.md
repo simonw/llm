@@ -89,6 +89,22 @@ You can truncate the display of the prompts and responses using the `-t/--trunca
 ```bash
 llm logs -n 5 -t --json
 ```
+Or use `--prompts` to see just the truncated prompts:
+```bash
+llm logs -n 2 --prompts
+```
+Example output:
+```
+- model: deepseek-reasoner
+  datetime: 2025-02-02T06:39:53
+  conversation: 01jk2pk05xq3d0vgk0202zrsg1
+  prompt:  H01 There are five huts. H02 The Scotsman lives in the purple hut. H03 The Welshman owns the parrot. H04 Kombucha is...
+- model: o3-mini
+  datetime: 2025-02-02T19:03:05
+  conversation: 01jk40qkxetedzpf1zd8k9bgww
+  system: Formatting re-enabled. Write a detailed README with extensive usage examples.
+  prompt: <documents> <document index="1"> <source>./Cargo.toml</source> <document_content> [package] name = "py-limbo" version...
+```
 
 (logs-conversation)=
 ### Logs for a conversation

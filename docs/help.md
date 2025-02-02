@@ -302,6 +302,7 @@ Options:
   -t, --truncate              Truncate long strings in output
   -u, --usage                 Include token usage
   -r, --response              Just output the last response
+  --prompts                   Output prompts, end-truncated if necessary
   -x, --extract               Extract first fenced code block
   --xl, --extract-last        Extract last fenced code block
   -c, --current               Show logs from the current conversation
