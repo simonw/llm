@@ -630,8 +630,8 @@ def chat(
                 end_token = "!end {}".format(" ".join(bits[1:]))
             continue
         if prompt.strip().startswith("!attach"):
-            cmd = prompt.strip().split()
-            if len(cmd) != 2:
+            cmd = prompt.strip().split(maxsplit=1)
+            if len(cmd) < 2:
                 print("Usage: !attach file")
                 continue
             value = cmd[1]
