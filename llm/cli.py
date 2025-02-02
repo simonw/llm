@@ -1058,8 +1058,9 @@ def logs_list(
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
                 lines = [
-                    "- conversation: {}".format(cid),
-                    "  model: {}".format(row["model"]),
+                    "- model: {}".format(row["model"]),
+                    "  datetime: {}".format(row["datetime_utc"]).split(".")[0],
+                    "  conversation: {}".format(cid),
                 ]
                 if system:
                     lines.append("  system: {}".format(system))
