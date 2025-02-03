@@ -57,6 +57,33 @@ And confirm they were logged correctly with:
 llm logs -n 1
 ```
 
+### Azure OpenAI Service
+
+LLM supports OpenAI models deployed via [Azure OpenAI Service](https://azure.microsoft.com/en-us/products/ai-services/openai-service). These can also be added using the same configuration mechanism.
+
+The `model_id` is the name LLM will use for the model. The `model_name` is the deployment name of the model on Azure OpenAI Service. 
+
+The `api_base` will be the Azure OpenAI Service endpoint. The `api_key_name` is the name of the Azure OpenAI Service API key stored using the {ref}`api-keys` feature.
+
+You must add `api_version` to use a specific version of the Azure OpenAI Service API.
+
+Set `api_type` to `azure` to specify that the OpenAI client library should use the Azure OpenAI Service API.
+
+You must also add `api_engine` to specify the base model to use, eg: `gpt-35-turbo-16k`
+
+For example, to add the `mygpt35` model (a `gpt-35-turbo-16k` model) deployed on Azure OpenAI Service, using the `2023-05-15` version of the API, with the account endpoint `https://my-openai-account.openai.azure.com/`, add this to your `extra-openai-models.yaml` file:
+
+
+```yaml
+- model_id: mygpt
+  model_name: mygpt35
+  api_base: https://my-openai-account.openai.azure.com/
+  api_key_name: azure
+  api_version: 2023-05-15
+  api_type: azure
+  api_engine: gpt-35-turbo-16k
+```
+
 ### Extra HTTP headers
 
 Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require the setting of additional HTTP headers. You can set those using the `headers:` key like this:
