@@ -32,6 +32,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-fireworks](https://github.com/simonw/llm-fireworks)** supports models hosted by [Fireworks AI](https://fireworks.ai/).
 - **[llm-palm](https://github.com/simonw/llm-palm)** adds support for Google's [PaLM 2 model](https://developers.generativeai.google/).
 - **[llm-openrouter](https://github.com/simonw/llm-openrouter)** provides access to models hosted on [OpenRouter](https://openrouter.ai/).
+- **[llm-github-models](https://github.com/tonybaloney/llm-github-models)** provides access to models hosted on [GitHub](https://github.com/marketplace/models/).
 - **[llm-cohere](https://github.com/Accudio/llm-cohere)** by Alistair Shepherd provides `cohere-generate` and `cohere-summarize` API models, powered by [Cohere](https://cohere.com/).
 - **[llm-bedrock](https://github.com/simonw/llm-bedrock)** adds support for Nova by Amazon via Amazon Bedrock.
 - **[llm-bedrock-anthropic](https://github.com/sblakey/llm-bedrock-anthropic)** by Sean Blakey adds support for Claude and Claude Instant by Anthropic via Amazon Bedrock.
