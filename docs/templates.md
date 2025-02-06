@@ -97,6 +97,8 @@ prompt: >
 ```
 The `prompt: >` causes the following indented text to be treated as a single string, with newlines collapsed to spaces. Use `prompt: |` to preserve newlines.
 
+Strings in `prompt` and `system` use the Python `string.Template` [syntax](https://docs.python.org/3/library/string.html#template-strings). This means you can escape dollar signs by doubling them, or use curly braces to put placeholders inside words.
+
 Running that with `llm -t steampunk` against GPT-4 (via [strip-tags](https://github.com/simonw/strip-tags) to remove HTML tags from the input and minify whitespace):
 ```bash
 curl -s 'https://til.simonwillison.net/macos/imovie-slides-and-audio' | \
