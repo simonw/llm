@@ -83,6 +83,8 @@ if "image/jpeg" in model.attachment_types:
     ...
 ```
 
+(python-api-model-options)=
+
 ### Model options
 
 For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
@@ -91,6 +93,8 @@ For models that support options (view those with `llm models --options`) you can
 model = llm.get_model()
 print(model.prompt("Names for otters", temperature=0.2))
 ```
+
+(python-api-models-from-plugins)=
 
 ### Models from plugins
 
@@ -111,9 +115,86 @@ print(response.text())
 ```
 Some models do not use API keys at all.
 
+(python-api-underlying-json)=
+
+### Accessing the underlying JSON
+
+Most model plugins also make a JSON version of the prompt response available. The structure of this will differ between model plugins, so building against this is likely to result in code that only works with that specific model provider.
+
+You can access this JSON data as a Python dictionary using the `response.json()` method:
+
+```python
+import llm
+from pprint import pprint
+
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt("3 names for an otter")
+json_data = response.json()
+pprint(json_data)
+```
+Here's that example output from GPT-4o mini:
+```python
+{'content': 'Sure! Here are three fun names for an otter:\n'
+            '\n'
+            '1. **Splash**\n'
+            '2. **Bubbles**\n'
+            '3. **Otto** \n'
+            '\n'
+            'Feel free to mix and match or use these as inspiration!',
+ 'created': 1739291215,
+ 'finish_reason': 'stop',
+ 'id': 'chatcmpl-AznO31yxgBjZ4zrzBOwJvHEWgdTaf',
+ 'model': 'gpt-4o-mini-2024-07-18',
+ 'object': 'chat.completion.chunk',
+ 'usage': {'completion_tokens': 43,
+           'completion_tokens_details': {'accepted_prediction_tokens': 0,
+                                         'audio_tokens': 0,
+                                         'reasoning_tokens': 0,
+                                         'rejected_prediction_tokens': 0},
+           'prompt_tokens': 13,
+           'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0},
+           'total_tokens': 56}}
+```
+
+(python-api-token-usage)=
+
+### Token usage
+
+Many models can return a count of the number of tokens used while executing the prompt.
+
+The `response.usage()` method provides an abstraction over this:
+
+```python
+pprint(response.usage())
+```
+Example output:
+```python
+Usage(input=5,
+      output=2,
+      details={'candidatesTokensDetails': [{'modality': 'TEXT',
+                                            'tokenCount': 2}],
+               'promptTokensDetails': [{'modality': 'TEXT', 'tokenCount': 5}]})
+```
+The `.input` and `.output` properties are integers representing the number of input and output tokens. The `.details` property may be a dictionary with additional custom values that vary by model.
+
+(python-api-streaming-responses)=
+
+### Streaming responses
+
+For models that support it you can stream responses as they are generated, like this:
+
+```python
+response = model.prompt("Five diabolical names for a pet goat")
+for chunk in response:
+    print(chunk, end="")
+```
+The `response.text()` method described earlier does this for you - it runs through the iterator and gathers the results into a string.
+
+If a response has been evaluated, `response.text()` will continue to return the same string.
+
 (python-api-listing-models)=
 
-### Listing models
+## Listing models
 
 The `llm.get_models()` list returns a list of all available models, including those from plugins.
 
@@ -130,19 +211,6 @@ Use `llm.get_async_models()` to list async models:
 for model in llm.get_async_models():
     print(model.model_id)
 ```
-
-### Streaming responses
-
-For models that support it you can stream responses as they are generated, like this:
-
-```python
-response = model.prompt("Five diabolical names for a pet goat")
-for chunk in response:
-    print(chunk, end="")
-```
-The `response.text()` method described earlier does this for you - it runs through the iterator and gathers the results into a string.
-
-If a response has been evaluated, `response.text()` will continue to return the same string.
 
 (python-api-async)=
 
