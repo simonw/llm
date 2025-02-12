@@ -573,6 +573,8 @@ Options:
   --batch-size INTEGER         Batch size to use when running embeddings
   --prefix TEXT                Prefix to add to the IDs
   -m, --model TEXT             Embedding model to use
+  --prepend TEXT               Prepend this string to all content before
+                               embedding
   --store                      Store the text itself in the database
   -d, --database FILE
   --help                       Show this message and exit.

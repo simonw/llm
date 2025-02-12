@@ -1574,6 +1574,10 @@ def embed(
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "--prepend",
+    help="Prepend this string to all content before embedding",
+)
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1593,6 +1597,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    prepend,
     store,
     database,
 ):
@@ -1715,11 +1720,15 @@ def embed_multi(
         def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
                 values = list(row.values())
-                id = prefix + str(values[0])
+                id: str = prefix + str(values[0])
+                content: Optional[Union[bytes, str]] = None
                 if binary:
-                    yield id, cast(bytes, values[1])
+                    content = cast(bytes, values[1])
                 else:
-                    yield id, " ".join(v or "" for v in values[1:])
+                    content = " ".join(v or "" for v in values[1:])
+                if prepend and isinstance(content, str):
+                    content = prepend + content
+                yield id, content or ""
 
         embed_kwargs = {"store": store}
         if batch_size:
