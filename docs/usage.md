@@ -38,6 +38,10 @@ Will run a prompt of:
 ```
 <contents of myscript.py> explain this code
 ```
+
+You can change this with the `--input-style` argument; it supports the values `prepend` (the default), `append` (the opposite of `prepend`),
+and `fence-prepend` and `fence-append`, which will fence the standard input content with triple backticks before prepending or appending it.
+
 For models that support them, {ref}`system prompts <system-prompts>` are a better tool for this kind of prompting.
 
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
