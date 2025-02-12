@@ -1720,15 +1720,15 @@ def embed_multi(
         def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
                 values = list(row.values())
-                id = prefix + str(values[0])
-                content = None
+                id: str = prefix + str(values[0])
+                content: Optional[Union[bytes, str]] = None
                 if binary:
                     content = cast(bytes, values[1])
                 else:
                     content = " ".join(v or "" for v in values[1:])
                 if prepend and isinstance(content, str):
                     content = prepend + content
-                yield id, content
+                yield id, content or ""
 
         embed_kwargs = {"store": store}
         if batch_size:
