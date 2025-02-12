@@ -250,6 +250,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
 
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
 @pytest.mark.parametrize(
     "filename,content",
     (
@@ -265,7 +266,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         ),
     ),
 )
-def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
+def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, content):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "phrases", "-d", str(db_path), "-m", "embed-demo"]
     input = None
@@ -278,6 +279,8 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
         args.append(str(path))
     if prefix:
         args.extend(("--prefix", prefix))
+    if prepend:
+        args.extend(("--prepend", prepend))
     # Auto-detection can't detect JSON-nl, so make that explicit
     if filename.endswith(".jsonl"):
         args.extend(("--format", "nl"))
@@ -325,7 +328,8 @@ def test_embed_multi_files_binary_store(tmpdir):
 
 @pytest.mark.parametrize("use_other_db", (True, False))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
-def test_embed_multi_sql(tmpdir, use_other_db, prefix):
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
+def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
     db_path = str(tmpdir / "embeddings.db")
     db = sqlite_utils.Database(db_path)
     extra_args = []
@@ -336,6 +340,8 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
 
     if prefix:
         extra_args.extend(("--prefix", prefix))
+    if prepend:
+        extra_args.extend(("--prepend", prepend))
 
     db["content"].insert_all(
         [
@@ -365,8 +371,14 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     assert embeddings_db["embeddings"].count == 2
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     assert rows == [
-        {"id": (prefix or "") + "1", "content": "cli Command line interface"},
-        {"id": (prefix or "") + "2", "content": "sql Structured query language"},
+        {
+            "id": (prefix or "") + "1",
+            "content": (prepend or "") + "cli Command line interface",
+        },
+        {
+            "id": (prefix or "") + "2",
+            "content": (prepend or "") + "sql Structured query language",
+        },
     ]
 
 
@@ -425,7 +437,8 @@ def multi_files(tmpdir):
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("scenario", ("single", "multi"))
-def test_embed_multi_files(multi_files, scenario):
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
+def test_embed_multi_files(multi_files, scenario, prepend):
     db_path, files = multi_files
     for filename, content in (
         ("file1.txt", b"hello world"),
@@ -440,17 +453,23 @@ def test_embed_multi_files(multi_files, scenario):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
 
+    extra_args = []
+
+    if prepend:
+        extra_args.extend(("--prepend", prepend))
     if scenario == "single":
-        extra_args = ["--files", str(files), "**/*.txt"]
+        extra_args.extend(["--files", str(files), "**/*.txt"])
     else:
-        extra_args = [
-            "--files",
-            str(files / "nested" / "more"),
-            "**/*.ini",
-            "--files",
-            str(files / "nested"),
-            "*.txt",
-        ]
+        extra_args.extend(
+            [
+                "--files",
+                str(files / "nested" / "more"),
+                "**/*.ini",
+                "--files",
+                str(files / "nested"),
+                "*.txt",
+            ]
+        )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -471,17 +490,20 @@ def test_embed_multi_files(multi_files, scenario):
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     if scenario == "single":
         assert rows == [
-            {"id": "file1.txt", "content": "hello world"},
-            {"id": "file2.txt", "content": "goodbye world"},
-            {"id": "nested/more/three.txt", "content": "three"},
-            {"id": "nested/one.txt", "content": "one"},
-            {"id": "nested/two.txt", "content": "two"},
+            {"id": "file1.txt", "content": (prepend or "") + "hello world"},
+            {"id": "file2.txt", "content": (prepend or "") + "goodbye world"},
+            {"id": "nested/more/three.txt", "content": (prepend or "") + "three"},
+            {"id": "nested/one.txt", "content": (prepend or "") + "one"},
+            {"id": "nested/two.txt", "content": (prepend or "") + "two"},
         ]
     else:
         assert rows == [
-            {"id": "ignored.ini", "content": "Has weird \x96 character"},
-            {"id": "one.txt", "content": "one"},
-            {"id": "two.txt", "content": "two"},
+            {
+                "id": "ignored.ini",
+                "content": (prepend or "") + "Has weird \x96 character",
+            },
+            {"id": "one.txt", "content": (prepend or "") + "one"},
+            {"id": "two.txt", "content": (prepend or "") + "two"},
         ]
 
 
