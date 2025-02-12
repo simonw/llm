@@ -10,7 +10,7 @@ DEFAULT_PLUGINS = ("llm.default_plugins.openai_models",)
 pm = pluggy.PluginManager("llm")
 pm.add_hookspecs(hookspecs)
 
-LLM_LOAD_PLUGINS = os.environ.get("LLM_LOAD_PLUGINS", None)
+LLM_LOAD_PLUGINS = os.environ.get("LLM_LOAD_PLUGINS")
 
 _loaded = False
 
