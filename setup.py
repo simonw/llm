@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-VERSION = "0.13.1"
+VERSION = "0.21"
 
 
 def get_long_description():
@@ -37,9 +37,9 @@ setup(
     """,
     install_requires=[
         "click",
-        "openai>=1.0",
+        "openai>=1.55.3",
         "click-default-group>=1.2.3",
-        "sqlite-utils>=3.35.0",
+        "sqlite-utils>=3.37",
         "sqlite-migrate>=0.1a2",
         "pydantic>=1.10.2",
         "PyYAML",
@@ -48,20 +48,22 @@ setup(
         "setuptools",
         "pip",
         "pyreadline3; sys_platform == 'win32'",
+        "puremagic",
     ],
     extras_require={
         "test": [
             "pytest",
             "numpy",
-            "pytest-httpx",
+            "pytest-httpx>=0.33.0",
+            "pytest-asyncio",
             "cogapp",
-            "mypy",
-            "black>=24.1.0",
+            "mypy>=1.10.0",
+            "black>=25.1.0",
             "ruff",
             "types-click",
             "types-PyYAML",
             "types-setuptools",
         ]
     },
-    python_requires=">=3.8",
+    python_requires=">=3.9",
 )

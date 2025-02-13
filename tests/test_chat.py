@@ -5,25 +5,16 @@ import pytest
 import sys
 
 
-def test_mock_model(mock_model):
-    mock_model.enqueue(["hello world"])
-    mock_model.enqueue(["second"])
-    model = llm.get_model("mock")
-    response = model.prompt(prompt="hello")
-    assert response.text() == "hello world"
-    assert str(response) == "hello world"
-    assert model.history[0][0].prompt == "hello"
-    response2 = model.prompt(prompt="hello again")
-    assert response2.text() == "second"
-
-
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_basic(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["one world"])
     mock_model.enqueue(["one again"])
     result = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock"], input="Hi\nHi two\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nHi two\nquit\n",
+        catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output == (
@@ -59,6 +50,9 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         },
         {
             "id": ANY,
@@ -72,12 +66,18 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 2,
+            "output_tokens": 1,
+            "token_details": None,
         },
     ]
     # Now continue that conversation
     mock_model.enqueue(["continued"])
     result2 = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock", "-c"], input="Continue\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock", "-c"],
+        input="Continue\nquit\n",
+        catch_exceptions=False,
     )
     assert result2.exit_code == 0
     assert result2.output == (
@@ -110,6 +110,9 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 
@@ -147,6 +150,9 @@ def test_chat_system(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 
@@ -173,8 +179,11 @@ def test_chat_options(mock_model, logs_db):
             "response": "Some text",
             "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": 0,
+            "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
         }
     ]
 

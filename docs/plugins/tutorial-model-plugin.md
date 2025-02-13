@@ -1,5 +1,5 @@
 (tutorial-model-plugin)=
-# Writing a plugin to support a new model
+# Model plugin tutorial
 
 This tutorial will walk you through developing a new plugin for LLM that adds support for a new Large Language Model.
 
@@ -135,7 +135,7 @@ We can try that out by pasting it into the interactive Python interpreter and ru
 
 To execute the model, we start with a word. We look at the options for words that might come next and pick one of those at random. Then we repeat that process until we have produced the desired number of output words.
 
-Some words might not have any following words from our training sentence. For our implementation we wil fall back on picking a random word from our collection.
+Some words might not have any following words from our training sentence. For our implementation we will fall back on picking a random word from our collection.
 
 We will implement this as a [Python generator](https://realpython.com/introduction-to-python-generators/), using the yield keyword to produce each token:
 ```python
@@ -344,7 +344,7 @@ class Markov(Model):
 ```
 Let's add extra validation rules to our options. Length must be at least 2. Duration must be between 0 and 10.
 
-The `Options` class uses [Pydantic 2](https://pydantic.org/), which can support all sorts of advanced validation rules.
+The `Options` class uses [Pydantic 2](https://pydantic.dev/), which can support all sorts of advanced validation rules.
 
 We can also add inline documentation, which can then be displayed by the `llm models --options` command.
 

@@ -12,6 +12,8 @@ A CLI utility and Python library for interacting with Large Language Models, bot
 
 [Run prompts from the command-line](https://llm.datasette.io/en/stable/usage.html#executing-a-prompt), [store the results in SQLite](https://llm.datasette.io/en/stable/logging.html), [generate embeddings](https://llm.datasette.io/en/stable/embeddings/index.html) and more.
 
+Consult the **[LLM plugins directory](https://llm.datasette.io/en/stable/plugins/directory.html)** for plugins that provide access to remote and local models.
+
 Full documentation: **[llm.datasette.io](https://llm.datasette.io/)**
 
 Background on this project:
@@ -101,7 +103,7 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 
 You can use the `-s/--system` option to set a system prompt, providing instructions for processing other input to the tool.
 
-To describe how the code a file works, try this:
+To describe how the code in a file works, try this:
 
 ```bash
 cat mycode.py | llm -s "Explain this code"

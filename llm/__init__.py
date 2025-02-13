@@ -4,6 +4,9 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    AsyncModel,
+    AsyncResponse,
+    Attachment,
     Conversation,
     Model,
     ModelWithAliases,
@@ -15,7 +18,7 @@ from .models import (
 )
 from .embeddings import Collection
 from .templates import Template
-from .plugins import pm
+from .plugins import pm, load_plugins
 import click
 from typing import Dict, List, Optional
 import json
@@ -25,9 +28,12 @@ import struct
 
 __all__ = [
     "hookimpl",
+    "get_async_model",
     "get_model",
     "get_key",
     "user_dir",
+    "AsyncResponse",
+    "Attachment",
     "Collection",
     "Conversation",
     "Model",
@@ -38,6 +44,7 @@ __all__ = [
     "ModelError",
     "NeedsKeyException",
 ]
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def get_plugins(all=False):
@@ -71,12 +78,13 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
         for alias, model_id in configured_aliases.items():
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
-    def register(model, aliases=None):
+    def register(model, async_model=None, aliases=None):
         alias_list = list(aliases or [])
         if model.model_id in extra_model_aliases:
             alias_list.extend(extra_model_aliases[model.model_id])
-        model_aliases.append(ModelWithAliases(model, alias_list))
+        model_aliases.append(ModelWithAliases(model, async_model, alias_list))
 
+    load_plugins()
     pm.hook.register_models(register=register)
 
     return model_aliases
@@ -99,6 +107,7 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
             alias_list.extend(extra_model_aliases[model.model_id])
         model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
 
     return model_aliases
@@ -110,6 +119,7 @@ def get_embedding_models():
     def register(model, aliases=None):
         models.append(model)
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
     return models
 
@@ -131,12 +141,25 @@ def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
     return model_aliases
 
 
+def get_async_model_aliases() -> Dict[str, AsyncModel]:
+    async_model_aliases = {}
+    for model_with_aliases in get_models_with_aliases():
+        if model_with_aliases.async_model:
+            for alias in model_with_aliases.aliases:
+                async_model_aliases[alias] = model_with_aliases.async_model
+            async_model_aliases[model_with_aliases.model.model_id] = (
+                model_with_aliases.async_model
+            )
+    return async_model_aliases
+
+
 def get_model_aliases() -> Dict[str, Model]:
     model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
-        for alias in model_with_aliases.aliases:
-            model_aliases[alias] = model_with_aliases.model
-        model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
+        if model_with_aliases.model:
+            for alias in model_with_aliases.aliases:
+                model_aliases[alias] = model_with_aliases.model
+            model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
 
 
@@ -144,12 +167,56 @@ class UnknownModelError(KeyError):
     pass
 
 
-def get_model(name):
-    aliases = get_model_aliases()
+def get_models() -> List[Model]:
+    "Get all registered models"
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.model for mwa in models_with_aliases if mwa.model]
+
+
+def get_async_models() -> List[AsyncModel]:
+    "Get all registered async models"
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.async_model for mwa in models_with_aliases if mwa.async_model]
+
+
+def get_async_model(name: Optional[str] = None) -> AsyncModel:
+    "Get an async model by name or alias"
+    aliases = get_async_model_aliases()
+    name = name or get_default_model()
     try:
         return aliases[name]
     except KeyError:
-        raise UnknownModelError("Unknown model: " + name)
+        # Does a sync model exist?
+        sync_model = None
+        try:
+            sync_model = get_model(name, _skip_async=True)
+        except UnknownModelError:
+            pass
+        if sync_model:
+            raise UnknownModelError("Unknown async model (sync model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
+
+
+def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
+    "Get a model by name or alias"
+    aliases = get_model_aliases()
+    name = name or get_default_model()
+    try:
+        return aliases[name]
+    except KeyError:
+        # Does an async model exist?
+        if _skip_async:
+            raise UnknownModelError("Unknown model: " + name)
+        async_model = None
+        try:
+            async_model = get_async_model(name)
+        except UnknownModelError:
+            pass
+        if async_model:
+            raise UnknownModelError("Unknown model (async model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
 
 
 def get_key(
@@ -256,3 +323,27 @@ def cosine_similarity(a, b):
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b)
+
+
+def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    path = user_dir() / filename
+    if path.exists():
+        return path.read_text().strip()
+    else:
+        return default
+
+
+def set_default_model(model, filename="default_model.txt"):
+    path = user_dir() / filename
+    if model is None and path.exists():
+        path.unlink()
+    else:
+        path.write_text(model)
+
+
+def get_default_embedding_model():
+    return get_default_model("default_embedding_model.txt", None)
+
+
+def set_default_embedding_model(model):
+    set_default_model(model, "default_embedding_model.txt")

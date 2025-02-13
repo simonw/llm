@@ -1,15 +1,22 @@
+import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
 import json
+import re
 from llm import (
+    Attachment,
+    AsyncResponse,
     Collection,
     Conversation,
     Response,
     Template,
     UnknownModelError,
     encode,
+    get_async_model,
+    get_default_model,
+    get_default_embedding_model,
     get_embedding_models_with_aliases,
     get_embedding_model_aliases,
     get_embedding_model,
@@ -20,12 +27,21 @@ from llm import (
     get_models_with_aliases,
     user_dir,
     set_alias,
+    set_default_model,
+    set_default_embedding_model,
     remove_alias,
 )
 
 from .migrations import migrate
-from .plugins import pm
+from .plugins import pm, load_plugins
+from .utils import (
+    mimetype_from_path,
+    mimetype_from_string,
+    token_usage_string,
+    extract_fenced_code_block,
+)
 import base64
+import httpx
 import pathlib
 import pydantic
 import readline
@@ -41,10 +57,58 @@ import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 
-DEFAULT_MODEL = "gpt-3.5-turbo"
-DEFAULT_EMBEDDING_MODEL = "ada-002"
-
 DEFAULT_TEMPLATE = "prompt: "
+
+
+class AttachmentType(click.ParamType):
+    name = "attachment"
+
+    def convert(self, value, param, ctx):
+        if value == "-":
+            content = sys.stdin.buffer.read()
+            # Try to guess type
+            mimetype = mimetype_from_string(content)
+            if mimetype is None:
+                raise click.BadParameter("Could not determine mimetype of stdin")
+            return Attachment(type=mimetype, path=None, url=None, content=content)
+        if "://" in value:
+            # Confirm URL exists and try to guess type
+            try:
+                response = httpx.head(value)
+                response.raise_for_status()
+                mimetype = response.headers.get("content-type")
+            except httpx.HTTPError as ex:
+                raise click.BadParameter(str(ex))
+            return Attachment(mimetype, None, value, None)
+        # Check that the file exists
+        path = pathlib.Path(value)
+        if not path.exists():
+            self.fail(f"File {value} does not exist", param, ctx)
+        path = path.resolve()
+        # Try to guess type
+        mimetype = mimetype_from_path(str(path))
+        if mimetype is None:
+            raise click.BadParameter(f"Could not determine mimetype of {value}")
+        return Attachment(type=mimetype, path=str(path), url=None, content=None)
+
+
+def attachment_types_callback(ctx, param, values):
+    collected = []
+    for value, mimetype in values:
+        if "://" in value:
+            attachment = Attachment(mimetype, None, value, None)
+        elif value == "-":
+            content = sys.stdin.buffer.read()
+            attachment = Attachment(mimetype, None, None, content)
+        else:
+            # Look for file
+            path = pathlib.Path(value)
+            if not path.exists():
+                raise click.BadParameter(f"File {value} does not exist")
+            path = path.resolve()
+            attachment = Attachment(mimetype, str(path), None, None)
+        collected.append(attachment)
+    return collected
 
 
 def _validate_metadata_json(ctx, param, value):
@@ -67,11 +131,16 @@ def _validate_metadata_json(ctx, param, value):
 @click.version_option()
 def cli():
     """
-    Access large language models from the command-line
+    Access Large Language Models from the command-line
 
     Documentation: https://llm.datasette.io/
 
-    To get started, obtain an OpenAI key and set it like this:
+    LLM can run models from many different providers. Consult the
+    plugin directory for a list of available models:
+
+    https://llm.datasette.io/en/stable/plugins/directory.html
+
+    To get started with OpenAI, obtain an API key from them and:
 
     \b
         $ llm keys set openai
@@ -87,6 +156,23 @@ def cli():
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
+@click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="Attachment with explicit mimetype",
+)
 @click.option(
     "options",
     "-o",
@@ -122,10 +208,22 @@ def cli():
 )
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
+@click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
+@click.option("-u", "--usage", is_flag=True, help="Show token usage")
+@click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
+@click.option(
+    "extract_last",
+    "--xl",
+    "--extract-last",
+    is_flag=True,
+    help="Extract last fenced code block",
+)
 def prompt(
     prompt,
     system,
     model_id,
+    attachments,
+    attachment_types,
     options,
     template,
     param,
@@ -136,11 +234,37 @@ def prompt(
     conversation_id,
     key,
     save,
+    async_,
+    usage,
+    extract,
+    extract_last,
 ):
     """
     Execute a prompt
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
+
+    Examples:
+
+    \b
+        llm 'Capital of France?'
+        llm 'Capital of France?' -m gpt-4o
+        llm 'Capital of France?' -s 'answer in Spanish'
+
+    Multi-modal models can be called with attachments like this:
+
+    \b
+        llm 'Extract text from this image' -a image.jpg
+        llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
+        cat image | llm 'describe image' -a -
+        # With an explicit mimetype:
+        cat image | llm 'describe image' --at - image/jpeg
+
+    The -x/--extract option returns just the content of the first ``` fenced code
+    block, if one is present. If none are present it returns the full response.
+
+    \b
+        llm 'JavaScript function for reversing a string' -x
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
@@ -161,7 +285,13 @@ def prompt(
                 bits.append(prompt)
             prompt = " ".join(bits)
 
-        if prompt is None and not save and sys.stdin.isatty():
+        if (
+            prompt is None
+            and not save
+            and sys.stdin.isatty()
+            and not attachments
+            and not attachment_types
+        ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
         return prompt
@@ -195,6 +325,10 @@ def prompt(
             to_save["system"] = system
         if param:
             to_save["defaults"] = dict(param)
+        if extract:
+            to_save["extract"] = True
+        if extract_last:
+            to_save["extract_last"] = True
         path.write_text(
             yaml.dump(
                 to_save,
@@ -211,6 +345,8 @@ def prompt(
         if system:
             raise click.ClickException("Cannot use -t/--template and --system together")
         template_obj = load_template(template)
+        extract = template_obj.extract
+        extract_last = template_obj.extract_last
         prompt = read_prompt()
         try:
             prompt, system = template_obj.evaluate(prompt, params)
@@ -218,6 +354,9 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+
+    if extract or extract_last:
+        no_stream = True
 
     conversation = None
     if conversation_id or _continue:
@@ -236,9 +375,12 @@ def prompt(
 
     # Now resolve the model
     try:
-        model = model_aliases[model_id]
-    except KeyError:
-        raise click.ClickException("'{}' is not a known model".format(model_id))
+        if async_:
+            model = get_async_model(model_id)
+        else:
+            model = get_model(model_id)
+    except UnknownModelError as ex:
+        raise click.ClickException(ex)
 
     # Provide the API key, if one is needed and has been provided
     if model.needs_key:
@@ -261,27 +403,87 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    resolved_attachments = [*attachments, *attachment_types]
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         validated_options["stream"] = False
 
     prompt = read_prompt()
+    response = None
 
     prompt_method = model.prompt
     if conversation:
         prompt_method = conversation.prompt
 
     try:
-        response = prompt_method(prompt, system, **validated_options)
-        if should_stream:
-            for chunk in response:
-                print(chunk, end="")
-                sys.stdout.flush()
-            print("")
+        if async_:
+
+            async def inner():
+                if should_stream:
+                    response = prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    )
+                    async for chunk in response:
+                        print(chunk, end="")
+                        sys.stdout.flush()
+                    print("")
+                else:
+                    response = prompt_method(
+                        prompt,
+                        attachments=resolved_attachments,
+                        system=system,
+                        **validated_options,
+                    )
+                    text = await response.text()
+                    if extract or extract_last:
+                        text = (
+                            extract_fenced_code_block(text, last=extract_last) or text
+                        )
+                    print(text)
+                return response
+
+            response = asyncio.run(inner())
         else:
-            print(response.text())
-    except Exception as ex:
+            response = prompt_method(
+                prompt,
+                attachments=resolved_attachments,
+                system=system,
+                **validated_options,
+            )
+            if should_stream:
+                for chunk in response:
+                    print(chunk, end="")
+                    sys.stdout.flush()
+                print("")
+            else:
+                text = response.text()
+                if extract or extract_last:
+                    text = extract_fenced_code_block(text, last=extract_last) or text
+                print(text)
+    # List of exceptions that should never be raised in pytest:
+    except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
+    except Exception as ex:
+        # All other exceptions should raise in pytest, show to user otherwise
+        if getattr(sys, "_called_from_test", False):
+            raise
+        raise click.ClickException(str(ex))
+
+    if isinstance(response, AsyncResponse):
+        response = asyncio.run(response.to_sync_response())
+
+    if usage:
+        # Show token usage to stderr in yellow
+        click.echo(
+            click.style(
+                "Token usage: {}".format(response.token_usage()), fg="yellow", bold=True
+            ),
+            err=True,
+        )
 
     # Log to the database
     if (logs_on() or log) and not no_log:
@@ -342,8 +544,12 @@ def chat(
     Hold an ongoing chat with a model.
     """
     # Left and right arrow keys to move cursor:
-    readline.parse_and_bind("\\e[D: backward-char")
-    readline.parse_and_bind("\\e[C: forward-char")
+    if sys.platform != "win32":
+        readline.parse_and_bind("\\e[D: backward-char")
+        readline.parse_and_bind("\\e[C: forward-char")
+    else:
+        readline.parse_and_bind("bind -x '\\e[D: backward-char'")
+        readline.parse_and_bind("bind -x '\\e[C: forward-char'")
     log_path = logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
@@ -436,7 +642,7 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system, **validated_options)
+        response = conversation.prompt(prompt, system=system, **validated_options)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
@@ -467,7 +673,7 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
     for response in db["responses"].rows_where(
         "conversation_id = ?", [conversation_id]
     ):
-        conversation.responses.append(Response.from_row(response))
+        conversation.responses.append(Response.from_row(db, response))
     return conversation
 
 
@@ -497,6 +703,27 @@ def keys_list():
 def keys_path_command():
     "Output the path to the keys.json file"
     click.echo(user_dir() / "keys.json")
+
+
+@keys.command(name="get")
+@click.argument("name")
+def keys_get(name):
+    """
+    Return the value of a stored key
+
+    Example usage:
+
+    \b
+        export OPENAI_API_KEY=$(llm keys get openai)
+    """
+    path = user_dir() / "keys.json"
+    if not path.exists():
+        raise click.ClickException("No keys found")
+    keys = json.loads(path.read_text())
+    try:
+        click.echo(keys[name])
+    except KeyError:
+        raise click.ClickException("No key found with name '{}'".format(name))
 
 
 @keys.command(name="set")
@@ -588,6 +815,9 @@ LOGS_COLUMNS = """    responses.id,
     responses.conversation_id,
     responses.duration_ms,
     responses.datetime_utc,
+    responses.input_tokens,
+    responses.output_tokens,
+    responses.token_details,
     conversations.name as conversation_name,
     conversations.model as conversation_model"""
 
@@ -610,6 +840,21 @@ where responses_fts match :query{extra_where}
 order by responses_fts.rank desc{limit}
 """
 
+ATTACHMENTS_SQL = """
+select
+    response_id,
+    attachments.id,
+    attachments.type,
+    attachments.path,
+    attachments.url,
+    length(attachments.content) as content_length
+from attachments
+join prompt_attachments
+    on attachments.id = prompt_attachments.attachment_id
+where prompt_attachments.response_id in ({})
+order by prompt_attachments."order"
+"""
+
 
 @logs.command(name="list")
 @click.option(
@@ -628,6 +873,19 @@ order by responses_fts.rank desc{limit}
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+@click.option("-u", "--usage", is_flag=True, help="Include token usage")
+@click.option("-r", "--response", is_flag=True, help="Just output the last response")
+@click.option(
+    "--prompts", is_flag=True, help="Output prompts, end-truncated if necessary"
+)
+@click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
+@click.option(
+    "extract_last",
+    "--xl",
+    "--extract-last",
+    is_flag=True,
+    help="Extract last fenced code block",
+)
 @click.option(
     "current_conversation",
     "-c",
@@ -654,6 +912,11 @@ def logs_list(
     model,
     query,
     truncate,
+    usage,
+    response,
+    prompts,
+    extract,
+    extract_last,
     current_conversation,
     conversation_id,
     json_output,
@@ -664,6 +927,21 @@ def logs_list(
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    if prompts and (json_output or response):
+        invalid = " or ".join(
+            [
+                flag[0]
+                for flag in (("--json", json_output), ("--response", response))
+                if flag[1]
+            ]
+        )
+        raise click.ClickException(
+            "Cannot use --prompts and {} together".format(invalid)
+        )
+
+    if response and not current_conversation and not conversation_id:
+        current_conversation = True
 
     if current_conversation:
         try:
@@ -711,7 +989,8 @@ def logs_list(
     if conversation_id:
         where_bits.append("responses.conversation_id = :conversation_id")
     if where_bits:
-        sql_format["extra_where"] = " where " + " and ".join(where_bits)
+        where_ = " and " if query else " where "
+        sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
     rows = list(
@@ -725,6 +1004,14 @@ def logs_list(
     # ... except for searches where we don't do this
     if not query:
         rows.reverse()
+
+    # Fetch any attachments
+    ids = [row["id"] for row in rows]
+    attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
+    attachments_by_id = {}
+    for attachment in attachments:
+        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
     for row in rows:
         if truncate:
             row["prompt"] = _truncate_string(row["prompt"])
@@ -738,14 +1025,54 @@ def logs_list(
                 else:
                     row[key] = json.loads(row[key])
 
-    # Output as JSON if request
+    output = None
     if json_output:
-        click.echo(json.dumps(list(rows), indent=2))
+        # Output as JSON if requested
+        for row in rows:
+            row["attachments"] = [
+                {k: v for k, v in attachment.items() if k != "response_id"}
+                for attachment in attachments_by_id.get(row["id"], [])
+            ]
+        output = json.dumps(list(rows), indent=2)
+    elif extract or extract_last:
+        # Extract and return first code block
+        for row in rows:
+            output = extract_fenced_code_block(row["response"], last=extract_last)
+            if output is not None:
+                break
+    elif response:
+        # Just output the last response
+        if rows:
+            output = rows[-1]["response"]
+
+    if output is not None:
+        click.echo(output)
     else:
         # Output neatly formatted human-readable logs
         current_system = None
         should_show_conversation = True
         for row in rows:
+            if prompts:
+                system = _truncate_string(row["system"], 120, end=True)
+                prompt = _truncate_string(row["prompt"], 120, end=True)
+                cid = row["conversation_id"]
+                attachments = attachments_by_id.get(row["id"])
+                lines = [
+                    "- model: {}".format(row["model"]),
+                    "  datetime: {}".format(row["datetime_utc"]).split(".")[0],
+                    "  conversation: {}".format(cid),
+                ]
+                if system:
+                    lines.append("  system: {}".format(system))
+                if prompt:
+                    lines.append("  prompt: {}".format(prompt))
+                if attachments:
+                    lines.append("  attachments:")
+                    for attachment in attachments:
+                        path = attachment["path"] or attachment["url"]
+                        lines.append("  - {}: {}".format(attachment["type"], path))
+                click.echo("\n".join(lines))
+                continue
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
@@ -769,7 +1096,39 @@ def logs_list(
                 if row["system"] is not None:
                     click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            attachments = attachments_by_id.get(row["id"])
+            if attachments:
+                click.echo("\n### Attachments\n")
+                for i, attachment in enumerate(attachments, 1):
+                    if attachment["path"]:
+                        path = attachment["path"]
+                        click.echo(
+                            "{}. **{}**: `{}`".format(i, attachment["type"], path)
+                        )
+                    elif attachment["url"]:
+                        click.echo(
+                            "{}. **{}**: {}".format(
+                                i, attachment["type"], attachment["url"]
+                            )
+                        )
+                    elif attachment["content_length"]:
+                        click.echo(
+                            "{}. **{}**: `<{} bytes>`".format(
+                                i,
+                                attachment["type"],
+                                f"{attachment['content_length']:,}",
+                            )
+                        )
+
             click.echo("\n## Response:\n\n{}\n".format(row["response"]))
+            if usage:
+                token_usage = token_usage_string(
+                    row["input_tokens"],
+                    row["output_tokens"],
+                    json.loads(row["token_details"]) if row["token_details"] else None,
+                )
+                if token_usage:
+                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
 
 
 @cli.group(
@@ -793,40 +1152,57 @@ _type_lookup = {
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
 )
-def models_list(options):
+@click.option("async_", "--async", is_flag=True, help="List async models")
+@click.option("-q", "--query", help="Search for models matching this string")
+def models_list(options, async_, query):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
+        if async_ and not model_with_aliases.async_model:
+            continue
+        if query and not model_with_aliases.matches(query):
+            continue
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
-        output = str(model_with_aliases.model) + extra
-        if options and model_with_aliases.model.Options.schema()["properties"]:
-            for name, field in model_with_aliases.model.Options.schema()[
-                "properties"
-            ].items():
+        model = (
+            model_with_aliases.model if not async_ else model_with_aliases.async_model
+        )
+        output = str(model) + extra
+        if options and model.Options.schema()["properties"]:
+            output += "\n  Options:"
+            for name, field in model.Options.schema()["properties"].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
-                    any_of = [{"type": field["type"]}]
+                    any_of = [{"type": field.get("type", "str")}]
                 types = ", ".join(
                     [
-                        _type_lookup.get(item["type"], item["type"])
+                        _type_lookup.get(item.get("type"), item.get("type", "str"))
                         for item in any_of
-                        if item["type"] != "null"
+                        if item.get("type") != "null"
                     ]
                 )
-                bits = ["\n  ", name, ": ", types]
+                bits = ["\n    ", name, ": ", types]
                 description = field.get("description", "")
                 if description and (
-                    model_with_aliases.model.__class__
-                    not in models_that_have_shown_options
+                    model.__class__ not in models_that_have_shown_options
                 ):
                     wrapped = textwrap.wrap(description, 70)
-                    bits.append("\n    ")
-                    bits.extend("\n    ".join(wrapped))
+                    bits.append("\n      ")
+                    bits.extend("\n      ".join(wrapped))
                 output += "".join(bits)
-            models_that_have_shown_options.add(model_with_aliases.model.__class__)
+            models_that_have_shown_options.add(model.__class__)
+        if options and model.attachment_types:
+            attachment_types = ", ".join(sorted(model.attachment_types))
+            wrapper = textwrap.TextWrapper(
+                width=min(max(shutil.get_terminal_size().columns, 30), 70),
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
+            output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
         click.echo(output)
+    if not query:
+        click.echo(f"Default: {get_default_model()}")
 
 
 @models.command(name="default")
@@ -1198,6 +1574,10 @@ def embed(
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "--prepend",
+    help="Prepend this string to all content before embedding",
+)
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1217,6 +1597,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    prepend,
     store,
     database,
 ):
@@ -1339,11 +1720,15 @@ def embed_multi(
         def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
             for row in rows:
                 values = list(row.values())
-                id = prefix + str(values[0])
+                id: str = prefix + str(values[0])
+                content: Optional[Union[bytes, str]] = None
                 if binary:
-                    yield id, cast(bytes, values[1])
+                    content = cast(bytes, values[1])
                 else:
-                    yield id, " ".join(v or "" for v in values[1:])
+                    content = " ".join(v or "" for v in values[1:])
+                if prepend and isinstance(content, str):
+                    content = prepend + content
+                yield id, content or ""
 
         embed_kwargs = {"store": store}
         if batch_size:
@@ -1559,34 +1944,17 @@ def template_dir():
     return path
 
 
-def _truncate_string(s, max_length=100):
-    if len(s) > max_length:
+def _truncate_string(s, max_length=100, end=False):
+    if not s:
+        return s
+    if end:
+        s = re.sub(r"\s+", " ", s)
+        if len(s) <= max_length:
+            return s
         return s[: max_length - 3] + "..."
-    return s
-
-
-def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
-    path = user_dir() / filename
-    if path.exists():
-        return path.read_text().strip()
-    else:
-        return default
-
-
-def set_default_model(model, filename="default_model.txt"):
-    path = user_dir() / filename
-    if model is None and path.exists():
-        path.unlink()
-    else:
-        path.write_text(model)
-
-
-def get_default_embedding_model():
-    return get_default_model("default_embedding_model.txt", None)
-
-
-def set_default_embedding_model(model):
-    set_default_model(model, "default_embedding_model.txt")
+    if len(s) <= max_length:
+        return s
+    return s[: max_length - 3] + "..."
 
 
 def logs_db_path():
@@ -1638,6 +2006,8 @@ def render_errors(errors):
         output.append("  " + error["msg"])
     return "\n".join(output)
 
+
+load_plugins()
 
 pm.hook.register_commands(cli=cli)
 

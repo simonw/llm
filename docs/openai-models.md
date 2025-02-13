@@ -23,20 +23,41 @@ Then paste in the API key.
 
 Run `llm models` for a full list of available models. The OpenAI models supported by LLM are:
 
+<!-- [[[cog
+from click.testing import CliRunner
+from llm.cli import cli
+result = CliRunner().invoke(cli, ["models", "list"])
+models = [line for line in result.output.split("\n") if line.startswith("OpenAI ")]
+cog.out("```\n{}\n```".format("\n".join(models)))
+]]] -->
 ```
+OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Chat: gpt-4o-audio-preview
+OpenAI Chat: gpt-4o-audio-preview-2024-12-17
+OpenAI Chat: gpt-4o-audio-preview-2024-10-01
+OpenAI Chat: gpt-4o-mini-audio-preview
+OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k, turbo)
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
 OpenAI Chat: gpt-4-1106-preview
 OpenAI Chat: gpt-4-0125-preview
-OpenAI Chat: gpt-4-turbo-preview (aliases: gpt-4-turbo, 4-turbo, 4t)
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct, instruct)
+OpenAI Chat: gpt-4-turbo-2024-04-09
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
+OpenAI Chat: o1
+OpenAI Chat: o1-2024-12-17
+OpenAI Chat: o1-preview
+OpenAI Chat: o1-mini
+OpenAI Chat: o3-mini
+OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
+<!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 
-The best balance of price and capacity are the `-turbo` models. `gpt-3.5-turbo` (aliased to `3.5`) is the least expensive. `gpt-4-turbo-preview` (aliased to `4t`) is the cheapest of the GPT-4 models.
+`gpt-4o-mini` (aliased to `4o-mini`) is the least expensive model, and is the default for if you don't specify a model at all. `gpt-4o` (aliased to `4o`) is the newest, cheapest and fastest of the GPT-4 family of models.
 
 The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
 

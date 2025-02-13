@@ -3,8 +3,10 @@ import datetime
 import llm
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.models import Usage
 import json
 import os
+import pathlib
 import pytest
 import re
 import sqlite_utils
@@ -26,16 +28,18 @@ def log_path(user_path):
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
-    start = datetime.datetime.utcnow()
+    start = datetime.datetime.now(datetime.timezone.utc)
     db["responses"].insert_all(
         {
             "id": str(ULID()).lower(),
             "system": "system",
             "prompt": "prompt",
-            "response": "response",
+            "response": 'response\n```python\nprint("hello word")\n```',
             "model": "davinci",
             "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
             "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
         }
         for i in range(100)
     )
@@ -45,37 +49,49 @@ def log_path(user_path):
 datetime_re = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 
-def test_logs_text(log_path):
+@pytest.mark.parametrize("usage", (False, True))
+def test_logs_text(log_path, usage):
     runner = CliRunner()
     args = ["logs", "-p", str(log_path)]
+    if usage:
+        args.append("-u")
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     output = result.output
     # Replace 2023-08-17T20:53:58 with YYYY-MM-DDTHH:MM:SS
     output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
-
-    assert output == (
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## System:\n\n"
-        "system\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
+    expected = (
+        (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## System:\n\n"
+            "system\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + (
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "Model: **davinci**\n\n"
+            "## Prompt:\n\n"
+            "prompt\n\n"
+            "## Response:\n\n"
+            'response\n```python\nprint("hello word")\n```\n\n'
+        )
+        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
     )
+    assert output == expected
 
 
 @pytest.mark.parametrize("n", (None, 0, 2))
@@ -95,6 +111,82 @@ def test_logs_json(n, log_path):
         else:
             expected_length = n
     assert len(logs) == expected_length
+
+
+@pytest.mark.parametrize(
+    "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
+)
+def test_logs_response_only(args, log_path):
+    "Test that logs -r/--response returns just the last response"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'response\n```python\nprint("hello word")\n```\n'
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["-x"],
+        ["--extract"],
+        ["list", "-x"],
+        ["list", "--extract"],
+        # Using -xr together should have same effect as just -x
+        ["-xr"],
+        ["-x", "-r"],
+        ["--extract", "--response"],
+    ),
+)
+def test_logs_extract_first_code(args, log_path):
+    "Test that logs -x/--extract returns the first code block"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'print("hello word")\n\n'
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["--xl"],
+        ["--extract-last"],
+        ["list", "--xl"],
+        ["list", "--extract-last"],
+        ["--xl", "-r"],
+        ["-x", "--xl"],
+    ),
+)
+def test_logs_extract_last_code(args, log_path):
+    "Test that logs --xl/--extract-last returns the last code block"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'print("hello word")\n\n'
+
+
+def test_logs_prompts(log_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "--prompts", "-p", str(log_path)])
+    assert result.exit_code == 0
+    output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", result.output)
+    expected = (
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+        "- model: davinci\n"
+        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  conversation: abc123\n"
+        "  system: system\n"
+        "  prompt: prompt\n"
+    )
+    assert output == expected
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -135,16 +227,19 @@ def test_logs_filtered(user_path, model):
 
 
 @pytest.mark.parametrize(
-    "query,expected",
+    "query,extra_args,expected",
     (
         # With no search term order should be by datetime
-        ("", ["doc1", "doc2", "doc3"]),
+        ("", [], ["doc1", "doc2", "doc3"]),
         # With a search it's order by rank instead
-        ("llama", ["doc1", "doc3"]),
-        ("alpaca", ["doc2"]),
+        ("llama", [], ["doc1", "doc3"]),
+        ("alpaca", [], ["doc2"]),
+        # Model filter should work too
+        ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
+        ("llama", ["-m", "davinci2"], []),
     ),
 )
-def test_logs_search(user_path, query, expected):
+def test_logs_search(user_path, query, extra_args, expected):
     log_path = str(user_path / "logs.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -164,7 +259,7 @@ def test_logs_search(user_path, query, expected):
     _insert("doc2", "alpaca")
     _insert("doc3", "llama llama")
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"])
+    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"] + extra_args)
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert [record["id"] for record in records] == expected
@@ -246,7 +341,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     expected = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
@@ -260,7 +355,7 @@ def test_llm_default_prompt(
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
 
@@ -274,7 +369,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             "prompt_json": {
@@ -285,14 +380,41 @@ def test_llm_default_prompt(
             "options_json": {},
             "response": "Bob, Alice, Eve",
             "response_json": {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4o-mini",
                 "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-3.5-turbo",
+            "conversation_model": "gpt-4o-mini",
         }.items()
     )
+
+
+@pytest.mark.parametrize(
+    "args,expect_just_code",
+    (
+        (["-x"], True),
+        (["--extract"], True),
+        (["-x", "--async"], True),
+        (["--extract", "--async"], True),
+        # Use --no-stream here to ensure it passes test same as -x/--extract cases
+        (["--no-stream"], False),
+    ),
+)
+def test_extract_fenced_code(
+    mocked_openai_chat_returning_fenced_code, args, expect_just_code
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code"] + args,
+        catch_exceptions=False,
+    )
+    output = result.output
+    if expect_just_code:
+        assert "```" not in output
+    else:
+        assert "```" in output
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
@@ -499,32 +621,39 @@ def test_openai_localai_configuration(mocked_localai, user_path):
 
 
 EXPECTED_OPTIONS = """
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+OpenAI Chat: gpt-4o (aliases: 4o)
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    json_object: boolean
+      Output a valid JSON object {...}. Prompt must mention JSON.
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
 """
 
 
@@ -533,6 +662,22 @@ def test_llm_models_options(user_path):
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
     assert EXPECTED_OPTIONS.strip() in result.output
+    assert "AsyncMockModel: mock" not in result.output
+
+
+def test_llm_models_async(user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "AsyncMockModel: mock" in result.output
+
+
+@pytest.mark.parametrize("option", ("-q", "--query"))
+def test_llm_models_query(user_path, option):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", option, "mockmodel"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "MockModel: mock\n"
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):
@@ -542,3 +687,62 @@ def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir2 = llm.user_dir()
     assert user_dir == str(user_dir2)
     assert os.path.exists(user_dir)
+
+
+def test_model_defaults(tmpdir, monkeypatch):
+    user_dir = str(tmpdir / "u")
+    monkeypatch.setenv("LLM_USER_PATH", user_dir)
+    config_path = pathlib.Path(user_dir) / "default_model.txt"
+    assert not config_path.exists()
+    assert llm.get_default_model() == "gpt-4o-mini"
+    assert llm.get_model().model_id == "gpt-4o-mini"
+    llm.set_default_model("gpt-4o")
+    assert config_path.exists()
+    assert llm.get_default_model() == "gpt-4o"
+    assert llm.get_model().model_id == "gpt-4o"
+
+
+def test_get_models():
+    models = llm.get_models()
+    assert all(isinstance(model, llm.Model) for model in models)
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids
+    # Ensure no model_ids are duplicated
+    # https://github.com/simonw/llm/issues/667
+    assert len(model_ids) == len(set(model_ids))
+
+
+def test_get_async_models():
+    models = llm.get_async_models()
+    assert all(isinstance(model, llm.AsyncModel) for model in models)
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids
+
+
+def test_mock_model(mock_model):
+    mock_model.enqueue(["hello world"])
+    mock_model.enqueue(["second"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    assert response.text() == "hello world"
+    assert str(response) == "hello world"
+    assert model.history[0][0].prompt == "hello"
+    assert response.usage() == Usage(input=1, output=1, details=None)
+    response2 = model.prompt(prompt="hello again")
+    assert response2.text() == "second"
+    assert response2.usage() == Usage(input=2, output=1, details=None)
+
+
+def test_sync_on_done(mock_model):
+    mock_model.enqueue(["hello world"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    caught = []
+
+    def done(response):
+        caught.append(response)
+
+    response.on_done(done)
+    assert len(caught) == 0
+    str(response)
+    assert len(caught) == 1

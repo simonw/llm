@@ -19,19 +19,27 @@ result = CliRunner().invoke(cli, ["aliases", "list"])
 cog.out("```\n{}```".format(result.output))
 ]]] -->
 ```
-3.5              : gpt-3.5-turbo
-chatgpt          : gpt-3.5-turbo
-chatgpt-16k      : gpt-3.5-turbo-16k
-3.5-16k          : gpt-3.5-turbo-16k
-4                : gpt-4
-gpt4             : gpt-4
-4-32k            : gpt-4-32k
-gpt-4-turbo      : gpt-4-turbo-preview
-4-turbo          : gpt-4-turbo-preview
-4t               : gpt-4-turbo-preview
-3.5-instruct     : gpt-3.5-turbo-instruct
-chatgpt-instruct : gpt-3.5-turbo-instruct
-ada              : ada-002 (embedding)
+4o                  : gpt-4o
+4o-mini             : gpt-4o-mini
+3.5                 : gpt-3.5-turbo
+chatgpt             : gpt-3.5-turbo
+chatgpt-16k         : gpt-3.5-turbo-16k
+3.5-16k             : gpt-3.5-turbo-16k
+4                   : gpt-4
+gpt4                : gpt-4
+4-32k               : gpt-4-32k
+gpt-4-turbo-preview : gpt-4-turbo
+4-turbo             : gpt-4-turbo
+4t                  : gpt-4-turbo
+3.5-instruct        : gpt-3.5-turbo-instruct
+chatgpt-instruct    : gpt-3.5-turbo-instruct
+ada                 : text-embedding-ada-002 (embedding)
+ada-002             : text-embedding-ada-002 (embedding)
+3-small             : text-embedding-3-small (embedding)
+3-large             : text-embedding-3-large (embedding)
+3-small-512         : text-embedding-3-small-512 (embedding)
+3-large-256         : text-embedding-3-large-256 (embedding)
+3-large-1024        : text-embedding-3-large-1024 (embedding)
 ```
 <!-- [[[end]]] -->
 

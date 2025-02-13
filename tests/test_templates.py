@@ -91,6 +91,12 @@ def test_templates_list(templates_path, args):
             {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
             None,
         ),
+        # -x/--extract should be persisted:
+        (
+            ["--system", "write python", "--extract"],
+            {"system": "write python", "extract": True},
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
@@ -115,7 +121,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
         (
             "'Summarize this: $input'",
             [],
-            "gpt-3.5-turbo",
+            "gpt-4o-mini",
             "Summarize this: Input text",
             None,
         ),
@@ -133,24 +139,26 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
             "Summarize this: Input text",
             None,
         ),
-        (
+        pytest.param(
             "boo",
             ["-s", "s"],
             None,
             None,
             "Error: Cannot use -t/--template and --system together",
+            marks=pytest.mark.httpx_mock(),
         ),
-        (
+        pytest.param(
             "prompt: 'Say $hello'",
             [],
             None,
             None,
             "Error: Missing variables: hello",
+            marks=pytest.mark.httpx_mock(),
         ),
         (
             "prompt: 'Say $hello'",
             ["-p", "hello", "Blah"],
-            "gpt-3.5-turbo",
+            "gpt-4o-mini",
             "Say Blah",
             None,
         ),
@@ -183,4 +191,4 @@ def test_template_basic(
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
-        mocked_openai_chat.reset(assert_all_responses_were_requested=False)
+        mocked_openai_chat.reset()

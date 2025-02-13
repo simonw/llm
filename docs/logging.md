@@ -54,7 +54,22 @@ You can view the logs using the `llm logs` command:
 ```bash
 llm logs
 ```
-This will output the three most recent logged items in Markdown format
+This will output the three most recent logged items in Markdown format, showing both the prompt and the response formatted using Markdown.
+
+To get back just the most recent prompt response as plain text, add `-r/--response`:
+
+```bash
+llm logs -r
+```
+Use `-x/--extract` to extract and return the first fenced code block from the selected log entries:
+
+```bash
+llm logs --extract
+```
+Or `--xl/--extract-last` for the last fenced code block:
+```bash
+llm logs --extract-last
+```
 
 Add `--json` to get the log messages in JSON instead:
 
@@ -73,6 +88,22 @@ llm logs -n 0
 You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable:
 ```bash
 llm logs -n 5 -t --json
+```
+Or use `--prompts` to see just the truncated prompts:
+```bash
+llm logs -n 2 --prompts
+```
+Example output:
+```
+- model: deepseek-reasoner
+  datetime: 2025-02-02T06:39:53
+  conversation: 01jk2pk05xq3d0vgk0202zrsg1
+  prompt:  H01 There are five huts. H02 The Scotsman lives in the purple hut. H03 The Welshman owns the parrot. H04 Kombucha is...
+- model: o3-mini
+  datetime: 2025-02-02T19:03:05
+  conversation: 01jk40qkxetedzpf1zd8k9bgww
+  system: Formatting re-enabled. Write a detailed README with extensive usage examples.
+  prompt: <documents> <document index="1"> <source>./Cargo.toml</source> <document_content> [package] name = "py-limbo" version...
 ```
 
 (logs-conversation)=
@@ -130,7 +161,7 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts"):
+for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -153,12 +184,29 @@ CREATE TABLE [responses] (
   [response_json] TEXT,
   [conversation_id] TEXT REFERENCES [conversations]([id]),
   [duration_ms] INTEGER,
-  [datetime_utc] TEXT
+  [datetime_utc] TEXT,
+  [input_tokens] INTEGER,
+  [output_tokens] INTEGER,
+  [token_details] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],
   [response],
   content=[responses]
+);
+CREATE TABLE [attachments] (
+  [id] TEXT PRIMARY KEY,
+  [type] TEXT,
+  [path] TEXT,
+  [url] TEXT,
+  [content] BLOB
+);
+CREATE TABLE [prompt_attachments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [attachment_id])
 );
 ```
 <!-- [[[end]]] -->
