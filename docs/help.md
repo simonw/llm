@@ -336,7 +336,7 @@ Usage: llm models list [OPTIONS]
 Options:
   --options         Show options for each model, if available
   --async           List async models
-  -q, --query TEXT  Search for models matching this string
+  -q, --query TEXT  Search for models matching these strings
   --help            Show this message and exit.
 ```
 
@@ -627,7 +627,8 @@ Usage: llm embed-models list [OPTIONS]
   List available embedding models
 
 Options:
-  --help  Show this message and exit.
+  -q, --query TEXT  Search for embedding models matching these strings
+  --help            Show this message and exit.
 ```
 
 (help-embed-models-default)=

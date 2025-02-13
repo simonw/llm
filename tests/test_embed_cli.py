@@ -590,6 +590,20 @@ def test_default_embedding_model():
     assert result7.output == "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"
 
 
+@pytest.mark.parametrize(
+    "args,expected_model_id",
+    (
+        (["-q", "text-embedding-3-large"], "text-embedding-3-large"),
+        (["-q", "text", "-q", "3"], "text-embedding-3-large"),
+    ),
+)
+def test_llm_embed_models_query(user_path, args, expected_model_id):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed-models"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert expected_model_id in result.output
+
+
 @pytest.mark.parametrize("default_is_set", (False, True))
 @pytest.mark.parametrize("command", ("embed", "embed-multi"))
 def test_default_embed_model_errors(user_path, default_is_set, command):

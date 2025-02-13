@@ -1153,15 +1153,22 @@ _type_lookup = {
     "--options", is_flag=True, help="Show options for each model, if available"
 )
 @click.option("async_", "--async", is_flag=True, help="List async models")
-@click.option("-q", "--query", help="Search for models matching this string")
+@click.option(
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for models matching these strings",
+)
 def models_list(options, async_, query):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
             continue
-        if query and not model_with_aliases.matches(query):
-            continue
+        if query:
+            # Only show models where every provided query string matches
+            if not all(model_with_aliases.matches(q) for q in query):
+                continue
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
@@ -1820,11 +1827,20 @@ def embed_models():
 
 
 @embed_models.command(name="list")
-def embed_models_list():
+@click.option(
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for embedding models matching these strings",
+)
+def embed_models_list(query):
     "List available embedding models"
     output = []
     for model_with_aliases in get_embedding_models_with_aliases():
-        s = str(model_with_aliases.model.model_id)
+        if query:
+            if not all(model_with_aliases.matches(q) for q in query):
+                continue
+        s = str(model_with_aliases.model)
         if model_with_aliases.aliases:
             s += " (aliases: {})".format(", ".join(model_with_aliases.aliases))
         output.append(s)

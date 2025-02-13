@@ -618,8 +618,8 @@ class _BaseModel(ABC, _get_key_mixin):
     def __str__(self) -> str:
         return "{}: {}".format(self.__class__.__name__, self.model_id)
 
-    def __repr__(self):
-        return "<{} '{}'>".format(self.__class__.__name__, self.model_id)
+    def __repr__(self) -> str:
+        return f"<{str(self)}>"
 
 
 class Model(_BaseModel):
@@ -750,6 +750,12 @@ class EmbeddingModel(ABC, _get_key_mixin):
         """
         pass
 
+    def __str__(self) -> str:
+        return "{}: {}".format(self.__class__.__name__, self.model_id)
+
+    def __repr__(self) -> str:
+        return f"<{str(self)}>"
+
 
 @dataclass
 class ModelWithAliases:
@@ -772,6 +778,13 @@ class ModelWithAliases:
 class EmbeddingModelWithAliases:
     model: EmbeddingModel
     aliases: Set[str]
+
+    def matches(self, query: str) -> bool:
+        query = query.lower()
+        all_strings: List[str] = []
+        all_strings.extend(self.aliases)
+        all_strings.append(str(self.model))
+        return any(query in alias.lower() for alias in all_strings)
 
 
 def _conversation_name(text):

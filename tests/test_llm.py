@@ -672,12 +672,26 @@ def test_llm_models_async(user_path):
     assert "AsyncMockModel: mock" in result.output
 
 
-@pytest.mark.parametrize("option", ("-q", "--query"))
-def test_llm_models_query(user_path, option):
+@pytest.mark.parametrize(
+    "args,expected_model_id,unexpected_model_id",
+    (
+        (["-q", "gpt-4o"], "OpenAI Chat: gpt-4o", None),
+        (["-q", "mock"], "MockModel: mock", None),
+        (["--query", "mock"], "MockModel: mock", None),
+        (
+            ["-q", "4o", "-q", "mini"],
+            "OpenAI Chat: gpt-4o-mini",
+            "OpenAI Chat: gpt-4o ",
+        ),
+    ),
+)
+def test_llm_models_query(user_path, args, expected_model_id, unexpected_model_id):
     runner = CliRunner()
-    result = runner.invoke(cli, ["models", option, "mockmodel"], catch_exceptions=False)
+    result = runner.invoke(cli, ["models"] + args, catch_exceptions=False)
     assert result.exit_code == 0
-    assert result.output == "MockModel: mock\n"
+    assert expected_model_id in result.output
+    if unexpected_model_id:
+        assert unexpected_model_id not in result.output
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):
