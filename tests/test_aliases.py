@@ -71,14 +71,26 @@ def test_cli_aliases_list_json(args):
     )
 
 
-def test_cli_aliases_set(user_path):
+@pytest.mark.parametrize(
+    "args,expected,expected_error",
+    (
+        (["foo", "bar"], {"foo": "bar"}, None),
+        (["foo", "-q", "mo"], {"foo": "mock"}, None),
+        (["foo", "-q", "mog"], None, "No model found matching query: mog"),
+    ),
+)
+def test_cli_aliases_set(user_path, args, expected, expected_error):
     # Should be not aliases.json at start
     assert not (user_path / "aliases.json").exists()
     runner = CliRunner()
-    result = runner.invoke(cli, ["aliases", "set", "foo", "bar"])
-    assert result.exit_code == 0
-    assert (user_path / "aliases.json").exists()
-    assert json.loads((user_path / "aliases.json").read_text("utf-8")) == {"foo": "bar"}
+    result = runner.invoke(cli, ["aliases", "set"] + args)
+    if not expected_error:
+        assert result.exit_code == 0
+        assert (user_path / "aliases.json").exists()
+        assert json.loads((user_path / "aliases.json").read_text("utf-8")) == expected
+    else:
+        assert result.exit_code == 1
+        assert result.output.strip() == f"Error: {expected_error}"
 
 
 def test_cli_aliases_path(user_path):

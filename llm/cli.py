@@ -1300,17 +1300,51 @@ def aliases_list(json_):
 
 @aliases.command(name="set")
 @click.argument("alias")
-@click.argument("model_id")
-def aliases_set(alias, model_id):
+@click.argument("model_id", required=False)
+@click.option(
+    "-q",
+    "--query",
+    multiple=True,
+    help="Set alias for model matching these strings",
+)
+def aliases_set(alias, model_id, query):
     """
     Set an alias for a model
 
     Example usage:
 
     \b
-        $ llm aliases set turbo gpt-3.5-turbo
+        llm aliases set mini gpt-4o-mini
+
+    Alternatively you can omit the model ID and specify one or more -q options.
+    The first model matching all of those query strings will be used.
+
+    \b
+        llm aliases set mini -q 4o -q mini
     """
-    set_alias(alias, model_id)
+    if not model_id:
+        if not query:
+            raise click.ClickException(
+                "You must provide a model_id or at least one -q option"
+            )
+        # Search for the first model matching all query strings
+        found = None
+        for model_with_aliases in get_models_with_aliases():
+            if all(model_with_aliases.matches(q) for q in query):
+                found = model_with_aliases
+                break
+        if not found:
+            raise click.ClickException(
+                "No model found matching query: " + ", ".join(query)
+            )
+        model_id = found.model.model_id
+        set_alias(alias, model_id)
+        click.echo(
+            f"Alias '{alias}' set to model '{model_id}'",
+            err=True,
+        )
+    else:
+        set_alias(alias, model_id)
 
 
 @aliases.command(name="remove")

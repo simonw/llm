@@ -53,11 +53,8 @@ Example output:
 {
     "3.5": "gpt-3.5-turbo",
     "chatgpt": "gpt-3.5-turbo",
-    "chatgpt-16k": "gpt-3.5-turbo-16k",
-    "3.5-16k": "gpt-3.5-turbo-16k",
     "4": "gpt-4",
     "gpt4": "gpt-4",
-    "4-32k": "gpt-4-32k",
     "ada": "ada-002"
 }
 ```
@@ -67,12 +64,15 @@ Example output:
 The `llm aliases set <alias> <model-id>` command can be used to add a new alias:
 
 ```bash
-llm aliases set turbo gpt-3.5-turbo-16k
+llm aliases set mini gpt-4o-mini
 ```
-Now you can run the `gpt-3.5-turbo-16k` model using the `turbo` alias like this:
-
+You can also pass one or more `-q search` options to set an alias on the first model matching those search terms:
 ```bash
-llm -m turbo 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
+llm aliases set mini -q 4o -q mini
+```
+Now you can run the `gpt-4o-mini` model using the `mini` alias like this:
+```bash
+llm -m mini 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
 ```
 Aliases can be set for both regular models and {ref}`embedding models <embeddings>` using the same command. To set an alias of `oai` for the OpenAI `ada-002` embedding model use this:
 ```bash
@@ -92,7 +92,7 @@ Output:
 The `llm aliases remove <alias>` command will remove the specified alias:
 
 ```bash
-llm aliases remove turbo
+llm aliases remove mini
 ```
 
 ## Viewing the aliases file

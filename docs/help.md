@@ -444,16 +444,22 @@ Options:
 (help-aliases-set)=
 #### llm aliases set --help
 ```
-Usage: llm aliases set [OPTIONS] ALIAS MODEL_ID
+Usage: llm aliases set [OPTIONS] ALIAS [MODEL_ID]
 
   Set an alias for a model
 
   Example usage:
 
-      $ llm aliases set turbo gpt-3.5-turbo
+      llm aliases set mini gpt-4o-mini
+
+  Alternatively you can omit the model ID and specify one or more -q options.
+  The first model matching all of those query strings will be used.
+
+      llm aliases set mini -q 4o -q mini
 
 Options:
-  --help  Show this message and exit.
+  -q, --query TEXT  Set alias for model matching these strings
+  --help            Show this message and exit.
 ```
 
 (help-aliases-remove)=
