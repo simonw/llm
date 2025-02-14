@@ -257,9 +257,10 @@ GeminiPro: gemini-1.5-flash-002
 ...
 ```
 
-Add `-q term` to search for models matching a specific search term:
+Add one or more `-q term` options to search for models matching all of those search terms:
 ```bash
 llm models -q gpt-4o
+llm models -q 4o -q mini
 ```
 
 Add `--options` to also see documentation for the options supported by each model:

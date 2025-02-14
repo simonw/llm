@@ -361,8 +361,14 @@ llm embed-models
 ```
 The output should look something like this:
 ```
-3-small (aliases: ada)
-sentence-transformers/all-MiniLM-L6-v2 (aliases: all-MiniLM-L6-v2)
+OpenAIEmbeddingModel: text-embedding-ada-002 (aliases: ada, ada-002)
+OpenAIEmbeddingModel: text-embedding-3-small (aliases: 3-small)
+OpenAIEmbeddingModel: text-embedding-3-large (aliases: 3-large)
+...
+```
+Add `-q` one or more times to search for models matching those terms:
+```bash
+llm embed-models -q 3-small
 ```
 
 (embeddings-cli-embed-models-default)=
