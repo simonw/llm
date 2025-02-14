@@ -236,12 +236,12 @@ def get_key(
     if explicit_key:
         # User specified a key that's not an alias, use that
         return explicit_key
-    # Stored key over-rides environment variables over-ride the default key
-    if key_alias in stored_keys:
-        return stored_keys[key_alias]
-    # Finally try environment variable
+    # Environment variable overrides stored key
     if env_var and os.environ.get(env_var):
         return os.environ[env_var]
+    # Finally try stored key
+    if key_alias in stored_keys:
+        return stored_keys[key_alias]
     # Couldn't find it
     return None
 
