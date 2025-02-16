@@ -718,7 +718,7 @@ def test_model_defaults(tmpdir, monkeypatch):
 
 def test_get_models():
     models = llm.get_models()
-    assert all(isinstance(model, llm.Model) for model in models)
+    assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
     # Ensure no model_ids are duplicated
