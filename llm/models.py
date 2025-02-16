@@ -167,6 +167,11 @@ class Conversation(_BaseConversation):
             key=key,
         )
 
+    def __repr__(self):
+        count = len(self.responses)
+        s = "s" if count == 1 else ""
+        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
+
 
 @dataclass
 class AsyncConversation(_BaseConversation):
@@ -193,6 +198,11 @@ class AsyncConversation(_BaseConversation):
             conversation=self,
             key=key,
         )
+
+    def __repr__(self):
+        count = len(self.responses)
+        s = "s" if count == 1 else ""
+        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
 
 
 class _BaseResponse:
@@ -651,7 +661,11 @@ class _BaseModel(ABC, _get_key_mixin):
                 )
 
     def __str__(self) -> str:
-        return "{}: {}".format(self.__class__.__name__, self.model_id)
+        return "{}{}: {}".format(
+            self.__class__.__name__,
+            " (async)" if isinstance(self, (AsyncModel, AsyncKeyModel)) else "",
+            self.model_id,
+        )
 
     def __repr__(self) -> str:
         return f"<{str(self)}>"
