@@ -34,6 +34,11 @@ def register_models(register):
         Chat("gpt-4o", vision=True), AsyncChat("gpt-4o", vision=True), aliases=("4o",)
     )
     register(
+        Chat("chatgpt-4o-latest", vision=True),
+        AsyncChat("chatgpt-4o-latest", vision=True),
+        aliases=("chatgpt-4o",),
+    )
+    register(
         Chat("gpt-4o-mini", vision=True),
         AsyncChat("gpt-4o-mini", vision=True),
         aliases=("4o-mini",),
