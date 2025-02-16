@@ -1,4 +1,4 @@
-from llm import AsyncModel, EmbeddingModel, Model, hookimpl
+from llm import AsyncKeyModel, EmbeddingModel, KeyModel, hookimpl
 import llm
 from llm.utils import (
     dicts_to_table_string,
@@ -212,7 +212,7 @@ def register_commands(cli):
     @click.option("--key", help="OpenAI API key")
     def models(json_, key):
         "List models available to you from the OpenAI API"
-        from llm.cli import get_key
+        from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
         response = httpx.get(
@@ -479,7 +479,7 @@ class _Shared:
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
 
-    def get_client(self, async_=False):
+    def get_client(self, key, *, async_=False):
         kwargs = {}
         if self.api_base:
             kwargs["base_url"] = self.api_base
@@ -490,7 +490,7 @@ class _Shared:
         if self.api_engine:
             kwargs["engine"] = self.api_engine
         if self.needs_key:
-            kwargs["api_key"] = self.get_key()
+            kwargs["api_key"] = self.get_key(key)
         else:
             # OpenAI-compatible models don't need a key, but the
             # openai client library requires one
@@ -516,7 +516,7 @@ class _Shared:
         return kwargs
 
 
-class Chat(_Shared, Model):
+class Chat(_Shared, KeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     default_max_tokens = None
@@ -527,12 +527,12 @@ class Chat(_Shared, Model):
             default=None,
         )
 
-    def execute(self, prompt, stream, response, conversation=None):
+    def execute(self, prompt, stream, response, conversation=None, key=None):
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
-        client = self.get_client()
+        client = self.get_client(key)
         usage = None
         if stream:
             completion = client.chat.completions.create(
@@ -567,7 +567,7 @@ class Chat(_Shared, Model):
         response._prompt_json = redact_data({"messages": messages})
 
 
-class AsyncChat(_Shared, AsyncModel):
+class AsyncChat(_Shared, AsyncKeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     default_max_tokens = None
@@ -579,13 +579,13 @@ class AsyncChat(_Shared, AsyncModel):
         )
 
     async def execute(
-        self, prompt, stream, response, conversation=None
+        self, prompt, stream, response, conversation=None, key=None
     ) -> AsyncGenerator[str, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
-        client = self.get_client(async_=True)
+        client = self.get_client(key, async_=True)
         usage = None
         if stream:
             completion = await client.chat.completions.create(
@@ -635,7 +635,7 @@ class Completion(Chat):
     def __str__(self):
         return "OpenAI Completion: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None):
+    def execute(self, prompt, stream, response, conversation=None, key=None):
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
@@ -647,7 +647,7 @@ class Completion(Chat):
                 messages.append(prev_response.text())
         messages.append(prompt.prompt)
         kwargs = self.build_kwargs(prompt, stream)
-        client = self.get_client()
+        client = self.get_client(key)
         if stream:
             completion = client.completions.create(
                 model=self.model_name or self.model_id,

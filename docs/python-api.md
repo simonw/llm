@@ -94,6 +94,21 @@ model = llm.get_model()
 print(model.prompt("Names for otters", temperature=0.2))
 ```
 
+(python-api-models-api-keys)=
+
+### Passing an API key
+
+Models that accept API keys should take an additional `key=` parameter to their `model.prompt()` method:
+
+```python
+model = llm.get_model("gpt-4o-mini")
+print(model.prompt("Names for beavers", key="sk-..."))
+```
+
+If you don't provide this argument LLM will attempt to find it from an environment variable (`OPENAI_API_KEY` for OpenAI, others for different plugins) or from keys that have been saved using the {ref}`llm keys set <api-keys>` command.
+
+Some model plugins may not yet have been upgraded to handle the `key=` parameter, in which case you will need to use one of the other mechanisms.
+
 (python-api-models-from-plugins)=
 
 ### Models from plugins
@@ -192,26 +207,6 @@ The `response.text()` method described earlier does this for you - it runs throu
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
 
-(python-api-listing-models)=
-
-## Listing models
-
-The `llm.get_models()` list returns a list of all available models, including those from plugins.
-
-```python
-import llm
-
-for model in llm.get_models():
-    print(model.model_id)
-```
-
-Use `llm.get_async_models()` to list async models:
-
-```python
-for model in llm.get_async_models():
-    print(model.model_id)
-```
-
 (python-api-async)=
 
 ## Async models
@@ -239,6 +234,7 @@ async for chunk in model.prompt(
 ):
     print(chunk, end="", flush=True)
 ```
+This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
 
 (python-api-conversations)=
 
@@ -276,6 +272,26 @@ response = conversation.prompt(
 ```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+(python-api-listing-models)=
+
+## Listing models
+
+The `llm.get_models()` list returns a list of all available models, including those from plugins.
+
+```python
+import llm
+
+for model in llm.get_models():
+    print(model.model_id)
+```
+
+Use `llm.get_async_models()` to list async models:
+
+```python
+for model in llm.get_async_models():
+    print(model.model_id)
+```
 
 (python-api-response-on-done)=
 

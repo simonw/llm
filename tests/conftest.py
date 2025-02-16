@@ -79,6 +79,22 @@ class MockModel(llm.Model):
         response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
 
 
+class MockKeyModel(llm.KeyModel):
+    model_id = "mock_key"
+    needs_key = "mock"
+
+    def execute(self, prompt, stream, response, conversation, key):
+        return [f"key: {key}"]
+
+
+class MockAsyncKeyModel(llm.AsyncKeyModel):
+    model_id = "mock_key"
+    needs_key = "mock"
+
+    async def execute(self, prompt, stream, response, conversation, key):
+        yield f"async, key: {key}"
+
+
 class AsyncMockModel(llm.AsyncModel):
     model_id = "mock"
 
@@ -151,6 +167,16 @@ def mock_model():
 @pytest.fixture
 def async_mock_model():
     return AsyncMockModel()
+
+
+@pytest.fixture
+def mock_key_model():
+    return MockKeyModel()
+
+
+@pytest.fixture
+def mock_async_key_model():
+    return MockAsyncKeyModel()
 
 
 @pytest.fixture(autouse=True)

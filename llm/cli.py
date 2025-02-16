@@ -7,12 +7,14 @@ import json
 import re
 from llm import (
     Attachment,
+    AsyncKeyModel,
     AsyncResponse,
     Collection,
     Conversation,
     Response,
     Template,
     UnknownModelError,
+    KeyModel,
     encode,
     get_async_model,
     get_default_model,
@@ -20,7 +22,6 @@ from llm import (
     get_embedding_models_with_aliases,
     get_embedding_model_aliases,
     get_embedding_model,
-    get_key,
     get_plugins,
     get_model,
     get_model_aliases,
@@ -382,10 +383,6 @@ def prompt(
     except UnknownModelError as ex:
         raise click.ClickException(ex)
 
-    # Provide the API key, if one is needed and has been provided
-    if model.needs_key:
-        model.key = get_key(key, model.needs_key, model.key_env_var)
-
     if conversation:
         # To ensure it can see the key
         conversation.model = model
@@ -403,11 +400,16 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    kwargs = {**validated_options}
+
     resolved_attachments = [*attachments, *attachment_types]
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
-        validated_options["stream"] = False
+        kwargs["stream"] = False
+
+    if isinstance(model, (KeyModel, AsyncKeyModel)):
+        kwargs["key"] = key
 
     prompt = read_prompt()
     response = None
@@ -425,7 +427,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
-                        **validated_options,
+                        **kwargs,
                     )
                     async for chunk in response:
                         print(chunk, end="")
@@ -436,7 +438,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
-                        **validated_options,
+                        **kwargs,
                     )
                     text = await response.text()
                     if extract or extract_last:
@@ -452,7 +454,7 @@ def prompt(
                 prompt,
                 attachments=resolved_attachments,
                 system=system,
-                **validated_options,
+                **kwargs,
             )
             if should_stream:
                 for chunk in response:
@@ -586,10 +588,6 @@ def chat(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
-    # Provide the API key, if one is needed and has been provided
-    if model.needs_key:
-        model.key = get_key(key, model.needs_key, model.key_env_var)
-
     if conversation is None:
         # Start a fresh conversation for this chat
         conversation = Conversation(model=model)
@@ -609,9 +607,15 @@ def chat(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    kwargs = {}
+    kwargs.update(validated_options)
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
-        validated_options["stream"] = False
+        kwargs["stream"] = False
+
+    if key and isinstance(model, KeyModel):
+        kwargs["key"] = key
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
@@ -642,7 +646,7 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system=system, **validated_options)
+        response = conversation.prompt(prompt, system=system, **kwargs)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:

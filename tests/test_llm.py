@@ -718,7 +718,7 @@ def test_model_defaults(tmpdir, monkeypatch):
 
 def test_get_models():
     models = llm.get_models()
-    assert all(isinstance(model, llm.Model) for model in models)
+    assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
     # Ensure no model_ids are duplicated
@@ -728,7 +728,9 @@ def test_get_models():
 
 def test_get_async_models():
     models = llm.get_async_models()
-    assert all(isinstance(model, llm.AsyncModel) for model in models)
+    assert all(
+        isinstance(model, (llm.AsyncModel, llm.AsyncKeyModel)) for model in models
+    )
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
 
@@ -745,6 +747,18 @@ def test_mock_model(mock_model):
     response2 = model.prompt(prompt="hello again")
     assert response2.text() == "second"
     assert response2.usage() == Usage(input=2, output=1, details=None)
+
+
+def test_mock_key_model(mock_key_model):
+    response = mock_key_model.prompt(prompt="hello", key="hi")
+    assert response.text() == "key: hi"
+
+
+@pytest.mark.asyncio
+async def test_mock_async_key_model(mock_async_key_model):
+    response = mock_async_key_model.prompt(prompt="hello", key="hi")
+    output = await response.text()
+    assert output == "async, key: hi"
 
 
 def test_sync_on_done(mock_model):
