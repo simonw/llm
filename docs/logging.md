@@ -87,23 +87,71 @@ llm logs -n 0
 ```
 You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable:
 ```bash
-llm logs -n 5 -t --json
-```
-Or use `--prompts` to see just the truncated prompts:
-```bash
-llm logs -n 2 --prompts
+llm logs -n 1 -t --json
 ```
 Example output:
+```json
+[
+  {
+    "id": "01jm8ec74wxsdatyn5pq1fp0s5",
+    "model": "anthropic/claude-3-haiku-20240307",
+    "prompt": "hi",
+    "system": null,
+    "prompt_json": null,
+    "response": "Hello! How can I assist you today?",
+    "conversation_id": "01jm8ec74taftdgj2t4zra9z0j",
+    "duration_ms": 560,
+    "datetime_utc": "2025-02-16T22:34:30.374882+00:00",
+    "input_tokens": 8,
+    "output_tokens": 12,
+    "token_details": null,
+    "conversation_name": "hi",
+    "conversation_model": "anthropic/claude-3-haiku-20240307",
+    "attachments": []
+  }
+]
 ```
+
+(logging-short)=
+
+### -s/--short mode
+
+Use `-s/--short` to see a shortened YAML log with truncated prompts and no responses:
+```bash
+llm logs -n 2 --short
+```
+Example output:
+```yaml
 - model: deepseek-reasoner
-  datetime: 2025-02-02T06:39:53
+  datetime: '2025-02-02T06:39:53'
   conversation: 01jk2pk05xq3d0vgk0202zrsg1
   prompt:  H01 There are five huts. H02 The Scotsman lives in the purple hut. H03 The Welshman owns the parrot. H04 Kombucha is...
 - model: o3-mini
-  datetime: 2025-02-02T19:03:05
+  datetime: '2025-02-02T19:03:05'
   conversation: 01jk40qkxetedzpf1zd8k9bgww
   system: Formatting re-enabled. Write a detailed README with extensive usage examples.
   prompt: <documents> <document index="1"> <source>./Cargo.toml</source> <document_content> [package] name = "py-limbo" version...
+```
+Include `-u/--usage` to get token usage information:
+
+```bash
+llm logs -n 1 --short --usage
+```
+Example output:
+```yaml
+- model: o3-mini
+  datetime: '2025-02-16T23:00:56'
+  conversation: 01jm8fxxnef92n1663c6ays8xt
+  system: Produce Python code that demonstrates every possible usage of yaml.dump
+    with all of the arguments it can take, especi...
+  prompt: <documents> <document index="1"> <source>./setup.py</source> <document_content>
+    NAME = 'PyYAML' VERSION = '7.0.0.dev0...
+  usage:
+    input: 74793
+    output: 3550
+    details:
+      completion_tokens_details:
+        reasoning_tokens: 2240
 ```
 
 (logs-conversation)=

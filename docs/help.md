@@ -300,9 +300,9 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -t, --truncate              Truncate long strings in output
+  -s, --short                 Shorter YAML output with truncated prompts
   -u, --usage                 Include token usage
   -r, --response              Just output the last response
-  --prompts                   Output prompts, end-truncated if necessary
   -x, --extract               Extract first fenced code block
   --xl, --extract-last        Extract last fenced code block
   -c, --current               Show logs from the current conversation
