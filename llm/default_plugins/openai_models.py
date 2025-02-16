@@ -212,7 +212,7 @@ def register_commands(cli):
     @click.option("--key", help="OpenAI API key")
     def models(json_, key):
         "List models available to you from the OpenAI API"
-        from llm.cli import get_key
+        from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
         response = httpx.get(

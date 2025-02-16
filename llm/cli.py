@@ -22,7 +22,6 @@ from llm import (
     get_embedding_models_with_aliases,
     get_embedding_model_aliases,
     get_embedding_model,
-    get_key,
     get_plugins,
     get_model,
     get_model_aliases,
@@ -589,10 +588,6 @@ def chat(
     except KeyError:
         raise click.ClickException("'{}' is not a known model".format(model_id))
 
-    # Provide the API key, if one is needed and has been provided
-    if model.needs_key:
-        model.key = get_key(key, model.needs_key, model.key_env_var)
-
     if conversation is None:
         # Start a fresh conversation for this chat
         conversation = Conversation(model=model)
@@ -612,9 +607,15 @@ def chat(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    kwargs = {}
+    kwargs.update(validated_options)
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
-        validated_options["stream"] = False
+        kwargs["stream"] = False
+
+    if key and isinstance(model, KeyModel):
+        kwargs["key"] = key
 
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
@@ -645,7 +646,7 @@ def chat(
                 raise click.ClickException(str(ex))
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system=system, **validated_options)
+        response = conversation.prompt(prompt, system=system, **kwargs)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
