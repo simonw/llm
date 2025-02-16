@@ -132,7 +132,7 @@ Example output:
   system: Formatting re-enabled. Write a detailed README with extensive usage examples.
   prompt: <documents> <document index="1"> <source>./Cargo.toml</source> <document_content> [package] name = "py-limbo" version...
 ```
-Include `-u/--usage` to get token usage information:
+Include `-u/--usage` to include token usage information:
 
 ```bash
 llm logs -n 1 --short --usage
