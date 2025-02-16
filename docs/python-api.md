@@ -94,6 +94,21 @@ model = llm.get_model()
 print(model.prompt("Names for otters", temperature=0.2))
 ```
 
+(python-api-models-api-keys)=
+
+### Passing an API key
+
+Models that accept API keys should take an additional `key=` parameter to their `model.prompt()` method:
+
+```python
+model = llm.get_model("gpt-4o-mini")
+print(model.prompt("Names for beavers", key="sk-..."))
+```
+
+If you don't provide this argument LLM will attempt to find it from an environment variable (`OPENAI_API_KEY` for OpenAI, others for different plugins) or from keys that have been saved using the {ref}`llm keys set <api-keys>` command.
+
+Some model plugins may not yet have been upgraded to handle the `key=` parameter, in which case you will need to use one of the other mechanisms.
+
 (python-api-models-from-plugins)=
 
 ### Models from plugins
