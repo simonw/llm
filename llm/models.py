@@ -699,8 +699,6 @@ class Model(_Model):
 
 
 class KeyModel(_Model):
-    needs_key = True
-
     @abstractmethod
     def execute(
         self,
@@ -755,8 +753,6 @@ class AsyncModel(_AsyncModel):
 
 
 class AsyncKeyModel(_AsyncModel):
-    needs_key = True
-
     @abstractmethod
     async def execute(
         self,

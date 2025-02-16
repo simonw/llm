@@ -81,6 +81,7 @@ class MockModel(llm.Model):
 
 class MockKeyModel(llm.KeyModel):
     model_id = "mock_key"
+    needs_key = "mock"
 
     def execute(self, prompt, stream, response, conversation, key):
         return [f"key: {key}"]
@@ -88,6 +89,7 @@ class MockKeyModel(llm.KeyModel):
 
 class MockAsyncKeyModel(llm.AsyncKeyModel):
     model_id = "mock_key"
+    needs_key = "mock"
 
     async def execute(self, prompt, stream, response, conversation, key):
         yield f"async, key: {key}"
