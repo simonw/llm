@@ -728,7 +728,9 @@ def test_get_models():
 
 def test_get_async_models():
     models = llm.get_async_models()
-    assert all(isinstance(model, llm.AsyncModel) for model in models)
+    assert all(
+        isinstance(model, (llm.AsyncModel, llm.AsyncKeyModel)) for model in models
+    )
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
 

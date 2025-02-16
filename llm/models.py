@@ -150,6 +150,7 @@ class Conversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
+        key: Optional[str] = None,
         **options,
     ) -> "Response":
         return Response(
@@ -163,6 +164,7 @@ class Conversation(_BaseConversation):
             self.model,
             stream,
             conversation=self,
+            key=key,
         )
 
 
@@ -175,6 +177,7 @@ class AsyncConversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
+        key: Optional[str] = None,
         **options,
     ) -> "AsyncResponse":
         return AsyncResponse(
@@ -188,6 +191,7 @@ class AsyncConversation(_BaseConversation):
             self.model,
             stream,
             conversation=self,
+            key=key,
         )
 
 
@@ -666,6 +670,7 @@ class _Model(_BaseModel):
         stream: bool = True,
         **options,
     ) -> Response:
+        key = options.pop("key", None)
         self._validate_attachments(attachments)
         return Response(
             Prompt(
@@ -677,6 +682,7 @@ class _Model(_BaseModel):
             ),
             self,
             stream,
+            key=key,
         )
 
 
@@ -718,6 +724,7 @@ class _AsyncModel(_BaseModel):
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
+        key = options.pop("key", None)
         self._validate_attachments(attachments)
         return AsyncResponse(
             Prompt(
@@ -729,6 +736,7 @@ class _AsyncModel(_BaseModel):
             ),
             self,
             stream,
+            key=key,
         )
 
 
@@ -753,8 +761,8 @@ class AsyncKeyModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
         key: Optional[str],
-    ) -> Iterator[str]:
-        pass
+    ) -> AsyncGenerator[str, None]:
+        yield ""
 
 
 class EmbeddingModel(ABC, _get_key_mixin):

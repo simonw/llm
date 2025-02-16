@@ -7,12 +7,14 @@ import json
 import re
 from llm import (
     Attachment,
+    AsyncKeyModel,
     AsyncResponse,
     Collection,
     Conversation,
     Response,
     Template,
     UnknownModelError,
+    KeyModel,
     encode,
     get_async_model,
     get_default_model,
@@ -382,10 +384,6 @@ def prompt(
     except UnknownModelError as ex:
         raise click.ClickException(ex)
 
-    # Provide the API key, if one is needed and has been provided
-    if model.needs_key:
-        model.key = get_key(key, model.needs_key, model.key_env_var)
-
     if conversation:
         # To ensure it can see the key
         conversation.model = model
@@ -403,11 +401,16 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    kwargs = {**validated_options}
+
     resolved_attachments = [*attachments, *attachment_types]
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
-        validated_options["stream"] = False
+        kwargs["stream"] = False
+
+    if isinstance(model, (KeyModel, AsyncKeyModel)):
+        kwargs["key"] = key
 
     prompt = read_prompt()
     response = None
@@ -425,7 +428,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
-                        **validated_options,
+                        **kwargs,
                     )
                     async for chunk in response:
                         print(chunk, end="")
@@ -436,7 +439,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
-                        **validated_options,
+                        **kwargs,
                     )
                     text = await response.text()
                     if extract or extract_last:
@@ -452,7 +455,7 @@ def prompt(
                 prompt,
                 attachments=resolved_attachments,
                 system=system,
-                **validated_options,
+                **kwargs,
             )
             if should_stream:
                 for chunk in response:

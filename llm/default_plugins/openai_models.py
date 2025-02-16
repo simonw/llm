@@ -1,4 +1,4 @@
-from llm import AsyncModel, EmbeddingModel, KeyModel, hookimpl
+from llm import AsyncKeyModel, EmbeddingModel, KeyModel, hookimpl
 import llm
 from llm.utils import (
     dicts_to_table_string,
@@ -567,7 +567,7 @@ class Chat(_Shared, KeyModel):
         response._prompt_json = redact_data({"messages": messages})
 
 
-class AsyncChat(_Shared, AsyncModel):
+class AsyncChat(_Shared, AsyncKeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     default_max_tokens = None
