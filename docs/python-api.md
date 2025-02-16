@@ -207,26 +207,6 @@ The `response.text()` method described earlier does this for you - it runs throu
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
 
-(python-api-listing-models)=
-
-## Listing models
-
-The `llm.get_models()` list returns a list of all available models, including those from plugins.
-
-```python
-import llm
-
-for model in llm.get_models():
-    print(model.model_id)
-```
-
-Use `llm.get_async_models()` to list async models:
-
-```python
-for model in llm.get_async_models():
-    print(model.model_id)
-```
-
 (python-api-async)=
 
 ## Async models
@@ -254,6 +234,7 @@ async for chunk in model.prompt(
 ):
     print(chunk, end="", flush=True)
 ```
+This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
 
 (python-api-conversations)=
 
@@ -291,6 +272,26 @@ response = conversation.prompt(
 ```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+(python-api-listing-models)=
+
+## Listing models
+
+The `llm.get_models()` list returns a list of all available models, including those from plugins.
+
+```python
+import llm
+
+for model in llm.get_models():
+    print(model.model_id)
+```
+
+Use `llm.get_async_models()` to list async models:
+
+```python
+for model in llm.get_async_models():
+    print(model.model_id)
+```
 
 (python-api-response-on-done)=
 
