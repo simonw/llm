@@ -877,11 +877,11 @@ order by prompt_attachments."order"
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
+@click.option(
+    "-s", "--short", is_flag=True, help="Shorter YAML output with truncated prompts"
+)
 @click.option("-u", "--usage", is_flag=True, help="Include token usage")
 @click.option("-r", "--response", is_flag=True, help="Just output the last response")
-@click.option(
-    "--prompts", is_flag=True, help="Output prompts, end-truncated if necessary"
-)
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
     "extract_last",
@@ -916,9 +916,9 @@ def logs_list(
     model,
     query,
     truncate,
+    short,
     usage,
     response,
-    prompts,
     extract,
     extract_last,
     current_conversation,
@@ -932,7 +932,7 @@ def logs_list(
     db = sqlite_utils.Database(path)
     migrate(db)
 
-    if prompts and (json_output or response):
+    if short and (json_output or response):
         invalid = " or ".join(
             [
                 flag[0]
@@ -940,9 +940,7 @@ def logs_list(
                 if flag[1]
             ]
         )
-        raise click.ClickException(
-            "Cannot use --prompts and {} together".format(invalid)
-        )
+        raise click.ClickException("Cannot use --short and {} together".format(invalid))
 
     if response and not current_conversation and not conversation_id:
         current_conversation = True
@@ -1056,26 +1054,39 @@ def logs_list(
         current_system = None
         should_show_conversation = True
         for row in rows:
-            if prompts:
+            if short:
                 system = _truncate_string(row["system"], 120, end=True)
                 prompt = _truncate_string(row["prompt"], 120, end=True)
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
-                lines = [
-                    "- model: {}".format(row["model"]),
-                    "  datetime: {}".format(row["datetime_utc"]).split(".")[0],
-                    "  conversation: {}".format(cid),
-                ]
+                obj = {
+                    "model": row["model"],
+                    "datetime": row["datetime_utc"].split(".")[0],
+                    "conversation": cid,
+                }
                 if system:
-                    lines.append("  system: {}".format(system))
+                    obj["system"] = system
                 if prompt:
-                    lines.append("  prompt: {}".format(prompt))
+                    obj["prompt"] = prompt
                 if attachments:
-                    lines.append("  attachments:")
+                    items = []
                     for attachment in attachments:
-                        path = attachment["path"] or attachment["url"]
-                        lines.append("  - {}: {}".format(attachment["type"], path))
-                click.echo("\n".join(lines))
+                        details = {"type": attachment["type"]}
+                        if attachment.get("path"):
+                            details["path"] = attachment["path"]
+                        if attachment.get("url"):
+                            details["url"] = attachment["url"]
+                        items.append(details)
+                    obj["attachments"] = items
+                if usage and (row["input_tokens"] or row["output_tokens"]):
+                    usage_details = {
+                        "input": row["input_tokens"],
+                        "output": row["output_tokens"],
+                    }
+                    if row["token_details"]:
+                        usage_details["details"] = json.loads(row["token_details"])
+                    obj["usage"] = usage_details
+                click.echo(yaml.dump([obj], sort_keys=False).strip())
                 continue
             click.echo(
                 "# {}{}\n{}".format(

@@ -164,27 +164,35 @@ def test_logs_extract_last_code(args, log_path):
     assert result.output == 'print("hello word")\n\n'
 
 
-def test_logs_prompts(log_path):
+@pytest.mark.parametrize("arg", ("-s", "--short"))
+@pytest.mark.parametrize("usage", (None, "-u", "--usage"))
+def test_logs_short(log_path, arg, usage):
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "--prompts", "-p", str(log_path)])
+    args = ["logs", arg, "-p", str(log_path)]
+    if usage:
+        args.append(usage)
+    result = runner.invoke(cli, args)
     assert result.exit_code == 0
     output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", result.output)
+    expected_usage = ""
+    if usage:
+        expected_usage = "  usage:\n    input: 2\n    output: 5\n"
     expected = (
         "- model: davinci\n"
-        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
         "  conversation: abc123\n"
         "  system: system\n"
-        "  prompt: prompt\n"
+        f"  prompt: prompt\n{expected_usage}"
         "- model: davinci\n"
-        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
         "  conversation: abc123\n"
         "  system: system\n"
-        "  prompt: prompt\n"
+        f"  prompt: prompt\n{expected_usage}"
         "- model: davinci\n"
-        "  datetime: YYYY-MM-DDTHH:MM:SS\n"
+        "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
         "  conversation: abc123\n"
         "  system: system\n"
-        "  prompt: prompt\n"
+        f"  prompt: prompt\n{expected_usage}"
     )
     assert output == expected
 
