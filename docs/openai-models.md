@@ -32,6 +32,7 @@ cog.out("```\n{}\n```".format("\n".join(models)))
 ]]] -->
 ```
 OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
 OpenAI Chat: gpt-4o-audio-preview
 OpenAI Chat: gpt-4o-audio-preview-2024-12-17

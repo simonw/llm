@@ -308,6 +308,19 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    image/gif, image/jpeg, image/png, image/webp
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float

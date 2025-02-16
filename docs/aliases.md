@@ -20,6 +20,7 @@ cog.out("```\n{}```".format(result.output))
 ]]] -->
 ```
 4o                  : gpt-4o
+chatgpt-4o          : chatgpt-4o-latest
 4o-mini             : gpt-4o-mini
 3.5                 : gpt-3.5-turbo
 chatgpt             : gpt-3.5-turbo
