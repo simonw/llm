@@ -749,6 +749,18 @@ def test_mock_model(mock_model):
     assert response2.usage() == Usage(input=2, output=1, details=None)
 
 
+def test_mock_key_model(mock_key_model):
+    response = mock_key_model.prompt(prompt="hello", key="hi")
+    assert response.text() == "key: hi"
+
+
+@pytest.mark.asyncio
+async def test_mock_async_key_model(mock_async_key_model):
+    response = mock_async_key_model.prompt(prompt="hello", key="hi")
+    output = await response.text()
+    assert output == "async, key: hi"
+
+
 def test_sync_on_done(mock_model):
     mock_model.enqueue(["hello world"])
     model = llm.get_model("mock")
