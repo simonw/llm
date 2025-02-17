@@ -38,34 +38,42 @@ llm plugins
 ```json
 [
   {
-    "name": "llm-mpt30b",
+    "name": "llm-anthropic",
+    "hooks": [
+      "register_models"
+    ],
+    "version": "0.11"
+  },
+  {
+    "name": "llm-gguf",
     "hooks": [
       "register_commands",
       "register_models"
     ],
-    "version": "0.1"
+    "version": "0.1a0"
   },
   {
-    "name": "llm-palm",
+    "name": "llm-clip",
     "hooks": [
       "register_commands",
-      "register_models"
+      "register_embedding_models"
     ],
     "version": "0.1"
   },
   {
-    "name": "llm.default_plugins.openai_models",
+    "name": "llm-cmd",
     "hooks": [
-      "register_commands",
-      "register_models"
-    ]
+      "register_commands"
+    ],
+    "version": "0.2a0"
   },
   {
-    "name": "llm-gpt4all",
+    "name": "llm-gemini",
     "hooks": [
+      "register_embedding_models",
       "register_models"
     ],
-    "version": "0.1"
+    "version": "0.3"
   }
 ]
 ```
