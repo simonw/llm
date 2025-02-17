@@ -12,6 +12,7 @@ See also [LLM 0.22, the annotated release notes](https://simonwillison.net/2025/
 - New `llm embed-multi --prepend X` option for prepending a string to each value before it is embedded - useful for models such as [nomic-embed-text-v2-moe](https://huggingface.co/nomic-ai/nomic-embed-text-v2-moe) that require passages to start with a string like `"search_document: "`. [#745](https://github.com/simonw/llm/issues/745)
 - The `response.json()` and `response.usage()` methods are {ref}`now documented <python-api-underlying-json>`.
 - Fixed a bug where conversations that were loaded from the database could not be continued using `asyncio` prompts. [#742](https://github.com/simonw/llm/issues/742)
+- New plugin for macOS users: [llm-mlx](https://github.com/simonw/llm-mlx), which provides [extremely high performance access](https://simonwillison.net/2025/Feb/15/llm-mlx/) to a wide range of local models using Apple's MLX framework.
 - The `llm-claude-3` plugin has been renamed to [llm-anthropic](https://github.com/simonw/llm-anthropic).
 
 (v0_21)=
