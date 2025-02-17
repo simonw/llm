@@ -48,3 +48,14 @@ async def test_async_on_done(async_mock_model):
     await response.text()
     assert response._done
     assert len(caught) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_conversation(async_mock_model):
+    async_mock_model.enqueue(["one"])
+    conversation = async_mock_model.conversation()
+    response1 = await conversation.prompt("hi").text()
+    async_mock_model.enqueue(["two"])
+    response2 = await conversation.prompt("hi").text()
+    assert response1 == "one"
+    assert response2 == "two"
