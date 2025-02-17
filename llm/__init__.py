@@ -4,6 +4,7 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    AsyncConversation,
     AsyncKeyModel,
     AsyncModel,
     AsyncResponse,
@@ -29,6 +30,7 @@ import pathlib
 import struct
 
 __all__ = [
+    "AsyncConversation",
     "AsyncKeyModel",
     "AsyncResponse",
     "Attachment",

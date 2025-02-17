@@ -131,14 +131,9 @@ class _BaseConversation:
     responses: List["_BaseResponse"] = field(default_factory=list)
 
     @classmethod
-    def from_row(cls, row):
-        from llm import get_model
-
-        return cls(
-            model=get_model(row["model"]),
-            id=row["id"],
-            name=row["name"],
-        )
+    @abstractmethod
+    def from_row(cls, row: Any) -> "_BaseConversation":
+        raise NotImplementedError
 
 
 @dataclass
@@ -165,6 +160,16 @@ class Conversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+        )
+
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_model
+
+        return cls(
+            model=get_model(row["model"]),
+            id=row["id"],
+            name=row["name"],
         )
 
     def __repr__(self):
@@ -197,6 +202,16 @@ class AsyncConversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+        )
+
+    @classmethod
+    def from_row(cls, row):
+        from llm import get_async_model
+
+        return cls(
+            model=get_async_model(row["model"]),
+            id=row["id"],
+            name=row["name"],
         )
 
     def __repr__(self):
@@ -251,10 +266,13 @@ class _BaseResponse:
         self.token_details = details
 
     @classmethod
-    def from_row(cls, db, row):
-        from llm import get_model
+    def from_row(cls, db, row, _async=False):
+        from llm import get_model, get_async_model
 
-        model = get_model(row["model"])
+        if _async:
+            model = get_async_model(row["model"])
+        else:
+            model = get_model(row["model"])
 
         response = cls(
             model=model,
@@ -427,7 +445,7 @@ class Response(_BaseResponse):
                 yield chunk
                 self._chunks.append(chunk)
         else:
-            raise ValueError("self.model must be a Model or KeyModel")
+            raise Exception("self.model must be a Model or KeyModel")
 
         if self.conversation:
             self.conversation.responses.append(self)
@@ -445,6 +463,10 @@ class Response(_BaseResponse):
 class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
+
+    @classmethod
+    def from_row(cls, db, row, _async=False):
+        return super().from_row(db, row, _async=True)
 
     async def on_done(self, callback):
         if not self._done:

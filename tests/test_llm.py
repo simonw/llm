@@ -398,6 +398,57 @@ def test_llm_default_prompt(
     )
 
 
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("async_", (False, True))
+def test_llm_prompt_continue(httpx_mock, user_path, async_):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"] + (
+        ["--async"] if async_ else []
+    )
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Should be logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"] + (["--async"] if async_ else [])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 2
+
+
 @pytest.mark.parametrize(
     "args,expect_just_code",
     (

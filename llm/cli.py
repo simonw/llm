@@ -7,6 +7,7 @@ import json
 import re
 from llm import (
     Attachment,
+    AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
     Collection,
@@ -32,6 +33,7 @@ from llm import (
     set_default_embedding_model,
     remove_alias,
 )
+from llm.models import _BaseConversation
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
@@ -363,7 +365,7 @@ def prompt(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id)
+            conversation = load_conversation(conversation_id, async_=async_)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
@@ -656,7 +658,9 @@ def chat(
         print("")
 
 
-def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
+def load_conversation(
+    conversation_id: Optional[str], async_=False
+) -> Optional[_BaseConversation]:
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     if conversation_id is None:
@@ -673,11 +677,13 @@ def load_conversation(conversation_id: Optional[str]) -> Optional[Conversation]:
             "No conversation found with id={}".format(conversation_id)
         )
     # Inflate that conversation
-    conversation = Conversation.from_row(row)
+    conversation_class = AsyncConversation if async_ else Conversation
+    response_class = AsyncResponse if async_ else Response
+    conversation = conversation_class.from_row(row)
     for response in db["responses"].rows_where(
         "conversation_id = ?", [conversation_id]
     ):
-        conversation.responses.append(Response.from_row(db, response))
+        conversation.responses.append(response_class.from_row(db, response))
     return conversation
 
 
