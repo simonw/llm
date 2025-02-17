@@ -3,6 +3,8 @@
 (v0_22)=
 ## 0.22 (2025-02-16)
 
+See also [LLM 0.22, the annotated release notes](https://simonwillison.net/2025/Feb/17/llm/).
+
 - Plugins that provide models that use API keys can now subclass the new `llm.KeyModel` and `llm.AsyncKeyModel` classes. This results in the API key being passed as a new `key` parameter to their `.execute()` methods, and means that Python users can pass a key as the `model.prompt(..., key=)` - see {ref}`Passing an API key <python-api-models-api-keys>`. Plugin developers should consult the new documentation on writing {ref}`Models that accept API keys <advanced-model-plugins-api-keys>`. [#744](https://github.com/simonw/llm/issues/744)
 - New OpenAI model: `chatgpt-4o-latest`. This model ID accesses the current model being used to power ChatGPT, which can change without warning. [#752](https://github.com/simonw/llm/issues/752)
 - New `llm logs -s/--short` flag, which returns a greatly shortened version of the matching log entries in YAML format with a truncated prompt and without including the response. [#737](https://github.com/simonw/llm/issues/737)
