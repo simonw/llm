@@ -1490,11 +1490,35 @@ def fragments():
 
 
 @fragments.command(name="list")
+@click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for fragments matching these strings",
+)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
-def fragments_list(json_):
+def fragments_list(queries, json_):
     "List current fragments"
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
+    params = {}
+    param_count = 0
+    where_bits = []
+    for q in queries:
+        param_count += 1
+        p = f"p{param_count}"
+        params[p] = q
+        where_bits.append(
+            f"""
+            (fragments.hash = :{p} or fragment_aliases.alias = :{p}
+            or fragments.source like '%' || :{p} || '%'
+            or fragments.content like '%' || :{p} || '%')
+        """
+        )
+    where = "\n      and\n  ".join(where_bits)
+    if where:
+        where = " where " + where
     sql = """
     select
         fragments.hash,
@@ -1509,10 +1533,13 @@ def fragments_list(json_):
         fragments
     left join
         fragment_aliases on fragment_aliases.fragment_id = fragments.id
+    {where}
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source;
-    """
-    results = list(db.query(sql))
+    """.format(
+        where=where
+    )
+    results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
     if json_:

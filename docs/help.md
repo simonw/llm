@@ -516,8 +516,9 @@ Usage: llm fragments list [OPTIONS]
   List current fragments
 
 Options:
-  --json  Output as JSON
-  --help  Show this message and exit.
+  -q, --query TEXT  Search for fragments matching these strings
+  --json            Output as JSON
+  --help            Show this message and exit.
 ```
 
 (help-fragments-set)=
