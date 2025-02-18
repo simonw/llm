@@ -1912,14 +1912,14 @@ def fragments_list(json_):
     sql = """
     select
         fragments.id,
-        fragments.hash,
-        fragments.content,
-        fragments.datetime_utc,
-        fragments.source,
         json_group_array(fragment_aliases.alias) filter (
             where
             fragment_aliases.alias is not null
-        ) as aliases
+        ) as aliases,
+        fragments.datetime_utc,
+        fragments.hash,
+        fragments.source,
+        fragments.content
     from
         fragments
     left join
