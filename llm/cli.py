@@ -91,7 +91,7 @@ def resolve_fragments(
                 """
                 select content, source from fragments
                 join fragment_aliases on fragments.id = fragment_aliases.fragment_id
-                where alias = :alias
+                where alias = :alias or hash = :alias limit 1
                 """,
                 {"alias": fragment},
             )
@@ -283,7 +283,7 @@ def cli():
     "-f",
     "--fragment",
     multiple=True,
-    help="Fragment (alias, URL or file path) to add to the prompt",
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
 )
 @click.option(
     "system_fragments",
@@ -1951,7 +1951,7 @@ def fragments_set(alias, fragment):
     """
     Set an alias for a fragment
 
-    Accepts an alias and a file path, URL or '-' for stdin
+    Accepts an alias and a file path, URL, hash or '-' for stdin
 
     Example usage:
 

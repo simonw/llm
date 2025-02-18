@@ -123,8 +123,8 @@ Options:
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
-  -f, --fragment TEXT             Fragment (alias, URL or file path) to add to
-                                  the prompt
+  -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
+                                  add to the prompt
   --sf, --system-fragment TEXT    Fragment to add to system prompt
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
@@ -690,7 +690,7 @@ Usage: llm fragments set [OPTIONS] ALIAS FRAGMENT
 
   Set an alias for a fragment
 
-  Accepts an alias and a file path, URL or '-' for stdin
+  Accepts an alias and a file path, URL, hash or '-' for stdin
 
   Example usage:
 
