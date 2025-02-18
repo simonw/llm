@@ -230,6 +230,11 @@ Use `llm fragments` to list all fragments that have been stored:
 ```bash
 llm fragments
 ```
+You can search by passing one or more `-q X` search strings. This will return results matching all of those strings, across the source, hash, aliases and content:
+```bash
+llm fragments -q pytest -q asyncio
+```
+
 The `llm fragments remove` command removes an alias. It does not delete the fragment record itself as those are linked to previous prompts and responses and cannot be deleted independently of them.
 ```bash
 llm fragments remove cli
