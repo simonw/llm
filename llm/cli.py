@@ -1497,13 +1497,12 @@ def fragments_list(json_):
     migrate(db)
     sql = """
     select
-        fragments.id,
+        fragments.hash,
         json_group_array(fragment_aliases.alias) filter (
             where
             fragment_aliases.alias is not null
         ) as aliases,
         fragments.datetime_utc,
-        fragments.hash,
         fragments.source,
         fragments.content
     from
@@ -1519,14 +1518,14 @@ def fragments_list(json_):
     if json_:
         click.echo(json.dumps(results, indent=4))
     else:
-
-        def selective_representer(dumper, data):
-            return dumper.represent_scalar(
+        yaml.add_representer(
+            str,
+            lambda dumper, data: dumper.represent_scalar(
                 "tag:yaml.org,2002:str", data, style="|" if "\n" in data else None
-            )
-
-        yaml.add_representer(str, selective_representer)
+            ),
+        )
         for result in results:
+            result["content"] = _truncate_string(result["content"])
             click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
 
 
