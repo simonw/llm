@@ -127,6 +127,45 @@ See {ref}`prompt templates <prompt-templates>` for more.
 
 You can use the `-f/--fragment` option to reference fragments of context that you would like to load into your prompt. Fragments can be specified as URLs, file paths or as aliases to previously saved fragments.
 
+Fragments are designed for running longer prompts. LLM {ref}`stores prompts in a database <logging>`, and the same prompt repeated many times can end up stored as multiple copies, wasting disk space. A fragment will be stored just once and referenced by all of the prompts that use it.
+
+The `-f` option can accept a path to a file on disk, a URL or the hash or alias of a previous fragment.
+
+For example, to ask a question about the `robots.txt` file on `llm.datasette.io`:
+```bash
+llm -f https://llm.datasette.io/robots.txt 'explain this'
+```
+For a poem inspired by some Python code on disk:
+```bash
+llm -f cli.py 'a short snappy poem inspired by this code'
+```
+You can use as many `-f` options as you like - the fragments will be concatenated together in the order you provided, with any additional prompt added at the end.
+
+Fragments can also be used for the system prompt using the `--sf/--system-fragment` option. If you have a file called `explain_code.txt` containing this:
+
+```
+Explain this code in detail. Include copies of the code quoted in the explanation.
+```
+You can run it as the system prompt like this:
+```bash
+llm -f cli.py --sf explain_code.txt
+```
+
+You can use the `llm fragments set` command to load a fragment and give it an alias for use in future queries:
+```bash
+llm fragments set cli cli.py
+# Then
+llm -f cli 'explain this code'
+```
+Use `llm fragments` to list all fragments that have been stored:
+```bash
+llm fragments
+```
+The `llm fragments remove` command removes an alias. It does not delete the fragment record itself as those are linked to previous prompts and responses and cannot be deleted independently of them.
+```bash
+llm fragments remove cli
+```
+
 (conversation)=
 ### Continuing a conversation
 
