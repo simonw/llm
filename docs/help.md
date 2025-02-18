@@ -118,7 +118,8 @@ Options:
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype
   -o, --option <TEXT TEXT>...     key/value options for the model
-  -f, --fragment TEXT             Fragment to add to prompt
+  -f, --fragment TEXT             Fragment (alias, URL or file path) to add to
+                                  the prompt
   --sf, --system-fragment TEXT    Fragment to add to system prompt
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
