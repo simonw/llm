@@ -20,7 +20,12 @@ from typing import (
     Set,
     Union,
 )
-from .utils import ensure_fragment, mimetype_from_path, mimetype_from_string, token_usage_string
+from .utils import (
+    ensure_fragment,
+    mimetype_from_path,
+    mimetype_from_string,
+    token_usage_string,
+)
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel
