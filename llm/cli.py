@@ -279,7 +279,11 @@ def cli():
     help="JSON schema to use for multiple results",
 )
 @click.option(
-    "fragments", "-f", "--fragment", multiple=True, help="Fragment to add to prompt"
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL or file path) to add to the prompt",
 )
 @click.option(
     "system_fragments",
@@ -1926,7 +1930,18 @@ def fragments_list(json_):
     results = list(db.query(sql))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
-    click.echo(json.dumps(results, indent=4))
+    if json_:
+        click.echo(json.dumps(results, indent=4))
+    else:
+
+        def selective_representer(dumper, data):
+            return dumper.represent_scalar(
+                "tag:yaml.org,2002:str", data, style="|" if "\n" in data else None
+            )
+
+        yaml.add_representer(str, selective_representer)
+        for result in results:
+            click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
 
 
 @fragments.command(name="set")

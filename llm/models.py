@@ -365,14 +365,6 @@ class _BaseResponse:
 
         response = cls(
             model=model,
-            prompt=Prompt(
-                prompt=row["prompt"],
-                model=model,
-                attachments=[],
-                system=row["system"],
-                schema=schema,
-                options=model.Options(**json.loads(row["options_json"])),
-            ),
             prompt=Prompt.from_row(db, row, model),
             stream=False,
         )
