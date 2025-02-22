@@ -114,6 +114,7 @@ def register_models(register):
         api_version = extra_model.get("api_version")
         api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
+        reasoning = extra_model.get("reasoning")
         kwargs = {}
         if extra_model.get("can_stream") is False:
             kwargs["can_stream"] = False
@@ -129,6 +130,7 @@ def register_models(register):
             api_version=api_version,
             api_engine=api_engine,
             headers=headers,
+            reasoning=reasoning,
             **kwargs,
         )
         if api_base:
