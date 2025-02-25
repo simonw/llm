@@ -190,31 +190,28 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 ```bash
 datasette "$(llm logs path)"
 ```
+
+### Browsing logs using llm-web-ui
+
+For a more LLM-oriented experience, you can use [`llm-web-ui`](https://github.com/martinklepsch/llm-web-ui) to browse your conversations and responses through a locally running web interface:
+
+```bash
+npx llm-web-ui "$(llm logs path)"
+```
+
+This launches a web UI that provides a user-friendly way to:
+- View all your conversations
+- Search through prompts and responses
+- Filter conversations by model
+- Examine detailed token usage statistics
+- Navigate through conversation history
+
+The web UI is especially helpful when working with multi-turn conversations or when you need to quickly locate specific interactions with your models.
+
 ## SQL schema
 
 Here's the SQL schema used by the `logs.db` database:
 
-<!-- [[[cog
-import cog
-from llm.migrations import migrate
-import sqlite_utils
-import re
-db = sqlite_utils.Database(memory=True)
-migrate(db)
-
-def cleanup_sql(sql):
-    first_line = sql.split('(')[0]
-    inner = re.search(r'\((.*)\)', sql, re.DOTALL).group(1)
-    columns = [l.strip() for l in inner.split(',')]
-    return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
-
-cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
-    schema = db[table].schema
-    cog.out(format(cleanup_sql(schema)))
-    cog.out("\n")
-cog.out("```\n")
-]]] -->
 ```sql
 CREATE TABLE [conversations] (
   [id] TEXT PRIMARY KEY,
@@ -257,5 +254,5 @@ CREATE TABLE [prompt_attachments] (
   [attachment_id])
 );
 ```
-<!-- [[[end]]] -->
+
 `responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table.
