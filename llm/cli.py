@@ -1138,6 +1138,12 @@ def logs_list(
                 if row["system"] is not None:
                     click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            if row["schema_json"]:
+                click.echo(
+                    "\n## Schema:\n\n```json\n{}\n```".format(
+                        json.dumps(row["schema_json"], indent=2)
+                    )
+                )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -1162,7 +1168,15 @@ def logs_list(
                             )
                         )
 
-            click.echo("\n## Response:\n\n{}\n".format(row["response"]))
+            # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
+            response = row["response"]
+            if row["schema_json"]:
+                try:
+                    parsed = json.loads(response)
+                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
+                except ValueError:
+                    pass
+            click.echo("\n## Response:\n\n{}\n".format(response))
             if usage:
                 token_usage = token_usage_string(
                     row["input_tokens"],
