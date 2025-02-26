@@ -23,7 +23,7 @@ from typing import (
 from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
 from abc import ABC, abstractmethod
 import json
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
@@ -499,7 +499,6 @@ class AsyncResponse(_BaseResponse):
             return chunk
 
         if not hasattr(self, "_generator"):
-
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
                     self.prompt,
@@ -618,10 +617,7 @@ class AsyncResponse(_BaseResponse):
 
 
 class Options(BaseModel):
-    # Note: using pydantic v1 style Configs,
-    # these are also compatible with pydantic v2
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 _Options = Options

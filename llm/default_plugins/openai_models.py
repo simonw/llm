@@ -13,14 +13,7 @@ import httpx
 import openai
 import os
 
-try:
-    # Pydantic 2
-    from pydantic import field_validator, Field  # type: ignore
-
-except ImportError:
-    # Pydantic 1
-    from pydantic.fields import Field
-    from pydantic.class_validators import validator as field_validator  # type: ignore [no-redef]
+from pydantic import field_validator, Field
 
 from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
 import json
