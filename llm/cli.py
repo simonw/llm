@@ -114,28 +114,19 @@ def attachment_types_callback(ctx, param, values):
     return collected
 
 
-def _validate_metadata_json(ctx, param, value):
-    if value is None:
-        return value
-    try:
-        obj = json.loads(value)
-        if not isinstance(obj, dict):
-            raise click.BadParameter("Metadata must be a JSON object")
-        return obj
-    except json.JSONDecodeError:
-        raise click.BadParameter("Metadata must be valid JSON")
+def json_validator(object_name):
+    def validator(ctx, param, value):
+        if value is None:
+            return value
+        try:
+            obj = json.loads(value)
+            if not isinstance(obj, dict):
+                raise click.BadParameter(f"{object_name} must be a JSON object")
+            return obj
+        except json.JSONDecodeError:
+            raise click.BadParameter(f"{object_name} must be valid JSON")
 
-
-def _validate_schema_json(ctx, param, value):
-    if value is None:
-        return value
-    try:
-        obj = json.loads(value)
-        if not isinstance(obj, dict):
-            raise click.BadParameter("Schema must be a JSON object")
-        return obj
-    except json.JSONDecodeError:
-        raise click.BadParameter("Schema must be valid JSON")
+    return validator
 
 
 @click.group(
@@ -197,7 +188,7 @@ def cli():
     help="key/value options for the model",
 )
 @click.option(
-    "--schema", callback=_validate_schema_json, help="JSON schema to use for output"
+    "--schema", callback=json_validator("schema"), help="JSON schema to use for output"
 )
 @click.option("-t", "--template", help="Template to use")
 @click.option(
@@ -1546,7 +1537,7 @@ def uninstall(packages, yes):
 @click.option(
     "--metadata",
     help="JSON object metadata to store",
-    callback=_validate_metadata_json,
+    callback=json_validator("metadata"),
 )
 @click.option(
     "format_",

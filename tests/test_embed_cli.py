@@ -76,8 +76,8 @@ def test_embed_errors(args, expected_error):
         (None, None),
         ('{"foo": "bar"}', None),
         ('{"foo": [1, 2, 3]}', None),
-        ("[1, 2, 3]", "Metadata must be a JSON object"),  # Must be a dictionary
-        ('{"foo": "incomplete}', "Metadata must be valid JSON"),
+        ("[1, 2, 3]", "metadata must be a JSON object"),  # Must be a dictionary
+        ('{"foo": "incomplete}', "metadata must be valid JSON"),
     ),
 )
 def test_embed_store(user_path, metadata, metadata_error):
