@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import string
 from typing import Optional, Any, Dict, List, Tuple
 
@@ -13,8 +13,7 @@ class Template(BaseModel):
     extract: Optional[bool] = None
     extract_last: Optional[bool] = None
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     class MissingVariables(Exception):
         pass

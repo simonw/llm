@@ -1197,9 +1197,9 @@ def models_list(options, async_, query):
             model_with_aliases.model if not async_ else model_with_aliases.async_model
         )
         output = str(model) + extra
-        if options and model.Options.schema()["properties"]:
+        if options and model.Options.model_json_schema()["properties"]:
             output += "\n  Options:"
-            for name, field in model.Options.schema()["properties"].items():
+            for name, field in model.Options.model_json_schema()["properties"].items():
                 any_of = field.get("anyOf")
                 if any_of is None:
                     any_of = [{"type": field.get("type", "str")}]
@@ -1413,7 +1413,7 @@ def templates_show(name):
     template = load_template(name)
     click.echo(
         yaml.dump(
-            dict((k, v) for k, v in template.dict().items() if v is not None),
+            dict((k, v) for k, v in template.model_dump().items() if v is not None),
             indent=4,
             default_flow_style=False,
         )
