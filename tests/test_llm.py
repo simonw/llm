@@ -7,6 +7,7 @@ from llm.models import Usage
 import json
 import os
 import pathlib
+from pydantic import BaseModel
 import pytest
 import re
 import sqlite_utils
@@ -806,6 +807,45 @@ def test_mock_model(mock_model):
     response2 = model.prompt(prompt="hello again")
     assert response2.text() == "second"
     assert response2.usage() == Usage(input=2, output=1, details=None)
+
+
+class Dog(BaseModel):
+    name: str
+    age: int
+
+
+dog_schema = {
+    "properties": {
+        "name": {"title": "Name", "type": "string"},
+        "age": {"title": "Age", "type": "integer"},
+    },
+    "required": ["name", "age"],
+    "title": "Dog",
+    "type": "object",
+}
+dog = {"name": "Cleo", "age": 10}
+
+
+@pytest.mark.parametrize("use_pydantic", (False, True))
+def test_schema(mock_model, use_pydantic):
+    assert dog_schema == Dog.model_json_schema()
+    mock_model.enqueue([json.dumps(dog)])
+    response = mock_model.prompt(
+        "invent a dog", schema=Dog if use_pydantic else dog_schema
+    )
+    assert json.loads(response.text()) == dog
+    assert response.prompt.schema == dog_schema
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_pydantic", (False, True))
+async def test_schema_async(async_mock_model, use_pydantic):
+    async_mock_model.enqueue([json.dumps(dog)])
+    response = async_mock_model.prompt(
+        "invent a dog", schema=Dog if use_pydantic else dog_schema
+    )
+    assert json.loads(await response.text()) == dog
+    assert response.prompt.schema == dog_schema
 
 
 def test_mock_key_model(mock_key_model):

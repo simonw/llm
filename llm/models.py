@@ -122,6 +122,8 @@ class Prompt:
         self.attachments = list(attachments or [])
         self.system = system
         self.prompt_json = prompt_json
+        if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
+            schema = schema.model_json_schema()
         self.schema = schema
         self.options = options or {}
 

@@ -865,6 +865,7 @@ select
 {columns}
 from
     responses
+left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id
 join responses_fts on responses_fts.rowid = responses.rowid
 where responses_fts match :query{extra_where}

@@ -249,5 +249,9 @@ def m014_schemas(db):
         pk="id",
     )
     db["responses"].add_column("schema_id", str, fk="schemas", fk_col="id")
-    # Clean up that table's SQL indentation
+    # Clean up SQL create table indentation
     db["responses"].transform()
+    # These changes may have dropped the FTS configuration, fix that
+    db["responses"].enable_fts(
+        ["prompt", "response"], create_triggers=True, replace=True
+    )

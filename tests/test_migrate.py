@@ -20,6 +20,7 @@ EXPECTED = {
     "input_tokens": int,
     "output_tokens": int,
     "token_details": str,
+    "schema_id": str,
 }
 
 
