@@ -103,6 +103,7 @@ class Prompt:
     attachments: Optional[List[Attachment]]
     system: Optional[str]
     prompt_json: Optional[str]
+    schema: Optional[Union[Dict, type[BaseModel]]]
     options: "Options"
 
     def __init__(
@@ -114,12 +115,14 @@ class Prompt:
         system=None,
         prompt_json=None,
         options=None,
+        schema=None,
     ):
         self.prompt = prompt
         self.model = model
         self.attachments = list(attachments or [])
         self.system = system
         self.prompt_json = prompt_json
+        self.schema = schema
         self.options = options or {}
 
 
@@ -144,6 +147,7 @@ class Conversation(_BaseConversation):
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -154,6 +158,7 @@ class Conversation(_BaseConversation):
                 model=self.model,
                 attachments=attachments,
                 system=system,
+                schema=schema,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -186,6 +191,7 @@ class AsyncConversation(_BaseConversation):
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -196,6 +202,7 @@ class AsyncConversation(_BaseConversation):
                 model=self.model,
                 attachments=attachments,
                 system=system,
+                schema=schema,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -253,6 +260,9 @@ class _BaseResponse:
         self.output_tokens: Optional[int] = None
         self.token_details: Optional[dict] = None
         self.done_callbacks: List[Callable] = []
+
+        if self.prompt.schema and not self.model.supports_schema:
+            raise ValueError(f"{self.model} does not support schemas")
 
     def set_usage(
         self,
@@ -662,6 +672,8 @@ class _BaseModel(ABC, _get_key_mixin):
     can_stream: bool = False
     attachment_types: Set = set()
 
+    supports_schema = False
+
     class Options(_Options):
         pass
 
@@ -700,6 +712,7 @@ class _Model(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         stream: bool = True,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
         **options,
     ) -> Response:
         key = options.pop("key", None)
@@ -709,6 +722,7 @@ class _Model(_BaseModel):
                 prompt,
                 attachments=attachments,
                 system=system,
+                schema=schema,
                 model=self,
                 options=self.Options(**options),
             ),
@@ -753,6 +767,7 @@ class _AsyncModel(_BaseModel):
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
@@ -763,6 +778,7 @@ class _AsyncModel(_BaseModel):
                 prompt,
                 attachments=attachments,
                 system=system,
+                schema=schema,
                 model=self,
                 options=self.Options(**options),
             ),

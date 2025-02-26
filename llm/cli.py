@@ -126,6 +126,18 @@ def _validate_metadata_json(ctx, param, value):
         raise click.BadParameter("Metadata must be valid JSON")
 
 
+def _validate_schema_json(ctx, param, value):
+    if value is None:
+        return value
+    try:
+        obj = json.loads(value)
+        if not isinstance(obj, dict):
+            raise click.BadParameter("Schema must be a JSON object")
+        return obj
+    except json.JSONDecodeError:
+        raise click.BadParameter("Schema must be valid JSON")
+
+
 @click.group(
     cls=DefaultGroup,
     default="prompt",
@@ -184,6 +196,9 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "--schema", callback=_validate_schema_json, help="JSON schema to use for output"
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -228,6 +243,7 @@ def prompt(
     attachments,
     attachment_types,
     options,
+    schema,
     template,
     param,
     no_stream,
@@ -429,6 +445,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
+                        schema=schema,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -440,6 +457,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
+                        schema=schema,
                         **kwargs,
                     )
                     text = await response.text()
@@ -456,6 +474,7 @@ def prompt(
                 prompt,
                 attachments=resolved_attachments,
                 system=system,
+                schema=schema,
                 **kwargs,
             )
             if should_stream:
