@@ -2073,7 +2073,7 @@ def get_history(chat_id):
 def render_errors(errors):
     output = []
     for error in errors:
-        output.append(", ".join(str(loc) for loc in error["loc"]))
+        output.append(", ".join(error["loc"]))
         output.append("  " + error["msg"])
     return "\n".join(output)
 
