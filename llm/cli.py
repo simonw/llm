@@ -848,13 +848,15 @@ LOGS_COLUMNS = """    responses.id,
     responses.output_tokens,
     responses.token_details,
     conversations.name as conversation_name,
-    conversations.model as conversation_model"""
+    conversations.model as conversation_model,
+    schemas.content as schema_json"""
 
 LOGS_SQL = """
 select
 {columns}
 from
     responses
+left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id{extra_where}
 order by responses.id desc{limit}
 """

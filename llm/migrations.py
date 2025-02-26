@@ -237,3 +237,17 @@ def m013_usage(db):
     db["responses"].add_column("input_tokens", int)
     db["responses"].add_column("output_tokens", int)
     db["responses"].add_column("token_details", str)
+
+
+@migration
+def m014_schemas(db):
+    db["schemas"].create(
+        {
+            "id": str,
+            "content": str,
+        },
+        pk="id",
+    )
+    db["responses"].add_column("schema_id", str, fk="schemas", fk_col="id")
+    # Clean up that table's SQL indentation
+    db["responses"].transform()
