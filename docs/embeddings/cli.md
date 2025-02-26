@@ -325,7 +325,7 @@ llm embed-multi photos \
 (embeddings-cli-similar)=
 ## llm similar
 
-The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID.
+The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID, based on [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity).
 
 This currently uses a slow brute-force approach which does not scale well to large collections. See [issue 216](https://github.com/simonw/llm/issues/216) for plans to add a more scalable approach via vector indexes provided by plugins.
 

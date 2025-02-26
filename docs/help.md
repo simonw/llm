@@ -77,7 +77,7 @@ Commands:
   models        Manage available models
   openai        Commands for working directly with the OpenAI API
   plugins       List installed plugins
-  similar       Return top N similar IDs from a collection
+  similar       Return top N similar IDs from a collection using cosine...
   templates     Manage stored prompt templates
   uninstall     Uninstall Python packages from the LLM environment
 ```
@@ -591,7 +591,7 @@ Options:
 ```
 Usage: llm similar [OPTIONS] COLLECTION [ID]
 
-  Return top N similar IDs from a collection
+  Return top N similar IDs from a collection using cosine similarity.
 
   Example usage:
 

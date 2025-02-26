@@ -1820,7 +1820,7 @@ def embed_multi(
 )
 def similar(collection, id, input, content, binary, number, database):
     """
-    Return top N similar IDs from a collection
+    Return top N similar IDs from a collection using cosine similarity.
 
     Example usage:
 
