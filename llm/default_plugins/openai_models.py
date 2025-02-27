@@ -454,7 +454,7 @@ class _Shared:
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         if not prompt.attachments:
-            messages.append({"role": "user", "content": prompt.prompt})
+            messages.append({"role": "user", "content": prompt.prompt or ""})
         else:
             attachment_message = []
             if prompt.prompt:

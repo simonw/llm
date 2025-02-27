@@ -98,7 +98,7 @@ class Attachment:
 
 @dataclass
 class Prompt:
-    prompt: str
+    prompt: Optional[str]
     model: "Model"
     attachments: Optional[List[Attachment]]
     system: Optional[str]
@@ -145,7 +145,7 @@ class _BaseConversation:
 class Conversation(_BaseConversation):
     def prompt(
         self,
-        prompt: Optional[str],
+        prompt: Optional[str] = None,
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -189,7 +189,7 @@ class Conversation(_BaseConversation):
 class AsyncConversation(_BaseConversation):
     def prompt(
         self,
-        prompt: Optional[str],
+        prompt: Optional[str] = None,
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -724,7 +724,7 @@ class _Model(_BaseModel):
 
     def prompt(
         self,
-        prompt: str,
+        prompt: Optional[str] = None,
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -780,7 +780,7 @@ class _AsyncModel(_BaseModel):
 
     def prompt(
         self,
-        prompt: str,
+        prompt: Optional[str] = None,
         *,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
