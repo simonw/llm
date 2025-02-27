@@ -75,6 +75,7 @@ def register_models(register):
     register(
         Chat("gpt-4.5-preview", vision=True),
         AsyncChat("gpt-4.5-preview", vision=True),
+        aliases=("gpt-4.5",),
     )
     # o1
     for model_id in ("o1", "o1-2024-12-17"):

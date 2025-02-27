@@ -562,7 +562,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     json_object: boolean
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
-OpenAI Chat: gpt-4.5-preview
+OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Options:
     temperature: float
     max_tokens: int

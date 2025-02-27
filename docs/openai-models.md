@@ -48,7 +48,7 @@ OpenAI Chat: gpt-4-0125-preview
 OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
 OpenAI Chat: gpt-4.5-preview-2025-02-27
-OpenAI Chat: gpt-4.5-preview
+OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
 OpenAI Chat: o1
 OpenAI Chat: o1-2024-12-17
 OpenAI Chat: o1-preview
