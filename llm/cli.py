@@ -909,7 +909,7 @@ order by prompt_attachments."order"
     "--data", is_flag=True, help="Output newline-delimited JSON data for schema"
 )
 @click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
-@click.option("--list-key", help="Return JSON objects from list in this key")
+@click.option("--data-key", help="Return JSON objects from array in this key")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
     "-s", "--short", is_flag=True, help="Shorter YAML output with truncated prompts"
@@ -952,7 +952,7 @@ def logs_list(
     schema,
     data,
     data_array,
-    list_key,
+    data_key,
     truncate,
     short,
     usage,
@@ -1071,10 +1071,10 @@ def logs_list(
                 decoded = json.loads(response)
                 if (
                     isinstance(decoded, dict)
-                    and (list_key in decoded)
-                    and all(isinstance(item, dict) for item in decoded[list_key])
+                    and (data_key in decoded)
+                    and all(isinstance(item, dict) for item in decoded[data_key])
                 ):
-                    for item in decoded[list_key]:
+                    for item in decoded[data_key]:
                         to_output.append(item)
                 else:
                     to_output.append(decoded)

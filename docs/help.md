@@ -303,7 +303,7 @@ Options:
   --schema TEXT               JSON schema, filepath or ID
   --data                      Output newline-delimited JSON data for schema
   --data-array                Output JSON array of data for schema
-  --list-key TEXT             Return JSON objects from list in this key
+  --data-key TEXT             Return JSON objects from array in this key
   -t, --truncate              Truncate long strings in output
   -s, --short                 Shorter YAML output with truncated prompts
   -u, --usage                 Include token usage
