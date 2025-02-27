@@ -119,6 +119,7 @@ Options:
                                   Attachment with explicit mimetype
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
+  --schema-multi TEXT             JSON schema to use for multiple results
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output

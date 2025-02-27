@@ -77,7 +77,9 @@ class MockModel(llm.Model):
                 break
             except IndexError:
                 break
-        response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
+        response.set_usage(
+            input=len((prompt.prompt or "").split()), output=len(gathered)
+        )
 
 
 class MockKeyModel(llm.KeyModel):
@@ -120,7 +122,9 @@ class AsyncMockModel(llm.AsyncModel):
                 break
             except IndexError:
                 break
-        response.set_usage(input=len(prompt.prompt.split()), output=len(gathered))
+        response.set_usage(
+            input=len((prompt.prompt or "").split()), output=len(gathered)
+        )
 
 
 class EmbedDemo(llm.EmbeddingModel):

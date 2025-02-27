@@ -201,6 +201,10 @@ def cli():
     help="key/value options for the model",
 )
 @schema_option
+@click.option(
+    "--schema-multi",
+    help="JSON schema to use for multiple results",
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -246,6 +250,7 @@ def prompt(
     attachment_types,
     options,
     schema_input,
+    schema_multi,
     template,
     param,
     no_stream,
@@ -295,7 +300,18 @@ def prompt(
     db = sqlite_utils.Database(log_path)
     migrate(db)
 
+    if schema_multi:
+        schema_input = schema_multi
+
     schema = resolve_schema_input(db, schema_input)
+
+    if schema_multi:
+        # Convert that schema into multiple "items" of the same schema
+        schema = {
+            "type": "object",
+            "properties": {"items": {"type": "array", "items": schema}},
+            "required": ["items"],
+        }
 
     model_aliases = get_model_aliases()
 

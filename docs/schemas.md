@@ -98,4 +98,9 @@ To return multiple items matching your schema, use the `--schema-multi` option. 
 ```bash
 llm --schema-multi 'name,description,fave_toy' 'invent 3 dogs'
 ```
+Using this option a simpler version of the New York Times example above is the following:
+```bash
+curl https://www.nytimes.com/ | uvx strip-tags | llm --schema-multi 'headline, summary' | jq
+```
+
 The Python utility function `llm.utils.build_json_schema(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary.

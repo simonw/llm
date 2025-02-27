@@ -616,24 +616,53 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
         assert result2.exit_code == 0
 
 
-def test_schema_using_dsl(mock_model, tmpdir, monkeypatch):
+@pytest.mark.parametrize(
+    "args,expected",
+    (
+        (
+            ["--schema", "name, age int"],
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+                "required": ["name", "age"],
+            },
+        ),
+        (
+            ["--schema-multi", "name, age int"],
+            {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "age": {"type": "integer"},
+                            },
+                            "required": ["name", "age"],
+                        },
+                    }
+                },
+                "required": ["items"],
+            },
+        ),
+    ),
+)
+def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
     user_path = tmpdir / "user"
     mock_model.enqueue([json.dumps(dog)])
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--schema", "name, age int", "prompt", "-m", "mock"],
+        ["prompt", "-m", "mock"] + args,
         catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output == '{"name": "Cleo", "age": 10}\n'
     rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
-    assert json.loads(rows[0]["content"]) == {
-        "type": "object",
-        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
-        "required": ["name", "age"],
-    }
+    assert json.loads(rows[0]["content"]) == expected
 
 
 @pytest.mark.asyncio
