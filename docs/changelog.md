@@ -9,6 +9,7 @@ Alpha release adding support for **schemas**, for getting supported models to ou
 - `model.prompt(..., schema={...})` parameter for specifying a schema from Python. This accepts either a dictionary JSON schema definition of a Pydantic `BaseModel` subclass, see {ref}`schemas in the Python API docs <python-api-schemas>`.
 - The default OpenAI plugin now supports schemas across all models.
 - Documentation on how to {ref}`add schema support to a model plugin <advanced-model-plugins-schemas>`.
+- LLM now depends on Pydantic v2 or higher. Pydantic v1 is no longer supported. [#520](https://github.com/simonw/llm/issues/520)
 
 (v0_22)=
 ## 0.22 (2025-02-16)
