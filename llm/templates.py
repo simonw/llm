@@ -12,6 +12,7 @@ class Template(BaseModel):
     # Should a fenced code block be extracted?
     extract: Optional[bool] = None
     extract_last: Optional[bool] = None
+    schema_object: Optional[dict] = None
 
     model_config = ConfigDict(extra="forbid")
 

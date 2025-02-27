@@ -356,6 +356,8 @@ def prompt(
             to_save["extract"] = True
         if extract_last:
             to_save["extract_last"] = True
+        if schema:
+            to_save["schema_object"] = schema
         path.write_text(
             yaml.dump(
                 to_save,
@@ -381,6 +383,8 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+        if template_obj.schema_object:
+            schema = template_obj.schema_object
 
     if extract or extract_last:
         no_stream = True
