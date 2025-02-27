@@ -20,7 +20,12 @@ from typing import (
     Set,
     Union,
 )
-from .utils import mimetype_from_path, mimetype_from_string, token_usage_string
+from .utils import (
+    mimetype_from_path,
+    mimetype_from_string,
+    token_usage_string,
+    make_schema_id,
+)
 from abc import ABC, abstractmethod
 import json
 from pydantic import BaseModel, ConfigDict
@@ -344,10 +349,7 @@ class _BaseResponse:
         )
         schema_id = None
         if self.prompt.schema:
-            schema_json = json.dumps(self.prompt.schema, separators=(",", ":"))
-            schema_id = hashlib.blake2b(
-                schema_json.encode(), digest_size=16
-            ).hexdigest()
+            schema_id, schema_json = make_schema_id(self.prompt.schema)
             db["schemas"].insert({"id": schema_id, "content": schema_json}, ignore=True)
 
         response_id = str(ULID()).lower()

@@ -1,10 +1,11 @@
 import click
+import hashlib
 import httpx
 import json
 import puremagic
 import re
 import textwrap
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -192,3 +193,9 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
         match = matches[-1] if last else matches[0]
         return match.group("code")
     return None
+
+
+def make_schema_id(schema: dict) -> Tuple[str, str]:
+    schema_json = json.dumps(schema, separators=(",", ":"))
+    schema_id = hashlib.blake2b(schema_json.encode(), digest_size=16).hexdigest()
+    return schema_id, schema_json
