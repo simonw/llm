@@ -1,5 +1,15 @@
 # Changelog
 
+(v0_23_a0)=
+## 0.23a0 (2025-02-26)
+
+Alpha release adding support for **schemas**, for getting supported models to output JSON that matches a specified JSON schema. [#776](https://github.com/simonw/llm/issues/776)
+
+- `llm prompt --schema '{JSON schema goes here}` option for specifying a schema that should be used for the output from the model, see {ref}`schemas in the CLI docs <usage-schemas>`.
+- `model.prompt(..., schema={...})` parameter for specifying a schema from Python. This accepts either a dictionary JSON schema definition of a Pydantic `BaseModel` subclass, see {ref}`schemas in the Python API docs <python-api-schemas>`.
+- The default OpenAI plugin now supports schemas across all models.
+- Documentation on how to {ref}`add schema support to a model plugin <advanced-model-plugins-schemas>`.
+
 (v0_22)=
 ## 0.22 (2025-02-16)
 
