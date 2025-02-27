@@ -122,6 +122,39 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+### Schemas
+
+Some models include the ability to return JSON that matches a provided [JSON schema](https://json-schema.org/). Models from OpenAI, Anthropic and Google Gemini all include this capability.
+
+LLM has alpha functionality for specifying a schema to use for the response to a prompt.
+
+Create the schema as a JSON string, then pass that to the `--schema` option. For example:
+
+```bash
+llm --schema '{
+  "type": "object",
+  "properties": {
+    "dogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}' -m gpt-4o-mini 'invent two dogs'
+```
+The JSON returned from the model should match that schema.
+
+Be warned that different models may support different dialects of the JSON schema specification.
+
 (conversation)=
 ### Continuing a conversation
 
