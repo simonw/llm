@@ -8,6 +8,7 @@ import pytest
 import re
 import sqlite_utils
 import sys
+import time
 
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
@@ -48,7 +49,7 @@ def schema_log_path(user_path):
     for i in range(2):
         db["responses"].insert(
             {
-                "id": str(ULID()).lower(),
+                "id": str(ULID.from_timestamp(time.time() + i)).lower(),
                 "system": "system",
                 "prompt": "prompt",
                 "response": '{"name": "' + str(i) + '"}',
@@ -60,10 +61,10 @@ def schema_log_path(user_path):
                 "schema_id": SINGLE_ID,
             }
         )
-    for _ in range(4):
+    for j in range(4):
         db["responses"].insert(
             {
-                "id": str(ULID()).lower(),
+                "id": str(ULID.from_timestamp(time.time() + j)).lower(),
                 "system": "system",
                 "prompt": "prompt",
                 "response": '{"items": [{"name": "one"}, {"name": "two"}]}',
