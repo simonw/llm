@@ -118,6 +118,15 @@ response = model.prompt("Describe a nice dog", schema={
 })
 ```
 
+You can also use LLM's {ref}`alternative schema syntax <schemas-dsl>` via the `llm.schema_dsl(schema_dsl)` function. This provides a quick way to construct a JSON schema for simple cases:
+
+```python
+print(model.prompt(
+    "Describe a nice dog with a surprising name",
+    schema=llm.schema_dsl("name, age int, bio")
+))
+```
+
 (python-api-model-options)=
 
 ### Model options

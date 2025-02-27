@@ -245,7 +245,7 @@ def resolve_schema_input(db, schema_input):
             pass
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
-        return build_json_schema(schema_input)
+        return schema_dsl(schema_input)
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():
@@ -303,7 +303,7 @@ def schema_summary(schema: dict) -> str:
     return ""
 
 
-def build_json_schema(schema_dsl: str) -> Dict[str, Any]:
+def schema_dsl(schema_dsl: str) -> Dict[str, Any]:
     """
     Build a JSON schema from a concise schema string.
 

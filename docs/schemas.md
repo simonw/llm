@@ -4,7 +4,9 @@
 
 Large Language Models are very good at producing structured output as JSON or other formats. LLM's **schemas** feature allows you to define the exact structure of JSON data you want to receive from a model.
 
-This feature is supported by models from OpenAI, Anthropic, Google Gemini and others {ref}`via plugins <advanced-model-plugins-schemas>`.
+This feature is supported by models from OpenAI, Anthropic, Google Gemini and can be implemented for others {ref}`via plugins <advanced-model-plugins-schemas>`.
+
+(schemas-json-schemas)=
 
 ## Understanding JSON schemas
 
@@ -17,6 +19,8 @@ A [JSON schema](https://json-schema.org/) is a specification that describes the 
 - Descriptions of those fields - these can be used to guide the language model
 
 Different models may support different subsets of the overall JSON schema language. You should experiment to figure out what works for the model you are using.
+
+(schemas-using-with-llm)=
 
 ## Using schemas with LLM
 
@@ -64,6 +68,8 @@ This example uses [uvx](https://docs.astral.sh/uv/guides/tools/) to run [strip-t
 
 This will instruct the model to return an array of JSON objects with the specified structure, each containing a headline, summary, and array of key people mentioned.
 
+(schemas-dsl)=
+
 ### Alternative schema syntax
 
 JSON schema's can be time-consuming to construct by hand. LLM also supports a concise alternative syntax for specifying a schema.
@@ -103,4 +109,4 @@ Using this option a simpler version of the New York Times example above is the f
 curl https://www.nytimes.com/ | uvx strip-tags | llm --schema-multi 'headline, summary' | jq
 ```
 
-The Python utility function `llm.utils.build_json_schema(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary.
+The Python utility function `llm.schema_dsl(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary.

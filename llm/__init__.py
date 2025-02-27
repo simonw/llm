@@ -19,6 +19,7 @@ from .models import (
     Prompt,
     Response,
 )
+from .utils import schema_dsl
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
@@ -49,6 +50,7 @@ __all__ = [
     "Response",
     "Template",
     "user_dir",
+    "schema_dsl",
 ]
 DEFAULT_MODEL = "gpt-4o-mini"
 

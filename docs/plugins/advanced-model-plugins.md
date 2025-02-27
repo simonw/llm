@@ -94,14 +94,16 @@ def register_models(register):
 
 ## Supporting schemas
 
-If your model supports {ref}`structured output <python-api-schemas>` against a defined JSON schema you can implement support by first adding `supports_schema = True` to the class:
+If your model supports {ref}`structured output <schemas>` against a defined JSON schema you can implement support by first adding `supports_schema = True` to the class:
 
 ```python
 class MyModel(llm.KeyModel):
     ...
     support_schema = True
 ```
-And then adding code to your `.execute()` method that checks for `prompt.schema` and, if it is present, uses that to prompt the model. `prompt.schema` will always be a Python dictionary, even if the user passed in a Pydantic model class.
+And then adding code to your `.execute()` method that checks for `prompt.schema` and, if it is present, uses that to prompt the model.
+
+`prompt.schema` will always be a Python dictionary representing a JSON schema, even if the user passed in a Pydantic model class.
 
 Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic](https://github.com/simonw/llm-anthropic) plugins for example of this pattern in action.
 

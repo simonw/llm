@@ -1,5 +1,5 @@
 import pytest
-from llm.utils import simplify_usage_dict, extract_fenced_code_block, build_json_schema
+from llm.utils import simplify_usage_dict, extract_fenced_code_block, schema_dsl
 
 
 @pytest.mark.parametrize(
@@ -209,7 +209,6 @@ def test_extract_fenced_code_block(input, last, expected):
         ),
     ],
 )
-def test_build_json_schema(schema, expected):
-    """Test the build_json_schema function with various inputs."""
-    result = build_json_schema(schema)
+def test_schema_dsl(schema, expected):
+    result = schema_dsl(schema)
     assert result == expected
