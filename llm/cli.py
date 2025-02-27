@@ -299,7 +299,7 @@ def prompt(
     model_aliases = get_model_aliases()
 
     def read_prompt():
-        nonlocal prompt
+        nonlocal prompt, schema
 
         # Is there extra prompt available on stdin?
         stdin_prompt = None
@@ -318,6 +318,7 @@ def prompt(
             and sys.stdin.isatty()
             and not attachments
             and not attachment_types
+            and not schema
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -376,6 +377,8 @@ def prompt(
         template_obj = load_template(template)
         extract = template_obj.extract
         extract_last = template_obj.extract_last
+        if template_obj.schema_object:
+            schema = template_obj.schema_object
         prompt = read_prompt()
         try:
             prompt, system = template_obj.evaluate(prompt, params)
@@ -383,8 +386,6 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-        if template_obj.schema_object:
-            schema = template_obj.schema_object
 
     if extract or extract_last:
         no_stream = True
