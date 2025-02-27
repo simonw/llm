@@ -123,6 +123,8 @@ The `model_id` is the identifier that will be recorded in the LLM logs. You can 
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
 
+For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
+
 With this configuration in place, the following command should run a prompt against the new model:
 
 ```bash
