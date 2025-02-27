@@ -443,6 +443,7 @@ Usage: llm schemas list [OPTIONS]
 Options:
   -p, --path FILE   Path to log database
   -q, --query TEXT  Search for schemas matching this string
+  --full            Output full schema contents
   --help            Show this message and exit.
 ```
 

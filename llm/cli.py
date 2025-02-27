@@ -1397,7 +1397,8 @@ def schemas():
     multiple=True,
     help="Search for schemas matching this string",
 )
-def schemas_list(path, queries):
+@click.option("--full", is_flag=True, help="Output full schema contents")
+def schemas_list(path, queries, full):
     "List stored schemas"
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
@@ -1429,9 +1430,20 @@ def schemas_list(path, queries):
     rows = db.query(sql, params)
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
-        click.echo(
-            "  summary: |\n    {}".format(schema_summary(json.loads(row["content"])))
-        )
+        if full:
+            click.echo(
+                "  schema: |\n{}".format(
+                    textwrap.indent(
+                        json.dumps(json.loads(row["content"]), indent=2), "    "
+                    )
+                )
+            )
+        else:
+            click.echo(
+                "  summary: |\n    {}".format(
+                    schema_summary(json.loads(row["content"]))
+                )
+            )
         click.echo(
             "  usage: |\n    {} time{}, most recently {}".format(
                 row["times_used"],
