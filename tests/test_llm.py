@@ -582,6 +582,28 @@ def test_schema(mock_model, use_pydantic):
     assert response.prompt.schema == dog_schema
 
 
+def test_schema_via_cli(mock_model, tmpdir, monkeypatch):
+    user_path = tmpdir / "user"
+    schema_path = tmpdir / "schema.json"
+    mock_model.enqueue([json.dumps(dog)])
+    open(schema_path, "w").write('{"schema": "one"}')
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--schema", str(schema_path), "prompt", "-m", "mock"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == '{"name": "Cleo", "age": 10}\n'
+    # Should have created user_path and put a logs.db in it
+    assert (user_path / "logs.db").exists()
+    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    assert rows == [
+        {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_pydantic", (False, True))
 async def test_schema_async(async_mock_model, use_pydantic):
