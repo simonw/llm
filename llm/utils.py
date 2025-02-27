@@ -199,3 +199,34 @@ def make_schema_id(schema: dict) -> Tuple[str, str]:
     schema_json = json.dumps(schema, separators=(",", ":"))
     schema_id = hashlib.blake2b(schema_json.encode(), digest_size=16).hexdigest()
     return schema_id, schema_json
+
+
+def output_rows_as_json(rows, nl=False):
+    """
+    Output rows as JSON - either newline-delimited or an array
+
+    Parameters:
+    - rows: List of dictionaries to output
+    - nl: Boolean, if True, use newline-delimited JSON
+
+    Returns:
+    - String with formatted JSON output
+    """
+    if not rows:
+        return "" if nl else "[]"
+
+    lines = []
+    end_i = len(rows) - 1
+    for i, row in enumerate(rows):
+        is_first = i == 0
+        is_last = i == end_i
+
+        line = "{firstchar}{serialized}{maybecomma}{lastchar}".format(
+            firstchar=("[" if is_first else " ") if not nl else "",
+            serialized=json.dumps(row),
+            maybecomma="," if (not nl and not is_last) else "",
+            lastchar="]" if (is_last and not nl) else "",
+        )
+        lines.append(line)
+
+    return "\n".join(lines)

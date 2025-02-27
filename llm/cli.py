@@ -43,6 +43,7 @@ from .utils import (
     token_usage_string,
     extract_fenced_code_block,
     make_schema_id,
+    output_rows_as_json,
 )
 import base64
 import httpx
@@ -904,6 +905,11 @@ order by prompt_attachments."order"
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
 @schema_option
+@click.option(
+    "--data", is_flag=True, help="Output newline-delimited JSON data for schema"
+)
+@click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
+@click.option("--list-key", help="Return JSON objects from list in this key")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
     "-s", "--short", is_flag=True, help="Shorter YAML output with truncated prompts"
@@ -944,6 +950,9 @@ def logs_list(
     model,
     query,
     schema,
+    data,
+    data_array,
+    list_key,
     truncate,
     short,
     usage,
@@ -1043,7 +1052,7 @@ def logs_list(
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
     # ... except for searches where we don't do this
-    if not query:
+    if not query and not data:
         rows.reverse()
 
     # Fetch any attachments
@@ -1052,6 +1061,27 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    if data or data_array:
+        # Special case for --data to output valid JSON
+        to_output = []
+        for row in rows:
+            response = row["response"] or ""
+            try:
+                decoded = json.loads(response)
+                if (
+                    isinstance(decoded, dict)
+                    and (list_key in decoded)
+                    and all(isinstance(item, dict) for item in decoded[list_key])
+                ):
+                    for item in decoded[list_key]:
+                        to_output.append(item)
+                else:
+                    to_output.append(decoded)
+            except ValueError:
+                pass
+        click.echo(output_rows_as_json(to_output, not data_array))
+        return
 
     for row in rows:
         if truncate:
