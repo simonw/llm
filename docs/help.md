@@ -430,6 +430,7 @@ Options:
 
 Commands:
   list*  List stored schemas
+  show   Show a stored schema
 ```
 
 (help-schemas-list)=
@@ -443,6 +444,18 @@ Options:
   -p, --path FILE   Path to log database
   -q, --query TEXT  Search for schemas matching this string
   --help            Show this message and exit.
+```
+
+(help-schemas-show)=
+#### llm schemas show --help
+```
+Usage: llm schemas show [OPTIONS] SCHEMA_ID
+
+  Show a stored schema
+
+Options:
+  -p, --path FILE  Path to log database
+  --help           Show this message and exit.
 ```
 
 (help-aliases)=

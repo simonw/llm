@@ -1441,6 +1441,30 @@ def schemas_list(path, queries):
         )
 
 
+@schemas.command(name="show")
+@click.argument("schema_id")
+@click.option(
+    "-p",
+    "--path",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def schemas_show(schema_id, path):
+    "Show a stored schema"
+    path = pathlib.Path(path or logs_db_path())
+    if not path.exists():
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    migrate(db)
+
+    sql = "select content from schemas where id = ?"
+    try:
+        row = db["schemas"].get(schema_id)
+    except sqlite_utils.db.NotFoundError:
+        raise click.ClickException("Invalid schema ID")
+    click.echo(json.dumps(json.loads(row["content"]), indent=2))
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
