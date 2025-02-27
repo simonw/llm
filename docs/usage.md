@@ -182,7 +182,7 @@ llm --schema a75b7b3f00e065247e6e364304338aa5 'five dogs'
 
 Be warned that different models may support different dialects of the JSON schema specification.
 
-See {ref}`logging-schemas` for tips on using the `llm logs --schema X` command to access JSON objects you have previously logged using this option.
+See {ref}`schemas-logs` for tips on using the `llm logs --schema X` command to access JSON objects you have previously logged using this option.
 
 (usage-conversation)=
 ### Continuing a conversation

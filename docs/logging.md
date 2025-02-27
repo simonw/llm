@@ -198,88 +198,10 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 datasette "$(llm logs path)"
 ```
 
-(logging-schemas)=
+### Browsing data collected using schemas
 
-## JSON objects created using schemas
+The `--schema X` option can be used to view responses that used the specified schema. This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
 
-You can use {ref}`usage-schemas` to collect structured JSON data from text and images that you feed into LLM.
-
-The JSON produced by these is logged in the database. You can use special options to extract just those JSON objects in a useful format.
-
-The `--schema X` filter option can be used to filter just for responses that were created using the specified schema. You can pass the full schema JSON, a path to the schema on disk or the schema ID.
-
-The `--data` option causes just the JSON data collected by that schema to be outputted, as newline-delimited JSON.
-
-If you instead want a JSON array of objects (with starting and ending square braces) you can use `--data-array` instead.
-
-Consider this schema file, called `dogs.schema.json`:
-
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "dogs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "ten_word_bio": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["name", "ten_word_bio"],
-        "additionalProperties": false
-      }
-    }
-  },
-  "required": ["dogs"],
-  "additionalProperties": false
-}
-```
-You can use this several times to invent several cool dogs:
-```bash
-llm --schema dogs.schema.json 'invent 3 cool dogs'
-llm --schema dogs.schema.json 'invent 2 cool dogs'
-```
-Having logged the cool dogs, you can see just the data that was returned by those prompts like this:
-```bash
-llm logs --schema dogs.schema.json --data
-```
-Output:
-```
-{"dogs": [{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}, {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]}
-{"dogs": [{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}, {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}, {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}]}
-```
-Note that the dogs are nested in that `"dogs"` key. To access the list of items from that key use `--data-key dogs`:
-```bash
-llm logs --schema dogs.schema.json --data-key dogs
-```
-Output:
-```
-{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}
-{"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}
-{"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}
-{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}
-{"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}
-```
-Finally, to output a JSON array instead of newline-delimited JSON use `--data-array`:
-```bash
-llm logs --schema dogs.schema.json --data-key dogs --data-array
-```
-Output:
-```json
-[{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."},
- {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."},
- {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."},
- {"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."},
- {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]
-```
 (logging-sql-schema)=
 
 ## SQL schema

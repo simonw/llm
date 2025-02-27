@@ -118,7 +118,7 @@ To return multiple items matching your schema, use the `--schema-multi` option. 
 ```bash
 llm --schema-multi 'name,description,fave_toy' 'invent 3 dogs'
 ```
-The Python utility function `llm.schema_dsl(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary when working with schemas {ref}`in the Python API <python-api-schemas`.
+The Python utility function `llm.schema_dsl(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary when working with schemas {ref}`in the Python API <python-api-schemas>`.
 
 You can experiment with the syntax using the `llm schemas dsl` command, which converts the input into a JSON schema:
 ```bash
@@ -141,4 +141,58 @@ Output:
     "age"
   ]
 }
+```
+
+(schemas-logs)=
+
+## Browsing logged JSON objects created using schemas
+
+By default, all JSON produced using schemas is logged to {ref}`a SQLite database <logging>`. You can use special options to the `llm logs` command to extract just those JSON objects in a useful format.
+
+The `llm logs --schema X` filter option can be used to filter just for responses that were created using the specified schema. You can pass the full schema JSON, a path to the schema on disk or the schema ID.
+
+The `--data` option causes just the JSON data collected by that schema to be outputted, as newline-delimited JSON.
+
+If you instead want a JSON array of objects (with starting and ending square braces) you can use `--data-array` instead.
+
+Let's invent some dogs:
+
+```bash
+llm --schema-multi 'name, ten_word_bio' 'invent 3 cool dogs'
+llm --schema-multi 'name, ten_word_bio' 'invent 2 cool dogs'
+```
+Having logged these cool dogs, you can see just the data that was returned by those prompts like this:
+```bash
+llm logs --schema-multi 'name, ten_word_bio' --data
+```
+We need to use `--schema-multi` here because we used that when we first created these records. The `--schema` option is also supported, and can be passed a filename or JSON schema or schema ID as well.
+
+Output:
+```
+{"items": [{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}, {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]}
+{"items": [{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}, {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}, {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}]}
+```
+Note that the dogs are nested in that `"items"` key. To access the list of items from that key use `--data-key items`:
+```bash
+llm logs --schema-multi 'name, ten_word_bio' --data-key items
+```
+Output:
+```
+{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}
+{"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}
+{"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}
+{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}
+{"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}
+```
+Finally, to output a JSON array instead of newline-delimited JSON use `--data-array`:
+```bash
+llm logs --schema-multi 'name, ten_word_bio' --data-key items --data-array
+```
+Output:
+```json
+[{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."},
+ {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."},
+ {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."},
+ {"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."},
+ {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]
 ```
