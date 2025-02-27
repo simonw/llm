@@ -157,7 +157,7 @@ Example output:
 (logs-conversation)=
 ### Logs for a conversation
 
-To view the logs for the most recent {ref}`conversation <conversation>` you have had with a model, use `-c`:
+To view the logs for the most recent {ref}`conversation <usage-conversation>` you have had with a model, use `-c`:
 
 ```bash
 llm logs -c

@@ -411,7 +411,7 @@ There's also a new {ref}`llm.Collection <embeddings-python-collections>` class f
 - The output format for `llm logs` has changed. Previously it was JSON - it's now a much more readable Markdown format suitable for pasting into other documents. [#160](https://github.com/simonw/llm/issues/160)
   - The new `llm logs --json` option can be used to get the old JSON format.
   - Pass `llm logs --conversation ID` or `--cid ID` to see the full logs for a specific conversation.
-- You can now combine piped input and a prompt in a single command: `cat script.py | llm 'explain this code'`. This works even for models that do not support {ref}`system prompts <system-prompts>`. [#153](https://github.com/simonw/llm/issues/153)
+- You can now combine piped input and a prompt in a single command: `cat script.py | llm 'explain this code'`. This works even for models that do not support {ref}`system prompts <usage-system-prompts>`. [#153](https://github.com/simonw/llm/issues/153)
 - Additional {ref}`openai-compatible-models` can now be configured with custom HTTP headers. This enables platforms such as [openrouter.ai](https://openrouter.ai/) to be used with LLM, which can provide Claude access even without an Anthropic API key.
 - Keys set in `keys.json` are now used in preference to environment variables. [#158](https://github.com/simonw/llm/issues/158)
 - The documentation now includes a {ref}`plugin directory <plugin-directory>` listing all available plugins for LLM. [#173](https://github.com/simonw/llm/issues/173)

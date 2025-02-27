@@ -38,7 +38,7 @@ Will run a prompt of:
 ```
 <contents of myscript.py> explain this code
 ```
-For models that support them, {ref}`system prompts <system-prompts>` are a better tool for this kind of prompting.
+For models that support them, {ref}`system prompts <usage-system-prompts>` are a better tool for this kind of prompting.
 
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
 
@@ -88,7 +88,7 @@ LLM will attempt to automatically detect the content type of the image. If this 
 cat myfile | llm "describe this image" --at - image/jpeg
 ```
 
-(system-prompts)=
+(usage-system-prompts)=
 ### System prompts
 
 You can use `-s/--system '...'` to set a system prompt.
@@ -122,6 +122,7 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-schemas)=
 ### Schemas
 
 Some models include the ability to return JSON that matches a provided [JSON schema](https://json-schema.org/). Models from OpenAI, Anthropic and Google Gemini all include this capability.
@@ -155,7 +156,7 @@ The JSON returned from the model should match that schema.
 
 Be warned that different models may support different dialects of the JSON schema specification.
 
-(conversation)=
+(usage-conversation)=
 ### Continuing a conversation
 
 By default, the tool will start a new conversation each time you run it.
