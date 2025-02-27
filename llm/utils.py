@@ -243,6 +243,9 @@ def resolve_schema_input(db, schema_input):
             return json.loads(schema_input)
         except ValueError:
             pass
+    if " " in schema_input.strip() or "," in schema_input:
+        # Treat it as schema DSL
+        return build_json_schema(schema_input)
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():
@@ -298,3 +301,67 @@ def schema_summary(schema: dict) -> str:
         return schema_summary(items)
 
     return ""
+
+
+def build_json_schema(schema_dsl: str) -> dict:
+    """
+    Build a JSON schema from a concise schema string.
+
+    Args:
+        schema_dsl: A string representing a schema in the concise format.
+            Can be comma-separated or newline-separated.
+
+    Returns:
+        A dictionary representing the JSON schema.
+    """
+    # Type mapping dictionary
+    type_mapping = {
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
+        "str": "string",
+    }
+
+    # Initialize the schema dictionary with required elements
+    json_schema = {"type": "object", "properties": {}, "required": []}
+
+    # Check if the schema is newline-separated or comma-separated
+    if "\n" in schema_dsl:
+        fields = [field.strip() for field in schema_dsl.split("\n") if field.strip()]
+    else:
+        fields = [field.strip() for field in schema_dsl.split(",") if field.strip()]
+
+    # Process each field
+    for field in fields:
+        # Extract field name, type, and description
+        if ":" in field:
+            field_info, description = field.split(":", 1)
+            description = description.strip()
+        else:
+            field_info = field
+            description = ""
+
+        # Process field name and type
+        field_parts = field_info.strip().split()
+        field_name = field_parts[0].strip()
+
+        # Default type is string
+        field_type = "string"
+
+        # If type is specified, use it
+        if len(field_parts) > 1:
+            type_indicator = field_parts[1].strip()
+            if type_indicator in type_mapping:
+                field_type = type_mapping[type_indicator]
+
+        # Add field to properties
+        json_schema["properties"][field_name] = {"type": field_type}
+
+        # Add description if provided
+        if description:
+            json_schema["properties"][field_name]["description"] = description
+
+        # Add field to required list
+        json_schema["required"].append(field_name)
+
+    return json_schema

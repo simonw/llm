@@ -96,6 +96,7 @@ embeddings/index
 plugins/index
 aliases
 python-api
+schemas
 templates
 logging
 related-tools

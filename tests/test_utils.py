@@ -1,5 +1,5 @@
 import pytest
-from llm.utils import simplify_usage_dict, extract_fenced_code_block
+from llm.utils import simplify_usage_dict, extract_fenced_code_block, build_json_schema
 
 
 @pytest.mark.parametrize(
@@ -101,3 +101,115 @@ def test_simplify_usage_dict(input_data, expected_output):
 def test_extract_fenced_code_block(input, last, expected):
     actual = extract_fenced_code_block(input, last=last)
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    "schema, expected",
+    [
+        # Test case 1: Basic comma-separated fields, default string type
+        (
+            "name, bio",
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "bio": {"type": "string"}},
+                "required": ["name", "bio"],
+            },
+        ),
+        # Test case 2: Comma-separated fields with types
+        (
+            "name, age int, balance float, active bool",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                    "balance": {"type": "number"},
+                    "active": {"type": "boolean"},
+                },
+                "required": ["name", "age", "balance", "active"],
+            },
+        ),
+        # Test case 3: Comma-separated fields with descriptions
+        (
+            "name: full name, age int: years old",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "full name"},
+                    "age": {"type": "integer", "description": "years old"},
+                },
+                "required": ["name", "age"],
+            },
+        ),
+        # Test case 4: Newline-separated fields
+        (
+            """
+        name
+        bio
+        age int
+        """,
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "bio": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+                "required": ["name", "bio", "age"],
+            },
+        ),
+        # Test case 5: Newline-separated with descriptions containing commas
+        (
+            """
+        name: the person's name
+        age int: their age in years, must be positive
+        bio: a short bio, no more than three sentences
+        """,
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "the person's name"},
+                    "age": {
+                        "type": "integer",
+                        "description": "their age in years, must be positive",
+                    },
+                    "bio": {
+                        "type": "string",
+                        "description": "a short bio, no more than three sentences",
+                    },
+                },
+                "required": ["name", "age", "bio"],
+            },
+        ),
+        # Test case 6: Empty schema
+        ("", {"type": "object", "properties": {}, "required": []}),
+        # Test case 7: Explicit string type
+        (
+            "name str, description str",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["name", "description"],
+            },
+        ),
+        # Test case 8: Extra whitespace
+        (
+            "  name  ,  age   int  :  person's age  ",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer", "description": "person's age"},
+                },
+                "required": ["name", "age"],
+            },
+        ),
+    ],
+)
+def test_build_json_schema(schema, expected):
+    """Test the build_json_schema function with various inputs."""
+    result = build_json_schema(schema)
+    assert result == expected
