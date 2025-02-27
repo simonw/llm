@@ -65,29 +65,29 @@ def test_logs_text(log_path, usage):
         (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
             "Model: **davinci**\n\n"
-            "## Prompt:\n\n"
+            "## Prompt\n\n"
             "prompt\n\n"
-            "## System:\n\n"
+            "## System\n\n"
             "system\n\n"
-            "## Response:\n\n"
+            "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
         + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
             "Model: **davinci**\n\n"
-            "## Prompt:\n\n"
+            "## Prompt\n\n"
             "prompt\n\n"
-            "## Response:\n\n"
+            "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
         + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
             "Model: **davinci**\n\n"
-            "## Prompt:\n\n"
+            "## Prompt\n\n"
             "prompt\n\n"
-            "## Response:\n\n"
+            "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
         + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")

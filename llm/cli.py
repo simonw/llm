@@ -1125,14 +1125,14 @@ def logs_list(
             # In conversation log mode only show it for the first one
             if conversation_id:
                 should_show_conversation = False
-            click.echo("## Prompt:\n\n{}".format(row["prompt"]))
+            click.echo("## Prompt\n\n{}".format(row["prompt"] or "- none -"))
             if row["system"] != current_system:
                 if row["system"] is not None:
-                    click.echo("\n## System:\n\n{}".format(row["system"]))
+                    click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             if row["schema_json"]:
                 click.echo(
-                    "\n## Schema:\n\n```json\n{}\n```".format(
+                    "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
                     )
                 )
@@ -1168,7 +1168,7 @@ def logs_list(
                     response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
                 except ValueError:
                     pass
-            click.echo("\n## Response:\n\n{}\n".format(response))
+            click.echo("\n## Response\n\n{}\n".format(response))
             if usage:
                 token_usage = token_usage_string(
                     row["input_tokens"],
