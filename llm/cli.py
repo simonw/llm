@@ -1069,7 +1069,7 @@ def logs_list(
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
-    if data or data_array:
+    if data or data_array or data_key:
         # Special case for --data to output valid JSON
         to_output = []
         for row in rows:

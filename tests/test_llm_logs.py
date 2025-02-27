@@ -329,7 +329,7 @@ def test_logs_search(user_path, query, extra_args, expected):
             ),
         ),
         (
-            ["--data", "--schema", MULTI_ID, "--data-key", "items"],
+            ["--schema", MULTI_ID, "--data-key", "items"],
             (
                 '{"name": "one"}\n'
                 '{"name": "two"}\n'
