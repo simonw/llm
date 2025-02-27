@@ -1287,13 +1287,14 @@ _type_lookup = {
     "--options", is_flag=True, help="Show options for each model, if available"
 )
 @click.option("async_", "--async", is_flag=True, help="List async models")
+@click.option("--schemas", is_flag=True, help="List models that support schemas")
 @click.option(
     "-q",
     "--query",
     multiple=True,
     help="Search for models matching these strings",
 )
-def models_list(options, async_, query):
+def models_list(options, async_, schemas, query):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
@@ -1303,6 +1304,8 @@ def models_list(options, async_, query):
             # Only show models where every provided query string matches
             if not all(model_with_aliases.matches(q) for q in query):
                 continue
+        if schemas and not model_with_aliases.model.supports_schema:
+            continue
         extra = ""
         if model_with_aliases.aliases:
             extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
@@ -1346,12 +1349,12 @@ def models_list(options, async_, query):
             + (["streaming"] if model.can_stream else [])
             + (["schemas"] if model.supports_schema else [])
         )
-        if features:
+        if options and features:
             output += "\n  Features:\n{}".format(
                 "\n".join("  - {}".format(feature) for feature in features)
             )
         click.echo(output)
-    if not query:
+    if not query and not options and not schemas:
         click.echo(f"Default: {get_default_model()}")
 
 

@@ -344,6 +344,7 @@ Usage: llm models list [OPTIONS]
 Options:
   --options         Show options for each model, if available
   --async           List async models
+  --schemas         List models that support schemas
   -q, --query TEXT  Search for models matching these strings
   --help            Show this message and exit.
 ```

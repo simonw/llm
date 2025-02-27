@@ -71,6 +71,11 @@ This example uses [uvx](https://docs.astral.sh/uv/guides/tools/) to run [strip-t
 
 This will instruct the model to return an array of JSON objects with the specified structure, each containing a headline, summary, and array of key people mentioned.
 
+For a list of available models that support schemas, run this command:
+```bash
+llm models --schemas
+```
+
 (schemas-dsl)=
 
 ## Alternative schema syntax

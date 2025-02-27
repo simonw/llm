@@ -721,7 +721,6 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Include the log probabilities of most likely N per token
   Features:
   - streaming
-Default: gpt-4o-mini
 
 ```
 <!-- [[[end]]] -->
