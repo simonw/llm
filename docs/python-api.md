@@ -126,7 +126,14 @@ print(model.prompt(
     schema=llm.schema_dsl("name, age int, bio")
 ))
 ```
+Pass `multi=True` to generate a schema that returns multiple items matching that specification:
 
+```python
+print(model.prompt(
+    "Describe 3 nice dogs with surprising names",
+    schema=llm.schema_dsl("name, age int, bio", multi=True)
+))
+```
 (python-api-model-options)=
 
 ### Model options

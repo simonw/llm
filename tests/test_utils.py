@@ -212,3 +212,24 @@ def test_extract_fenced_code_block(input, last, expected):
 def test_schema_dsl(schema, expected):
     result = schema_dsl(schema)
     assert result == expected
+
+
+def test_schema_dsl_multi():
+    result = schema_dsl("name, age int: The age", multi=True)
+    assert result == {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer", "description": "The age"},
+                    },
+                    "required": ["name", "age"],
+                },
+            }
+        },
+        "required": ["items"],
+    }

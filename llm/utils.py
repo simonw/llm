@@ -303,13 +303,14 @@ def schema_summary(schema: dict) -> str:
     return ""
 
 
-def schema_dsl(schema_dsl: str) -> Dict[str, Any]:
+def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
     """
     Build a JSON schema from a concise schema string.
 
     Args:
         schema_dsl: A string representing a schema in the concise format.
             Can be comma-separated or newline-separated.
+        multi: Boolean, return a schema for an "items" array of these
 
     Returns:
         A dictionary representing the JSON schema.
@@ -364,4 +365,16 @@ def schema_dsl(schema_dsl: str) -> Dict[str, Any]:
         # Add field to required list
         json_schema["required"].append(field_name)
 
-    return json_schema
+    if multi:
+        return multi_schema(json_schema)
+    else:
+        return json_schema
+
+
+def multi_schema(schema: dict) -> dict:
+    "Wrap JSON schema in an 'items': [] array"
+    return {
+        "type": "object",
+        "properties": {"items": {"type": "array", "items": schema}},
+        "required": ["items"],
+    }

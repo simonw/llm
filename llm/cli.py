@@ -46,6 +46,7 @@ from .utils import (
     output_rows_as_json,
     resolve_schema_input,
     schema_summary,
+    multi_schema,
 )
 import base64
 import httpx
@@ -307,11 +308,7 @@ def prompt(
 
     if schema_multi:
         # Convert that schema into multiple "items" of the same schema
-        schema = {
-            "type": "object",
-            "properties": {"items": {"type": "array", "items": schema}},
-            "required": ["items"],
-        }
+        schema = multi_schema(schema)
 
     model_aliases = get_model_aliases()
 
