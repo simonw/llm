@@ -159,12 +159,25 @@ You can also save the JSON schema to a file and reference the filename using `--
 ```bash
 llm --schema dogs.schema.json 'invent two dogs'
 ```
+
 Or save your schema {ref}`to a template <prompt-templates>` like this:
 
 ```bash
 llm --schema dogs.schema.json --save dogs
 # Then to use it:
 llm -t dogs 'invent two dogs'
+```
+Schemas are logged to your database. You can view stored schemas with:
+```bash
+llm schemas
+```
+And add `-q` one or more times to search:
+```bash
+llm schemas -q dogs -q bio
+```
+You can then use a stored schema ID as an argument to `--schema`:
+```bash
+llm --schema a75b7b3f00e065247e6e364304338aa5 'five dogs
 ```
 
 Be warned that different models may support different dialects of the JSON schema specification.
