@@ -1125,7 +1125,7 @@ def logs_list(
             # In conversation log mode only show it for the first one
             if conversation_id:
                 should_show_conversation = False
-            click.echo("## Prompt\n\n{}".format(row["prompt"] or "- none -"))
+            click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
