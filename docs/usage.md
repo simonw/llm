@@ -152,7 +152,20 @@ llm --schema '{
   }
 }' -m gpt-4o-mini 'invent two dogs'
 ```
-The JSON returned from the model should match that schema.
+LLM will pass this to the model, whish should result in JSON returned from the model matching that schema.
+
+You can also save the JSON schema to a file and reference the filename using `--schema`:
+
+```bash
+llm --schema dogs.schema.json 'invent two dogs'
+```
+Or save your schema {ref}`to a template <prompt-templates>` like this:
+
+```bash
+llm --schema dogs.schema.json --save dogs
+# Then to use it:
+llm -t dogs 'invent two dogs'
+```
 
 Be warned that different models may support different dialects of the JSON schema specification.
 

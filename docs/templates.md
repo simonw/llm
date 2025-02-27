@@ -26,6 +26,13 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
+
+Add `--schema` to bake a {ref}`schema <usage-schemas>` into your template:
+
+```bash
+llm --schema dog.schema.json 'invent a dog' --save dog
+```
+
 If you add `--extract` the setting to  {ref}`extract the first fenced code block <usage-extract-fenced-code>` will be persisted in the template.
 ```bash
 llm --system 'write a Python function' --extract --save python-function
