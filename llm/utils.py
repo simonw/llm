@@ -7,7 +7,7 @@ import puremagic
 import re
 import sqlite_utils
 import textwrap
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -303,7 +303,7 @@ def schema_summary(schema: dict) -> str:
     return ""
 
 
-def build_json_schema(schema_dsl: str) -> dict:
+def build_json_schema(schema_dsl: str) -> Dict[str, Any]:
     """
     Build a JSON schema from a concise schema string.
 
@@ -323,7 +323,7 @@ def build_json_schema(schema_dsl: str) -> dict:
     }
 
     # Initialize the schema dictionary with required elements
-    json_schema = {"type": "object", "properties": {}, "required": []}
+    json_schema: Dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
     # Check if the schema is newline-separated or comma-separated
     if "\n" in schema_dsl:

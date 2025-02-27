@@ -1469,7 +1469,6 @@ def schemas_show(schema_id, path):
     db = sqlite_utils.Database(path)
     migrate(db)
 
-    sql = "select content from schemas where id = ?"
     try:
         row = db["schemas"].get(schema_id)
     except sqlite_utils.db.NotFoundError:
