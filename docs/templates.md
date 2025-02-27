@@ -26,6 +26,13 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
+
+Add `--schema` to bake a {ref}`schema <usage-schemas>` into your template:
+
+```bash
+llm --schema dog.schema.json 'invent a dog' --save dog
+```
+
 If you add `--extract` the setting to  {ref}`extract the first fenced code block <usage-extract-fenced-code>` will be persisted in the template.
 ```bash
 llm --system 'write a Python function' --extract --save python-function
@@ -68,15 +75,18 @@ This will open the system default editor.
 
 :::{tip}
 You can control which editor will be used here using the `EDITOR` environment variable - for example, to use VS Code:
-
-    export EDITOR="code -w"
-
+```bash
+export EDITOR="code -w"
+```
 Add that to your `~/.zshrc` or `~/.bashrc` file depending on which shell you use (`zsh` is the default on macOS since macOS Catalina in 2019).
 :::
 
 You can also create a file called `summary.yaml` in the folder shown by running `llm templates path`, for example:
 ```bash
-$ llm templates path
+llm templates path
+```
+Example output:
+```
 /Users/simon/Library/Application Support/io.datasette.llm/templates
 ```
 
@@ -120,6 +130,26 @@ You can combine system and regular prompts like so:
 system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
 ```
+### Schemas
+
+Use the `schema:` key to embed a JSON schema (as YAML) in your template. The easiest way to create these is with the `llm --schema ... --save name-of-template` command - the result should look something like this:
+
+```yaml
+name: dogs
+schema_object:
+    properties:
+        dogs:
+            items:
+                properties:
+                    bio:
+                        type: string
+                    name:
+                        type: string
+                type: object
+            type: array
+    type: object
+```
+
 
 ### Additional template variables
 

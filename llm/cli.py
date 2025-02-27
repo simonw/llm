@@ -299,7 +299,7 @@ def prompt(
     model_aliases = get_model_aliases()
 
     def read_prompt():
-        nonlocal prompt
+        nonlocal prompt, schema
 
         # Is there extra prompt available on stdin?
         stdin_prompt = None
@@ -318,6 +318,7 @@ def prompt(
             and sys.stdin.isatty()
             and not attachments
             and not attachment_types
+            and not schema
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -356,6 +357,8 @@ def prompt(
             to_save["extract"] = True
         if extract_last:
             to_save["extract_last"] = True
+        if schema:
+            to_save["schema_object"] = schema
         path.write_text(
             yaml.dump(
                 to_save,
@@ -374,6 +377,8 @@ def prompt(
         template_obj = load_template(template)
         extract = template_obj.extract
         extract_last = template_obj.extract_last
+        if template_obj.schema_object:
+            schema = template_obj.schema_object
         prompt = read_prompt()
         try:
             prompt, system = template_obj.evaluate(prompt, params)

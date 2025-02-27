@@ -97,6 +97,12 @@ def test_templates_list(templates_path, args):
             {"system": "write python", "extract": True},
             None,
         ),
+        # So should schemas
+        (
+            ["--schema", '{"properties": {"name": {"type": "string"}}}'],
+            {"schema_object": {"properties": {"name": {"type": "string"}}}},
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
