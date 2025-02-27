@@ -47,6 +47,7 @@ from .utils import (
     resolve_schema_input,
     schema_summary,
     multi_schema,
+    schema_dsl,
 )
 import base64
 import httpx
@@ -1487,6 +1488,20 @@ def schemas_show(schema_id, path):
     except sqlite_utils.db.NotFoundError:
         raise click.ClickException("Invalid schema ID")
     click.echo(json.dumps(json.loads(row["content"]), indent=2))
+
+
+@schemas.command(name="dsl")
+@click.argument("input")
+@click.option("--multi", is_flag=True, help="Wrap in an array")
+def schemas_dsl_debug(input, multi):
+    """
+    Convert LLM's schema DSL to a JSON schema
+
+    \b
+        llm schema dsl 'name, age int, bio: their bio'
+    """
+    schema = schema_dsl(input, multi)
+    click.echo(json.dumps(schema, indent=2))
 
 
 @cli.group(

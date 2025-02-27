@@ -701,3 +701,37 @@ def test_sync_on_done(mock_model):
     assert len(caught) == 0
     str(response)
     assert len(caught) == 1
+
+
+def test_schemas_dsl():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["schemas", "dsl", "name, age int, bio: short bio"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+            "bio": {"type": "string", "description": "short bio"},
+        },
+        "required": ["name", "age", "bio"],
+    }
+    result2 = runner.invoke(cli, ["schemas", "dsl", "name, age int", "--multi"])
+    assert result2.exit_code == 0
+    assert json.loads(result2.output) == {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"},
+                    },
+                    "required": ["name", "age"],
+                },
+            }
+        },
+        "required": ["items"],
+    }

@@ -110,3 +110,26 @@ curl https://www.nytimes.com/ | uvx strip-tags | llm --schema-multi 'headline, s
 ```
 
 The Python utility function `llm.schema_dsl(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary.
+
+You can experiment with the syntax using the `llm schemas dsl` command, which converts the input into a JSON schema:
+```bash
+llm schemas dsl 'name, age int'
+```
+Output:
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "age"
+  ]
+}
+```
