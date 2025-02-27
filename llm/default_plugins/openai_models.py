@@ -366,6 +366,8 @@ def _attachment(attachment):
 
 
 class _Shared:
+    supports_schema = True
+
     def __init__(
         self,
         model_id,
@@ -504,6 +506,11 @@ class _Shared:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
             kwargs["response_format"] = {"type": "json_object"}
+        if prompt.schema:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "output", "schema": prompt.schema},
+            }
         if stream:
             kwargs["stream_options"] = {"include_usage": True}
         return kwargs

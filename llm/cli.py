@@ -114,16 +114,19 @@ def attachment_types_callback(ctx, param, values):
     return collected
 
 
-def _validate_metadata_json(ctx, param, value):
-    if value is None:
-        return value
-    try:
-        obj = json.loads(value)
-        if not isinstance(obj, dict):
-            raise click.BadParameter("Metadata must be a JSON object")
-        return obj
-    except json.JSONDecodeError:
-        raise click.BadParameter("Metadata must be valid JSON")
+def json_validator(object_name):
+    def validator(ctx, param, value):
+        if value is None:
+            return value
+        try:
+            obj = json.loads(value)
+            if not isinstance(obj, dict):
+                raise click.BadParameter(f"{object_name} must be a JSON object")
+            return obj
+        except json.JSONDecodeError:
+            raise click.BadParameter(f"{object_name} must be valid JSON")
+
+    return validator
 
 
 @click.group(
@@ -184,6 +187,9 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "--schema", callback=json_validator("schema"), help="JSON schema to use for output"
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -228,6 +234,7 @@ def prompt(
     attachments,
     attachment_types,
     options,
+    schema,
     template,
     param,
     no_stream,
@@ -429,6 +436,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
+                        schema=schema,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -440,6 +448,7 @@ def prompt(
                         prompt,
                         attachments=resolved_attachments,
                         system=system,
+                        schema=schema,
                         **kwargs,
                     )
                     text = await response.text()
@@ -456,6 +465,7 @@ def prompt(
                 prompt,
                 attachments=resolved_attachments,
                 system=system,
+                schema=schema,
                 **kwargs,
             )
             if should_stream:
@@ -829,13 +839,15 @@ LOGS_COLUMNS = """    responses.id,
     responses.output_tokens,
     responses.token_details,
     conversations.name as conversation_name,
-    conversations.model as conversation_model"""
+    conversations.model as conversation_model,
+    schemas.content as schema_json"""
 
 LOGS_SQL = """
 select
 {columns}
 from
     responses
+left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id{extra_where}
 order by responses.id desc{limit}
 """
@@ -844,6 +856,7 @@ select
 {columns}
 from
     responses
+left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id
 join responses_fts on responses_fts.rowid = responses.rowid
 where responses_fts match :query{extra_where}
@@ -1117,6 +1130,12 @@ def logs_list(
                 if row["system"] is not None:
                     click.echo("\n## System:\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            if row["schema_json"]:
+                click.echo(
+                    "\n## Schema:\n\n```json\n{}\n```".format(
+                        json.dumps(row["schema_json"], indent=2)
+                    )
+                )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -1141,7 +1160,15 @@ def logs_list(
                             )
                         )
 
-            click.echo("\n## Response:\n\n{}\n".format(row["response"]))
+            # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
+            response = row["response"]
+            if row["schema_json"]:
+                try:
+                    parsed = json.loads(response)
+                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
+                except ValueError:
+                    pass
+            click.echo("\n## Response:\n\n{}\n".format(response))
             if usage:
                 token_usage = token_usage_string(
                     row["input_tokens"],
@@ -1510,7 +1537,7 @@ def uninstall(packages, yes):
 @click.option(
     "--metadata",
     help="JSON object metadata to store",
-    callback=_validate_metadata_json,
+    callback=json_validator("metadata"),
 )
 @click.option(
     "format_",

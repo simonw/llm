@@ -83,6 +83,41 @@ if "image/jpeg" in model.attachment_types:
     ...
 ```
 
+(python-api-schemas)=
+
+### Schemas
+
+As with {ref}`the CLI tool <usage-schemas>` some models support passing a JSON schema should be used for the resulting response.
+
+You can pass this to the `prompt(schema=)` parameter as either a Python dictionary or a [Pydantic](https://docs.pydantic.dev/) `BaseModel` subclass:
+
+```python
+import llm, json
+from pydantic import BaseModel
+
+class Dog(BaseModel):
+    name: str
+    age: int
+
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt("Describe a nice dog", schema=Dog)
+dog = json.loads(response.text())
+print(dog)
+# {"name":"Buddy","age":3}
+```
+You can also pass a schema directly, like this:
+```python
+response = model.prompt("Describe a nice dog", schema={
+    "properties": {
+        "name": {"title": "Name", "type": "string"},
+        "age": {"title": "Age", "type": "integer"},
+    },
+    "required": ["name", "age"],
+    "title": "Dog",
+    "type": "object",
+})
+```
+
 (python-api-model-options)=
 
 ### Model options

@@ -157,7 +157,7 @@ Example output:
 (logs-conversation)=
 ### Logs for a conversation
 
-To view the logs for the most recent {ref}`conversation <conversation>` you have had with a model, use `-c`:
+To view the logs for the most recent {ref}`conversation <usage-conversation>` you have had with a model, use `-c`:
 
 ```bash
 llm logs -c
@@ -209,7 +209,7 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "responses", "responses_fts", "attachments", "prompt_attachments"):
+for table in ("conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments"):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -221,7 +221,11 @@ CREATE TABLE [conversations] (
   [name] TEXT,
   [model] TEXT
 );
-CREATE TABLE [responses] (
+CREATE TABLE [schemas] (
+  [id] TEXT PRIMARY KEY,
+  [content] TEXT
+);
+CREATE TABLE "responses" (
   [id] TEXT PRIMARY KEY,
   [model] TEXT,
   [prompt] TEXT,
@@ -235,7 +239,8 @@ CREATE TABLE [responses] (
   [datetime_utc] TEXT,
   [input_tokens] INTEGER,
   [output_tokens] INTEGER,
-  [token_details] TEXT
+  [token_details] TEXT,
+  [schema_id] TEXT REFERENCES [schemas]([id])
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],

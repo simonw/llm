@@ -50,6 +50,7 @@ def env_setup(monkeypatch, user_path):
 class MockModel(llm.Model):
     model_id = "mock"
     attachment_types = {"image/png", "audio/wav"}
+    supports_schema = True
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
@@ -97,6 +98,7 @@ class MockAsyncKeyModel(llm.AsyncKeyModel):
 
 class AsyncMockModel(llm.AsyncModel):
     model_id = "mock"
+    supports_schema = True
 
     def __init__(self):
         self.history = []
