@@ -930,6 +930,10 @@ order by prompt_attachments."order"
 @click.option("-q", "--query", help="Search for logs matching this string")
 @schema_option
 @click.option(
+    "--schema-multi",
+    help="JSON schema used for multiple results",
+)
+@click.option(
     "--data", is_flag=True, help="Output newline-delimited JSON data for schema"
 )
 @click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
@@ -974,6 +978,7 @@ def logs_list(
     model,
     query,
     schema_input,
+    schema_multi,
     data,
     data_array,
     data_key,
@@ -994,7 +999,11 @@ def logs_list(
     db = sqlite_utils.Database(path)
     migrate(db)
 
+    if schema_multi:
+        schema_input = schema_multi
     schema = resolve_schema_input(db, schema_input)
+    if schema_multi:
+        schema = multi_schema(schema)
 
     if short and (json_output or response):
         invalid = " or ".join(
