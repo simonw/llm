@@ -370,6 +370,9 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
 OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Options:
     temperature: float
@@ -383,6 +386,8 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     json_object: boolean
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -396,6 +401,9 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     json_object: boolean
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
 OpenAI Chat: gpt-4o-audio-preview
   Options:
     temperature: float
@@ -409,6 +417,8 @@ OpenAI Chat: gpt-4o-audio-preview
     json_object: boolean
   Attachment types:
     audio/mpeg, audio/wav
+  Features:
+  - streaming
 OpenAI Chat: gpt-4o-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -422,6 +432,8 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
     json_object: boolean
   Attachment types:
     audio/mpeg, audio/wav
+  Features:
+  - streaming
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
   Options:
     temperature: float
@@ -435,6 +447,8 @@ OpenAI Chat: gpt-4o-audio-preview-2024-10-01
     json_object: boolean
   Attachment types:
     audio/mpeg, audio/wav
+  Features:
+  - streaming
 OpenAI Chat: gpt-4o-mini-audio-preview
   Options:
     temperature: float
@@ -448,6 +462,8 @@ OpenAI Chat: gpt-4o-mini-audio-preview
     json_object: boolean
   Attachment types:
     audio/mpeg, audio/wav
+  Features:
+  - streaming
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -461,6 +477,8 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
     json_object: boolean
   Attachment types:
     audio/mpeg, audio/wav
+  Features:
+  - streaming
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
@@ -472,6 +490,8 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   Options:
     temperature: float
@@ -483,6 +503,8 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Options:
     temperature: float
@@ -494,6 +516,8 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   Options:
     temperature: float
@@ -505,6 +529,8 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4-1106-preview
   Options:
     temperature: float
@@ -516,6 +542,8 @@ OpenAI Chat: gpt-4-1106-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4-0125-preview
   Options:
     temperature: float
@@ -527,6 +555,8 @@ OpenAI Chat: gpt-4-0125-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4-turbo-2024-04-09
   Options:
     temperature: float
@@ -538,6 +568,8 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   Options:
     temperature: float
@@ -549,6 +581,8 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: gpt-4.5-preview-2025-02-27
   Options:
     temperature: float
@@ -562,6 +596,9 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     json_object: boolean
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
 OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Options:
     temperature: float
@@ -575,6 +612,9 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
     json_object: boolean
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
 OpenAI Chat: o1
   Options:
     temperature: float
@@ -589,6 +629,8 @@ OpenAI Chat: o1
     reasoning_effort: str
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - schemas
 OpenAI Chat: o1-2024-12-17
   Options:
     temperature: float
@@ -603,6 +645,8 @@ OpenAI Chat: o1-2024-12-17
     reasoning_effort: str
   Attachment types:
     image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - schemas
 OpenAI Chat: o1-preview
   Options:
     temperature: float
@@ -614,6 +658,8 @@ OpenAI Chat: o1-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: o1-mini
   Options:
     temperature: float
@@ -625,6 +671,8 @@ OpenAI Chat: o1-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+  Features:
+  - streaming
 OpenAI Chat: o3-mini
   Options:
     temperature: float
@@ -637,6 +685,9 @@ OpenAI Chat: o3-mini
     seed: int
     json_object: boolean
     reasoning_effort: str
+  Features:
+  - streaming
+  - schemas
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
@@ -668,6 +719,8 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Integer seed to attempt to sample deterministically
     logprobs: int
       Include the log probabilities of most likely N per token
+  Features:
+  - streaming
 Default: gpt-4o-mini
 
 ```

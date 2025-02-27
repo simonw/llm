@@ -1341,6 +1341,15 @@ def models_list(options, async_, query):
                 subsequent_indent="    ",
             )
             output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
+        features = (
+            []
+            + (["streaming"] if model.can_stream else [])
+            + (["schemas"] if model.supports_schema else [])
+        )
+        if features:
+            output += "\n  Features:\n{}".format(
+                "\n".join("  - {}".format(feature) for feature in features)
+            )
         click.echo(output)
     if not query:
         click.echo(f"Default: {get_default_model()}")
