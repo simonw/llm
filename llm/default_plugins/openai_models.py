@@ -24,7 +24,9 @@ import yaml
 def register_models(register):
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True), AsyncChat("gpt-4o", vision=True), aliases=("4o",)
+        Chat("gpt-4o", vision=True, supports_schema=True),
+        AsyncChat("gpt-4o", vision=True, supports_schema=True),
+        aliases=("4o",),
     )
     register(
         Chat("chatgpt-4o-latest", vision=True),
@@ -32,8 +34,8 @@ def register_models(register):
         aliases=("chatgpt-4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True),
-        AsyncChat("gpt-4o-mini", vision=True),
+        Chat("gpt-4o-mini", vision=True, supports_schema=True),
+        AsyncChat("gpt-4o-mini", vision=True, supports_schema=True),
         aliases=("4o-mini",),
     )
     for audio_model_id in (
@@ -69,19 +71,31 @@ def register_models(register):
     )
     # GPT-4.5
     register(
-        Chat("gpt-4.5-preview-2025-02-27", vision=True),
-        AsyncChat("gpt-4.5-preview-2025-02-27", vision=True),
+        Chat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
+        AsyncChat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
     )
     register(
-        Chat("gpt-4.5-preview", vision=True),
-        AsyncChat("gpt-4.5-preview", vision=True),
+        Chat("gpt-4.5-preview", vision=True, supports_schema=True),
+        AsyncChat("gpt-4.5-preview", vision=True, supports_schema=True),
         aliases=("gpt-4.5",),
     )
     # o1
     for model_id in ("o1", "o1-2024-12-17"):
         register(
-            Chat(model_id, vision=True, can_stream=False, reasoning=True),
-            AsyncChat(model_id, vision=True, can_stream=False, reasoning=True),
+            Chat(
+                model_id,
+                vision=True,
+                can_stream=False,
+                reasoning=True,
+                supports_schema=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                can_stream=False,
+                reasoning=True,
+                supports_schema=True,
+            ),
         )
 
     register(
@@ -93,8 +107,8 @@ def register_models(register):
         AsyncChat("o1-mini", allows_system_prompt=False),
     )
     register(
-        Chat("o3-mini", reasoning=True),
-        AsyncChat("o3-mini", reasoning=True),
+        Chat("o3-mini", reasoning=True, supports_schema=True),
+        AsyncChat("o3-mini", reasoning=True, supports_schema=True),
     )
     # The -instruct completion model
     register(
@@ -378,8 +392,6 @@ def _attachment(attachment):
 
 
 class _Shared:
-    supports_schema = True
-
     def __init__(
         self,
         model_id,
@@ -394,10 +406,12 @@ class _Shared:
         vision=False,
         audio=False,
         reasoning=False,
+        supports_schema=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
         self.key = key
+        self.supports_schema = supports_schema
         self.model_name = model_name
         self.api_base = api_base
         self.api_type = api_type
