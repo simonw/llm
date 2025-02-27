@@ -46,7 +46,7 @@ Number of responses logged:     48
 Database file size:             19.96MB
 ```
 
-(viewing-logs)=
+(logging-view)=
 
 ## Viewing the logs
 
@@ -154,7 +154,8 @@ Example output:
         reasoning_tokens: 2240
 ```
 
-(logs-conversation)=
+(logging-conversation)=
+
 ### Logs for a conversation
 
 To view the logs for the most recent {ref}`conversation <usage-conversation>` you have had with a model, use `-c`:
@@ -168,6 +169,8 @@ To see logs for a specific conversation based on its ID, use `--cid ID` or `--co
 llm logs --cid 01h82n0q9crqtnzmf13gkyxawg
 ```
 
+(logging-search)=
+
 ### Searching the logs
 
 You can search the logs for a search term in the `prompt` or the `response` columns.
@@ -176,12 +179,16 @@ llm logs -q 'cheesecake'
 ```
 The most relevant terms will be shown at the bottom of the output.
 
+(logging-filter-model)=
+
 ### Filtering by model
 
 You can filter to logs just for a specific model (or model alias) using `-m/--model`:
 ```bash
 llm logs -m chatgpt
 ```
+
+(logging-datasette)=
 
 ### Browsing logs using Datasette
 
@@ -190,6 +197,91 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 ```bash
 datasette "$(llm logs path)"
 ```
+
+(logging-schemas)=
+
+## JSON objects created using schemas
+
+You can use {ref}`usage-schemas` to collect structured JSON data from text and images that you feed into LLM.
+
+The JSON produced by these is logged in the database. You can use special options to extract just those JSON objects in a useful format.
+
+The `--schema X` filter option can be used to filter just for responses that were created using the specified schema. You can pass the full schema JSON, a path to the schema on disk or the schema ID.
+
+The `--data` option causes just the JSON data collected by that schema to be outputted, as newline-delimited JSON.
+
+If you instead want a JSON array of objects (with starting and ending square braces) you can use `--data-array` instead.
+
+Consider this schema file, called `dogs.schema.json`:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "dogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ten_word_bio": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["name", "ten_word_bio"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["dogs"],
+  "additionalProperties": false
+}
+```
+You can use this several times to invent several cool dogs:
+```bash
+llm --schema dogs.schema.json 'invent 3 cool dogs'
+llm --schema dogs.schema.json 'invent 2 cool dogs'
+```
+Having logged the cool dogs, you can see just the data that was returned by those prompts like this:
+```bash
+llm logs --schema dogs.schema.json --data
+```
+Output:
+```
+{"dogs": [{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}, {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]}
+{"dogs": [{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}, {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}, {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}]}
+```
+Note that the dogs are nested in that `"dogs"` key. To access the list of items from that key use `--data-key dogs`:
+```bash
+llm logs --schema dogs.schema.json --data-key dogs
+```
+Output:
+```
+{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."}
+{"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."}
+{"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."}
+{"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."}
+{"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}
+```
+Finally, to output a JSON array instead of newline-delimited JSON use `--data-array`:
+```bash
+llm logs --schema dogs.schema.json --data-key dogs --data-array
+```
+Output:
+```json
+[{"name": "Bolt", "ten_word_bio": "Lightning-fast border collie, loves frisbee and outdoor adventures."},
+ {"name": "Luna", "ten_word_bio": "Mystical husky with mesmerizing blue eyes, enjoys snow and play."},
+ {"name": "Ziggy", "ten_word_bio": "Quirky pug who loves belly rubs and quirky outfits."},
+ {"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."},
+ {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]
+```
+(logging-sql-schema)=
+
 ## SQL schema
 
 Here's the SQL schema used by the `logs.db` database:

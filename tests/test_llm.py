@@ -582,6 +582,40 @@ def test_schema(mock_model, use_pydantic):
     assert response.prompt.schema == dog_schema
 
 
+@pytest.mark.parametrize("use_filename", (True, False))
+def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
+    user_path = tmpdir / "user"
+    schema_path = tmpdir / "schema.json"
+    mock_model.enqueue([json.dumps(dog)])
+    schema_value = '{"schema": "one"}'
+    open(schema_path, "w").write(schema_value)
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    if use_filename:
+        schema_value = str(schema_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--schema", schema_value, "prompt", "-m", "mock"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == '{"name": "Cleo", "age": 10}\n'
+    # Should have created user_path and put a logs.db in it
+    assert (user_path / "logs.db").exists()
+    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    assert rows == [
+        {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
+    ]
+    if use_filename:
+        # Run it again to check that the ID option works now it's in the DB
+        result2 = runner.invoke(
+            cli,
+            ["--schema", "9a8ed2c9b17203f6d8905147234475b5", "prompt", "-m", "mock"],
+            catch_exceptions=False,
+        )
+        assert result2.exit_code == 0
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_pydantic", (False, True))
 async def test_schema_async(async_mock_model, use_pydantic):

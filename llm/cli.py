@@ -42,6 +42,9 @@ from .utils import (
     mimetype_from_string,
     token_usage_string,
     extract_fenced_code_block,
+    make_schema_id,
+    output_rows_as_json,
+    resolve_schema_input,
 )
 import base64
 import httpx
@@ -129,6 +132,15 @@ def json_validator(object_name):
     return validator
 
 
+def schema_option(fn):
+    click.option(
+        "schema_input",
+        "--schema",
+        help="JSON schema, filepath or ID",
+    )(fn)
+    return fn
+
+
 @click.group(
     cls=DefaultGroup,
     default="prompt",
@@ -187,9 +199,7 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
-@click.option(
-    "--schema", callback=json_validator("schema"), help="JSON schema to use for output"
-)
+@schema_option
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -234,7 +244,7 @@ def prompt(
     attachments,
     attachment_types,
     options,
-    schema,
+    schema_input,
     template,
     param,
     no_stream,
@@ -278,6 +288,13 @@ def prompt(
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
+
+    log_path = logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    schema = resolve_schema_input(db, schema_input)
 
     model_aliases = get_model_aliases()
 
@@ -501,10 +518,6 @@ def prompt(
 
     # Log to the database
     if (logs_on() or log) and not no_log:
-        log_path = logs_db_path()
-        (log_path.parent).mkdir(parents=True, exist_ok=True)
-        db = sqlite_utils.Database(log_path)
-        migrate(db)
         response.log_to_db(db)
 
 
@@ -895,6 +908,12 @@ order by prompt_attachments."order"
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
+@schema_option
+@click.option(
+    "--data", is_flag=True, help="Output newline-delimited JSON data for schema"
+)
+@click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
+@click.option("--data-key", help="Return JSON objects from array in this key")
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
     "-s", "--short", is_flag=True, help="Shorter YAML output with truncated prompts"
@@ -934,6 +953,10 @@ def logs_list(
     path,
     model,
     query,
+    schema_input,
+    data,
+    data_array,
+    data_key,
     truncate,
     short,
     usage,
@@ -950,6 +973,8 @@ def logs_list(
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    schema = resolve_schema_input(db, schema_input)
 
     if short and (json_output or response):
         invalid = " or ".join(
@@ -1009,6 +1034,11 @@ def logs_list(
         where_bits.append("responses.model = :model")
     if conversation_id:
         where_bits.append("responses.conversation_id = :conversation_id")
+    schema_id = None
+    if schema:
+        schema_id = make_schema_id(schema)[0]
+        where_bits.append("responses.schema_id = :schema_id")
+
     if where_bits:
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
@@ -1017,13 +1047,19 @@ def logs_list(
     rows = list(
         db.query(
             final_sql,
-            {"model": model_id, "query": query, "conversation_id": conversation_id},
+            {
+                "model": model_id,
+                "query": query,
+                "conversation_id": conversation_id,
+                "schema_id": schema_id,
+            },
         )
     )
+
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
     # ... except for searches where we don't do this
-    if not query:
+    if not query and not data:
         rows.reverse()
 
     # Fetch any attachments
@@ -1032,6 +1068,27 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    if data or data_array or data_key:
+        # Special case for --data to output valid JSON
+        to_output = []
+        for row in rows:
+            response = row["response"] or ""
+            try:
+                decoded = json.loads(response)
+                if (
+                    isinstance(decoded, dict)
+                    and (data_key in decoded)
+                    and all(isinstance(item, dict) for item in decoded[data_key])
+                ):
+                    for item in decoded[data_key]:
+                        to_output.append(item)
+                else:
+                    to_output.append(decoded)
+            except ValueError:
+                pass
+        click.echo(output_rows_as_json(to_output, not data_array))
+        return
 
     for row in rows:
         if truncate:

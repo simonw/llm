@@ -156,6 +156,8 @@ The JSON returned from the model should match that schema.
 
 Be warned that different models may support different dialects of the JSON schema specification.
 
+See {ref}`logging-schemas` for tips on using the `llm logs --schema X` command to access JSON objects you have previously logged using this option.
+
 (usage-conversation)=
 ### Continuing a conversation
 
@@ -209,7 +211,7 @@ Run `llm chat`, optionally with a `-m model_id`, to start a chat conversation:
 ```bash
 llm chat -m chatgpt
 ```
-Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logs-conversation>`.
+Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logging-conversation>`.
 
 You can pass `-c` to start a conversation as a continuation of your most recent prompt. This will automatically use the most recently used model:
 

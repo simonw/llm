@@ -1,10 +1,13 @@
 import click
+import hashlib
 import httpx
 import json
+import pathlib
 import puremagic
 import re
+import sqlite_utils
 import textwrap
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -192,3 +195,64 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
         match = matches[-1] if last else matches[0]
         return match.group("code")
     return None
+
+
+def make_schema_id(schema: dict) -> Tuple[str, str]:
+    schema_json = json.dumps(schema, separators=(",", ":"))
+    schema_id = hashlib.blake2b(schema_json.encode(), digest_size=16).hexdigest()
+    return schema_id, schema_json
+
+
+def output_rows_as_json(rows, nl=False):
+    """
+    Output rows as JSON - either newline-delimited or an array
+
+    Parameters:
+    - rows: List of dictionaries to output
+    - nl: Boolean, if True, use newline-delimited JSON
+
+    Returns:
+    - String with formatted JSON output
+    """
+    if not rows:
+        return "" if nl else "[]"
+
+    lines = []
+    end_i = len(rows) - 1
+    for i, row in enumerate(rows):
+        is_first = i == 0
+        is_last = i == end_i
+
+        line = "{firstchar}{serialized}{maybecomma}{lastchar}".format(
+            firstchar=("[" if is_first else " ") if not nl else "",
+            serialized=json.dumps(row),
+            maybecomma="," if (not nl and not is_last) else "",
+            lastchar="]" if (is_last and not nl) else "",
+        )
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def resolve_schema_input(db, schema_input):
+    # schema_input might be JSON or a filepath or an ID
+    if not schema_input:
+        return
+    if schema_input.strip().startswith("{"):
+        try:
+            return json.loads(schema_input)
+        except ValueError:
+            pass
+    # Is it a file on disk?
+    path = pathlib.Path(schema_input)
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            raise click.ClickException("Schema file contained invalid JSON")
+    # Last attempt: is it an ID in the DB?
+    try:
+        row = db["schemas"].get(schema_input)
+        return json.loads(row["content"])
+    except (sqlite_utils.db.NotFoundError, ValueError):
+        raise click.BadParameter("Invalid schema")

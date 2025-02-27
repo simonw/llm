@@ -117,7 +117,7 @@ Options:
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype
   -o, --option <TEXT TEXT>...     key/value options for the model
-  --schema TEXT                   JSON schema to use for output
+  --schema TEXT                   JSON schema, filepath or ID
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
@@ -300,6 +300,10 @@ Options:
   -p, --path FILE             Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
+  --schema TEXT               JSON schema, filepath or ID
+  --data                      Output newline-delimited JSON data for schema
+  --data-array                Output JSON array of data for schema
+  --data-key TEXT             Return JSON objects from array in this key
   -t, --truncate              Truncate long strings in output
   -s, --short                 Shorter YAML output with truncated prompts
   -u, --usage                 Include token usage
