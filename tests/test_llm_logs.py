@@ -10,6 +10,10 @@ import sqlite_utils
 import sys
 
 
+SINGLE_ID = "5843577700ba729bb14c327b30441885"
+MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
+
+
 @pytest.fixture
 def log_path(user_path):
     log_path = str(user_path / "logs.db")
@@ -30,6 +34,48 @@ def log_path(user_path):
         }
         for i in range(100)
     )
+    return log_path
+
+
+@pytest.fixture
+def schema_log_path(user_path):
+    log_path = str(user_path / "logs_schema.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+    db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
+    db["schemas"].insert({"id": MULTI_ID, "content": '{"name": "array"}'})
+    for i in range(2):
+        db["responses"].insert(
+            {
+                "id": str(ULID()).lower(),
+                "system": "system",
+                "prompt": "prompt",
+                "response": '{"name": "' + str(i) + '"}',
+                "model": "davinci",
+                "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
+                "conversation_id": "abc123",
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "schema_id": SINGLE_ID,
+            }
+        )
+    for _ in range(4):
+        db["responses"].insert(
+            {
+                "id": str(ULID()).lower(),
+                "system": "system",
+                "prompt": "prompt",
+                "response": '{"items": [{"name": "one"}, {"name": "two"}]}',
+                "model": "davinci",
+                "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
+                "conversation_id": "abc456",
+                "input_tokens": 2,
+                "output_tokens": 5,
+                "schema_id": MULTI_ID,
+            }
+        )
+
     return log_path
 
 
@@ -258,3 +304,51 @@ def test_logs_search(user_path, query, extra_args, expected):
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert [record["id"] for record in records] == expected
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    (
+        (["--data", "--schema", SINGLE_ID], '{"name": "1"}\n{"name": "0"}\n'),
+        (
+            ["--data", "--schema", MULTI_ID],
+            (
+                '{"items": [{"name": "one"}, {"name": "two"}]}\n'
+                '{"items": [{"name": "one"}, {"name": "two"}]}\n'
+                '{"items": [{"name": "one"}, {"name": "two"}]}\n'
+                '{"items": [{"name": "one"}, {"name": "two"}]}\n'
+            ),
+        ),
+        (
+            ["--data-array", "--schema", MULTI_ID],
+            (
+                '[{"items": [{"name": "one"}, {"name": "two"}]},\n'
+                ' {"items": [{"name": "one"}, {"name": "two"}]},\n'
+                ' {"items": [{"name": "one"}, {"name": "two"}]},\n'
+                ' {"items": [{"name": "one"}, {"name": "two"}]}]\n'
+            ),
+        ),
+        (
+            ["--data", "--schema", MULTI_ID, "--data-key", "items"],
+            (
+                '{"name": "one"}\n'
+                '{"name": "two"}\n'
+                '{"name": "one"}\n'
+                '{"name": "two"}\n'
+                '{"name": "one"}\n'
+                '{"name": "two"}\n'
+                '{"name": "one"}\n'
+                '{"name": "two"}\n'
+            ),
+        ),
+    ),
+)
+def test_logs_schema(schema_log_path, args, expected):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["logs", "-n", "0", "-p", str(schema_log_path)] + args,
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == expected

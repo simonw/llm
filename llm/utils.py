@@ -2,8 +2,10 @@ import click
 import hashlib
 import httpx
 import json
+import pathlib
 import puremagic
 import re
+import sqlite_utils
 import textwrap
 from typing import List, Dict, Optional, Tuple
 
@@ -230,3 +232,27 @@ def output_rows_as_json(rows, nl=False):
         lines.append(line)
 
     return "\n".join(lines)
+
+
+def resolve_schema_input(db, schema_input):
+    # schema_input might be JSON or a filepath or an ID
+    if not schema_input:
+        return
+    if schema_input.strip().startswith("{"):
+        try:
+            return json.loads(schema_input)
+        except ValueError:
+            pass
+    # Is it a file on disk?
+    path = pathlib.Path(schema_input)
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            raise click.ClickException("Schema file contained invalid JSON")
+    # Last attempt: is it an ID in the DB?
+    try:
+        row = db["schemas"].get(schema_input)
+        return json.loads(row["content"])
+    except (sqlite_utils.db.NotFoundError, ValueError):
+        raise click.BadParameter("Invalid schema")

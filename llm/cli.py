@@ -44,6 +44,7 @@ from .utils import (
     extract_fenced_code_block,
     make_schema_id,
     output_rows_as_json,
+    resolve_schema_input,
 )
 import base64
 import httpx
@@ -133,8 +134,8 @@ def json_validator(object_name):
 
 def schema_option(fn):
     click.option(
+        "schema_input",
         "--schema",
-        callback=json_validator("schema"),
         help="JSON schema, filepath or ID",
     )(fn)
     return fn
@@ -243,7 +244,7 @@ def prompt(
     attachments,
     attachment_types,
     options,
-    schema,
+    schema_input,
     template,
     param,
     no_stream,
@@ -287,6 +288,13 @@ def prompt(
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
+
+    log_path = logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    schema = resolve_schema_input(db, schema_input)
 
     model_aliases = get_model_aliases()
 
@@ -510,10 +518,6 @@ def prompt(
 
     # Log to the database
     if (logs_on() or log) and not no_log:
-        log_path = logs_db_path()
-        (log_path.parent).mkdir(parents=True, exist_ok=True)
-        db = sqlite_utils.Database(log_path)
-        migrate(db)
         response.log_to_db(db)
 
 
@@ -949,7 +953,7 @@ def logs_list(
     path,
     model,
     query,
-    schema,
+    schema_input,
     data,
     data_array,
     data_key,
@@ -969,6 +973,8 @@ def logs_list(
         raise click.ClickException("No log database found at {}".format(path))
     db = sqlite_utils.Database(path)
     migrate(db)
+
+    schema = resolve_schema_input(db, schema_input)
 
     if short and (json_output or response):
         invalid = " or ".join(
@@ -1049,6 +1055,7 @@ def logs_list(
             },
         )
     )
+
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
     # ... except for searches where we don't do this
