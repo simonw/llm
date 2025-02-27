@@ -177,7 +177,7 @@ llm schemas -q dogs -q bio
 ```
 You can then use a stored schema ID as an argument to `--schema`:
 ```bash
-llm --schema a75b7b3f00e065247e6e364304338aa5 'five dogs
+llm --schema a75b7b3f00e065247e6e364304338aa5 'five dogs'
 ```
 
 Be warned that different models may support different dialects of the JSON schema specification.
