@@ -431,6 +431,7 @@ Options:
 
 Commands:
   list*  List stored schemas
+  dsl    Convert LLM's schema DSL to a JSON schema
   show   Show a stored schema
 ```
 
@@ -458,6 +459,20 @@ Usage: llm schemas show [OPTIONS] SCHEMA_ID
 Options:
   -p, --path FILE  Path to log database
   --help           Show this message and exit.
+```
+
+(help-schemas-dsl)=
+#### llm schemas dsl --help
+```
+Usage: llm schemas dsl [OPTIONS] INPUT
+
+  Convert LLM's schema DSL to a JSON schema
+
+      llm schema dsl 'name, age int, bio: their bio'
+
+Options:
+  --multi  Wrap in an array
+  --help   Show this message and exit.
 ```
 
 (help-aliases)=
