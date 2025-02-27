@@ -77,6 +77,7 @@ Commands:
   models        Manage available models
   openai        Commands for working directly with the OpenAI API
   plugins       List installed plugins
+  schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
   templates     Manage stored prompt templates
   uninstall     Uninstall Python packages from the LLM environment
@@ -415,6 +416,33 @@ Usage: llm templates path [OPTIONS]
 
 Options:
   --help  Show this message and exit.
+```
+
+(help-schemas)=
+### llm schemas --help
+```
+Usage: llm schemas [OPTIONS] COMMAND [ARGS]...
+
+  Manage stored schemas
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*  List stored schemas
+```
+
+(help-schemas-list)=
+#### llm schemas list --help
+```
+Usage: llm schemas list [OPTIONS]
+
+  List stored schemas
+
+Options:
+  -p, --path FILE   Path to log database
+  -q, --query TEXT  Search for schemas matching this string
+  --help            Show this message and exit.
 ```
 
 (help-aliases)=

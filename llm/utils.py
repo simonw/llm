@@ -256,3 +256,45 @@ def resolve_schema_input(db, schema_input):
         return json.loads(row["content"])
     except (sqlite_utils.db.NotFoundError, ValueError):
         raise click.BadParameter("Invalid schema")
+
+
+def schema_summary(schema: dict) -> str:
+    """
+    Extract property names from a JSON schema and format them in a
+    concise way that highlights the array/object structure.
+
+    Args:
+        schema (dict): A JSON schema dictionary
+
+    Returns:
+        str: A human-friendly summary of the schema structure
+    """
+    if not schema or not isinstance(schema, dict):
+        return ""
+
+    schema_type = schema.get("type", "")
+
+    if schema_type == "object":
+        props = schema.get("properties", {})
+        prop_summaries = []
+
+        for name, prop_schema in props.items():
+            prop_type = prop_schema.get("type", "")
+
+            if prop_type == "array":
+                items = prop_schema.get("items", {})
+                items_summary = schema_summary(items)
+                prop_summaries.append(f"{name}: [{items_summary}]")
+            elif prop_type == "object":
+                nested_summary = schema_summary(prop_schema)
+                prop_summaries.append(f"{name}: {nested_summary}")
+            else:
+                prop_summaries.append(name)
+
+        return "{" + ", ".join(prop_summaries) + "}"
+
+    elif schema_type == "array":
+        items = schema.get("items", {})
+        return schema_summary(items)
+
+    return ""

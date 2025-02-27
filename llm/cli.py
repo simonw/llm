@@ -45,6 +45,7 @@ from .utils import (
     make_schema_id,
     output_rows_as_json,
     resolve_schema_input,
+    schema_summary,
 )
 import base64
 import httpx
@@ -1371,6 +1372,73 @@ def templates_list():
         for name, prompt in sorted(pairs):
             text = fmt.format(name=name, prompt=prompt)
             click.echo(display_truncated(text))
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def schemas():
+    "Manage stored schemas"
+
+
+@schemas.command(name="list")
+@click.option(
+    "-p",
+    "--path",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for schemas matching this string",
+)
+def schemas_list(path, queries):
+    "List stored schemas"
+    path = pathlib.Path(path or logs_db_path())
+    if not path.exists():
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    migrate(db)
+
+    params = []
+    where_sql = ""
+    if queries:
+        where_bits = ["schemas.content like ?" for _ in queries]
+        where_sql += " where {}".format(" and ".join(where_bits))
+        params.extend("%{}%".format(q) for q in queries)
+
+    sql = """
+    select
+      schemas.id,
+      schemas.content,
+      max(responses.datetime_utc) as recently_used,
+      count(*) as times_used
+    from schemas
+    join responses
+      on responses.schema_id = schemas.id
+    {} group by responses.schema_id
+    order by recently_used
+    """.format(
+        where_sql
+    )
+    rows = db.query(sql, params)
+    for row in rows:
+        click.echo("- id: {}".format(row["id"]))
+        click.echo(
+            "  summary: |\n    {}".format(schema_summary(json.loads(row["content"])))
+        )
+        click.echo(
+            "  usage: |\n    {} time{}, most recently {}".format(
+                row["times_used"],
+                "s" if row["times_used"] != 1 else "",
+                row["recently_used"],
+            )
+        )
 
 
 @cli.group(
