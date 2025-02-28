@@ -379,6 +379,7 @@ def prompt(
                 to_save,
                 indent=4,
                 default_flow_style=False,
+                sort_keys=False,
             ),
             "utf-8",
         )

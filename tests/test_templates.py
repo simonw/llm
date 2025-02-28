@@ -97,10 +97,17 @@ def test_templates_list(templates_path, args):
             {"system": "write python", "extract": True},
             None,
         ),
-        # So should schemas
+        # So should schemas (and should not sort properties)
         (
-            ["--schema", '{"properties": {"name": {"type": "string"}}}'],
-            {"schema_object": {"properties": {"name": {"type": "string"}}}},
+            [
+                "--schema",
+                '{"properties": {"b": {"type": "string"}, "a": {"type": "string"}}}',
+            ],
+            {
+                "schema_object": {
+                    "properties": {"b": {"type": "string"}, "a": {"type": "string"}}
+                }
+            },
             None,
         ),
     ),
