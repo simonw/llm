@@ -85,7 +85,7 @@ Or `-n 0` to see everything that has ever been logged:
 ```bash
 llm logs -n 0
 ```
-You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable:
+You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable - though the `--short` option is usually better.
 ```bash
 llm logs -n 1 -t --json
 ```
@@ -178,6 +178,19 @@ You can search the logs for a search term in the `prompt` or the `response` colu
 llm logs -q 'cheesecake'
 ```
 The most relevant terms will be shown at the bottom of the output.
+
+(logging-filter-id)=
+
+### Filtering past a specific ID
+
+If you want to retrieve all of the logs that were recorded since a specific response ID you can do so using these options:
+
+- `--id-gt $ID` - every record with an ID greater than $ID
+- `--id-gte $ID` - every record with an ID greater than or equal to $ID
+
+IDs are always issued in ascending order by time, so this provides a useful way to see everything that has happened since a particular record.
+
+This can be particularly useful when {ref}`working with schema data <schemas-logs>`, where you might want to access every record that you have created using a specific `--schema` but exclude records you have previously processed.
 
 (logging-filter-model)=
 

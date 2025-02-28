@@ -316,6 +316,8 @@ Options:
   --xl, --extract-last        Extract last fenced code block
   -c, --current               Show logs from the current conversation
   --cid, --conversation TEXT  Show logs for this conversation ID
+  --id-gt TEXT                Return responses with ID > this
+  --id-gte TEXT               Return responses with ID >= this
   --json                      Output logs as JSON
   --help                      Show this message and exit.
 ```

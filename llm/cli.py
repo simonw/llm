@@ -971,6 +971,8 @@ order by prompt_attachments."order"
     "--conversation",
     help="Show logs for this conversation ID",
 )
+@click.option("--id-gt", help="Return responses with ID > this")
+@click.option("--id-gte", help="Return responses with ID >= this")
 @click.option(
     "json_output",
     "--json",
@@ -996,6 +998,8 @@ def logs_list(
     extract_last,
     current_conversation,
     conversation_id,
+    id_gt,
+    id_gte,
     json_output,
 ):
     "Show recent logged prompts and their responses"
@@ -1069,6 +1073,10 @@ def logs_list(
         where_bits.append("responses.model = :model")
     if conversation_id:
         where_bits.append("responses.conversation_id = :conversation_id")
+    if id_gt:
+        where_bits.append("responses.id > :id_gt")
+    if id_gte:
+        where_bits.append("responses.id >= :id_gte")
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
@@ -1087,6 +1095,8 @@ def logs_list(
                 "query": query,
                 "conversation_id": conversation_id,
                 "schema_id": schema_id,
+                "id_gt": id_gt,
+                "id_gte": id_gte,
             },
         )
     )
@@ -1209,7 +1219,9 @@ def logs_list(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
                     (
-                        "    conversation: {}".format(row["conversation_id"])
+                        "    conversation: {} id: {}".format(
+                            row["conversation_id"], row["id"]
+                        )
                         if should_show_conversation
                         else ""
                     ),

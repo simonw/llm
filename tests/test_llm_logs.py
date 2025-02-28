@@ -81,6 +81,7 @@ def schema_log_path(user_path):
 
 
 datetime_re = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+id_re = re.compile(r"id: \w+")
 
 
 @pytest.mark.parametrize("usage", (False, True))
@@ -94,9 +95,11 @@ def test_logs_text(log_path, usage):
     output = result.output
     # Replace 2023-08-17T20:53:58 with YYYY-MM-DDTHH:MM:SS
     output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
+    # Replace id: whatever with id: xxx
+    output = id_re.sub("id: xxx", output)
     expected = (
         (
-            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
             "## Prompt\n\n"
             "prompt\n\n"
@@ -107,7 +110,7 @@ def test_logs_text(log_path, usage):
         )
         + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
         + (
-            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
             "## Prompt\n\n"
             "prompt\n\n"
@@ -116,7 +119,7 @@ def test_logs_text(log_path, usage):
         )
         + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
         + (
-            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
+            "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
             "## Prompt\n\n"
             "prompt\n\n"
