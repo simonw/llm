@@ -234,10 +234,16 @@ def output_rows_as_json(rows, nl=False):
     return "\n".join(lines)
 
 
-def resolve_schema_input(db, schema_input):
-    # schema_input might be JSON or a filepath or an ID
+def resolve_schema_input(db, schema_input, load_template):
+    # schema_input might be JSON or a filepath or an ID or t:name
     if not schema_input:
         return
+    if schema_input.strip().startswith("t:"):
+        name = schema_input.strip()[2:]
+        template = load_template(name)
+        if not template.schema_object:
+            raise click.ClickException("Template '{}' has no schema".format(name))
+        return template.schema_object
     if schema_input.strip().startswith("{"):
         try:
             return json.loads(schema_input)

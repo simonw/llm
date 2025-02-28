@@ -127,6 +127,23 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
         assert expected_error in result.output
 
 
+def test_templates_error_on_missing_schema(templates_path):
+    runner = CliRunner()
+    runner.invoke(
+        cli, ["the-prompt", "--save", "prompt_no_schema"], catch_exceptions=False
+    )
+    # This should complain about no schema
+    result = runner.invoke(
+        cli, ["hi", "--schema", "t:prompt_no_schema"], catch_exceptions=False
+    )
+    assert result.output == "Error: Template 'prompt_no_schema' has no schema\n"
+    # And this is just an invalid template
+    result2 = runner.invoke(
+        cli, ["hi", "--schema", "t:bad_template"], catch_exceptions=False
+    )
+    assert result2.output == "Error: Invalid template: bad_template\n"
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize(
     "template,extra_args,expected_model,expected_input,expected_error",

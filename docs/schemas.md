@@ -6,6 +6,8 @@ Large Language Models are very good at producing structured output as JSON or ot
 
 This feature is supported by models from OpenAI, Anthropic, Google Gemini and can be implemented for others {ref}`via plugins <advanced-model-plugins-schemas>`.
 
+This page describes schemas used via the `llm` command-line tool. Schemas can also be used from the {ref}`Python API <python-api-schemas>`.
+
 (schemas-json-schemas)=
 
 ## Understanding JSON schemas
@@ -20,16 +22,21 @@ A [JSON schema](https://json-schema.org/) is a specification that describes the 
 
 Different models may support different subsets of the overall JSON schema language. You should experiment to figure out what works for the model you are using.
 
+In most cases it's simpler to use the {ref}`condensed LLM schema syntax <schemas-dsl>` instead.
+
 (schemas-using-with-llm)=
 
-## Using schemas with LLM
+## How to specify a schema
 
-LLM provides several ways to use schemas:
+LLM accepts schema definitions for both running prompts and exploring logged responses, using the `--schema` option.
 
-1. Directly via the command line with the `--schema` option
-2. Through stored schemas in the database
-3. Via templates that include schemas
-4. Through the {ref}`Python API <python-api-schemas>`
+This option can take multiple forms:
+
+- A string providing a JSON schema: `--schema '{"type": "object", ...}'`
+- A {ref}`condensed schema definition <schemas-dsl>`: `--schema 'name,age int'`
+- The name or path of a file on disk containing a JSON schema: `--schema dogs.schema.json`
+- The hexadecimal ID of a previously logged schema: `--schema 520f7aabb121afd14d0c6c237b39ba2d` - these IDs can be found using the `llm schemas` command.
+- A schema that has been {ref}`saved in a template <prompt-templates-save>`: `--schema t:name-of-template`
 
 (schemas-using-cli)=
 
@@ -78,7 +85,7 @@ llm models --schemas
 
 (schemas-dsl)=
 
-## Alternative schema syntax
+## Concise LLM schema syntax
 
 JSON schema's can be time-consuming to construct by hand. LLM also supports a concise alternative syntax for specifying a schema.
 

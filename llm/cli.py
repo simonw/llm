@@ -305,7 +305,7 @@ def prompt(
     if schema_multi:
         schema_input = schema_multi
 
-    schema = resolve_schema_input(db, schema_input)
+    schema = resolve_schema_input(db, schema_input, load_template)
 
     if schema_multi:
         # Convert that schema into multiple "items" of the same schema
@@ -1002,7 +1002,7 @@ def logs_list(
 
     if schema_multi:
         schema_input = schema_multi
-    schema = resolve_schema_input(db, schema_input)
+    schema = resolve_schema_input(db, schema_input, load_template)
     if schema_multi:
         schema = multi_schema(schema)
 
