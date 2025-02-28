@@ -388,6 +388,8 @@ JSON schema covers the following:
 
 Different models may support different subsets of the overall JSON schema language. You should experiment to figure out what works for the model you are using.
 
+LLM recommends that the top level of the schema is an object, not an array, for increased compatibility across multiple models. I suggest using `{"items": [array of objects]}` if you want to return an array.
+
 The dogs schema above, `name, age int, one_sentence_bio`, would look like this as a full JSON schema:
 
 ```json
