@@ -16,6 +16,7 @@ from llm import (
     Template,
     UnknownModelError,
     KeyModel,
+    cosine_similarity,
     encode,
     get_async_model,
     get_default_model,
@@ -1880,6 +1881,102 @@ def embed_multi(
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
         collection_obj.embed_multi(tuples(), **embed_kwargs)
+
+
+@cli.command(name="embed-score")
+@click.option(
+    "-i1",
+    "--input1",
+    type=click.Path(exists=True, readable=True, allow_dash=True),
+    help="First file to embed",
+)
+@click.option(
+    "-i2",
+    "--input2",
+    type=click.Path(exists=True, readable=True, allow_dash=True),
+    help="Second file to embed",
+)
+@click.option("-c1", "--content1", help="First content to embed")
+@click.option("-c2", "--content2", help="Second content to embed")
+@click.option("--binary", is_flag=True, help="Treat input as binary data")
+@click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "format_",
+    "-f",
+    "--format",
+    type=click.Choice(["json", "text"]),
+    default="text",
+    help="Output format",
+)
+def embed_score(input1, input2, content1, content2, binary, model, format_):
+    """
+    Calculate similarity score between two embeddings without storing them.
+
+    Example usage:
+
+    \b
+        llm embed-score -c1 "I like pelicans" -c2 "I love pelicans"
+        llm embed-score -i1 file1.txt -i2 file2.txt
+        llm embed-score -i1 image1.jpg -i2 image2.jpg --binary
+    """
+    # Resolve the embedding model
+    if model is None:
+        model = get_default_embedding_model()
+        if model is None:
+            raise click.ClickException(
+                "You need to specify an embedding model (no default model is set)"
+            )
+    try:
+        model_obj = get_embedding_model(model)
+    except UnknownModelError:
+        raise click.ClickException(f"Unknown embedding model: {model}")
+
+    # Resolve first input
+    content_1 = None
+    if content1 is not None:
+        content_1 = content1
+    elif input1:
+        if input1 == "-":
+            # Read from stdin
+            input_source = sys.stdin.buffer if binary else sys.stdin
+            content_1 = input_source.read()
+        else:
+            mode = "rb" if binary else "r"
+            with open(input1, mode) as f:
+                content_1 = f.read()
+
+    if content_1 is None:
+        raise click.ClickException("No content provided for first input")
+
+    # Resolve second input
+    content_2 = None
+    if content2 is not None:
+        content_2 = content2
+    elif input2:
+        if input2 == "-":
+            # Read from stdin
+            input_source = sys.stdin.buffer if binary else sys.stdin
+            content_2 = input_source.read()
+        else:
+            mode = "rb" if binary else "r"
+            with open(input2, mode) as f:
+                content_2 = f.read()
+
+    if content_2 is None:
+        raise click.ClickException("No content provided for second input")
+
+    # Embed both inputs
+    embedding_1 = model_obj.embed(content_1)
+    embedding_2 = model_obj.embed(content_2)
+
+    # Calculate similarity score
+    score = cosine_similarity(embedding_1, embedding_2)
+
+    # Output the score in the requested format
+    if format_ == "json":
+        click.echo(json.dumps({"score": score, "content1": embedding_1, "content2": embedding_2}))
+    else:
+        click.echo(f"{score}")
 
 
 @cli.command()
