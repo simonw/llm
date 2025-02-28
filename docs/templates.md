@@ -132,7 +132,7 @@ prompt: 'Summarize this: $input'
 ```
 ### Schemas
 
-Use the `schema:` key to embed a JSON schema (as YAML) in your template. The easiest way to create these is with the `llm --schema ... --save name-of-template` command - the result should look something like this:
+Use the `schema_object:` key to embed a JSON schema (as YAML) in your template. The easiest way to create these is with the `llm --schema ... --save name-of-template` command - the result should look something like this:
 
 ```yaml
 name: dogs
