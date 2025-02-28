@@ -127,9 +127,9 @@ See {ref}`prompt templates <prompt-templates>` for more.
 
 Some models include the ability to return JSON that matches a provided [JSON schema](https://json-schema.org/). Models from OpenAI, Anthropic and Google Gemini all include this capability.
 
-LLM has alpha functionality for specifying a schema to use for the response to a prompt.
+Take a look at the {ref}`schemas documentation <schemas>` for a detailed guide to using this feature.
 
-Create the schema as a JSON string, then pass that to the `--schema` option. For example:
+You can pass JSON schemas directly to the `--schema` option:
 
 ```bash
 llm --schema '{
@@ -152,8 +152,15 @@ llm --schema '{
   }
 }' -m gpt-4o-mini 'invent two dogs'
 ```
-LLM will pass this to the model, whish should result in JSON returned from the model matching that schema.
 
+Or use LLM's custom {ref}`concise schema syntax <schemas-dsl>` like this:
+```bash
+llm --schema 'name,bio' 'invent a dog'
+```
+Two use the same concise schema for multiple items use `--schema-multi`:
+```bash
+llm --schema-multi 'name,bio' 'invent two dogs'
+```
 You can also save the JSON schema to a file and reference the filename using `--schema`:
 
 ```bash
@@ -166,18 +173,6 @@ Or save your schema {ref}`to a template <prompt-templates>` like this:
 llm --schema dogs.schema.json --save dogs
 # Then to use it:
 llm -t dogs 'invent two dogs'
-```
-Schemas are logged to your database. You can view stored schemas with:
-```bash
-llm schemas
-```
-And add `-q` one or more times to search:
-```bash
-llm schemas -q dogs -q bio
-```
-You can then use a stored schema ID as an argument to `--schema`:
-```bash
-llm --schema a75b7b3f00e065247e6e364304338aa5 'five dogs'
 ```
 
 Be warned that different models may support different dialects of the JSON schema specification.
