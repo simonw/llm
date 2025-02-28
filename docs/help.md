@@ -71,6 +71,7 @@ Commands:
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once
+  embed-score   Calculate similarity score between two embeddings without...
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -589,6 +590,31 @@ Options:
   --store                      Store the text itself in the database
   -d, --database FILE
   --help                       Show this message and exit.
+```
+
+(help-embed-score)=
+### llm embed-score --help
+```
+Usage: llm embed-score [OPTIONS]
+
+  Calculate similarity score between two embeddings without storing them to a
+  collection.
+
+  Example usage:
+
+      llm embed-score -c1 "I like pelicans" -c2 "I love pelicans"
+      llm embed-score -i1 file1.txt -i2 file2.txt
+      llm embed-score -i1 image1.jpg -i2 image2.jpg --binary
+
+Options:
+  -i1, --input1 PATH        First file to embed
+  -i2, --input2 PATH        Second file to embed
+  -c1, --content1 TEXT      First content to embed
+  -c2, --content2 TEXT      Second content to embed
+  --binary                  Treat input as binary data
+  -m, --model TEXT          Embedding model to use
+  -f, --format [json|text]  Output format
+  --help                    Show this message and exit.
 ```
 
 (help-similar)=
