@@ -1974,7 +1974,11 @@ def embed_score(input1, input2, content1, content2, binary, model, format_):
 
     # Output the score in the requested format
     if format_ == "json":
-        click.echo(json.dumps({"score": score, "content1": embedding_1, "content2": embedding_2}))
+        click.echo(
+            json.dumps(
+                {"score": score, "content1": embedding_1, "content2": embedding_2}
+            )
+        )
     else:
         click.echo(f"{score}")
 

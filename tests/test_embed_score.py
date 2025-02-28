@@ -41,7 +41,7 @@ def test_embed_score_with_content():
     assert json.loads(result.output.strip()) == {
         "score": pytest.approx(0.9734171683335759),
         "content1": [4, 2, 4, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "content2": [4, 2, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        "content2": [4, 2, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     }
 
 
