@@ -353,3 +353,58 @@ def test_logs_schema(schema_log_path, args, expected):
     )
     assert result.exit_code == 0
     assert result.output == expected
+
+
+def test_logs_schema_data_ids(schema_log_path):
+    db = sqlite_utils.Database(schema_log_path)
+    ulid = ULID.from_timestamp(time.time() + 100)
+    db["responses"].insert(
+        {
+            "id": str(ulid).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": json.dumps(
+                {
+                    "name": "three",
+                    "response_id": 1,
+                    "conversation_id": 2,
+                    "conversation_id_": 3,
+                }
+            ),
+            "model": "davinci",
+            "datetime_utc": ulid.datetime.isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "schema_id": SINGLE_ID,
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "logs",
+            "-n",
+            "0",
+            "-p",
+            str(schema_log_path),
+            "--data-ids",
+            "--data-key",
+            "items",
+            "--data-array",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    last_row = rows.pop(-1)
+    assert set(last_row.keys()) == {
+        "conversation_id_",
+        "conversation_id",
+        "response_id",
+        "response_id_",
+        "name",
+        "conversation_id__",
+    }
+    for row in rows:
+        assert set(row.keys()) == {"conversation_id", "response_id", "name"}

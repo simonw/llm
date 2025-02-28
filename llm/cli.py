@@ -48,6 +48,7 @@ from .utils import (
     schema_summary,
     multi_schema,
     schema_dsl,
+    find_unused_key,
 )
 import base64
 import httpx
@@ -939,6 +940,9 @@ order by prompt_attachments."order"
 )
 @click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
 @click.option("--data-key", help="Return JSON objects from array in this key")
+@click.option(
+    "--data-ids", is_flag=True, help="Attach corresponding IDs to JSON objects"
+)
 @click.option("-t", "--truncate", is_flag=True, help="Truncate long strings in output")
 @click.option(
     "-s", "--short", is_flag=True, help="Shorter YAML output with truncated prompts"
@@ -983,6 +987,7 @@ def logs_list(
     data,
     data_array,
     data_key,
+    data_ids,
     truncate,
     short,
     usage,
@@ -1099,22 +1104,28 @@ def logs_list(
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
-    if data or data_array or data_key:
+    if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
         to_output = []
         for row in rows:
             response = row["response"] or ""
             try:
                 decoded = json.loads(response)
+                new_items = []
                 if (
                     isinstance(decoded, dict)
                     and (data_key in decoded)
                     and all(isinstance(item, dict) for item in decoded[data_key])
                 ):
                     for item in decoded[data_key]:
-                        to_output.append(item)
+                        new_items.append(item)
                 else:
-                    to_output.append(decoded)
+                    new_items.append(decoded)
+                if data_ids:
+                    for item in new_items:
+                        item[find_unused_key(item, "response_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                to_output.extend(new_items)
             except ValueError:
                 pass
         click.echo(output_rows_as_json(to_output, not data_array))

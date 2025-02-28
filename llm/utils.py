@@ -384,3 +384,10 @@ def multi_schema(schema: dict) -> dict:
         "properties": {"items": {"type": "array", "items": schema}},
         "required": ["items"],
     }
+
+
+def find_unused_key(item: dict, key: str) -> str:
+    'Return unused key, e.g. for {"id": "1"} and key "id" returns "id_"'
+    while key in item:
+        key += "_"
+    return key

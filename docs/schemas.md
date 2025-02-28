@@ -208,3 +208,17 @@ Output:
  {"name": "Robo", "ten_word_bio": "A cybernetic dog with laser eyes and super intelligence."},
  {"name": "Flamepaw", "ten_word_bio": "Fire-resistant dog with a talent for agility and tricks."}]
 ```
+Add `--data-ids` to include `"response_id"` and `"conversation_id"` fields in each of the returned objects reflecting the database IDs of the response and conversation they were a part of. This can be useful for tracking the source of each individual row.
+
+```bash
+llm logs --schema-multi 'name, ten_word_bio' --data-key items --data-ids
+```
+Output:
+```json
+{"name": "Nebula", "ten_word_bio": "A cosmic puppy with starry fur, loves adventures in space.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
+{"name": "Echo", "ten_word_bio": "A clever hound with extraordinary hearing, master of hide-and-seek.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
+{"name": "Biscuit", "ten_word_bio": "An adorable chef dog, bakes treats that everyone loves.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
+{"name": "Cosmo", "ten_word_bio": "Galactic explorer, loves adventures and chasing shooting stars.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4daycb3svj0x7kvp7zrp4q"}
+{"name": "Pixel", "ten_word_bio": "Tech-savvy pup, builds gadgets and loves virtual playtime.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4daycb3svj0x7kvp7zrp4q"}
+```
+If a row already has a property called `"conversation_id"` or `"response_id"` additional underscores will be appended to the ID key until it no longer overlaps with the existing keys.
