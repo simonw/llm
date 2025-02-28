@@ -1910,7 +1910,7 @@ def embed_multi(
 )
 def embed_score(input1, input2, content1, content2, binary, model, format_):
     """
-    Calculate similarity score between two embeddings without storing them.
+    Calculate similarity score between two embeddings without storing them to a collection.
 
     Example usage:
 
