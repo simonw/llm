@@ -1,15 +1,29 @@
 # Changelog
 
-(v0_23_a0)=
-## 0.23a0 (2025-02-26)
+(v0_23)=
+## 0.23 (2025-02-28)
 
-Alpha release adding support for **schemas**, for getting supported models to output JSON that matches a specified JSON schema. [#776](https://github.com/simonw/llm/issues/776)
+Support for **schemas**, for getting supported models to output JSON that matches a specified JSON schema. See also [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/) for background on this feature. [#776](https://github.com/simonw/llm/issues/776)
 
-- `llm prompt --schema '{JSON schema goes here}` option for specifying a schema that should be used for the output from the model, see {ref}`schemas in the CLI docs <usage-schemas>`.
-- `model.prompt(..., schema={...})` parameter for specifying a schema from Python. This accepts either a dictionary JSON schema definition of a Pydantic `BaseModel` subclass, see {ref}`schemas in the Python API docs <python-api-schemas>`.
-- The default OpenAI plugin now supports schemas across all models.
-- Documentation on how to {ref}`add schema support to a model plugin <advanced-model-plugins-schemas>`.
+- New `llm prompt --schema '{JSON schema goes here}` option for specifying a schema that should be used for the output from the model. The {ref}`schemas documentation <schemas>` has more details and a tutorial.
+- Schemas can also be defined using a {ref}`concise schema specification <schemas-dsl>`, for example `llm prompt --schema 'name, bio, age int'`. [#790](https://github.com/simonw/llm/issues/790)
+- Schemas can also be specified by passing a filename and through {ref}`several other methods <schemas-specify>`. [#780](https://github.com/simonw/llm/issues/780)
+- New {ref}`llm schemas family of commands <help-schemas>`: `llm schemas list`, `llm schemas show`, and `llm schemas dsl` for debugging the new concise schema language. [#781](https://github.com/simonw/llm/issues/781)
+- Schemas can now be saved to templates using `llm --schema X --save template-name` or through modifying the {ref}`template YAML <prompt-templates-yaml>`. [#778](https://github.com/simonw/llm/issues/778)
+- The {ref}`llm logs <logging>` command now has new options for extracting data collected using schemas: `--data`, `--data-key`, `--data-array`, `--data-ids`. [#782](https://github.com/simonw/llm/issues/782)
+- New `llm logs --id-gt X` and `--id-gte X` options. [#801](https://github.com/simonw/llm/issues/801)
+- New `llm models --schemas` option for listing models that support schemas. [#797](https://github.com/simonw/llm/issues/797)
+- `model.prompt(..., schema={...})` parameter for specifying a schema from Python. This accepts either a dictionary JSON schema definition or a Pydantic `BaseModel` subclass, see {ref}`schemas in the Python API docs <python-api-schemas>`.
+- The default OpenAI plugin now enables schemas across all supported models. Run `llm models --schemas` for a list of these.
+- The [llm-anthropic](https://github.com/simonw/llm-anthropic) and [llm-gemini](https://github.com/simonw/llm-gemini) plugins have been upgraded to add schema support for those models. Here's documentation on how to {ref}`add schema support to a model plugin <advanced-model-plugins-schemas>`.
+
+Other smaller changes:
+
+- [GPT-4.5 preview](https://openai.com/index/introducing-gpt-4-5/) is now a supported model: `llm -m gpt-4.5 'a joke about a pelican and a wolf'` [#795](https://github.com/simonw/llm/issues/795)
+- The prompt string is now optional when calling `model.prompt()` from the Python API, so `model.prompt(attachments=llm.Attachment(url=url)))` now works. [#784](https://github.com/simonw/llm/issues/784)
+- `extra-openai-models.yaml` now supports a `reasoning: true` option. Thanks, [Kasper Primdal Lauritzen](https://github.com/KPLauritzen). [#766](https://github.com/simonw/llm/pull/766)
 - LLM now depends on Pydantic v2 or higher. Pydantic v1 is no longer supported. [#520](https://github.com/simonw/llm/issues/520)
+
 
 (v0_22)=
 ## 0.22 (2025-02-16)
