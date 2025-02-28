@@ -368,6 +368,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   Features:
   - streaming
   - schemas
+  - async
 OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Options:
     temperature: float
@@ -383,6 +384,7 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -399,6 +401,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Features:
   - streaming
   - schemas
+  - async
 OpenAI Chat: gpt-4o-audio-preview
   Options:
     temperature: float
@@ -414,6 +417,7 @@ OpenAI Chat: gpt-4o-audio-preview
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4o-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -429,6 +433,7 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
   Options:
     temperature: float
@@ -444,6 +449,7 @@ OpenAI Chat: gpt-4o-audio-preview-2024-10-01
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4o-mini-audio-preview
   Options:
     temperature: float
@@ -459,6 +465,7 @@ OpenAI Chat: gpt-4o-mini-audio-preview
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -474,6 +481,7 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
@@ -487,6 +495,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   Options:
     temperature: float
@@ -500,6 +509,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Options:
     temperature: float
@@ -513,6 +523,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   Options:
     temperature: float
@@ -526,6 +537,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4-1106-preview
   Options:
     temperature: float
@@ -539,6 +551,7 @@ OpenAI Chat: gpt-4-1106-preview
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4-0125-preview
   Options:
     temperature: float
@@ -552,6 +565,7 @@ OpenAI Chat: gpt-4-0125-preview
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4-turbo-2024-04-09
   Options:
     temperature: float
@@ -565,6 +579,7 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   Options:
     temperature: float
@@ -578,6 +593,7 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: gpt-4.5-preview-2025-02-27
   Options:
     temperature: float
@@ -594,6 +610,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
   Features:
   - streaming
   - schemas
+  - async
 OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Options:
     temperature: float
@@ -610,6 +627,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Features:
   - streaming
   - schemas
+  - async
 OpenAI Chat: o1
   Options:
     temperature: float
@@ -626,6 +644,7 @@ OpenAI Chat: o1
     image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - async
 OpenAI Chat: o1-2024-12-17
   Options:
     temperature: float
@@ -642,6 +661,7 @@ OpenAI Chat: o1-2024-12-17
     image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - async
 OpenAI Chat: o1-preview
   Options:
     temperature: float
@@ -655,6 +675,7 @@ OpenAI Chat: o1-preview
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: o1-mini
   Options:
     temperature: float
@@ -668,6 +689,7 @@ OpenAI Chat: o1-mini
     json_object: boolean
   Features:
   - streaming
+  - async
 OpenAI Chat: o3-mini
   Options:
     temperature: float
@@ -683,6 +705,7 @@ OpenAI Chat: o3-mini
   Features:
   - streaming
   - schemas
+  - async
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
