@@ -24,6 +24,7 @@ from llm import (
     get_embedding_model_aliases,
     get_embedding_model,
     get_plugins,
+    get_template_loaders,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
@@ -2299,6 +2300,14 @@ def logs_db_path():
 
 
 def load_template(name):
+    if ":" in name:
+        prefix, rest = name.split(":", 1)
+        loaders = get_template_loaders()
+        if prefix not in loaders:
+            raise click.ClickException("Unknown template prefix: {}".format(prefix))
+        loader = loaders[prefix]
+        return loader(rest)
+
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise click.ClickException(f"Invalid template: {name}")

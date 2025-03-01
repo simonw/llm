@@ -24,7 +24,7 @@ from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
 import click
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 import json
 import os
 import pathlib
@@ -96,6 +96,18 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     pm.hook.register_models(register=register)
 
     return model_aliases
+
+
+def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
+    load_plugins()
+    loaders = {}
+
+    def register(prefix, loader):
+        # TODO: if prefix already there either error or add a suffix
+        loaders[prefix] = loader
+
+    pm.hook.register_template_loaders(register=register)
+    return loaders
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
