@@ -66,3 +66,18 @@ class ClipEmbeddingModel(llm.EmbeddingModel):
 If your model accepts binary, your `.embed_batch()` model may be called with a list of Python bytestrings. These may be mixed with regular strings if the model accepts both types of input.
 
 [llm-clip](https://github.com/simonw/llm-clip) is an example of a model that can embed both binary and text content.
+
+## LLM_RAISE_ERRORS
+
+While working on a plugin it can be useful to request that errors are raised instead of being caught and logged, so you can access them from the Python debugger.
+
+Set the `LLM_RAISE_ERRORS` environment variable to enable this behavior, then run `llm` like this:
+
+```bash
+LLM_RAISE_ERRORS=1 python -i -m llm ...
+```
+The `-i` option means Python will drop into an interactive shell if an error occurs. You can then open a debugger at the most recent error using:
+
+```python
+import pdb; pdb.pm()
+```

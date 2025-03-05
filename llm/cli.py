@@ -4,6 +4,7 @@ from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
 import json
+import os
 import re
 from llm import (
     Attachment,
@@ -522,7 +523,9 @@ def prompt(
         raise click.ClickException(str(ex))
     except Exception as ex:
         # All other exceptions should raise in pytest, show to user otherwise
-        if getattr(sys, "_called_from_test", False):
+        if getattr(sys, "_called_from_test", False) or os.environ.get(
+            "LLM_RAISE_ERRORS", None
+        ):
             raise
         raise click.ClickException(str(ex))
 
