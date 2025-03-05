@@ -32,6 +32,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-replicate](https://github.com/simonw/llm-replicate)** adds support for remote models hosted on [Replicate](https://replicate.com/), including Llama 2 from Meta AI.
 - **[llm-fireworks](https://github.com/simonw/llm-fireworks)** supports models hosted by [Fireworks AI](https://fireworks.ai/).
 - **[llm-openrouter](https://github.com/simonw/llm-openrouter)** provides access to models hosted on [OpenRouter](https://openrouter.ai/).
+- **[llm-github-models](https://github.com/tonybaloney/llm-github-models)** provides access to models hosted on [GitHub](https://github.com/marketplace/models/).
 - **[llm-cohere](https://github.com/Accudio/llm-cohere)** by Alistair Shepherd provides `cohere-generate` and `cohere-summarize` API models, powered by [Cohere](https://cohere.com/).
 - **[llm-bedrock](https://github.com/simonw/llm-bedrock)** adds support for Nova by Amazon via Amazon Bedrock.
 - **[llm-bedrock-anthropic](https://github.com/sblakey/llm-bedrock-anthropic)** by Sean Blakey adds support for Claude and Claude Instant by Anthropic via Amazon Bedrock.
