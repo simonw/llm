@@ -135,6 +135,8 @@ def register_models(register):
         kwargs = {}
         if extra_model.get("can_stream") is False:
             kwargs["can_stream"] = False
+        if extra_model.get("supports_schema") is True:
+            kwargs["supports_schema"] = True
         if extra_model.get("completion"):
             klass = Completion
         else:
