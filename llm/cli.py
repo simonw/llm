@@ -1168,7 +1168,7 @@ def logs_list(
         output = json.dumps(list(rows), indent=2)
     elif extract or extract_last:
         # Extract and return first code block
-        for row in rows:
+        for row in reversed(rows) if extract_last else rows:
             output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
