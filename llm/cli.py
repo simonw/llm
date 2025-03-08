@@ -1186,7 +1186,9 @@ def logs_list(
         for row in rows:
             if short:
                 system = _truncate_string(row["system"], 120, normalize_whitespace=True)
-                prompt = _truncate_string(row["prompt"], 120, normalize_whitespace=True, keep_end=True)
+                prompt = _truncate_string(
+                    row["prompt"], 120, normalize_whitespace=True, keep_end=True
+                )
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
                 obj = {
@@ -2293,8 +2295,8 @@ def _truncate_string(text, max_length=100, normalize_whitespace=False, keep_end=
         return text
     if keep_end:
         # Find a reasonable cutoff for the start and end portions
-        cutoff = (max_length - 6) // 2 
-        return text[:cutoff] + " ... " + text[-cutoff:]
+        cutoff = (max_length - 6) // 2
+        return text[:cutoff] + "... " + text[-cutoff:]
     return text[: max_length - 3] + "..."
 
 
