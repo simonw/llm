@@ -1889,7 +1889,7 @@ def embed(
 @click.option(
     "encodings",
     "--encoding",
-    help="Encoding to use when reading --files",
+    help="Encodings to try when reading --files",
     multiple=True,
 )
 @click.option("--binary", is_flag=True, help="Treat --files as binary data")
@@ -1933,20 +1933,42 @@ def embed_multi(
     database,
 ):
     """
-    Store embeddings for multiple strings at once
-
-    Input can be CSV, TSV or a JSON list of objects.
-
-    The first column is treated as an ID - all other columns
-    are assumed to be text that should be concatenated together
-    in order to calculate the embeddings.
+    Store embeddings for multiple strings at once in the specified collection.
 
     Input data can come from one of three sources:
 
     \b
-    1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
-    2. A SQL query against a SQLite database
-    3. A directory of files
+    1. A CSV, TSV, JSON or JSONL file:
+       - CSV/TSV: First column is ID, remaining columns concatenated as content
+       - JSON: Array of objects with "id" field and content fields
+       - JSONL: Newline-delimited JSON objects
+
+    \b
+       Examples:
+         llm embed-multi docs input.csv
+         cat data.json | llm embed-multi docs -
+         llm embed-multi docs input.json --format json
+
+    \b
+    2. A SQL query against a SQLite database:
+       - First column returned is used as ID
+       - Other columns concatenated to form content
+
+    \b
+       Examples:
+         llm embed-multi docs --sql "SELECT id, title, body FROM posts"
+         llm embed-multi docs --attach blog blog.db --sql "SELECT id, content FROM blog.posts"
+
+    \b
+    3. Files in directories matching glob patterns:
+       - Each file becomes one embedding
+       - Relative file paths become IDs
+
+    \b
+       Examples:
+         llm embed-multi docs --files docs '**/*.md'
+         llm embed-multi images --files photos '*.jpg' --binary
+         llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
     """
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
