@@ -319,7 +319,10 @@ Add one or more `-q term` options to search for models matching all of those sea
 llm models -q gpt-4o
 llm models -q 4o -q mini
 ```
-
+Use one or more `-m` options to indicate specific models, either by their model ID or one of their aliases:
+```bash
+llm models -m gpt-4o -m gemini-1.5-pro-002
+```
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options

@@ -349,6 +349,7 @@ Options:
   --async           List async models
   --schemas         List models that support schemas
   -q, --query TEXT  Search for models matching these strings
+  -m, --model TEXT  Specific model IDs
   --help            Show this message and exit.
 ```
 

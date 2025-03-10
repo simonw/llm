@@ -1321,7 +1321,8 @@ _type_lookup = {
     multiple=True,
     help="Search for models matching these strings",
 )
-def models_list(options, async_, schemas, query):
+@click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
+def models_list(options, async_, schemas, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
@@ -1330,6 +1331,12 @@ def models_list(options, async_, schemas, query):
         if query:
             # Only show models where every provided query string matches
             if not all(model_with_aliases.matches(q) for q in query):
+                continue
+        if model_ids:
+            ids_and_aliases = set(
+                [model_with_aliases.model.model_id] + model_with_aliases.aliases
+            )
+            if not ids_and_aliases.intersection(model_ids):
                 continue
         if schemas and not model_with_aliases.model.supports_schema:
             continue
@@ -1382,7 +1389,7 @@ def models_list(options, async_, schemas, query):
                 "\n".join("  - {}".format(feature) for feature in features)
             )
         click.echo(output)
-    if not query and not options and not schemas:
+    if not query and not options and not schemas and not model_ids:
         click.echo(f"Default: {get_default_model()}")
 
 

@@ -478,25 +478,33 @@ def test_llm_models_async(user_path):
 
 
 @pytest.mark.parametrize(
-    "args,expected_model_id,unexpected_model_id",
+    "args,expected_model_ids,unexpected_model_ids",
     (
-        (["-q", "gpt-4o"], "OpenAI Chat: gpt-4o", None),
-        (["-q", "mock"], "MockModel: mock", None),
-        (["--query", "mock"], "MockModel: mock", None),
+        (["-q", "gpt-4o"], ["OpenAI Chat: gpt-4o"], None),
+        (["-q", "mock"], ["MockModel: mock"], None),
+        (["--query", "mock"], ["MockModel: mock"], None),
         (
             ["-q", "4o", "-q", "mini"],
-            "OpenAI Chat: gpt-4o-mini",
-            "OpenAI Chat: gpt-4o ",
+            ["OpenAI Chat: gpt-4o-mini"],
+            ["OpenAI Chat: gpt-4o "],
+        ),
+        (
+            ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
+            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
+            ["OpenAI Chat: gpt-4o "],
         ),
     ),
 )
-def test_llm_models_query(user_path, args, expected_model_id, unexpected_model_id):
+def test_llm_models_filter(user_path, args, expected_model_ids, unexpected_model_ids):
     runner = CliRunner()
     result = runner.invoke(cli, ["models"] + args, catch_exceptions=False)
     assert result.exit_code == 0
-    assert expected_model_id in result.output
-    if unexpected_model_id:
-        assert unexpected_model_id not in result.output
+    if expected_model_ids:
+        for expected_model_id in expected_model_ids:
+            assert expected_model_id in result.output
+    if unexpected_model_ids:
+        for unexpected_model_id in unexpected_model_ids:
+            assert unexpected_model_id not in result.output
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):
