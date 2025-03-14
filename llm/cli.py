@@ -1,3 +1,4 @@
+import os
 import asyncio
 import click
 from click_default_group import DefaultGroup
@@ -144,6 +145,50 @@ def schema_option(fn):
         help="JSON schema, filepath or ID",
     )(fn)
     return fn
+
+
+def open_editor_for_prompt(editor_binary=None):
+    """
+    Open system editor to compose prompt and return the result.
+
+    Args:
+        editor_binary (str, optional): Path to editor binary to use (e.g. 'vim', 'nano')
+    """
+    message = (
+        "# Enter your prompt below. Lines starting with # will be ignored.\n"
+        "# Press Ctrl+C to cancel.\n"
+        "# Save and exit to send prompt to the model.\n\n"
+    )
+
+    if editor_binary:
+        # Temporarily override the EDITOR environment variable
+        original_editor = os.environ.get('EDITOR')
+        os.environ['EDITOR'] = editor_binary
+        try:
+            result = click.edit(message)
+        finally:
+            if original_editor:
+                os.environ['EDITOR'] = original_editor
+            else:
+                del os.environ['EDITOR']
+    else:
+        result = click.edit(message)
+
+    if result is None:
+        click.echo("Editor closed without saving.", err=True)
+        sys.exit(1)
+
+    # Filter out comment lines and get actual prompt
+    prompt = "\n".join(
+        line for line in result.splitlines()
+        if not line.strip().startswith("#")
+    ).strip()
+
+    if not prompt:
+        click.echo("Empty prompt, exiting.", err=True)
+        sys.exit(1)
+
+    return prompt
 
 
 @click.group(
@@ -337,8 +382,8 @@ def prompt(
             and not attachment_types
             and not schema
         ):
-            # Hang waiting for input to stdin (unless --save)
-            prompt = sys.stdin.read()
+            # Open editor instead of hanging
+            prompt = open_editor_for_prompt()
         return prompt
 
     if save:
@@ -544,6 +589,73 @@ def prompt(
     # Log to the database
     if (logs_on() or log) and not no_log:
         response.log_to_db(db)
+
+
+@cli.command(name="editor")
+@click.option("-s", "--system", help="System prompt to use")
+@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option(
+    "options",
+    "-o",
+    "--option",
+    type=(str, str),
+    multiple=True,
+    help="key/value options for the model",
+)
+@click.option(
+    "--no-stream",
+    is_flag=True,
+    help="Do not stream output"
+)
+@click.option(
+    "-e",
+    "--editor",
+    help="Editor to use (e.g. vim, nano, notepad)",
+)
+@click.option(
+    "-n",
+    "--no-log",
+    is_flag=True,
+    help="Don't log to database",
+)
+def editor_command(system, model_id, options, no_stream, editor, no_log):
+    """
+    Open system editor to compose prompt and get response
+
+    Examples:
+
+    \b
+        llm editor
+        llm editor -m gpt-4
+        llm editor -e vim
+        llm editor -s 'respond in French'
+    """
+    prompt_text = open_editor_for_prompt(editor)
+
+    # Get the prompt command from the CLI group
+    prompt_cmd = cli.commands['prompt']
+
+    # Reuse the prompt command by calling it programmatically
+    ctx = click.get_current_context()
+    return ctx.invoke(
+        prompt_cmd,
+        prompt=prompt_text,
+        system=system,
+        model_id=model_id,
+        options=options,
+        no_stream=no_stream,
+        no_log=no_log,
+        log=False,
+        save=None,
+        _continue=None,
+        conversation_id=None,
+        key=None,
+        async_=False,
+        template=None,
+        param=(),
+        attachments=(),
+        attachment_types=(),
+    )
 
 
 @cli.command()
