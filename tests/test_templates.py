@@ -192,6 +192,13 @@ def test_templates_error_on_missing_schema(templates_path):
             "Say Blah",
             None,
         ),
+        (
+            "prompt: 'Say pelican'",
+            [],
+            "gpt-4o-mini",
+            "Say pelican",
+            None,
+        ),
     ),
 )
 def test_template_basic(
