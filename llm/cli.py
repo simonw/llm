@@ -397,9 +397,11 @@ def prompt(
         extract_last = template_obj.extract_last
         if template_obj.schema_object:
             schema = template_obj.schema_object
-        prompt = read_prompt()
+        input_ = ""
+        if "input" in template_obj.vars():
+            input_ = read_prompt()
         try:
-            prompt, system = template_obj.evaluate(prompt, params)
+            prompt, system = template_obj.evaluate(input_, params)
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:

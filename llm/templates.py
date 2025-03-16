@@ -38,6 +38,14 @@ class Template(BaseModel):
             system = self.interpolate(self.system, params)
         return prompt, system
 
+    def vars(self) -> set:
+        all_vars = set()
+        for text in [self.prompt, self.system]:
+            if not text:
+                continue
+            all_vars.update(self.extract_vars(string.Template(text)))
+        return all_vars
+
     @classmethod
     def interpolate(cls, text: Optional[str], params: Dict[str, Any]) -> Optional[str]:
         if not text:
