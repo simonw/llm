@@ -13,9 +13,11 @@ To run a prompt against the `gpt-4o-mini` model, run this:
 import llm
 
 model = llm.get_model("gpt-4o-mini")
-# Optional, you can configure the key in other ways:
-model.key = "sk-..."
-response = model.prompt("Five surprising names for a pet pelican")
+# key= is optional, you can configure the key in other ways
+response = model.prompt(
+    "Five surprising names for a pet pelican",
+    key="sk-..."
+)
 print(response.text())
 ```
 Note that the prompt will not be evaluated until you call that `response.text()` method - a form of lazy loading.
