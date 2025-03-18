@@ -367,7 +367,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -384,7 +384,7 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - async
@@ -400,7 +400,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -609,7 +609,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -626,7 +626,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -644,7 +644,7 @@ OpenAI Chat: o1
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
   - async
@@ -661,7 +661,7 @@ OpenAI Chat: o1-2024-12-17
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
   - async
