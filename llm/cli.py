@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import textwrap
 from llm import (
     Attachment,
     AsyncConversation,
@@ -246,6 +247,7 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option("-w", "--wrap-output", type=int, help="Maximum width of output text, when not streaming")
 def prompt(
     prompt,
     system,
@@ -268,6 +270,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    wrap_output,
 ):
     """
     Execute a prompt
@@ -469,6 +472,8 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
+    should_wrap = wrap_output is not None and not should_stream and schema_input is None and schema_multi is None
+
     try:
         if async_:
 
@@ -498,6 +503,8 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
+                    elif should_wrap:
+                        text = textwrap.fill(text, width=wrap_output, break_long_words=False)
                     print(text)
                 return response
 
@@ -519,6 +526,8 @@ def prompt(
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
+                elif should_wrap:
+                    text = textwrap.fill(text, width=wrap_output, break_long_words=False)
                 print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
