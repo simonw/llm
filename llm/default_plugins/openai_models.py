@@ -324,6 +324,29 @@ class SharedOptions(llm.Options):
         description="Integer seed to attempt to sample deterministically",
         default=None,
     )
+    extra_body: Optional[Union[dict, str]] = Field(
+        description=(
+            "Additional JSON properties to include in the request body. "
+            "When provided via CLI, must be a valid JSON string."
+        ),
+        default=None,
+    )
+
+    @field_validator("extra_body")
+    def validate_extra_body(cls, extra_body):
+        if extra_body is None:
+            return None
+
+        if isinstance(extra_body, str):
+            try:
+                return json.loads(extra_body)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON in extra_body string")
+
+        if not isinstance(extra_body, dict):
+            raise ValueError("extra_body must be a dictionary")
+
+        return extra_body
 
     @field_validator("logit_bias")
     def validate_logit_bias(cls, logit_bias):
