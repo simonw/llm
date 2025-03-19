@@ -234,11 +234,36 @@ class AsyncConversation(_BaseConversation):
         return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
 
 
+class Annotation(BaseModel):
+    start_index: int
+    end_index: int
+    data: dict
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            start_index=row["start_index"],
+            end_index=row["end_index"],
+            data=json.loads(row["data"]),
+        )
+
+
+class Chunk(BaseModel):
+    text: str
+    data: Optional[dict]
+    start_index: int
+    end_index: int
+
+    def __str__(self):
+        return self.text
+
+
 class _BaseResponse:
     """Base response class shared between sync and async responses"""
 
     prompt: "Prompt"
     stream: bool
+    _annotations: Optional[List[Annotation]] = None
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
 
@@ -255,6 +280,7 @@ class _BaseResponse:
         self.model = model
         self.stream = stream
         self._key = key
+        self._annotations = []
         self._chunks: List[str] = []
         self._done = False
         self.response_json = None
@@ -282,6 +308,13 @@ class _BaseResponse:
         self.output_tokens = output
         self.token_details = details
 
+    def add_annotations(self, annotations: List[Annotation]):
+        self._annotations.extend(annotations)
+
+    @property
+    def annotations(self):
+        return self._annotations or []
+
     @classmethod
     def from_row(cls, db, row, _async=False):
         from llm import get_model, get_async_model
@@ -293,7 +326,8 @@ class _BaseResponse:
 
         # Schema
         schema = None
-        if row["schema_id"]:
+        schema_id = row.get("schema_id")
+        if schema_id:
             schema = json.loads(db["schemas"].get(row["schema_id"])["content"])
 
         response = cls(
@@ -326,7 +360,60 @@ class _BaseResponse:
                 [row["id"]],
             )
         ]
+        # Annotations
+        response._annotations = [
+            Annotation.from_row(arow)
+            for arow in db.query(
+                """
+                select id, start_index, end_index, data
+                from response_annotations
+                where response_id = ?
+                order by start_index
+            """,
+                [row["id"]],
+            )
+        ]
         return response
+
+    def chunks(self) -> Iterator[str]:
+        return self.chunks_from_text(self.text())
+
+    # iterates over chunks of text, so an iterator of Chunk
+    def chunks_from_text(self, text) -> Iterator[Chunk]:
+        annotations = sorted(self.annotations, key=lambda a: a.start_index)
+
+        current_index = 0
+
+        for annotation in annotations:
+            # If there's a gap before this annotation, yield a gap chunk
+            if current_index < annotation.start_index:
+                gap_text = text[current_index : annotation.start_index]
+                yield Chunk(
+                    text=gap_text,
+                    data=None,
+                    start_index=current_index,
+                    end_index=annotation.start_index,
+                )
+
+            # Yield the chunk for this annotation
+            chunk_text = text[annotation.start_index : annotation.end_index]
+            yield Chunk(
+                text=chunk_text,
+                data=annotation.data,
+                start_index=annotation.start_index,
+                end_index=annotation.end_index,
+            )
+
+            current_index = annotation.end_index
+
+        # If there's text after the last annotation, yield a final gap chunk
+        if current_index < len(text):
+            yield Chunk(
+                text=text[current_index:],
+                data=None,
+                start_index=current_index,
+                end_index=len(text),
+            )
 
     def token_usage(self) -> str:
         return token_usage_string(
@@ -377,6 +464,18 @@ class _BaseResponse:
             "schema_id": schema_id,
         }
         db["responses"].insert(response)
+
+        if self.annotations:
+            db["response_annotations"].insert_all(
+                {
+                    "response_id": response_id,
+                    "start_index": annotation.start_index,
+                    "end_index": annotation.end_index,
+                    "data": json.dumps(annotation.data),
+                }
+                for annotation in self.annotations
+            )
+
         # Persist any attachments - loop through with index
         for index, attachment in enumerate(self.prompt.attachments):
             attachment_id = attachment.id()

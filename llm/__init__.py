@@ -4,11 +4,13 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    Annotation,
     AsyncConversation,
     AsyncKeyModel,
     AsyncModel,
     AsyncResponse,
     Attachment,
+    Chunk,
     Conversation,
     EmbeddingModel,
     EmbeddingModelWithAliases,
@@ -31,10 +33,12 @@ import pathlib
 import struct
 
 __all__ = [
+    "Annotation",
     "AsyncConversation",
     "AsyncKeyModel",
     "AsyncResponse",
     "Attachment",
+    "Chunk",
     "Collection",
     "Conversation",
     "get_async_model",

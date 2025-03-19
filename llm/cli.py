@@ -11,6 +11,7 @@ from llm import (
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    Chunk,
     Collection,
     Conversation,
     Response,
@@ -1092,40 +1093,48 @@ def logs_list(
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
-    rows = list(
-        db.query(
-            final_sql,
-            {
-                "model": model_id,
-                "query": query,
-                "conversation_id": conversation_id,
-                "schema_id": schema_id,
-                "id_gt": id_gt,
-                "id_gte": id_gte,
-            },
-        )
-    )
 
-    # Reverse the order - we do this because we 'order by id desc limit 3' to get the
-    # 3 most recent results, but we still want to display them in chronological order
-    # ... except for searches where we don't do this
+    # Fetch the rows from the database
+    query_params = {
+        "model": model_id,
+        "query": query,
+        "conversation_id": conversation_id,
+        "schema_id": schema_id,
+        "id_gt": id_gt,
+        "id_gte": id_gte,
+    }
+
+    # Instead of processing the rows directly, use Response.from_row()
+    responses = []
+    for row in db.query(final_sql, query_params):
+        try:
+            response_obj = Response.from_row(db, row)
+            responses.append(response_obj)
+        except Exception as e:
+            click.echo(
+                f"Warning: Error processing row {row.get('id')}: {str(e)}", err=True
+            )
+            raise
+
+    # Reverse the order if not a search query to display in chronological order
     if not query and not data:
-        rows.reverse()
+        responses.reverse()
 
     # Fetch any attachments
-    ids = [row["id"] for row in rows]
+    ids = [response.id for response in responses]
     attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
+    # Process the data options
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
         to_output = []
-        for row in rows:
-            response = row["response"] or ""
+        for response_obj in responses:
+            response_text = response_obj.text()
             try:
-                decoded = json.loads(response)
+                decoded = json.loads(response_text)
                 new_items = []
                 if (
                     isinstance(decoded, dict)
@@ -1138,160 +1147,275 @@ def logs_list(
                     new_items.append(decoded)
                 if data_ids:
                     for item in new_items:
-                        item[find_unused_key(item, "response_id")] = row["id"]
-                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                        item[find_unused_key(item, "response_id")] = response_obj.id
+                        item[find_unused_key(item, "conversation_id")] = (
+                            response_obj.conversation.id
+                            if response_obj.conversation
+                            else None
+                        )
                 to_output.extend(new_items)
             except ValueError:
                 pass
         click.echo(output_rows_as_json(to_output, not data_array))
         return
 
-    for row in rows:
-        if truncate:
-            row["prompt"] = _truncate_string(row["prompt"])
-            row["response"] = _truncate_string(row["response"])
-        # Either decode or remove all JSON keys
-        keys = list(row.keys())
-        for key in keys:
-            if key.endswith("_json") and row[key] is not None:
-                if truncate:
-                    del row[key]
-                else:
-                    row[key] = json.loads(row[key])
-
-    output = None
-    if json_output:
-        # Output as JSON if requested
-        for row in rows:
-            row["attachments"] = [
-                {k: v for k, v in attachment.items() if k != "response_id"}
-                for attachment in attachments_by_id.get(row["id"], [])
-            ]
-        output = json.dumps(list(rows), indent=2)
-    elif extract or extract_last:
+    # Handle extraction options
+    if extract or extract_last:
         # Extract and return first code block
-        for row in rows:
-            output = extract_fenced_code_block(row["response"], last=extract_last)
+        for response_obj in responses:
+            output = extract_fenced_code_block(response_obj.text(), last=extract_last)
             if output is not None:
-                break
-    elif response:
-        # Just output the last response
-        if rows:
-            output = rows[-1]["response"]
+                click.echo(output)
+                return
+        return
 
-    if output is not None:
-        click.echo(output)
-    else:
-        # Output neatly formatted human-readable logs
-        current_system = None
-        should_show_conversation = True
-        for row in rows:
-            if short:
-                system = _truncate_string(row["system"], 120, end=True)
-                prompt = _truncate_string(row["prompt"], 120, end=True)
-                cid = row["conversation_id"]
-                attachments = attachments_by_id.get(row["id"])
-                obj = {
-                    "model": row["model"],
-                    "datetime": row["datetime_utc"].split(".")[0],
-                    "conversation": cid,
+    # Handle response-only output
+    if response:
+        # Just output the last response
+        if responses:
+            click.echo(responses[-1].text())
+        return
+
+    # Process JSON output
+    if json_output:
+        output_list = []
+        for response_obj in responses:
+            response_dict = {
+                "id": response_obj.id,
+                "model": response_obj.model.model_id if response_obj.model else None,
+                "prompt": response_obj.prompt.prompt,
+                "system": response_obj.prompt.system,
+                "response": response_obj.text(),
+                "conversation_id": (
+                    response_obj.conversation.id if response_obj.conversation else None
+                ),
+                "datetime_utc": response_obj.datetime_utc(),
+                "input_tokens": response_obj.input_tokens,
+                "output_tokens": response_obj.output_tokens,
+                "token_details": response_obj.token_details,
+            }
+
+            # Add prompt_json and response_json if available
+            if hasattr(response_obj, "_prompt_json") and response_obj._prompt_json:
+                response_dict["prompt_json"] = response_obj._prompt_json
+            if hasattr(response_obj, "response_json") and response_obj.response_json:
+                response_dict["response_json"] = response_obj.response_json
+
+            # Add conversation name and model if conversation exists
+            if response_obj.conversation:
+                response_dict["conversation_name"] = response_obj.conversation.name
+                response_dict["conversation_model"] = (
+                    response_obj.conversation.model.model_id
+                    if response_obj.conversation.model
+                    else None
+                )
+
+            # Add attachments
+            response_dict["attachments"] = [
+                {k: v for k, v in attachment.items() if k != "response_id"}
+                for attachment in attachments_by_id.get(response_obj.id, [])
+            ]
+
+            output_list.append(response_dict)
+
+        click.echo(json.dumps(output_list, indent=2))
+        return
+
+    # Handle the regular output format
+    current_system = None
+    should_show_conversation = True
+    for response_obj in responses:
+        if short:
+            system = (
+                _truncate_string(response_obj.prompt.system, 120, end=True)
+                if response_obj.prompt.system
+                else None
+            )
+            prompt = (
+                _truncate_string(response_obj.prompt.prompt, 120, end=True)
+                if response_obj.prompt.prompt
+                else None
+            )
+            cid = response_obj.conversation.id if response_obj.conversation else None
+            response_attachments = attachments_by_id.get(response_obj.id, [])
+
+            obj = {
+                "model": response_obj.model.model_id if response_obj.model else None,
+                "datetime": response_obj.datetime_utc().split(".")[0],
+                "conversation": cid,
+            }
+            if system:
+                obj["system"] = system
+            if prompt:
+                obj["prompt"] = prompt
+            if response_attachments:
+                items = []
+                for attachment in response_attachments:
+                    details = {"type": attachment["type"]}
+                    if attachment.get("path"):
+                        details["path"] = attachment["path"]
+                    if attachment.get("url"):
+                        details["url"] = attachment["url"]
+                    items.append(details)
+                obj["attachments"] = items
+            if usage and (response_obj.input_tokens or response_obj.output_tokens):
+                usage_details = {
+                    "input": response_obj.input_tokens,
+                    "output": response_obj.output_tokens,
                 }
-                if system:
-                    obj["system"] = system
-                if prompt:
-                    obj["prompt"] = prompt
-                if attachments:
-                    items = []
-                    for attachment in attachments:
-                        details = {"type": attachment["type"]}
-                        if attachment.get("path"):
-                            details["path"] = attachment["path"]
-                        if attachment.get("url"):
-                            details["url"] = attachment["url"]
-                        items.append(details)
-                    obj["attachments"] = items
-                if usage and (row["input_tokens"] or row["output_tokens"]):
-                    usage_details = {
-                        "input": row["input_tokens"],
-                        "output": row["output_tokens"],
-                    }
-                    if row["token_details"]:
-                        usage_details["details"] = json.loads(row["token_details"])
-                    obj["usage"] = usage_details
-                click.echo(yaml.dump([obj], sort_keys=False).strip())
-                continue
+                if response_obj.token_details:
+                    usage_details["details"] = response_obj.token_details
+                obj["usage"] = usage_details
+            click.echo(yaml.dump([obj], sort_keys=False).strip())
+            continue
+
+        # Full output format
+        click.echo(
+            "# {}{}\n{}".format(
+                response_obj.datetime_utc().split(".")[0],
+                (
+                    "    conversation: {} id: {}".format(
+                        (
+                            response_obj.conversation.id
+                            if response_obj.conversation
+                            else None
+                        ),
+                        response_obj.id,
+                    )
+                    if should_show_conversation
+                    else ""
+                ),
+                (
+                    "\nModel: **{}**\n".format(
+                        response_obj.model.model_id if response_obj.model else None
+                    )
+                    if should_show_conversation
+                    else ""
+                ),
+            )
+        )
+        # In conversation log mode only show it for the first one
+        if conversation_id:
+            should_show_conversation = False
+        click.echo("## Prompt\n\n{}".format(response_obj.prompt.prompt or "-- none --"))
+        if response_obj.prompt.system != current_system:
+            if response_obj.prompt.system is not None:
+                click.echo("\n## System\n\n{}".format(response_obj.prompt.system))
+            current_system = response_obj.prompt.system
+
+        # Handle schema if present
+        if response_obj.prompt.schema:
             click.echo(
-                "# {}{}\n{}".format(
-                    row["datetime_utc"].split(".")[0],
-                    (
-                        "    conversation: {} id: {}".format(
-                            row["conversation_id"], row["id"]
-                        )
-                        if should_show_conversation
-                        else ""
-                    ),
-                    (
-                        "\nModel: **{}**\n".format(row["model"])
-                        if should_show_conversation
-                        else ""
-                    ),
+                "\n## Schema\n\n```json\n{}\n```".format(
+                    json.dumps(response_obj.prompt.schema, indent=2)
                 )
             )
-            # In conversation log mode only show it for the first one
-            if conversation_id:
-                should_show_conversation = False
-            click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
-            if row["system"] != current_system:
-                if row["system"] is not None:
-                    click.echo("\n## System\n\n{}".format(row["system"]))
-                current_system = row["system"]
-            if row["schema_json"]:
-                click.echo(
-                    "\n## Schema\n\n```json\n{}\n```".format(
-                        json.dumps(row["schema_json"], indent=2)
-                    )
-                )
-            attachments = attachments_by_id.get(row["id"])
-            if attachments:
-                click.echo("\n### Attachments\n")
-                for i, attachment in enumerate(attachments, 1):
-                    if attachment["path"]:
-                        path = attachment["path"]
-                        click.echo(
-                            "{}. **{}**: `{}`".format(i, attachment["type"], path)
-                        )
-                    elif attachment["url"]:
-                        click.echo(
-                            "{}. **{}**: {}".format(
-                                i, attachment["type"], attachment["url"]
-                            )
-                        )
-                    elif attachment["content_length"]:
-                        click.echo(
-                            "{}. **{}**: `<{} bytes>`".format(
-                                i,
-                                attachment["type"],
-                                f"{attachment['content_length']:,}",
-                            )
-                        )
 
-            # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
-            response = row["response"]
-            if row["schema_json"]:
-                try:
-                    parsed = json.loads(response)
-                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
-                except ValueError:
-                    pass
-            click.echo("\n## Response\n\n{}\n".format(response))
-            if usage:
-                token_usage = token_usage_string(
-                    row["input_tokens"],
-                    row["output_tokens"],
-                    json.loads(row["token_details"]) if row["token_details"] else None,
-                )
-                if token_usage:
-                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
+        # Handle attachments
+        response_attachments = attachments_by_id.get(response_obj.id, [])
+        if response_attachments:
+            click.echo("\n### Attachments\n")
+            for i, attachment in enumerate(response_attachments, 1):
+                if attachment["path"]:
+                    path = attachment["path"]
+                    click.echo("{}. **{}**: `{}`".format(i, attachment["type"], path))
+                elif attachment["url"]:
+                    click.echo(
+                        "{}. **{}**: {}".format(
+                            i, attachment["type"], attachment["url"]
+                        )
+                    )
+                elif attachment["content_length"]:
+                    click.echo(
+                        "{}. **{}**: `<{} bytes>`".format(
+                            i,
+                            attachment["type"],
+                            f"{attachment['content_length']:,}",
+                        )
+                    )
+
+        # Handle response output
+        response_text = response_obj.text()
+        # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
+        if response_obj.prompt.schema:
+            try:
+                parsed = json.loads(response_text)
+                response_text = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
+            except ValueError:
+                pass
+
+        if response_obj.annotations:
+            response_text = format_chunks(response_obj.chunks())
+
+        click.echo("\n## Response\n\n{}\n".format(response_text))
+
+        # Handle token usage
+        if usage and (response_obj.input_tokens or response_obj.output_tokens):
+            token_usage = token_usage_string(
+                response_obj.input_tokens,
+                response_obj.output_tokens,
+                response_obj.token_details,
+            )
+            if token_usage:
+                click.echo("## Token usage:\n\n{}\n".format(token_usage))
+
+
+def format_chunks(chunks: Iterable[Chunk]) -> str:
+    """
+    Format a list of Chunk objects into a structured text with annotations.
+
+    Args:
+        chunks: A list of Chunk objects containing text and metadata
+
+    Returns:
+        A formatted string with annotations listed at the end
+    """
+    result = ""
+    annotations = []
+    annotation_index = 1
+
+    # First pass to collect all text and mark positions for annotations
+    combined_text = ""
+    annotation_positions = []
+
+    for chunk in chunks:
+        # Add the chunk text to the combined text
+        start_pos = len(combined_text)
+        combined_text += chunk.text
+        end_pos = len(combined_text)
+
+        # If chunk has data, record its position and data
+        if chunk.data:
+            annotation_positions.append(
+                {
+                    "start": start_pos,
+                    "end": end_pos,
+                    "data": chunk.data,
+                    "index": annotation_index,
+                }
+            )
+            annotation_index += 1
+
+    # Second pass to build the result with annotation markers
+    result = combined_text
+
+    # Sort annotations in reverse order to avoid messing up indices when inserting
+    for pos in sorted(annotation_positions, key=lambda x: x["end"], reverse=True):
+        # Store the annotation data
+        annotation_data = textwrap.indent(json.dumps(pos["data"], indent=2), "  ")
+        annotations.append(f"  [{pos['index']}]\n{annotation_data}")
+
+        # Insert the annotation marker at the end of the chunk
+        annotation_marker = f" 「{result[pos['start']:pos['end']]}」[{pos['index']}]"
+        result = result[: pos["end"]] + annotation_marker + result[pos["end"] :]
+
+    annotations.reverse()
+
+    # Add annotations section if there are any
+    if annotations:
+        result += "\n\n### Annotations\n\n" + "\n\n".join(annotations)
+
+    return result
 
 
 @cli.group(

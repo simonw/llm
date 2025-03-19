@@ -116,6 +116,13 @@ def register_models(register):
         aliases=("3.5-instruct", "chatgpt-instruct"),
     )
 
+    # Search models
+    for model_id in ("gpt-4o-search-preview", "gpt-4o-mini-search-preview"):
+        register(
+            Chat(model_id, search_preview=True),
+            AsyncChat(model_id, search_preview=True),
+        )
+
     # Load extra models
     extra_path = llm.user_dir() / "extra-openai-models.yaml"
     if not extra_path.exists():
@@ -351,7 +358,7 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
-class ReasoningEffortEnum(str, Enum):
+class LowMediumHighEnum(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
@@ -362,11 +369,20 @@ class OptionsForReasoning(SharedOptions):
         description="Output a valid JSON object {...}. Prompt must mention JSON.",
         default=None,
     )
-    reasoning_effort: Optional[ReasoningEffortEnum] = Field(
+    reasoning_effort: Optional[LowMediumHighEnum] = Field(
         description=(
             "Constraints effort on reasoning for reasoning models. Currently supported "
             "values are low, medium, and high. Reducing reasoning effort can result in "
             "faster responses and fewer tokens used on reasoning in a response."
+        ),
+        default=None,
+    )
+
+
+class OptionsForSearchPreview(SharedOptions):
+    search_context_size: Optional[LowMediumHighEnum] = Field(
+        description=(
+            "How much context is retrieved from the web to help the tool formulate a response"
         ),
         default=None,
     )
@@ -418,6 +434,7 @@ class _Shared:
         reasoning=False,
         supports_schema=False,
         allows_system_prompt=True,
+        search_preview=False,
     ):
         self.model_id = model_id
         self.key = key
@@ -431,11 +448,15 @@ class _Shared:
         self.can_stream = can_stream
         self.vision = vision
         self.allows_system_prompt = allows_system_prompt
+        self.search_preview = search_preview
 
         self.attachment_types = set()
 
         if reasoning:
             self.Options = OptionsForReasoning
+
+        if search_preview:
+            self.Options = OptionsForSearchPreview
 
         if vision:
             self.attachment_types.update(
@@ -511,6 +532,22 @@ class _Shared:
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
 
+    def set_annotations(self, response, annotations: list):
+        # Annotation(type='url_citation', url_citation=AnnotationURLCitation(
+        #   end_index=358, start_index=284, title='...', url='https://...'))
+        to_add = []
+        for annotation in annotations:
+            if annotation["type"] == "url_citation":
+                data = annotation["url_citation"]
+                start_index = data.pop("start_index")
+                end_index = data.pop("end_index")
+                to_add.append(
+                    llm.Annotation(
+                        start_index=start_index, end_index=end_index, data=data
+                    )
+                )
+        response.add_annotations(to_add)
+
     def get_client(self, key, *, async_=False):
         kwargs = {}
         if self.api_base:
@@ -550,6 +587,13 @@ class _Shared:
             }
         if stream:
             kwargs["stream_options"] = {"include_usage": True}
+        if self.search_preview:
+            kwargs["web_search_options"] = {}
+            if prompt.options.search_context_size:
+                kwargs.pop("search_context_size", None)
+                kwargs["web_search_options"][
+                    "search_context_size"
+                ] = prompt.options.search_context_size
         return kwargs
 
 
@@ -571,6 +615,7 @@ class Chat(_Shared, KeyModel):
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
         usage = None
+        annotations = []
         if stream:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -581,6 +626,10 @@ class Chat(_Shared, KeyModel):
             chunks = []
             for chunk in completion:
                 chunks.append(chunk)
+                try:
+                    annotations.extend(chunk.choices[0].delta.annotations)
+                except (AttributeError, IndexError):
+                    pass
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 try:
@@ -589,7 +638,11 @@ class Chat(_Shared, KeyModel):
                     content = None
                 if content is not None:
                     yield content
-            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+            final_json = remove_dict_none_values(combine_chunks(chunks))
+            if annotations:
+                final_json["annotations"] = annotations
+                self.set_annotations(response, annotations)
+            response.response_json = final_json
         else:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -600,6 +653,13 @@ class Chat(_Shared, KeyModel):
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].message.content
+        try:
+            if completion.choices[0].message.annotations:
+                self.set_annotations(
+                    response, completion.choices[0].message.annotations
+                )
+        except AttributeError:
+            pass
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
