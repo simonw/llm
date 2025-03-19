@@ -22,6 +22,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 
 - **[llm-mistral](https://github.com/simonw/llm-mistral)** adds support for [Mistral AI](https://mistral.ai/)'s language and embedding models.
 - **[llm-gemini](https://github.com/simonw/llm-gemini)** adds support for Google's [Gemini](https://ai.google.dev/docs) models.
+- **[llm-vertex](https://github.com/justyns/llm-vertex)** adds support for Google's Gemini models via [Vertex AI](console.cloud.google.com/vertex-ai) (GCP).
 - **[llm-anthropic](https://github.com/simonw/llm-anthropic)** supports Anthropic's [Claude 3 family](https://www.anthropic.com/news/claude-3-family), [3.5 Sonnet](https://www.anthropic.com/news/claude-3-5-sonnet) and beyond.
 - **[llm-command-r](https://github.com/simonw/llm-command-r)** supports Cohere's Command R and [Command R Plus](https://txt.cohere.com/command-r-plus-microsoft-azure/) API models.
 - **[llm-reka](https://github.com/simonw/llm-reka)** supports the [Reka](https://www.reka.ai/) family of models via their API.
