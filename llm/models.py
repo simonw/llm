@@ -250,7 +250,7 @@ class Annotation(BaseModel):
 
 class Chunk(BaseModel):
     text: str
-    data: Optional[dict]
+    annotation: Optional[dict]
     start_index: int
     end_index: int
 
@@ -390,7 +390,7 @@ class _BaseResponse:
                 gap_text = text[current_index : annotation.start_index]
                 yield Chunk(
                     text=gap_text,
-                    data=None,
+                    annotation=None,
                     start_index=current_index,
                     end_index=annotation.start_index,
                 )
@@ -399,7 +399,7 @@ class _BaseResponse:
             chunk_text = text[annotation.start_index : annotation.end_index]
             yield Chunk(
                 text=chunk_text,
-                data=annotation.data,
+                annotation=annotation.data,
                 start_index=annotation.start_index,
                 end_index=annotation.end_index,
             )
@@ -410,7 +410,7 @@ class _BaseResponse:
         if current_index < len(text):
             yield Chunk(
                 text=text[current_index:],
-                data=None,
+                annotation=None,
                 start_index=current_index,
                 end_index=len(text),
             )

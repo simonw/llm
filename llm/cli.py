@@ -1384,13 +1384,12 @@ def format_chunks(chunks: Iterable[Chunk]) -> str:
         combined_text += chunk.text
         end_pos = len(combined_text)
 
-        # If chunk has data, record its position and data
-        if chunk.data:
+        if chunk.annotation:
             annotation_positions.append(
                 {
                     "start": start_pos,
                     "end": end_pos,
-                    "data": chunk.data,
+                    "data": chunk.annotation,
                     "index": annotation_index,
                 }
             )
