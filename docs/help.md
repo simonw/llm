@@ -70,7 +70,7 @@ Commands:
   collections   View and manage collections of embeddings
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
-  embed-multi   Store embeddings for multiple strings at once
+  embed-multi   Store embeddings for multiple strings at once in the...
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -349,6 +349,7 @@ Options:
   --async           List async models
   --schemas         List models that support schemas
   -q, --query TEXT  Search for models matching these strings
+  -m, --model TEXT  Specific model IDs
   --help            Show this message and exit.
 ```
 
@@ -621,25 +622,42 @@ Options:
 ```
 Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
 
-  Store embeddings for multiple strings at once
-
-  Input can be CSV, TSV or a JSON list of objects.
-
-  The first column is treated as an ID - all other columns are assumed to be
-  text that should be concatenated together in order to calculate the
-  embeddings.
+  Store embeddings for multiple strings at once in the specified collection.
 
   Input data can come from one of three sources:
 
-  1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
-  2. A SQL query against a SQLite database
-  3. A directory of files
+  1. A CSV, TSV, JSON or JSONL file:
+     - CSV/TSV: First column is ID, remaining columns concatenated as content
+     - JSON: Array of objects with "id" field and content fields
+     - JSONL: Newline-delimited JSON objects
+
+     Examples:
+       llm embed-multi docs input.csv
+       cat data.json | llm embed-multi docs -
+       llm embed-multi docs input.json --format json
+
+  2. A SQL query against a SQLite database:
+     - First column returned is used as ID
+     - Other columns concatenated to form content
+
+     Examples:
+       llm embed-multi docs --sql "SELECT id, title, body FROM posts"
+       llm embed-multi docs --attach blog blog.db --sql "SELECT id, content FROM blog.posts"
+
+  3. Files in directories matching glob patterns:
+     - Each file becomes one embedding
+     - Relative file paths become IDs
+
+     Examples:
+       llm embed-multi docs --files docs '**/*.md'
+       llm embed-multi images --files photos '*.jpg' --binary
+       llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
 
 Options:
   --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
   --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
                                and glob pattern
-  --encoding TEXT              Encoding to use when reading --files
+  --encoding TEXT              Encodings to try when reading --files
   --binary                     Treat --files as binary data
   --sql TEXT                   Read input using this SQL query
   --attach <TEXT FILE>...      Additional databases to attach - specify alias

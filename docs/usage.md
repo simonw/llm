@@ -319,7 +319,10 @@ Add one or more `-q term` options to search for models matching all of those sea
 llm models -q gpt-4o
 llm models -q 4o -q mini
 ```
-
+Use one or more `-m` options to indicate specific models, either by their model ID or one of their aliases:
+```bash
+llm models -m gpt-4o -m gemini-1.5-pro-002
+```
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options
@@ -364,7 +367,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -381,7 +384,7 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - async
@@ -397,7 +400,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -606,7 +609,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -623,7 +626,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -641,7 +644,7 @@ OpenAI Chat: o1
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
   - async
@@ -658,7 +661,7 @@ OpenAI Chat: o1-2024-12-17
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
   - async

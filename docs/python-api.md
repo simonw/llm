@@ -13,11 +13,19 @@ To run a prompt against the `gpt-4o-mini` model, run this:
 import llm
 
 model = llm.get_model("gpt-4o-mini")
-# Optional, you can configure the key in other ways:
-model.key = "sk-..."
-response = model.prompt("Five surprising names for a pet pelican")
+# key= is optional, you can configure the key in other ways
+response = model.prompt(
+    "Five surprising names for a pet pelican",
+    key="sk-..."
+)
 print(response.text())
 ```
+Note that the prompt will not be evaluated until you call that `response.text()` method - a form of lazy loading.
+
+If you inspect the response before it has been evaluated it will look like this:
+
+    <Response prompt='Your prompt' text='... not yet done ...'>
+
 The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.

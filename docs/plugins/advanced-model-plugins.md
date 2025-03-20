@@ -1,9 +1,15 @@
 (advanced-model-plugins)=
 # Advanced model plugins
 
-The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of developing a plugin that adds support for a new model.
+The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of developing a plugin that adds support for a new model. This document covers more advanced topics.
 
-This document covers more advanced topics.
+Features to consider for your model plugin include:
+
+- {ref}`Accepting API keys <advanced-model-plugins-api-keys>` using the standard mechanism that incorporates `llm keys set`, environment variables and support for passing an explicit key to the model.
+- Including support for {ref}`Async models <advanced-model-plugins-async>` that can be used with Python's `asyncio` library.
+- Support for {ref}`structured output <advanced-model-plugins-schemas>` using JSON schemas.
+- Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
+- Tracking {ref}`token usage <advanced-model-plugins-usage>` for models that charge by the token.
 
 (advanced-model-plugins-api-keys)=
 

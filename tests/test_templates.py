@@ -146,10 +146,11 @@ def test_templates_error_on_missing_schema(templates_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize(
-    "template,extra_args,expected_model,expected_input,expected_error",
+    "template,input_text,extra_args,expected_model,expected_input,expected_error",
     (
         (
             "'Summarize this: $input'",
+            "Input text",
             [],
             "gpt-4o-mini",
             "Summarize this: Input text",
@@ -157,6 +158,7 @@ def test_templates_error_on_missing_schema(templates_path):
         ),
         (
             "prompt: 'Summarize this: $input'\nmodel: gpt-4",
+            "Input text",
             [],
             "gpt-4",
             "Summarize this: Input text",
@@ -164,6 +166,7 @@ def test_templates_error_on_missing_schema(templates_path):
         ),
         (
             "prompt: 'Summarize this: $input'",
+            "Input text",
             ["-m", "4"],
             "gpt-4",
             "Summarize this: Input text",
@@ -171,6 +174,7 @@ def test_templates_error_on_missing_schema(templates_path):
         ),
         pytest.param(
             "boo",
+            "Input text",
             ["-s", "s"],
             None,
             None,
@@ -179,6 +183,7 @@ def test_templates_error_on_missing_schema(templates_path):
         ),
         pytest.param(
             "prompt: 'Say $hello'",
+            "Input text",
             [],
             None,
             None,
@@ -187,9 +192,18 @@ def test_templates_error_on_missing_schema(templates_path):
         ),
         (
             "prompt: 'Say $hello'",
+            "Input text",
             ["-p", "hello", "Blah"],
             "gpt-4o-mini",
             "Say Blah",
+            None,
+        ),
+        (
+            "prompt: 'Say pelican'",
+            "",
+            [],
+            "gpt-4o-mini",
+            "Say pelican",
             None,
         ),
     ),
@@ -198,6 +212,7 @@ def test_template_basic(
     templates_path,
     mocked_openai_chat,
     template,
+    input_text,
     extra_args,
     expected_model,
     expected_input,
@@ -207,7 +222,9 @@ def test_template_basic(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-stream", "-t", "template", "Input text"] + extra_args,
+        ["--no-stream", "-t", "template"]
+        + ([input_text] if input_text else [])
+        + extra_args,
         catch_exceptions=False,
     )
     if expected_error is None:
