@@ -34,8 +34,8 @@ def register_models(register):
         aliases=("chatgpt-4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True),
-        AsyncChat("gpt-4o-mini", vision=True, supports_schema=True),
+        Chat("gpt-4o-mini", vision=True, supports_schema=True, responses_api=True),
+        AsyncChat("gpt-4o-mini", vision=True, supports_schema=True, responses_api=True),
         aliases=("4o-mini",),
     )
     for audio_model_id in (
@@ -85,16 +85,33 @@ def register_models(register):
             Chat(
                 model_id,
                 vision=True,
-                can_stream=False,
                 reasoning=True,
                 supports_schema=True,
             ),
             AsyncChat(
                 model_id,
                 vision=True,
-                can_stream=False,
                 reasoning=True,
                 supports_schema=True,
+            ),
+        )
+
+    # o1-pro
+    for model_id in ("o1-pro", "o1-pro-2025-03-19"):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                responses_api=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                responses_api=True,
             ),
         )
 
@@ -119,7 +136,7 @@ def register_models(register):
     # Search models
     for model_id in ("gpt-4o-search-preview", "gpt-4o-mini-search-preview"):
         register(
-            Chat(model_id, search_preview=True),
+            Chat(model_id, search_preview=True, responses_api=True),
             AsyncChat(model_id, search_preview=True),
         )
 
@@ -434,6 +451,7 @@ class _Shared:
         reasoning=False,
         supports_schema=False,
         allows_system_prompt=True,
+        responses_api=False,
         search_preview=False,
     ):
         self.model_id = model_id
@@ -448,6 +466,7 @@ class _Shared:
         self.can_stream = can_stream
         self.vision = vision
         self.allows_system_prompt = allows_system_prompt
+        self.responses_api = responses_api
         self.search_preview = search_preview
 
         self.attachment_types = set()
@@ -585,7 +604,7 @@ class _Shared:
                 "type": "json_schema",
                 "json_schema": {"name": "output", "schema": prompt.schema},
             }
-        if stream:
+        if stream and not self.responses_api:
             kwargs["stream_options"] = {"include_usage": True}
         if self.search_preview:
             kwargs["web_search_options"] = {}
@@ -594,6 +613,7 @@ class _Shared:
                 kwargs["web_search_options"][
                     "search_context_size"
                 ] = prompt.options.search_context_size
+        kwargs["tools"] = [{"type": "web_search_preview"}]
         return kwargs
 
 
@@ -614,42 +634,44 @@ class Chat(_Shared, KeyModel):
         messages = self.build_messages(prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
+        kwargs["model"] = self.model_name or self.model_id
         usage = None
         annotations = []
+        if self.responses_api:
+            method = client.responses.create
+            kwargs["input"] = messages
+        else:
+            method = client.chat.completions.create
+            kwargs["messages"] = messages
         if stream:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=True,
-                **kwargs,
-            )
-            chunks = []
-            for chunk in completion:
-                chunks.append(chunk)
+            kwargs["stream"] = True
+            completion = method(**kwargs)
+            events = []
+            from pprint import pprint
+
+            for event in completion:
+                pprint(event.dict())
+                events.append(event)
                 try:
-                    annotations.extend(chunk.choices[0].delta.annotations)
+                    annotations.extend(event.choices[0].delta.annotations)
                 except (AttributeError, IndexError):
                     pass
-                if chunk.usage:
-                    usage = chunk.usage.model_dump()
+                # if event.usage:
+                #     usage = event.usage.model_dump()
                 try:
-                    content = chunk.choices[0].delta.content
-                except IndexError:
+                    content = event.choices[0].delta.content
+                except (IndexError, AttributeError):
                     content = None
                 if content is not None:
                     yield content
-            final_json = remove_dict_none_values(combine_chunks(chunks))
+            final_json = remove_dict_none_values(combine_events(events))
             if annotations:
                 final_json["annotations"] = annotations
                 self.set_annotations(response, annotations)
             response.response_json = final_json
         else:
-            completion = client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=False,
-                **kwargs,
-            )
+            kwargs["stream"] = True
+            completion = client.chat.completions.create(**kwargs)
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].message.content
@@ -702,7 +724,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     content = None
                 if content is not None:
                     yield content
-            response.response_json = remove_dict_none_values(combine_chunks(chunks))
+            response.response_json = remove_dict_none_values(combine_events(chunks))
         else:
             completion = await client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -761,7 +783,7 @@ class Completion(Chat):
                     content = None
                 if content is not None:
                     yield content
-            combined = combine_chunks(chunks)
+            combined = combine_events(chunks)
             cleaned = remove_dict_none_values(combined)
             response.response_json = cleaned
         else:
@@ -780,7 +802,7 @@ def not_nulls(data) -> dict:
     return {key: value for key, value in data if value is not None}
 
 
-def combine_chunks(chunks: List) -> dict:
+def combine_events(chunks: List) -> dict:
     content = ""
     role = None
     finish_reason = None
