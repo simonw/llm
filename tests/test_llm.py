@@ -458,7 +458,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
 """
 
 
