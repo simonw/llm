@@ -742,6 +742,34 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Include the log probabilities of most likely N per token
   Features:
   - streaming
+OpenAI Chat: gpt-4o-search-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    search_context_size: str
+  Features:
+  - streaming
+  - async
+OpenAI Chat: gpt-4o-mini-search-preview
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    search_context_size: str
+  Features:
+  - streaming
+  - async
 
 ```
 <!-- [[[end]]] -->
