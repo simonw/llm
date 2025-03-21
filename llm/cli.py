@@ -180,6 +180,13 @@ def cli():
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Use first model matching these strings",
+)
+@click.option(
     "attachments",
     "-a",
     "--attachment",
@@ -250,6 +257,7 @@ def prompt(
     prompt,
     system,
     model_id,
+    queries,
     attachments,
     attachment_types,
     options,
@@ -303,6 +311,18 @@ def prompt(
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
+
+    if queries and not model_id:
+        # Use -q options to find model with shortest model_id
+        matches = []
+        for model_with_aliases in get_models_with_aliases():
+            if all(model_with_aliases.matches(q) for q in queries):
+                matches.append(model_with_aliases.model.model_id)
+        if not matches:
+            raise click.ClickException(
+                "No model found matching queries {}".format(", ".join(queries))
+            )
+        model_id = min(matches, key=len)
 
     if schema_multi:
         schema_input = schema_multi

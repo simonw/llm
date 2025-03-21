@@ -26,6 +26,11 @@ You can use `-m 4o` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
+Or if you know the name is too long to type, use `-q` once or more to provide search terms - the model with the shortest model ID that matches all of those terms (as a lowercase substring) will be used:
+```bash
+llm 'Ten names for cheesecakes' -q 4o -q mini
+```
+
 You can also send a prompt to standard input, for example:
 ```bash
 echo 'Ten names for cheesecakes' | llm

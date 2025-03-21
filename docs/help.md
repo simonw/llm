@@ -114,6 +114,7 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 Options:
   -s, --system TEXT               System prompt to use
   -m, --model TEXT                Model to use
+  -q, --query TEXT                Use first model matching these strings
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype
