@@ -39,6 +39,7 @@ from llm.utils import simplify_usage_dict, extract_fenced_code_block, schema_dsl
     ],
 )
 def test_simplify_usage_dict(input_data, expected_output):
+    # This utility function is used by at least one plugin - llm-openai-plugin
     assert simplify_usage_dict(input_data) == expected_output
 
 
