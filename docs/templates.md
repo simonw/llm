@@ -269,7 +269,7 @@ llm -t roast 'How are you today?'
 
 ## Template loaders from plugins
 
-LLM plugins can register prefixes that can be used to load templates from external sources.
+LLM plugins can {ref}`register prefixes <plugin-hooks-register-template-loaders>` that can be used to load templates from external sources.
 
 [llm-templates-github](https://github.com/simonw/llm-templates-github) is an example which adds a `gh:` prefix which can be used to load templates from GitHub.
 
@@ -299,3 +299,5 @@ curl -sL 'https://llm.datasette.io/' | llm -t gh:simonw/summarize
 The `-sL` flags to `curl` are used to follow redirects and suppress progress meters.
 
 This command will fetch the content of the LLM index page and feed it to the template defined by [summarize.yaml](https://github.com/simonw/llm-templates/blob/main/summarize.yaml) in the [simonw/llm-templates](https://github.com/simonw/llm-templates) GitHub repository.
+
+If two template loader plugins attempt to register the same prefix one of them will have `_1` added to the end of their prefix. Use `llm templates loaders` to check if this has occurred.
