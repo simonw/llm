@@ -858,7 +858,7 @@ class Model(_Model):
         stream: bool,
         response: Response,
         conversation: Optional[Conversation],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, Chunk]]:
         pass
 
 
@@ -871,7 +871,7 @@ class KeyModel(_Model):
         response: Response,
         conversation: Optional[Conversation],
         key: Optional[str],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, Chunk]]:
         pass
 
 
@@ -914,7 +914,7 @@ class AsyncModel(_AsyncModel):
         stream: bool,
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, Chunk], None]:
         yield ""
 
 
@@ -927,7 +927,7 @@ class AsyncKeyModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
         key: Optional[str],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, Chunk], None]:
         yield ""
 
 
