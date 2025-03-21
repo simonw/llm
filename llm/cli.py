@@ -1500,6 +1500,21 @@ def templates_path():
     click.echo(template_dir())
 
 
+@templates.command(name="loaders")
+def templates_loaders():
+    "Show template loaders registered by plugins"
+    found = False
+    for prefix, loader in get_template_loaders().items():
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No template loaders found")
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
