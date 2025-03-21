@@ -2375,7 +2375,12 @@ def load_template(name):
         if prefix not in loaders:
             raise click.ClickException("Unknown template prefix: {}".format(prefix))
         loader = loaders[prefix]
-        return loader(rest)
+        try:
+            return loader(rest)
+        except Exception as ex:
+            raise click.ClickException(
+                "Could not load template {}: {}".format(name, ex)
+            )
 
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
