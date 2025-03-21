@@ -376,10 +376,11 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  List available prompt templates
-  edit   Edit the specified prompt template using the default $EDITOR
-  path   Output the path to the templates directory
-  show   Show the specified prompt template
+  list*    List available prompt templates
+  edit     Edit the specified prompt template using the default $EDITOR
+  loaders  Show template loaders registered by plugins
+  path     Output the path to the templates directory
+  show     Show the specified prompt template
 ```
 
 (help-templates-list)=
@@ -421,6 +422,17 @@ Options:
 Usage: llm templates path [OPTIONS]
 
   Output the path to the templates directory
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-templates-loaders)=
+#### llm templates loaders --help
+```
+Usage: llm templates loaders [OPTIONS]
+
+  Show template loaders registered by plugins
 
 Options:
   --help  Show this message and exit.
