@@ -25,6 +25,7 @@ from llm import (
     get_embedding_model_aliases,
     get_embedding_model,
     get_plugins,
+    get_template_loaders,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
@@ -1466,6 +1467,54 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified prompt template"
+    template = load_template(name)
+    click.echo(
+        yaml.dump(
+            dict((k, v) for k, v in template.model_dump().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified prompt template using the default $EDITOR"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=path)
+    # Validate that template
+    load_template(name)
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output the path to the templates directory"
+    click.echo(template_dir())
+
+
+@templates.command(name="loaders")
+def templates_loaders():
+    "Show template loaders registered by plugins"
+    found = False
+    for prefix, loader in get_template_loaders().items():
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No template loaders found")
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
@@ -1702,39 +1751,6 @@ def display_truncated(text):
         return text[: console_width - 3] + "..."
     else:
         return text
-
-
-@templates.command(name="show")
-@click.argument("name")
-def templates_show(name):
-    "Show the specified prompt template"
-    template = load_template(name)
-    click.echo(
-        yaml.dump(
-            dict((k, v) for k, v in template.model_dump().items() if v is not None),
-            indent=4,
-            default_flow_style=False,
-        )
-    )
-
-
-@templates.command(name="edit")
-@click.argument("name")
-def templates_edit(name):
-    "Edit the specified prompt template using the default $EDITOR"
-    # First ensure it exists
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        path.write_text(DEFAULT_TEMPLATE, "utf-8")
-    click.edit(filename=path)
-    # Validate that template
-    load_template(name)
-
-
-@templates.command(name="path")
-def templates_path():
-    "Output the path to the templates directory"
-    click.echo(template_dir())
 
 
 @cli.command()
@@ -2353,6 +2369,19 @@ def logs_db_path():
 
 
 def load_template(name):
+    if ":" in name:
+        prefix, rest = name.split(":", 1)
+        loaders = get_template_loaders()
+        if prefix not in loaders:
+            raise click.ClickException("Unknown template prefix: {}".format(prefix))
+        loader = loaders[prefix]
+        try:
+            return loader(rest)
+        except Exception as ex:
+            raise click.ClickException(
+                "Could not load template {}: {}".format(name, ex)
+            )
+
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise click.ClickException(f"Invalid template: {name}")

@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_24a0)=
+## 0.24a0 (2025-02-28)
+
+- Alpha release with experimental `register_template_loaders()` plugin hook. [#809](https://github.com/simonw/llm/issues/809)
+
 (v0_23)=
 ## 0.23 (2025-02-28)
 

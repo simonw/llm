@@ -264,3 +264,40 @@ Example:
 llm -t roast 'How are you today?'
 ```
 > I'm doing great but with your boring questions, I must admit, I've seen more life in a cemetery.
+
+(prompt-templates-loaders)=
+
+## Template loaders from plugins
+
+LLM plugins can {ref}`register prefixes <plugin-hooks-register-template-loaders>` that can be used to load templates from external sources.
+
+[llm-templates-github](https://github.com/simonw/llm-templates-github) is an example which adds a `gh:` prefix which can be used to load templates from GitHub.
+
+You can install that plugin like this:
+```bash
+llm install llm-templates-github
+```
+
+Use the `llm templates loaders` command to see details of the registered loaders.
+
+```bash
+llm templates loaders
+```
+Output:
+```
+gh:
+  Load a template from GitHub or local cache if available
+
+  Format: username/repo/template_name (without the .yaml extension)
+    or username/template_name which means username/llm-templates/template_name
+```
+
+Then you can then use it like this:
+```bash
+curl -sL 'https://llm.datasette.io/' | llm -t gh:simonw/summarize
+```
+The `-sL` flags to `curl` are used to follow redirects and suppress progress meters.
+
+This command will fetch the content of the LLM index page and feed it to the template defined by [summarize.yaml](https://github.com/simonw/llm-templates/blob/main/summarize.yaml) in the [simonw/llm-templates](https://github.com/simonw/llm-templates) GitHub repository.
+
+If two template loader plugins attempt to register the same prefix one of them will have `_1` added to the end of their prefix. Use `llm templates loaders` to check if this has occurred.
