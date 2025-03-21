@@ -1467,6 +1467,39 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified prompt template"
+    template = load_template(name)
+    click.echo(
+        yaml.dump(
+            dict((k, v) for k, v in template.model_dump().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified prompt template using the default $EDITOR"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=path)
+    # Validate that template
+    load_template(name)
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output the path to the templates directory"
+    click.echo(template_dir())
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
@@ -1703,39 +1736,6 @@ def display_truncated(text):
         return text[: console_width - 3] + "..."
     else:
         return text
-
-
-@templates.command(name="show")
-@click.argument("name")
-def templates_show(name):
-    "Show the specified prompt template"
-    template = load_template(name)
-    click.echo(
-        yaml.dump(
-            dict((k, v) for k, v in template.model_dump().items() if v is not None),
-            indent=4,
-            default_flow_style=False,
-        )
-    )
-
-
-@templates.command(name="edit")
-@click.argument("name")
-def templates_edit(name):
-    "Edit the specified prompt template using the default $EDITOR"
-    # First ensure it exists
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        path.write_text(DEFAULT_TEMPLATE, "utf-8")
-    click.edit(filename=path)
-    # Validate that template
-    load_template(name)
-
-
-@templates.command(name="path")
-def templates_path():
-    "Output the path to the templates directory"
-    click.echo(template_dir())
 
 
 @cli.command()
