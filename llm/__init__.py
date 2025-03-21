@@ -103,8 +103,12 @@ def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
     loaders = {}
 
     def register(prefix, loader):
-        # TODO: if prefix already there either error or add a suffix
-        loaders[prefix] = loader
+        suffix = 0
+        prefix_to_try = prefix
+        while prefix_to_try in loaders:
+            suffix += 1
+            prefix_to_try = f"{prefix}_{suffix}"
+        loaders[prefix_to_try] = loader
 
     pm.hook.register_template_loaders(register=register)
     return loaders
