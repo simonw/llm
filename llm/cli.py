@@ -5,7 +5,6 @@ from dataclasses import asdict
 import io
 import json
 import os
-import re
 from llm import (
     Attachment,
     AsyncConversation,
