@@ -1208,8 +1208,10 @@ def logs_list(
         should_show_conversation = True
         for row in rows:
             if short:
-                system = _truncate_string(row["system"], 120, end=True)
-                prompt = _truncate_string(row["prompt"], 120, end=True)
+                system = _truncate_string(row["system"], 120, normalize_whitespace=True)
+                prompt = _truncate_string(
+                    row["prompt"], 120, normalize_whitespace=True, keep_end=True
+                )
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
                 obj = {
@@ -2351,17 +2353,18 @@ def template_dir():
     return path
 
 
-def _truncate_string(s, max_length=100, end=False):
-    if not s:
-        return s
-    if end:
-        s = re.sub(r"\s+", " ", s)
-        if len(s) <= max_length:
-            return s
-        return s[: max_length - 3] + "..."
-    if len(s) <= max_length:
-        return s
-    return s[: max_length - 3] + "..."
+def _truncate_string(text, max_length=100, normalize_whitespace=False, keep_end=False):
+    if not text:
+        return text
+    if normalize_whitespace:
+        text = re.sub(r"\s+", " ", text)
+    if len(text) <= max_length:
+        return text
+    if keep_end:
+        # Find a reasonable cutoff for the start and end portions
+        cutoff = (max_length - 6) // 2
+        return text[:cutoff] + "... " + text[-cutoff:]
+    return text[: max_length - 3] + "..."
 
 
 def logs_db_path():
