@@ -40,17 +40,18 @@ from llm.models import _BaseConversation
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
+    extract_fenced_code_block,
+    find_unused_key,
+    make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
-    token_usage_string,
-    extract_fenced_code_block,
-    make_schema_id,
+    multi_schema,
     output_rows_as_json,
     resolve_schema_input,
-    schema_summary,
-    multi_schema,
     schema_dsl,
-    find_unused_key,
+    schema_summary,
+    token_usage_string,
+    truncate_string,
 )
 import base64
 import httpx
@@ -1169,8 +1170,8 @@ def logs_list(
 
     for row in rows:
         if truncate:
-            row["prompt"] = _truncate_string(row["prompt"])
-            row["response"] = _truncate_string(row["response"])
+            row["prompt"] = truncate_string(row["prompt"] or "")
+            row["response"] = truncate_string(row["response"] or "")
         # Either decode or remove all JSON keys
         keys = list(row.keys())
         for key in keys:
@@ -1208,9 +1209,11 @@ def logs_list(
         should_show_conversation = True
         for row in rows:
             if short:
-                system = _truncate_string(row["system"], 120, normalize_whitespace=True)
-                prompt = _truncate_string(
-                    row["prompt"], 120, normalize_whitespace=True, keep_end=True
+                system = truncate_string(
+                    row["system"] or "", 120, normalize_whitespace=True
+                )
+                prompt = truncate_string(
+                    row["prompt"] or "", 120, normalize_whitespace=True, keep_end=True
                 )
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
@@ -2351,20 +2354,6 @@ def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def _truncate_string(text, max_length=100, normalize_whitespace=False, keep_end=False):
-    if not text:
-        return text
-    if normalize_whitespace:
-        text = re.sub(r"\s+", " ", text)
-    if len(text) <= max_length:
-        return text
-    if keep_end:
-        # Find a reasonable cutoff for the start and end portions
-        cutoff = (max_length - 6) // 2
-        return text[:cutoff] + "... " + text[-cutoff:]
-    return text[: max_length - 3] + "..."
 
 
 def logs_db_path():

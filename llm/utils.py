@@ -391,3 +391,43 @@ def find_unused_key(item: dict, key: str) -> str:
     while key in item:
         key += "_"
     return key
+
+
+def truncate_string(
+    text: str,
+    max_length: int = 100,
+    normalize_whitespace: bool = False,
+    keep_end: bool = False,
+) -> str:
+    """
+    Truncate a string to a maximum length, with options to normalize whitespace and keep both start and end.
+
+    Args:
+        text: The string to truncate
+        max_length: Maximum length of the result string
+        normalize_whitespace: If True, replace all whitespace with a single space
+        keep_end: If True, keep both beginning and end of string
+
+    Returns:
+        Truncated string
+    """
+    if not text:
+        return text
+
+    if normalize_whitespace:
+        text = re.sub(r"\s+", " ", text)
+
+    if len(text) <= max_length:
+        return text
+
+    # Minimum sensible length for keep_end is 9 characters: "a... z"
+    min_keep_end_length = 9
+
+    if keep_end and max_length >= min_keep_end_length:
+        # Calculate how much text to keep at each end
+        # Subtract 5 for the "... " separator
+        cutoff = (max_length - 5) // 2
+        return text[:cutoff] + "... " + text[-cutoff:]
+    else:
+        # Fall back to simple truncation for very small max_length
+        return text[: max_length - 3] + "..."
