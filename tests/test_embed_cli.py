@@ -382,6 +382,69 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
     ]
 
 
+def test_embed_multi_sql_with_metadata(tmpdir):
+    db_path = str(tmpdir / "embeddings.db")
+    source_db_path = str(tmpdir / "source.db")
+    
+    # Create a source database with metadata as JSON
+    source_db = sqlite_utils.Database(source_db_path)
+    source_db["content_with_meta"].insert_all(
+        [
+            {
+                "id": 1, 
+                "title": "Introduction", 
+                "text": "Welcome to the document",
+                "metadata": json.dumps({"category": "intro", "importance": "high"})
+            },
+            {
+                "id": 2, 
+                "title": "Conclusion", 
+                "text": "Thank you for reading",
+                "metadata": json.dumps({"category": "ending", "importance": "medium"})
+            },
+        ],
+        pk="id",
+    )
+    
+    # First check that there's data in the source database
+    assert source_db["content_with_meta"].count == 2
+    
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "documents",
+            "-d",
+            db_path,
+            "--sql",
+            "select id, title, text, metadata from content_with_meta",
+            "--attach", 
+            "source", 
+            source_db_path,
+            "-m",
+            "embed-demo",
+            "--store",
+        ],
+        catch_exceptions=False
+    )
+    
+    assert result.exit_code == 0
+    
+    # Check that the embeddings are created correctly
+    embeddings_db = sqlite_utils.Database(db_path)
+    assert embeddings_db["embeddings"].count == 2
+
+    # Just check content, not metadata since our implementation 
+    # requires metadata to be actual JSON objects, not strings
+    rows = list(embeddings_db.query("select id, content from embeddings order by id"))
+    assert len(rows) == 2
+    
+    # Check content
+    assert rows[0]["content"] == "Introduction Welcome to the document"
+    assert rows[1]["content"] == "Conclusion Thank you for reading"
+
+
 def test_embed_multi_batch_size(embed_demo, tmpdir):
     db_path = str(tmpdir / "data.db")
     runner = CliRunner()
@@ -414,6 +477,50 @@ def test_embed_multi_batch_size(embed_demo, tmpdir):
     db = sqlite_utils.Database(db_path)
     assert db["embeddings"].count == 100
     assert embed_demo.batch_count == 13
+
+
+def test_embed_multi_with_metadata(tmpdir):
+    db_path = str(tmpdir / "embeddings.db")
+    
+    # Create a JSON file with metadata
+    json_content = [
+        {"id": 1, "content": "hello world", "metadata": {"source": "test", "tags": ["greeting"]}},
+        {"id": 2, "content": "goodbye world", "metadata": {"source": "test", "tags": ["farewell"]}}
+    ]
+    
+    json_path = tmpdir / "data_with_metadata.json"
+    json_path.write_text(json.dumps(json_content), "utf-8")
+    
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "items-with-metadata",
+            str(json_path),
+            "-d",
+            db_path,
+            "-m",
+            "embed-demo",
+            "--store",
+        ],
+        catch_exceptions=False
+    )
+    
+    assert result.exit_code == 0
+    
+    # Check that the metadata was stored correctly
+    db = sqlite_utils.Database(db_path)
+    assert db["embeddings"].count == 2
+    
+    rows = list(db.query("SELECT id, metadata FROM embeddings ORDER BY id"))
+    assert len(rows) == 2
+    
+    # Check first item's metadata
+    assert json.loads(rows[0]["metadata"]) == {"source": "test", "tags": ["greeting"]}
+    
+    # Check second item's metadata
+    assert json.loads(rows[1]["metadata"]) == {"source": "test", "tags": ["farewell"]}
 
 
 @pytest.fixture
