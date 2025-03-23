@@ -10,6 +10,7 @@ from llm import (
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    Chunk,
     Collection,
     Conversation,
     Response,
@@ -561,6 +562,8 @@ def prompt(
             )
             if should_stream:
                 for chunk in response:
+                    if isinstance(chunk, Chunk) and chunk.annotation:
+                        print(chunk.annotation)
                     print(chunk, end="")
                     sys.stdout.flush()
                 print("")

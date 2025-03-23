@@ -59,7 +59,7 @@ class MyAsyncModel(llm.AsyncModel):
 
     async def execute(
         self, prompt, stream, response, conversation=None
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[llm.Chunk, str], None]:
         if stream:
             completion = await client.chat.completions.create(
                 model=self.model_id,
@@ -83,7 +83,7 @@ class MyAsyncModel(llm.AsyncKeyModel):
     ...
     async def execute(
         self, prompt, stream, response, conversation=None, key=None
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[llm.Chunk, str], None]:
 ```
 
 

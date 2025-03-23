@@ -28,7 +28,7 @@ from .utils import (
 )
 from abc import ABC, abstractmethod
 import json
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
@@ -250,9 +250,9 @@ class Annotation(BaseModel):
 
 class Chunk(BaseModel):
     text: str
-    annotation: Optional[dict]
-    start_index: int
-    end_index: int
+    annotation: Dict[str, Any] = Field(default_factory=dict)
+    start_index: Optional[int] = None
+    end_index: Optional[int] = None
 
     def __str__(self):
         return self.text
@@ -387,7 +387,7 @@ class _BaseResponse:
                 gap_text = text[current_index : annotation.start_index]
                 yield Chunk(
                     text=gap_text,
-                    annotation=None,
+                    annotation={},
                     start_index=current_index,
                     end_index=annotation.start_index,
                 )
@@ -407,7 +407,7 @@ class _BaseResponse:
         if current_index < len(text):
             yield Chunk(
                 text=text[current_index:],
-                annotation=None,
+                annotation={},
                 start_index=current_index,
                 end_index=len(text),
             )
@@ -554,26 +554,32 @@ class Response(_BaseResponse):
             return
 
         if isinstance(self.model, Model):
-            for chunk in self.model.execute(
+            chunk_iter = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
-            ):
-                yield chunk
-                self._chunks.append(chunk)
+            )
         elif isinstance(self.model, KeyModel):
-            for chunk in self.model.execute(
+            chunk_iter = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
                 key=self.model.get_key(self._key),
-            ):
-                yield chunk
-                self._chunks.append(chunk)
+            )
         else:
             raise Exception("self.model must be a Model or KeyModel")
+        index = 0
+        for chunk in chunk_iter:
+            if isinstance(chunk, Chunk):
+                chunk.start_index = index
+                index += len(chunk.text)
+                chunk.end_index = index
+            else:
+                index += len(chunk)
+            yield chunk
+            self._chunks.append(chunk)
 
         if self.conversation:
             self.conversation.responses.append(self)
@@ -618,6 +624,7 @@ class AsyncResponse(_BaseResponse):
     def __aiter__(self):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        self._generator_index = 0
         return self
 
     async def __anext__(self) -> Union[Chunk, str]:
@@ -650,6 +657,12 @@ class AsyncResponse(_BaseResponse):
 
         try:
             chunk = await self._generator.__anext__()
+            if isinstance(chunk, Chunk):
+                chunk.start_index = self._generator_index
+                self._generator_index += len(chunk.text)
+                chunk.end_index = self._generator_index
+            else:
+                self._generator_index += len(chunk)
             self._chunks.append(chunk)
             return chunk
         except StopAsyncIteration:
