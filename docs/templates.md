@@ -28,7 +28,10 @@ You can also save default parameters:
 llm --system 'Summarize this text in the voice of $voice' \
   --model gpt-4 -p voice GlaDOS --save summarize
 ```
-
+Or options:
+```bash
+llm --system 'Speak in French' -o temperature 1.8 --save wild-french
+```
 Add `--schema` to bake a {ref}`schema <usage-schemas>` into your template:
 
 ```bash
@@ -141,6 +144,20 @@ You can combine system and regular prompts like so:
 ```yaml
 system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
+```
+
+
+(prompt-templates-options)=
+
+### Options
+
+Default options can be set using the `options:` key:
+
+```yaml
+name: wild-french
+system: Speak in French
+options:
+  temperature: 1.8
 ```
 
 (prompt-templates-schemas)=

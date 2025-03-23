@@ -397,6 +397,17 @@ def prompt(
             to_save["extract_last"] = True
         if schema:
             to_save["schema_object"] = schema
+        if options:
+            # Need to validate and convert their types first
+            model = get_model(model_id or get_default_model())
+            try:
+                to_save["options"] = dict(
+                    (key, value)
+                    for key, value in model.Options(**dict(options))
+                    if value is not None
+                )
+            except pydantic.ValidationError as ex:
+                raise click.ClickException(render_errors(ex.errors()))
         path.write_text(
             yaml.dump(
                 to_save,
@@ -419,10 +430,21 @@ def prompt(
         if template_obj.schema_object:
             schema = template_obj.schema_object
         input_ = ""
+        if template_obj.options:
+            # Make options mutable (they start as a tuple)
+            options = list(options)
+            # Load any options, provided they were not set using -o already
+            specified_options = dict(options)
+            for option_name, option_value in template_obj.options.items():
+                if option_name not in specified_options:
+                    options.append((option_name, option_value))
         if "input" in template_obj.vars():
             input_ = read_prompt()
         try:
-            prompt, system = template_obj.evaluate(input_, params)
+            template_prompt, system = template_obj.evaluate(input_, params)
+            if template_prompt:
+                # Over-ride user prompt only if the template provided one
+                prompt = template_prompt
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
