@@ -263,7 +263,7 @@ class _BaseResponse:
 
     prompt: "Prompt"
     stream: bool
-    _annotations: Optional[List[Annotation]] = None
+    _annotations: List[Annotation] = field(default_factory=list)
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
 
@@ -280,8 +280,8 @@ class _BaseResponse:
         self.model = model
         self.stream = stream
         self._key = key
-        self._annotations = []
-        self._chunks: List[str] = []
+        self._annotations: List[Annotation] = []
+        self._chunks: List[Union[Chunk, str]] = []
         self._done = False
         self.response_json = None
         self.conversation = conversation
@@ -374,9 +374,6 @@ class _BaseResponse:
             )
         ]
         return response
-
-    def chunks(self) -> Iterator[str]:
-        return self.chunks_from_text(self.text())
 
     # iterates over chunks of text, so an iterator of Chunk
     def chunks_from_text(self, text) -> Iterator[Chunk]:
@@ -502,6 +499,9 @@ class Response(_BaseResponse):
     model: "Model"
     conversation: Optional["Conversation"] = None
 
+    def chunks(self) -> Iterator[Chunk]:
+        return self.chunks_from_text(self.text())
+
     def on_done(self, callback):
         if not self._done:
             self.done_callbacks.append(callback)
@@ -521,7 +521,7 @@ class Response(_BaseResponse):
 
     def text(self) -> str:
         self._force()
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     def text_or_raise(self) -> str:
         return self.text()
@@ -546,7 +546,7 @@ class Response(_BaseResponse):
             details=self.token_details,
         )
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[Union[Chunk, str]]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
@@ -592,6 +592,9 @@ class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
+    async def chunks(self) -> Iterator[Chunk]:
+        return self.chunks_from_text(await self.text())
+
     @classmethod
     def from_row(cls, db, row, _async=False):
         return super().from_row(db, row, _async=True)
@@ -617,7 +620,7 @@ class AsyncResponse(_BaseResponse):
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         return self
 
-    async def __anext__(self) -> str:
+    async def __anext__(self) -> Union[Chunk, str]:
         if self._done:
             if not self._chunks:
                 raise StopAsyncIteration
@@ -666,11 +669,11 @@ class AsyncResponse(_BaseResponse):
     def text_or_raise(self) -> str:
         if not self._done:
             raise ValueError("Response not yet awaited")
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     async def text(self) -> str:
         await self._force()
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     async def json(self) -> Optional[Dict[str, Any]]:
         await self._force()
