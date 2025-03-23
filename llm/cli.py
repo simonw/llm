@@ -2415,7 +2415,9 @@ def options_clear(model, key):
         if len(cleared_keys) == 1:
             click.echo(f"Cleared option '{cleared_keys[0]}' for model {model_id}")
         else:
-            click.echo(f"Cleared {', '.join(cleared_keys)} options for model {model_id}")
+            click.echo(
+                f"Cleared {', '.join(cleared_keys)} options for model {model_id}"
+            )
 
 
 def template_dir():
