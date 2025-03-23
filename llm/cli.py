@@ -63,7 +63,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple
+from typing import cast, Optional, Iterable, Union, Tuple, Any
 import warnings
 import yaml
 
@@ -493,6 +493,12 @@ def prompt(
             )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
+
+    # Add on any default model options
+    default_options = get_model_options(model_id)
+    for key_, value in default_options.items():
+        if key_ not in validated_options:
+            validated_options[key_] = value
 
     kwargs = {**validated_options}
 
@@ -2371,6 +2377,143 @@ def collections_delete(collection, database):
     collection_obj.delete()
 
 
+@models.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def options():
+    "Manage default options for models"
+
+
+@options.command(name="list")
+def options_list():
+    """
+    List default options for all models
+
+    Example usage:
+
+    \b
+        llm models options list
+    """
+    options = get_all_model_options()
+    if not options:
+        click.echo("No default options set for any models.", err=True)
+        return
+
+    for model_id, model_options in options.items():
+        click.echo(f"{model_id}:")
+        for key, value in model_options.items():
+            click.echo(f"  {key}: {value}")
+
+
+@options.command(name="show")
+@click.argument("model")
+def options_show(model):
+    """
+    List default options set for a specific model
+
+    Example usage:
+
+    \b
+        llm models options show gpt-4o
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    options = get_model_options(model_id)
+    if not options:
+        click.echo(f"No default options set for model '{model_id}'.", err=True)
+        return
+
+    for key, value in options.items():
+        click.echo(f"{key}: {value}")
+
+
+@options.command(name="set")
+@click.argument("model")
+@click.argument("key")
+@click.argument("value")
+def options_set(model, key, value):
+    """
+    Set a default option for a model
+
+    Example usage:
+
+    \b
+        llm models options set gpt-4o temperature 0.5
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+
+        # Validate option against model schema
+        try:
+            # Create a test Options object to validate
+            test_options = {key: value}
+            model_obj.Options(**test_options)
+        except pydantic.ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    set_model_option(model_id, key, value)
+    click.echo(f"Set default option {key}={value} for model {model_id}", err=True)
+
+
+@options.command(name="clear")
+@click.argument("model")
+@click.argument("key", required=False)
+def options_clear(model, key):
+    """
+    Clear default option(s) for a model
+
+    Example usage:
+
+    \b
+        llm models options clear gpt-4o
+        # Or for a single option
+        llm models options clear gpt-4o temperature
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    cleared_keys = []
+    if not key:
+        cleared_keys = list(get_model_options(model_id).keys())
+        for key_ in cleared_keys:
+            clear_model_option(model_id, key_)
+    else:
+        cleared_keys.append(key)
+        clear_model_option(model_id, key)
+    if cleared_keys:
+        if len(cleared_keys) == 1:
+            click.echo(f"Cleared option '{cleared_keys[0]}' for model {model_id}")
+        else:
+            click.echo(
+                f"Cleared {', '.join(cleared_keys)} options for model {model_id}"
+            )
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
@@ -2461,3 +2604,98 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def get_all_model_options() -> dict:
+    """
+    Get all default options for all models
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options
+
+
+def get_model_options(model_id: str) -> dict:
+    """
+    Get default options for a specific model
+
+    Args:
+        model_id: Return options for model with this ID
+
+    Returns:
+        A dictionary of model options
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options.get(model_id, {})
+
+
+def set_model_option(model_id: str, key: str, value: Any) -> None:
+    """
+    Set a default option for a model.
+
+    Args:
+        model_id: The model ID
+        key: The option key
+        value: The option value
+    """
+    path = user_dir() / "model_options.json"
+    if path.exists():
+        try:
+            options = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            options = {}
+    else:
+        options = {}
+
+    # Ensure the model has an entry
+    if model_id not in options:
+        options[model_id] = {}
+
+    # Set the option
+    options[model_id][key] = value
+
+    # Save the options
+    path.write_text(json.dumps(options, indent=2))
+
+
+def clear_model_option(model_id: str, key: str) -> None:
+    """
+    Clear a model option
+
+    Args:
+        model_id: The model ID
+        key: Key to clear
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return
+
+    if model_id not in options:
+        return
+
+    if key in options[model_id]:
+        del options[model_id][key]
+        if not options[model_id]:
+            del options[model_id]
+
+    path.write_text(json.dumps(options, indent=2))

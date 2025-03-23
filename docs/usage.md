@@ -45,30 +45,17 @@ Will run a prompt of:
 ```
 For models that support them, {ref}`system prompts <usage-system-prompts>` are a better tool for this kind of prompting.
 
+### Model options
+
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
 
 ```bash
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
-(usage-extract-fenced-code)=
-### Extracting fenced code blocks
+Use the `llm models --options` command to see which options are supported by each model.
 
-If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
-
-The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
-
-````
-```python
-def my_function():
-    # ...
-```
-````
-It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
-
-Use `--xl/--extract-last` to return the last fenced code block instead of the first.
-
-The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
+You can also {ref}`configure default options <usage-executing-default-options>` for a model using the `llm models options` commands.
 
 (usage-attachments)=
 ### Attachments
@@ -126,6 +113,26 @@ And then use the new template like this:
 cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
+
+
+(usage-extract-fenced-code)=
+### Extracting fenced code blocks
+
+If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
+
+The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
+
+````
+```python
+def my_function():
+    # ...
+```
+````
+It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
+
+Use `--xl/--extract-last` to return the last fenced code block instead of the first.
+
+The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
 
 (usage-schemas)=
 ### Schemas
@@ -756,3 +763,33 @@ When running a prompt you can pass the full model name or any of the aliases to 
 llm -m 4o \
   'As many names for cheesecakes as you can think of, with detailed descriptions'
 ```
+
+(usage-executing-default-options)=
+
+## Setting default options for models
+
+To configure a default option for a specific model, use the `llm models options set` command:
+```bash
+llm models options set gpt-4o temperature 0.5
+```
+This option will then be applied automatically any time you run a prompt through the `gpt-4o` model.
+
+Default options are stored in the `model_options.json` file in the LLM configuration directory.
+
+You can list all default options across all models using the `llm models options list` command:
+```bash
+llm models options list
+```
+Or show them for an individual model with `llm models options show <model_id>`:
+```bash
+llm models options show gpt-4o
+```
+To clear a default option, use the `llm models options clear` command:
+```bash
+llm models options clear gpt-4o temperature
+```
+Or clear all default options for a model like this:
+```bash
+llm models options clear gpt-4o
+```
+

@@ -336,6 +336,7 @@ Options:
 Commands:
   list*    List available models
   default  Show or set the default model
+  options  Manage default options for models
 ```
 
 (help-models-list)=
@@ -360,6 +361,85 @@ Options:
 Usage: llm models default [OPTIONS] [MODEL]
 
   Show or set the default model
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-models-options)=
+#### llm models options --help
+```
+Usage: llm models options [OPTIONS] COMMAND [ARGS]...
+
+  Manage default options for models
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*  List default options for all models
+  clear  Clear default option(s) for a model
+  set    Set a default option for a model
+  show   List default options set for a specific model
+```
+
+(help-models-options-list)=
+##### llm models options list --help
+```
+Usage: llm models options list [OPTIONS]
+
+  List default options for all models
+
+  Example usage:
+
+      llm models options list
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-models-options-show)=
+##### llm models options show --help
+```
+Usage: llm models options show [OPTIONS] MODEL
+
+  List default options set for a specific model
+
+  Example usage:
+
+      llm models options show gpt-4o
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-models-options-set)=
+##### llm models options set --help
+```
+Usage: llm models options set [OPTIONS] MODEL KEY VALUE
+
+  Set a default option for a model
+
+  Example usage:
+
+      llm models options set gpt-4o temperature 0.5
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-models-options-clear)=
+##### llm models options clear --help
+```
+Usage: llm models options clear [OPTIONS] MODEL [KEY]
+
+  Clear default option(s) for a model
+
+  Example usage:
+
+      llm models options clear gpt-4o
+      # Or for a single option
+      llm models options clear gpt-4o temperature
 
 Options:
   --help  Show this message and exit.
