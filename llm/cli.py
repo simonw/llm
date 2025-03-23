@@ -399,7 +399,7 @@ def prompt(
             to_save["schema_object"] = schema
         if options:
             # Need to validate and convert their types first
-            model = get_model(model_id) if model_id else get_default_model()
+            model = get_model(model_id or get_default_model())
             try:
                 to_save["options"] = dict(
                     (key, value)

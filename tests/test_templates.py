@@ -91,6 +91,12 @@ def test_templates_list(templates_path, args):
             {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
             None,
         ),
+        # Options
+        (
+            ["-o", "temperature", "0.5", "--system", "in french"],
+            {"system": "in french", "options": {"temperature": 0.5}},
+            None,
+        ),
         # -x/--extract should be persisted:
         (
             ["--system", "write python", "--extract"],
