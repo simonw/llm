@@ -5,13 +5,11 @@ from dataclasses import asdict
 import io
 import json
 import os
-import re
 from llm import (
     Attachment,
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
-    Chunk,
     Collection,
     Conversation,
     Response,
@@ -26,6 +24,7 @@ from llm import (
     get_embedding_model_aliases,
     get_embedding_model,
     get_plugins,
+    get_template_loaders,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
@@ -40,17 +39,18 @@ from llm.models import _BaseConversation
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
+    extract_fenced_code_block,
+    find_unused_key,
+    make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
-    token_usage_string,
-    extract_fenced_code_block,
-    make_schema_id,
+    multi_schema,
     output_rows_as_json,
     resolve_schema_input,
-    schema_summary,
-    multi_schema,
     schema_dsl,
-    find_unused_key,
+    schema_summary,
+    token_usage_string,
+    truncate_string,
 )
 import base64
 import httpx
@@ -63,7 +63,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple
+from typing import cast, Optional, Iterable, Union, Tuple, Any
 import warnings
 import yaml
 
@@ -181,6 +181,13 @@ def cli():
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Use first model matching these strings",
+)
+@click.option(
     "attachments",
     "-a",
     "--attachment",
@@ -251,6 +258,7 @@ def prompt(
     prompt,
     system,
     model_id,
+    queries,
     attachments,
     attachment_types,
     options,
@@ -304,6 +312,18 @@ def prompt(
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
+
+    if queries and not model_id:
+        # Use -q options to find model with shortest model_id
+        matches = []
+        for model_with_aliases in get_models_with_aliases():
+            if all(model_with_aliases.matches(q) for q in queries):
+                matches.append(model_with_aliases.model.model_id)
+        if not matches:
+            raise click.ClickException(
+                "No model found matching queries {}".format(", ".join(queries))
+            )
+        model_id = min(matches, key=len)
 
     if schema_multi:
         schema_input = schema_multi
@@ -377,6 +397,17 @@ def prompt(
             to_save["extract_last"] = True
         if schema:
             to_save["schema_object"] = schema
+        if options:
+            # Need to validate and convert their types first
+            model = get_model(model_id or get_default_model())
+            try:
+                to_save["options"] = dict(
+                    (key, value)
+                    for key, value in model.Options(**dict(options))
+                    if value is not None
+                )
+            except pydantic.ValidationError as ex:
+                raise click.ClickException(render_errors(ex.errors()))
         path.write_text(
             yaml.dump(
                 to_save,
@@ -399,10 +430,21 @@ def prompt(
         if template_obj.schema_object:
             schema = template_obj.schema_object
         input_ = ""
+        if template_obj.options:
+            # Make options mutable (they start as a tuple)
+            options = list(options)
+            # Load any options, provided they were not set using -o already
+            specified_options = dict(options)
+            for option_name, option_value in template_obj.options.items():
+                if option_name not in specified_options:
+                    options.append((option_name, option_value))
         if "input" in template_obj.vars():
             input_ = read_prompt()
         try:
-            prompt, system = template_obj.evaluate(input_, params)
+            template_prompt, system = template_obj.evaluate(input_, params)
+            if template_prompt:
+                # Over-ride user prompt only if the template provided one
+                prompt = template_prompt
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
@@ -451,6 +493,12 @@ def prompt(
             )
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
+
+    # Add on any default model options
+    default_options = get_model_options(model_id)
+    for key_, value in default_options.items():
+        if key_ not in validated_options:
+            validated_options[key_] = value
 
     kwargs = {**validated_options}
 
@@ -1093,48 +1141,40 @@ def logs_list(
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
+    rows = list(
+        db.query(
+            final_sql,
+            {
+                "model": model_id,
+                "query": query,
+                "conversation_id": conversation_id,
+                "schema_id": schema_id,
+                "id_gt": id_gt,
+                "id_gte": id_gte,
+            },
+        )
+    )
 
-    # Fetch the rows from the database
-    query_params = {
-        "model": model_id,
-        "query": query,
-        "conversation_id": conversation_id,
-        "schema_id": schema_id,
-        "id_gt": id_gt,
-        "id_gte": id_gte,
-    }
-
-    # Instead of processing the rows directly, use Response.from_row()
-    responses = []
-    for row in db.query(final_sql, query_params):
-        try:
-            response_obj = Response.from_row(db, row)
-            responses.append(response_obj)
-        except Exception as e:
-            click.echo(
-                f"Warning: Error processing row {row.get('id')}: {str(e)}", err=True
-            )
-            raise
-
-    # Reverse the order if not a search query to display in chronological order
+    # Reverse the order - we do this because we 'order by id desc limit 3' to get the
+    # 3 most recent results, but we still want to display them in chronological order
+    # ... except for searches where we don't do this
     if not query and not data:
-        responses.reverse()
+        rows.reverse()
 
     # Fetch any attachments
-    ids = [response.id for response in responses]
+    ids = [row["id"] for row in rows]
     attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
-    # Process the data options
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
         to_output = []
-        for response_obj in responses:
-            response_text = response_obj.text()
+        for row in rows:
+            response = row["response"] or ""
             try:
-                decoded = json.loads(response_text)
+                decoded = json.loads(response)
                 new_items = []
                 if (
                     isinstance(decoded, dict)
@@ -1147,274 +1187,164 @@ def logs_list(
                     new_items.append(decoded)
                 if data_ids:
                     for item in new_items:
-                        item[find_unused_key(item, "response_id")] = response_obj.id
-                        item[find_unused_key(item, "conversation_id")] = (
-                            response_obj.conversation.id
-                            if response_obj.conversation
-                            else None
-                        )
+                        item[find_unused_key(item, "response_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row["id"]
                 to_output.extend(new_items)
             except ValueError:
                 pass
         click.echo(output_rows_as_json(to_output, not data_array))
         return
 
-    # Handle extraction options
-    if extract or extract_last:
-        # Extract and return first code block
-        for response_obj in responses:
-            output = extract_fenced_code_block(response_obj.text(), last=extract_last)
-            if output is not None:
-                click.echo(output)
-                return
-        return
+    for row in rows:
+        if truncate:
+            row["prompt"] = truncate_string(row["prompt"] or "")
+            row["response"] = truncate_string(row["response"] or "")
+        # Either decode or remove all JSON keys
+        keys = list(row.keys())
+        for key in keys:
+            if key.endswith("_json") and row[key] is not None:
+                if truncate:
+                    del row[key]
+                else:
+                    row[key] = json.loads(row[key])
 
-    # Handle response-only output
-    if response:
-        # Just output the last response
-        if responses:
-            click.echo(responses[-1].text())
-        return
-
-    # Process JSON output
+    output = None
     if json_output:
-        output_list = []
-        for response_obj in responses:
-            response_dict = {
-                "id": response_obj.id,
-                "model": response_obj.model.model_id if response_obj.model else None,
-                "prompt": response_obj.prompt.prompt,
-                "system": response_obj.prompt.system,
-                "response": response_obj.text(),
-                "conversation_id": (
-                    response_obj.conversation.id if response_obj.conversation else None
-                ),
-                "datetime_utc": response_obj.datetime_utc(),
-                "input_tokens": response_obj.input_tokens,
-                "output_tokens": response_obj.output_tokens,
-                "token_details": response_obj.token_details,
-            }
-
-            # Add prompt_json and response_json if available
-            if hasattr(response_obj, "_prompt_json") and response_obj._prompt_json:
-                response_dict["prompt_json"] = response_obj._prompt_json
-            if hasattr(response_obj, "response_json") and response_obj.response_json:
-                response_dict["response_json"] = response_obj.response_json
-
-            # Add conversation name and model if conversation exists
-            if response_obj.conversation:
-                response_dict["conversation_name"] = response_obj.conversation.name
-                response_dict["conversation_model"] = (
-                    response_obj.conversation.model.model_id
-                    if response_obj.conversation.model
-                    else None
-                )
-
-            # Add attachments
-            response_dict["attachments"] = [
+        # Output as JSON if requested
+        for row in rows:
+            row["attachments"] = [
                 {k: v for k, v in attachment.items() if k != "response_id"}
-                for attachment in attachments_by_id.get(response_obj.id, [])
+                for attachment in attachments_by_id.get(row["id"], [])
             ]
+        output = json.dumps(list(rows), indent=2)
+    elif extract or extract_last:
+        # Extract and return first code block
+        for row in rows:
+            output = extract_fenced_code_block(row["response"], last=extract_last)
+            if output is not None:
+                break
+    elif response:
+        # Just output the last response
+        if rows:
+            output = rows[-1]["response"]
 
-            output_list.append(response_dict)
-
-        click.echo(json.dumps(output_list, indent=2))
-        return
-
-    # Handle the regular output format
-    current_system = None
-    should_show_conversation = True
-    for response_obj in responses:
-        if short:
-            system = (
-                _truncate_string(response_obj.prompt.system, 120, end=True)
-                if response_obj.prompt.system
-                else None
-            )
-            prompt = (
-                _truncate_string(response_obj.prompt.prompt, 120, end=True)
-                if response_obj.prompt.prompt
-                else None
-            )
-            cid = response_obj.conversation.id if response_obj.conversation else None
-            response_attachments = attachments_by_id.get(response_obj.id, [])
-
-            obj = {
-                "model": response_obj.model.model_id if response_obj.model else None,
-                "datetime": response_obj.datetime_utc().split(".")[0],
-                "conversation": cid,
-            }
-            if system:
-                obj["system"] = system
-            if prompt:
-                obj["prompt"] = prompt
-            if response_attachments:
-                items = []
-                for attachment in response_attachments:
-                    details = {"type": attachment["type"]}
-                    if attachment.get("path"):
-                        details["path"] = attachment["path"]
-                    if attachment.get("url"):
-                        details["url"] = attachment["url"]
-                    items.append(details)
-                obj["attachments"] = items
-            if usage and (response_obj.input_tokens or response_obj.output_tokens):
-                usage_details = {
-                    "input": response_obj.input_tokens,
-                    "output": response_obj.output_tokens,
+    if output is not None:
+        click.echo(output)
+    else:
+        # Output neatly formatted human-readable logs
+        current_system = None
+        should_show_conversation = True
+        for row in rows:
+            if short:
+                system = truncate_string(
+                    row["system"] or "", 120, normalize_whitespace=True
+                )
+                prompt = truncate_string(
+                    row["prompt"] or "", 120, normalize_whitespace=True, keep_end=True
+                )
+                cid = row["conversation_id"]
+                attachments = attachments_by_id.get(row["id"])
+                obj = {
+                    "model": row["model"],
+                    "datetime": row["datetime_utc"].split(".")[0],
+                    "conversation": cid,
                 }
-                if response_obj.token_details:
-                    usage_details["details"] = response_obj.token_details
-                obj["usage"] = usage_details
-            click.echo(yaml.dump([obj], sort_keys=False).strip())
-            continue
-
-        # Full output format
-        click.echo(
-            "# {}{}\n{}".format(
-                response_obj.datetime_utc().split(".")[0],
-                (
-                    "    conversation: {} id: {}".format(
-                        (
-                            response_obj.conversation.id
-                            if response_obj.conversation
-                            else None
-                        ),
-                        response_obj.id,
-                    )
-                    if should_show_conversation
-                    else ""
-                ),
-                (
-                    "\nModel: **{}**\n".format(
-                        response_obj.model.model_id if response_obj.model else None
-                    )
-                    if should_show_conversation
-                    else ""
-                ),
-            )
-        )
-        # In conversation log mode only show it for the first one
-        if conversation_id:
-            should_show_conversation = False
-        click.echo("## Prompt\n\n{}".format(response_obj.prompt.prompt or "-- none --"))
-        if response_obj.prompt.system != current_system:
-            if response_obj.prompt.system is not None:
-                click.echo("\n## System\n\n{}".format(response_obj.prompt.system))
-            current_system = response_obj.prompt.system
-
-        # Handle schema if present
-        if response_obj.prompt.schema:
+                if system:
+                    obj["system"] = system
+                if prompt:
+                    obj["prompt"] = prompt
+                if attachments:
+                    items = []
+                    for attachment in attachments:
+                        details = {"type": attachment["type"]}
+                        if attachment.get("path"):
+                            details["path"] = attachment["path"]
+                        if attachment.get("url"):
+                            details["url"] = attachment["url"]
+                        items.append(details)
+                    obj["attachments"] = items
+                if usage and (row["input_tokens"] or row["output_tokens"]):
+                    usage_details = {
+                        "input": row["input_tokens"],
+                        "output": row["output_tokens"],
+                    }
+                    if row["token_details"]:
+                        usage_details["details"] = json.loads(row["token_details"])
+                    obj["usage"] = usage_details
+                click.echo(yaml.dump([obj], sort_keys=False).strip())
+                continue
             click.echo(
-                "\n## Schema\n\n```json\n{}\n```".format(
-                    json.dumps(response_obj.prompt.schema, indent=2)
+                "# {}{}\n{}".format(
+                    row["datetime_utc"].split(".")[0],
+                    (
+                        "    conversation: {} id: {}".format(
+                            row["conversation_id"], row["id"]
+                        )
+                        if should_show_conversation
+                        else ""
+                    ),
+                    (
+                        "\nModel: **{}**\n".format(row["model"])
+                        if should_show_conversation
+                        else ""
+                    ),
                 )
             )
-
-        # Handle attachments
-        response_attachments = attachments_by_id.get(response_obj.id, [])
-        if response_attachments:
-            click.echo("\n### Attachments\n")
-            for i, attachment in enumerate(response_attachments, 1):
-                if attachment["path"]:
-                    path = attachment["path"]
-                    click.echo("{}. **{}**: `{}`".format(i, attachment["type"], path))
-                elif attachment["url"]:
-                    click.echo(
-                        "{}. **{}**: {}".format(
-                            i, attachment["type"], attachment["url"]
-                        )
+            # In conversation log mode only show it for the first one
+            if conversation_id:
+                should_show_conversation = False
+            click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
+            if row["system"] != current_system:
+                if row["system"] is not None:
+                    click.echo("\n## System\n\n{}".format(row["system"]))
+                current_system = row["system"]
+            if row["schema_json"]:
+                click.echo(
+                    "\n## Schema\n\n```json\n{}\n```".format(
+                        json.dumps(row["schema_json"], indent=2)
                     )
-                elif attachment["content_length"]:
-                    click.echo(
-                        "{}. **{}**: `<{} bytes>`".format(
-                            i,
-                            attachment["type"],
-                            f"{attachment['content_length']:,}",
+                )
+            attachments = attachments_by_id.get(row["id"])
+            if attachments:
+                click.echo("\n### Attachments\n")
+                for i, attachment in enumerate(attachments, 1):
+                    if attachment["path"]:
+                        path = attachment["path"]
+                        click.echo(
+                            "{}. **{}**: `{}`".format(i, attachment["type"], path)
                         )
-                    )
+                    elif attachment["url"]:
+                        click.echo(
+                            "{}. **{}**: {}".format(
+                                i, attachment["type"], attachment["url"]
+                            )
+                        )
+                    elif attachment["content_length"]:
+                        click.echo(
+                            "{}. **{}**: `<{} bytes>`".format(
+                                i,
+                                attachment["type"],
+                                f"{attachment['content_length']:,}",
+                            )
+                        )
 
-        # Handle response output
-        response_text = response_obj.text()
-        # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
-        if response_obj.prompt.schema:
-            try:
-                parsed = json.loads(response_text)
-                response_text = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
-            except ValueError:
-                pass
-
-        if response_obj.annotations:
-            response_text = format_chunks(response_obj.chunks())
-
-        click.echo("\n## Response\n\n{}\n".format(response_text))
-
-        # Handle token usage
-        if usage and (response_obj.input_tokens or response_obj.output_tokens):
-            token_usage = token_usage_string(
-                response_obj.input_tokens,
-                response_obj.output_tokens,
-                response_obj.token_details,
-            )
-            if token_usage:
-                click.echo("## Token usage:\n\n{}\n".format(token_usage))
-
-
-def format_chunks(chunks: Iterable[Chunk]) -> str:
-    """
-    Format a list of Chunk objects into a structured text with annotations.
-
-    Args:
-        chunks: A list of Chunk objects containing text and metadata
-
-    Returns:
-        A formatted string with annotations listed at the end
-    """
-    result = ""
-    annotations = []
-    annotation_index = 1
-
-    # First pass to collect all text and mark positions for annotations
-    combined_text = ""
-    annotation_positions = []
-
-    for chunk in chunks:
-        # Add the chunk text to the combined text
-        start_pos = len(combined_text)
-        combined_text += chunk.text
-        end_pos = len(combined_text)
-
-        if chunk.annotation:
-            annotation_positions.append(
-                {
-                    "start": start_pos,
-                    "end": end_pos,
-                    "data": chunk.annotation,
-                    "index": annotation_index,
-                }
-            )
-            annotation_index += 1
-
-    # Second pass to build the result with annotation markers
-    result = combined_text
-
-    # Sort annotations in reverse order to avoid messing up indices when inserting
-    for pos in sorted(annotation_positions, key=lambda x: x["end"], reverse=True):
-        # Store the annotation data
-        annotation_data = textwrap.indent(json.dumps(pos["data"], indent=2), "  ")
-        annotations.append(f"  [{pos['index']}]\n{annotation_data}")
-
-        # Insert the annotation marker at the end of the chunk
-        annotation_marker = f" 「{result[pos['start']:pos['end']]}」[{pos['index']}]"
-        result = result[: pos["end"]] + annotation_marker + result[pos["end"] :]
-
-    annotations.reverse()
-
-    # Add annotations section if there are any
-    if annotations:
-        result += "\n\n### Annotations\n\n" + "\n\n".join(annotations)
-
-    return result
+            # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
+            response = row["response"]
+            if row["schema_json"]:
+                try:
+                    parsed = json.loads(response)
+                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
+                except ValueError:
+                    pass
+            click.echo("\n## Response\n\n{}\n".format(response))
+            if usage:
+                token_usage = token_usage_string(
+                    row["input_tokens"],
+                    row["output_tokens"],
+                    json.loads(row["token_details"]) if row["token_details"] else None,
+                )
+                if token_usage:
+                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
 
 
 @cli.group(
@@ -1567,6 +1497,54 @@ def templates_list():
         for name, prompt in sorted(pairs):
             text = fmt.format(name=name, prompt=prompt)
             click.echo(display_truncated(text))
+
+
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified prompt template"
+    template = load_template(name)
+    click.echo(
+        yaml.dump(
+            dict((k, v) for k, v in template.model_dump().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified prompt template using the default $EDITOR"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=path)
+    # Validate that template
+    load_template(name)
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output the path to the templates directory"
+    click.echo(template_dir())
+
+
+@templates.command(name="loaders")
+def templates_loaders():
+    "Show template loaders registered by plugins"
+    found = False
+    for prefix, loader in get_template_loaders().items():
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No template loaders found")
 
 
 @cli.group(
@@ -1805,39 +1783,6 @@ def display_truncated(text):
         return text[: console_width - 3] + "..."
     else:
         return text
-
-
-@templates.command(name="show")
-@click.argument("name")
-def templates_show(name):
-    "Show the specified prompt template"
-    template = load_template(name)
-    click.echo(
-        yaml.dump(
-            dict((k, v) for k, v in template.model_dump().items() if v is not None),
-            indent=4,
-            default_flow_style=False,
-        )
-    )
-
-
-@templates.command(name="edit")
-@click.argument("name")
-def templates_edit(name):
-    "Edit the specified prompt template using the default $EDITOR"
-    # First ensure it exists
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        path.write_text(DEFAULT_TEMPLATE, "utf-8")
-    click.edit(filename=path)
-    # Validate that template
-    load_template(name)
-
-
-@templates.command(name="path")
-def templates_path():
-    "Output the path to the templates directory"
-    click.echo(template_dir())
 
 
 @cli.command()
@@ -2432,23 +2377,147 @@ def collections_delete(collection, database):
     collection_obj.delete()
 
 
+@models.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def options():
+    "Manage default options for models"
+
+
+@options.command(name="list")
+def options_list():
+    """
+    List default options for all models
+
+    Example usage:
+
+    \b
+        llm models options list
+    """
+    options = get_all_model_options()
+    if not options:
+        click.echo("No default options set for any models.", err=True)
+        return
+
+    for model_id, model_options in options.items():
+        click.echo(f"{model_id}:")
+        for key, value in model_options.items():
+            click.echo(f"  {key}: {value}")
+
+
+@options.command(name="show")
+@click.argument("model")
+def options_show(model):
+    """
+    List default options set for a specific model
+
+    Example usage:
+
+    \b
+        llm models options show gpt-4o
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    options = get_model_options(model_id)
+    if not options:
+        click.echo(f"No default options set for model '{model_id}'.", err=True)
+        return
+
+    for key, value in options.items():
+        click.echo(f"{key}: {value}")
+
+
+@options.command(name="set")
+@click.argument("model")
+@click.argument("key")
+@click.argument("value")
+def options_set(model, key, value):
+    """
+    Set a default option for a model
+
+    Example usage:
+
+    \b
+        llm models options set gpt-4o temperature 0.5
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+
+        # Validate option against model schema
+        try:
+            # Create a test Options object to validate
+            test_options = {key: value}
+            model_obj.Options(**test_options)
+        except pydantic.ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    set_model_option(model_id, key, value)
+    click.echo(f"Set default option {key}={value} for model {model_id}", err=True)
+
+
+@options.command(name="clear")
+@click.argument("model")
+@click.argument("key", required=False)
+def options_clear(model, key):
+    """
+    Clear default option(s) for a model
+
+    Example usage:
+
+    \b
+        llm models options clear gpt-4o
+        # Or for a single option
+        llm models options clear gpt-4o temperature
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    cleared_keys = []
+    if not key:
+        cleared_keys = list(get_model_options(model_id).keys())
+        for key_ in cleared_keys:
+            clear_model_option(model_id, key_)
+    else:
+        cleared_keys.append(key)
+        clear_model_option(model_id, key)
+    if cleared_keys:
+        if len(cleared_keys) == 1:
+            click.echo(f"Cleared option '{cleared_keys[0]}' for model {model_id}")
+        else:
+            click.echo(
+                f"Cleared {', '.join(cleared_keys)} options for model {model_id}"
+            )
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def _truncate_string(s, max_length=100, end=False):
-    if not s:
-        return s
-    if end:
-        s = re.sub(r"\s+", " ", s)
-        if len(s) <= max_length:
-            return s
-        return s[: max_length - 3] + "..."
-    if len(s) <= max_length:
-        return s
-    return s[: max_length - 3] + "..."
 
 
 def logs_db_path():
@@ -2456,6 +2525,19 @@ def logs_db_path():
 
 
 def load_template(name):
+    if ":" in name:
+        prefix, rest = name.split(":", 1)
+        loaders = get_template_loaders()
+        if prefix not in loaders:
+            raise click.ClickException("Unknown template prefix: {}".format(prefix))
+        loader = loaders[prefix]
+        try:
+            return loader(rest)
+        except Exception as ex:
+            raise click.ClickException(
+                "Could not load template {}: {}".format(name, ex)
+            )
+
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise click.ClickException(f"Invalid template: {name}")
@@ -2522,3 +2604,98 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def get_all_model_options() -> dict:
+    """
+    Get all default options for all models
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options
+
+
+def get_model_options(model_id: str) -> dict:
+    """
+    Get default options for a specific model
+
+    Args:
+        model_id: Return options for model with this ID
+
+    Returns:
+        A dictionary of model options
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options.get(model_id, {})
+
+
+def set_model_option(model_id: str, key: str, value: Any) -> None:
+    """
+    Set a default option for a model.
+
+    Args:
+        model_id: The model ID
+        key: The option key
+        value: The option value
+    """
+    path = user_dir() / "model_options.json"
+    if path.exists():
+        try:
+            options = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            options = {}
+    else:
+        options = {}
+
+    # Ensure the model has an entry
+    if model_id not in options:
+        options[model_id] = {}
+
+    # Set the option
+    options[model_id][key] = value
+
+    # Save the options
+    path.write_text(json.dumps(options, indent=2))
+
+
+def clear_model_option(model_id: str, key: str) -> None:
+    """
+    Clear a model option
+
+    Args:
+        model_id: The model ID
+        key: Key to clear
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return
+
+    if model_id not in options:
+        return
+
+    if key in options[model_id]:
+        del options[model_id][key]
+        if not options[model_id]:
+            del options[model_id]
+
+    path.write_text(json.dumps(options, indent=2))

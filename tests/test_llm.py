@@ -425,6 +425,25 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+@pytest.mark.parametrize(
+    "args,exit_code",
+    (
+        (["-q", "mo", "-q", "ck"], 0),
+        (["-q", "mock"], 0),
+        (["-q", "badmodel"], 1),
+        (["-q", "mock", "-q", "badmodel"], 1),
+    ),
+)
+def test_prompt_select_model_with_queries(mock_model, user_path, args, exit_code):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        args + ["hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == exit_code
+
+
 EXPECTED_OPTIONS = """
 OpenAI Chat: gpt-4o (aliases: 4o)
   Options:
@@ -458,7 +477,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
 """
 
 

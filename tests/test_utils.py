@@ -1,5 +1,10 @@
 import pytest
-from llm.utils import simplify_usage_dict, extract_fenced_code_block, schema_dsl
+from llm.utils import (
+    simplify_usage_dict,
+    extract_fenced_code_block,
+    truncate_string,
+    schema_dsl,
+)
 
 
 @pytest.mark.parametrize(
@@ -39,6 +44,7 @@ from llm.utils import simplify_usage_dict, extract_fenced_code_block, schema_dsl
     ],
 )
 def test_simplify_usage_dict(input_data, expected_output):
+    # This utility function is used by at least one plugin - llm-openai-plugin
     assert simplify_usage_dict(input_data) == expected_output
 
 
@@ -233,3 +239,91 @@ def test_schema_dsl_multi():
         },
         "required": ["items"],
     }
+
+
+@pytest.mark.parametrize(
+    "text, max_length, normalize_whitespace, keep_end, expected",
+    [
+        # Basic truncation tests
+        ("Hello, world!", 100, False, False, "Hello, world!"),
+        ("Hello, world!", 5, False, False, "He..."),
+        ("", 10, False, False, ""),
+        (None, 10, False, False, None),
+        # Normalize whitespace tests
+        ("Hello   world!", 100, True, False, "Hello world!"),
+        ("Hello \n\t world!", 100, True, False, "Hello world!"),
+        ("Hello   world!", 5, True, False, "He..."),
+        # Keep end tests
+        ("Hello, world!", 10, False, True, "He... d!"),
+        ("Hello, world!", 7, False, False, "Hell..."),  # Now using regular truncation
+        ("1234567890", 7, False, False, "1234..."),  # Now using regular truncation
+        # Combinations of parameters
+        ("Hello   world!", 10, True, True, "He... d!"),
+        # Note: After normalization, "Hello world!" is exactly 12 chars, so no truncation
+        ("Hello \n\t world!", 12, True, True, "Hello world!"),
+        # Edge cases
+        ("12345", 5, False, False, "12345"),
+        ("123456", 5, False, False, "12..."),
+        ("12345", 5, False, True, "12345"),  # Unchanged for exact fit
+        ("123456", 5, False, False, "12..."),  # Regular truncation for small max_length
+        # Very long string
+        ("A" * 200, 10, False, False, "AAAAAAA..."),
+        ("A" * 200, 10, False, True, "AA... AA"),  # keep_end with adequate length
+        # Exact boundary cases
+        ("123456789", 9, False, False, "123456789"),  # Exact fit
+        ("1234567890", 9, False, False, "123456..."),  # Simple truncation
+        ("123456789", 9, False, True, "123456789"),  # Exact fit with keep_end
+        ("1234567890", 9, False, True, "12... 90"),  # keep_end truncation
+        # Minimum sensible length tests for keep_end
+        (
+            "1234567890",
+            8,
+            False,
+            True,
+            "12345...",
+        ),  # Too small for keep_end, use regular
+        ("1234567890", 9, False, True, "12... 90"),  # Just enough for keep_end
+    ],
+)
+def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expected):
+    """Test the truncate_string function with various inputs and parameters."""
+    result = truncate_string(
+        text=text,
+        max_length=max_length,
+        normalize_whitespace=normalize_whitespace,
+        keep_end=keep_end,
+    )
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "text, max_length, keep_end, prefix_len, expected_full",
+    [
+        # Test cases when the length is just right (string fits)
+        ("0123456789", 10, True, None, "0123456789"),
+        # Test cases with enough room for the ellipsis
+        ("012345678901234", 14, True, 4, "0123... 1234"),
+        # Test cases with different cutoffs
+        ("abcdefghijklmnopqrstuvwxyz", 10, True, 2, "ab... yz"),
+        ("abcdefghijklmnopqrstuvwxyz", 12, True, 3, "abc... xyz"),
+        # Test cases below minimum threshold
+        ("abcdefghijklmnopqrstuvwxyz", 8, True, None, "abcde..."),
+    ],
+)
+def test_test_truncate_string_keep_end(
+    text, max_length, keep_end, prefix_len, expected_full
+):
+    """Test the specific behavior of the keep_end parameter."""
+    result = truncate_string(
+        text=text,
+        max_length=max_length,
+        keep_end=keep_end,
+    )
+
+    assert result == expected_full
+
+    # Only check prefix/suffix when we expect truncation with keep_end
+    if prefix_len is not None and len(text) > max_length and max_length >= 9:
+        assert result[:prefix_len] == text[:prefix_len]
+        assert result[-prefix_len:] == text[-prefix_len:]
+        assert "... " in result

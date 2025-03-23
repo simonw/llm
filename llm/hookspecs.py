@@ -18,3 +18,8 @@ def register_models(register):
 @hookspec
 def register_embedding_models(register):
     "Register additional model instances that can be used for embedding"
+
+
+@hookspec
+def register_template_loaders(register):
+    "Register additional template loaders with prefixes"
