@@ -2324,7 +2324,14 @@ def options():
 
 @options.command(name="list")
 def options_list():
-    "List all custom model options"
+    """
+    List default options for all models
+
+    Example usage:
+
+    \b
+        llm models options list
+    """
     options = get_all_model_options()
     if not options:
         click.echo("No default options set for any models.", err=True)
@@ -2339,7 +2346,14 @@ def options_list():
 @options.command(name="show")
 @click.argument("model")
 def options_show(model):
-    "Show options for a specific model"
+    """
+    List default options set for a specific model
+
+    Example usage:
+
+    \b
+        llm models options show gpt-4o
+    """
     import llm
 
     try:
@@ -2364,7 +2378,14 @@ def options_show(model):
 @click.argument("key")
 @click.argument("value")
 def options_set(model, key, value):
-    "Set option for model"
+    """
+    Set a default option for a model
+
+    Example usage:
+
+    \b
+        llm models options set gpt-4o temperature 0.5
+    """
     import llm
 
     try:
@@ -2392,7 +2413,16 @@ def options_set(model, key, value):
 @click.argument("model")
 @click.argument("key", required=False)
 def options_clear(model, key):
-    "Clear option(s) for model"
+    """
+    Clear default option(s) for a model
+
+    Example usage:
+
+    \b
+        llm models options clear gpt-4o
+        # Or for a single option
+        llm models options clear gpt-4o temperature
+    """
     import llm
 
     try:

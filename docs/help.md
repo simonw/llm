@@ -376,10 +376,10 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  List all custom model options
-  clear  Clear option(s) for model
-  set    Set option for model
-  show   Show options for a specific model
+  list*  List default options for all models
+  clear  Clear default option(s) for a model
+  set    Set a default option for a model
+  show   List default options set for a specific model
 ```
 
 (help-models-options-list)=
@@ -387,7 +387,11 @@ Commands:
 ```
 Usage: llm models options list [OPTIONS]
 
-  List all custom model options
+  List default options for all models
+
+  Example usage:
+
+      llm models options list
 
 Options:
   --help  Show this message and exit.
@@ -398,7 +402,11 @@ Options:
 ```
 Usage: llm models options show [OPTIONS] MODEL
 
-  Show options for a specific model
+  List default options set for a specific model
+
+  Example usage:
+
+      llm models options show gpt-4o
 
 Options:
   --help  Show this message and exit.
@@ -409,7 +417,11 @@ Options:
 ```
 Usage: llm models options set [OPTIONS] MODEL KEY VALUE
 
-  Set option for model
+  Set a default option for a model
+
+  Example usage:
+
+      llm models options set gpt-4o temperature 0.5
 
 Options:
   --help  Show this message and exit.
@@ -420,7 +432,13 @@ Options:
 ```
 Usage: llm models options clear [OPTIONS] MODEL [KEY]
 
-  Clear option(s) for model
+  Clear default option(s) for a model
+
+  Example usage:
+
+      llm models options clear gpt-4o
+      # Or for a single option
+      llm models options clear gpt-4o temperature
 
 Options:
   --help  Show this message and exit.
