@@ -146,7 +146,7 @@ def test_templates_error_on_missing_schema(templates_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize(
-    "template,input_text,extra_args,expected_model,expected_input,expected_error",
+    "template,input_text,extra_args,expected_model,expected_input,expected_error,expected_options",
     (
         (
             "'Summarize this: $input'",
@@ -154,6 +154,7 @@ def test_templates_error_on_missing_schema(templates_path):
             [],
             "gpt-4o-mini",
             "Summarize this: Input text",
+            None,
             None,
         ),
         (
@@ -163,6 +164,7 @@ def test_templates_error_on_missing_schema(templates_path):
             "gpt-4",
             "Summarize this: Input text",
             None,
+            None,
         ),
         (
             "prompt: 'Summarize this: $input'",
@@ -170,6 +172,7 @@ def test_templates_error_on_missing_schema(templates_path):
             ["-m", "4"],
             "gpt-4",
             "Summarize this: Input text",
+            None,
             None,
         ),
         pytest.param(
@@ -179,6 +182,7 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             None,
             "Error: Cannot use -t/--template and --system together",
+            None,
             marks=pytest.mark.httpx_mock(),
         ),
         pytest.param(
@@ -188,6 +192,7 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             None,
             "Error: Missing variables: hello",
+            None,
             marks=pytest.mark.httpx_mock(),
         ),
         (
@@ -197,6 +202,7 @@ def test_templates_error_on_missing_schema(templates_path):
             "gpt-4o-mini",
             "Say Blah",
             None,
+            None,
         ),
         (
             "prompt: 'Say pelican'",
@@ -205,10 +211,25 @@ def test_templates_error_on_missing_schema(templates_path):
             "gpt-4o-mini",
             "Say pelican",
             None,
+            None,
         ),
+        # Template with just a system prompt
+        (
+            "system: 'Summarize this'",
+            "Input text",
+            [],
+            "gpt-4o-mini",
+            [
+                {"content": "Summarize this", "role": "system"},
+                {"content": "Input text", "role": "user"},
+            ],
+            None,
+            None,
+        ),
+        # Options
     ),
 )
-def test_template_basic(
+def test_execute_prompt_with_a_template(
     templates_path,
     mocked_openai_chat,
     template,
@@ -217,6 +238,7 @@ def test_template_basic(
     expected_model,
     expected_input,
     expected_error,
+    expected_options,
 ):
     (templates_path / "template.yaml").write_text(template, "utf-8")
     runner = CliRunner()
@@ -227,12 +249,17 @@ def test_template_basic(
         + extra_args,
         catch_exceptions=False,
     )
+    if isinstance(expected_input, str):
+        expected_messages = [{"role": "user", "content": expected_input}]
+    else:
+        expected_messages = expected_input
+
     if expected_error is None:
         assert result.exit_code == 0
         last_request = mocked_openai_chat.get_requests()[-1]
         assert json.loads(last_request.content) == {
             "model": expected_model,
-            "messages": [{"role": "user", "content": expected_input}],
+            "messages": expected_messages,
             "stream": False,
         }
     else:
