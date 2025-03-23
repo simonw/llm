@@ -227,6 +227,25 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
         ),
         # Options
+        (
+            "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
+            "Input text",
+            [],
+            "gpt-4o-mini",
+            "Summarize this: Input text",
+            None,
+            {"temperature": 0.5},
+        ),
+        # Should be over-ridden by CLI
+        (
+            "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
+            "Input text",
+            ["-o", "temperature", "0.7"],
+            "gpt-4o-mini",
+            "Summarize this: Input text",
+            None,
+            {"temperature": 0.7},
+        ),
     ),
 )
 def test_execute_prompt_with_a_template(
@@ -257,11 +276,14 @@ def test_execute_prompt_with_a_template(
     if expected_error is None:
         assert result.exit_code == 0
         last_request = mocked_openai_chat.get_requests()[-1]
-        assert json.loads(last_request.content) == {
+        expected_data = {
             "model": expected_model,
             "messages": expected_messages,
             "stream": False,
         }
+        if expected_options:
+            expected_data.update(expected_options)
+        assert json.loads(last_request.content) == expected_data
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
