@@ -9,6 +9,7 @@ class Template(BaseModel):
     system: Optional[str] = None
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
+    options: Optional[Dict[str, Any]] = None
     # Should a fenced code block be extracted?
     extract: Optional[bool] = None
     extract_last: Optional[bool] = None
