@@ -64,6 +64,15 @@ See [the OpenAI models documentation](https://platform.openai.com/docs/models) f
 
 [o1-pro](https://platform.openai.com/docs/models/o1-pro) is not available  through the Chat Completions API used by LLM's default OpenAI plugin. You can install the new [llm-openai-plugin](https://github.com/simonw/llm-openai-plugin) plugin to access that model.
 
+## Model features
+
+The following features work with OpenAI models:
+
+- {ref}`System prompts <usage-system-prompts>` can be used to provide instructions that have a higher weight than the prompt itself.
+- {ref}`Attachments <usage-attachments>`. Many OpenAI models support image inputs - check which ones using `llm models --options`. Any model that accepts images can also accept PDFs.
+- {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
+- {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
+
 (openai-models-embedding)=
 
 ## OpenAI embedding models

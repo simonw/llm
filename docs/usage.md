@@ -45,6 +45,7 @@ Will run a prompt of:
 ```
 For models that support them, {ref}`system prompts <usage-system-prompts>` are a better tool for this kind of prompting.
 
+(usage-model-options)=
 ### Model options
 
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
