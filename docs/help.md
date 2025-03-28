@@ -663,7 +663,7 @@ Usage: llm fragments [OPTIONS] COMMAND [ARGS]...
   Manage fragments that are stored in the database
 
   Fragments are reusable snippets of text that are shared across multiple
-  responses.
+  prompts.
 
 Options:
   --help  Show this message and exit.
