@@ -58,6 +58,7 @@ import base64
 import httpx
 import pathlib
 import pydantic
+import re
 import readline
 from runpy import run_module
 import shutil
@@ -76,6 +77,12 @@ DEFAULT_TEMPLATE = "prompt: "
 
 class FragmentNotFound(Exception):
     pass
+
+
+def validate_fragment_alias(ctx, param, value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
+        raise click.BadParameter("Fragment alias must be alphanumeric")
+    return value
 
 
 def resolve_fragments(
@@ -1967,7 +1974,7 @@ def fragments_list(queries, json_):
 
 
 @fragments.command(name="set")
-@click.argument("alias")
+@click.argument("alias", callback=validate_fragment_alias)
 @click.argument("fragment")
 def fragments_set(alias, fragment):
     """
@@ -1998,7 +2005,7 @@ def fragments_set(alias, fragment):
 
 
 @fragments.command(name="remove")
-@click.argument("alias")
+@click.argument("alias", callback=validate_fragment_alias)
 def fragments_remove(alias):
     """
     Remove a fragment alias
