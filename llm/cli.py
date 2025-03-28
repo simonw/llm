@@ -1912,7 +1912,11 @@ def aliases_path():
     default_if_no_args=True,
 )
 def fragments():
-    "Manage fragments"
+    """
+    Manage fragments that are stored in the database
+
+    Fragments are reusable snippets of text that are shared across multiple prompts.
+    """
 
 
 @fragments.command(name="list")

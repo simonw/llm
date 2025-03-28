@@ -71,7 +71,7 @@ Commands:
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once in the...
-  fragments     Manage fragments
+  fragments     Manage fragments that are stored in the database
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -660,7 +660,10 @@ Options:
 ```
 Usage: llm fragments [OPTIONS] COMMAND [ARGS]...
 
-  Manage fragments
+  Manage fragments that are stored in the database
+
+  Fragments are reusable snippets of text that are shared across multiple
+  responses.
 
 Options:
   --help  Show this message and exit.
