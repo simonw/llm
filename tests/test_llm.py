@@ -117,8 +117,8 @@ def test_llm_default_prompt(
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
+        "choices": [{"message": {"content": {"$": "response"}}}],
         "model": "gpt-4o-mini",
-        "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
 
     # Test "llm logs"
@@ -143,7 +143,7 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             "response_json": {
                 "model": "gpt-4o-mini",
-                "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+                "choices": [{"message": {"content": {"$": "response"}}}],
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
@@ -326,7 +326,7 @@ def test_openai_completion_logprobs_stream(
     assert len(rows) == 1
     row = rows[0]
     assert json.loads(row["response_json"]) == {
-        "content": "\n\nHi.",
+        "content": {"$": "response"},
         "logprobs": [
             {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
             {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
@@ -379,7 +379,7 @@ def test_openai_completion_logprobs_nostream(
                         {"!": -1.1, ".": -0.9},
                     ],
                 },
-                "text": "\n\nHi.",
+                "text": {"$": "response"},
             }
         ],
         "created": 1695097747,

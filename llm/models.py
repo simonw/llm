@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from condense_json import condense_json, uncondense_json
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
@@ -365,8 +366,9 @@ class _BaseResponse:
             ),
             stream=False,
         )
+        prompt_json = json.loads(row["prompt_json"] or "null")
         response.id = row["id"]
-        response._prompt_json = json.loads(row["prompt_json"] or "null")
+        response._prompt_json = prompt_json
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
         response._chunks = [row["response"]]
@@ -410,19 +412,45 @@ class _BaseResponse:
             db["schemas"].insert({"id": schema_id, "content": schema_json}, ignore=True)
 
         response_id = str(ULID()).lower()
+        replacements = {}
+        # Persist any fragments
+        for i, fragment in enumerate(self.prompt.fragments):
+            fragment_id = ensure_fragment(db, fragment)
+            replacements[fragment_id] = fragment
+            db["prompt_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "order": i,
+                },
+            )
+        for i, fragment in enumerate(self.prompt.system_fragments):
+            fragment_id = ensure_fragment(db, fragment)
+            replacements[fragment_id] = fragment
+            db["system_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "order": i,
+                },
+            )
+
+        # Persist the response itself
+        response_text = self.text_or_raise()
+        json_data = self.json()
         response = {
             "id": response_id,
             "model": self.model.model_id,
             "prompt": self.prompt._prompt,
             "system": self.prompt._system,
-            "prompt_json": self._prompt_json,
+            "prompt_json": condense_json(self._prompt_json, replacements),
             "options_json": {
                 key: value
                 for key, value in dict(self.prompt.options).items()
                 if value is not None
             },
-            "response": self.text_or_raise(),
-            "response_json": self.json(),
+            "response": response_text,
+            "response_json": condense_json(json_data, {"response": response_text}),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
@@ -434,25 +462,7 @@ class _BaseResponse:
             "schema_id": schema_id,
         }
         db["responses"].insert(response)
-        # Persist any fragments
-        for i, fragment in enumerate(self.prompt.fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            db["prompt_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-        for i, fragment in enumerate(self.prompt.system_fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            db["system_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
+
         # Persist any attachments - loop through with index
         for index, attachment in enumerate(self.prompt.attachments):
             attachment_id = attachment.id()
