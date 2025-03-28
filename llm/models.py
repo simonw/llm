@@ -152,25 +152,6 @@ class Prompt:
         ]
         return "\n\n".join(bits)
 
-    @classmethod
-    def from_row(cls, db, row, model):
-        all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
-        fragments = [
-            row["content"] for row in all_fragments if row["fragment_type"] == "prompt"
-        ]
-        system_fragments = [
-            row["content"] for row in all_fragments if row["fragment_type"] == "system"
-        ]
-        return cls(
-            prompt=row["prompt"],
-            model=model,
-            fragments=fragments,
-            attachments=[],
-            system=row["system"],
-            system_fragments=system_fragments,
-            options=model.Options(**json.loads(row["options_json"])),
-        )
-
 
 @dataclass
 class _BaseConversation:
@@ -363,9 +344,25 @@ class _BaseResponse:
         if row["schema_id"]:
             schema = json.loads(db["schemas"].get(row["schema_id"])["content"])
 
+        all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
+        fragments = [
+            row["content"] for row in all_fragments if row["fragment_type"] == "prompt"
+        ]
+        system_fragments = [
+            row["content"] for row in all_fragments if row["fragment_type"] == "system"
+        ]
         response = cls(
             model=model,
-            prompt=Prompt.from_row(db, row, model),
+            prompt=Prompt(
+                prompt=row["prompt"],
+                model=model,
+                fragments=fragments,
+                attachments=[],
+                system=row["system"],
+                schema=schema,
+                system_fragments=system_fragments,
+                options=model.Options(**json.loads(row["options_json"])),
+            ),
             stream=False,
         )
         response.id = row["id"]
