@@ -413,10 +413,20 @@ class _BaseResponse:
 
         response_id = str(ULID()).lower()
         replacements = {}
-        # Persist any fragments
+        # Include replacements from previous responses
+        for previous_response in conversation.responses[:-1]:
+            for fragment in (previous_response.prompt.fragments or []) + (
+                previous_response.prompt.system_fragments or []
+            ):
+                fragment_id = ensure_fragment(db, fragment)
+                replacements[f"f:{fragment_id}"] = fragment
+                replacements[f"r:{previous_response.id}"] = (
+                    previous_response.text_or_raise()
+                )
+
         for i, fragment in enumerate(self.prompt.fragments):
             fragment_id = ensure_fragment(db, fragment)
-            replacements[fragment_id] = fragment
+            replacements[f"f{fragment_id}"] = fragment
             db["prompt_fragments"].insert(
                 {
                     "response_id": response_id,
@@ -426,7 +436,7 @@ class _BaseResponse:
             )
         for i, fragment in enumerate(self.prompt.system_fragments):
             fragment_id = ensure_fragment(db, fragment)
-            replacements[fragment_id] = fragment
+            replacements[f"f{fragment_id}"] = fragment
             db["system_fragments"].insert(
                 {
                     "response_id": response_id,
@@ -435,8 +445,8 @@ class _BaseResponse:
                 },
             )
 
-        # Persist the response itself
         response_text = self.text_or_raise()
+        replacements[f"r:{response_id}"] = response_text
         json_data = self.json()
         response = {
             "id": response_id,
@@ -450,7 +460,7 @@ class _BaseResponse:
                 if value is not None
             },
             "response": response_text,
-            "response_json": condense_json(json_data, {"response": response_text}),
+            "response_json": condense_json(json_data, replacements),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
