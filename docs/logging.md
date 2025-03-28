@@ -236,7 +236,10 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments"):
+for table in (
+    "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
+    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments"
+):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -287,6 +290,31 @@ CREATE TABLE [prompt_attachments] (
   [order] INTEGER,
   PRIMARY KEY ([response_id],
   [attachment_id])
+);
+CREATE TABLE [fragments] (
+  [id] INTEGER PRIMARY KEY,
+  [hash] TEXT,
+  [content] TEXT,
+  [datetime_utc] TEXT,
+  [source] TEXT
+);
+CREATE TABLE [fragment_aliases] (
+  [alias] TEXT PRIMARY KEY,
+  [fragment_id] INTEGER REFERENCES [fragments]([id])
+);
+CREATE TABLE [prompt_fragments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_id])
+);
+CREATE TABLE [system_fragments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_id])
 );
 ```
 <!-- [[[end]]] -->

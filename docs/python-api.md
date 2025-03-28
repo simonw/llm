@@ -142,6 +142,32 @@ print(model.prompt(
     schema=llm.schema_dsl("name, age int, bio", multi=True)
 ))
 ```
+
+(python-api-fragments)=
+
+### Fragments
+
+The {ref}`fragment system <usage-fragments>` from the CLI tool can also be accessed from the Python API, by passing `fragments=` and/or `system_fragments=` lists of strings to the `prompt()` method:
+
+```python
+response = model.prompt(
+    "What do these documents say about dogs?",
+    fragments=[
+        open("dogs1.txt").read(),
+        open("dogs2.txt").read(),
+    ],
+    system_fragments=[
+        "You answer questions like Snoopy",
+    ]
+)
+```
+This mechanism has limited utility in Python, as you can also assemble the contents of these strings together into the `prompt=` and `system=` strings directly.
+
+Fragments become more interesting if you are working with LLM's mechanisms for storing prompts to a SQLite database, which are not yet part of the stable, documented Python API.
+
+Some model plugins may include features that take advantage of fragments, for example [llm-anthropic](https://github.com/simonw/llm-anthropic) aims to use them as part of a mechanism that taps into Claude's prompt caching system.
+
+
 (python-api-model-options)=
 
 ### Model options
