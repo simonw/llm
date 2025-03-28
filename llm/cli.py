@@ -2524,7 +2524,28 @@ def logs_db_path():
     return user_dir() / "logs.db"
 
 
+def _parse_yaml_template(name, content):
+    try:
+        loaded = yaml.safe_load(content)
+    except yaml.YAMLError as ex:
+        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
+    if isinstance(loaded, str):
+        return Template(name=name, prompt=loaded)
+    loaded["name"] = name
+    try:
+        return Template(**loaded)
+    except pydantic.ValidationError as ex:
+        msg = "A validation error occurred:\n"
+        msg += render_errors(ex.errors())
+        raise click.ClickException(msg)
+
+
 def load_template(name):
+    if name.startswith("https://") or name.startswith("http://"):
+        response = httpx.get(name)
+        response.raise_for_status()
+        return _parse_yaml_template(name, response.text)
+
     if ":" in name:
         prefix, rest = name.split(":", 1)
         loaders = get_template_loaders()
@@ -2541,19 +2562,8 @@ def load_template(name):
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise click.ClickException(f"Invalid template: {name}")
-    try:
-        loaded = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as ex:
-        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
-    if isinstance(loaded, str):
-        return Template(name=name, prompt=loaded)
-    loaded["name"] = name
-    try:
-        return Template(**loaded)
-    except pydantic.ValidationError as ex:
-        msg = "A validation error occurred:\n"
-        msg += render_errors(ex.errors())
-        raise click.ClickException(msg)
+    content = path.read_text()
+    return _parse_yaml_template(name, content)
 
 
 def get_history(chat_id):
