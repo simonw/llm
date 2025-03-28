@@ -414,11 +414,6 @@ def prompt(
 
     model_aliases = get_model_aliases()
 
-    log_path = logs_db_path()
-    (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-
     def read_prompt():
         nonlocal prompt, schema
 
