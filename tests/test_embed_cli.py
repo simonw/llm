@@ -211,9 +211,21 @@ def test_similar_by_id_cli(user_path_with_embeddings):
     assert json.loads(result.output) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
+
+
+@pytest.mark.parametrize("option", ("-p", "--plain"))
+def test_similar_by_id_cli_output_plain(user_path_with_embeddings, option):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["similar", "demo", "1", option], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    # Replace score with a placeholder
+    output = result.output.split("(")[0] + "(score)" + result.output.split(")")[1]
+    assert output == "2 (score)\n\n  goodbye world\n\n"
 
 
 @pytest.mark.parametrize("scenario", ("argument", "file", "stdin"))
@@ -237,13 +249,13 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
     assert json.loads(lines[0]) == {
         "id": "1",
         "score": pytest.approx(0.9999999999999999),
-        "content": None,
+        "content": "hello world",
         "metadata": None,
     }
     assert json.loads(lines[1]) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
 

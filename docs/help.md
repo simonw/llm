@@ -786,6 +786,7 @@ Options:
   -c, --content TEXT    Content to embed for comparison
   --binary              Treat input as binary data
   -n, --number INTEGER  Number of results to return
+  -p, --plain           Output in plain text format
   -d, --database FILE
   --help                Show this message and exit.
 ```

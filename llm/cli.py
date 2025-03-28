@@ -2215,13 +2215,14 @@ def embed_multi(
 @click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
+@click.option("-p", "--plain", is_flag=True, help="Output in plain text format")
 @click.option(
     "-d",
     "--database",
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, binary, number, database):
+def similar(collection, id, input, content, binary, number, plain, database):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -2272,7 +2273,15 @@ def similar(collection, id, input, content, binary, number, database):
         results = collection_obj.similar(content, number)
 
     for result in results:
-        click.echo(json.dumps(asdict(result)))
+        if plain:
+            click.echo(f"{result.id} ({result.score})\n")
+            if result.content:
+                click.echo(textwrap.indent(result.content, "  "))
+            if result.metadata:
+                click.echo(textwrap.indent(json.dumps(result.metadata), "  "))
+            click.echo("")
+        else:
+            click.echo(json.dumps(asdict(result)))
 
 
 @cli.group(
