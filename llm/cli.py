@@ -105,7 +105,8 @@ def resolve_fragments(
     resolved = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
-            response = httpx.get(fragment, follow_redirects=True)
+            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            response = client.get(fragment)
             response.raise_for_status()
             resolved.append(FragmentString(response.text, fragment))
         elif fragment == "-":
