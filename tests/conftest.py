@@ -84,11 +84,11 @@ class MockModel(llm.Model):
 
 class EchoModel(llm.Model):
     model_id = "echo"
+    can_stream = True
 
     def execute(self, prompt, stream, response, conversation):
-        yield "system:\n{}\n\nprompt:\n{}".format(
-            prompt.system or "", prompt.prompt or ""
-        )
+        yield "system:\n{}\n\n".format(prompt.system or "")
+        yield "prompt:\n{}".format(prompt.prompt or "")
 
 
 class MockKeyModel(llm.KeyModel):
