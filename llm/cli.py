@@ -484,6 +484,10 @@ def prompt(
             to_save["extract_last"] = True
         if schema:
             to_save["schema_object"] = schema
+        if fragments:
+            to_save["fragments"] = list(fragments)
+        if system_fragments:
+            to_save["system_fragments"] = list(system_fragments)
         if options:
             # Need to validate and convert their types first
             model = get_model(model_id or get_default_model())
@@ -514,6 +518,11 @@ def prompt(
         template_obj = load_template(template)
         extract = template_obj.extract
         extract_last = template_obj.extract_last
+        # Combine with template fragments/system_fragments
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
         input_ = ""
