@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from condense_json import condense_json, uncondense_json
+from condense_json import condense_json
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
