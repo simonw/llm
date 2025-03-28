@@ -1961,7 +1961,7 @@ def fragments_list(queries, json_):
             ),
         )
         for result in results:
-            result["content"] = _truncate_string(result["content"])
+            result["content"] = truncate_string(result["content"])
             click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
 
 
