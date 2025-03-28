@@ -133,10 +133,11 @@ Create a file in that directory called `extra-openai-models.yaml`.
 Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
 
 ```yaml
-- model_id: gpt-3.5-turbo-0613
-  aliases: ["0613"]
+- model_id: gpt-4-turbo-2024-04-09
+  model_name: gpt-4-turbo-2024-04-09
+  aliases: ["g4t"]
 ```
-The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
+The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. You must also include the `model_name`.
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
 
