@@ -19,20 +19,28 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
-def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch):
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_creates_log_database(
+    mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
+):
     user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["three names \nfor a pet pelican", "--no-stream", "--key", "x"],
-        catch_exceptions=False,
-    )
+    args = ["three names \nfor a pet pelican", "--no-stream", "--key", "x"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
     # Should have created user_path and put a logs.db in it
-    assert (user_path / "logs.db").exists()
-    assert sqlite_utils.Database(str(user_path / "logs.db"))["responses"].count == 1
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})

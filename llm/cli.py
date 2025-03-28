@@ -181,6 +181,12 @@ def cli():
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use")
 @click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option(
     "queries",
     "-q",
     "--query",
@@ -258,6 +264,7 @@ def prompt(
     prompt,
     system,
     model_id,
+    database,
     queries,
     attachments,
     attachment_types,
@@ -308,7 +315,7 @@ def prompt(
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
-    log_path = logs_db_path()
+    log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
