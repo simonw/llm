@@ -250,8 +250,11 @@ def test_logs_path(monkeypatch, env, user_path):
 
 
 @pytest.mark.parametrize("model", ("davinci", "curie"))
-def test_logs_filtered(user_path, model):
+@pytest.mark.parametrize("path_option", (None, "-p", "--path", "-d", "--database"))
+def test_logs_filtered(user_path, model, path_option):
     log_path = str(user_path / "logs.db")
+    if path_option:
+        log_path = str(user_path / "logs_alternative.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
     db["responses"].insert_all(
@@ -265,7 +268,11 @@ def test_logs_filtered(user_path, model):
         for i in range(100)
     )
     runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-m", model, "--json"])
+    result = runner.invoke(
+        cli,
+        ["logs", "list", "-m", model, "--json"]
+        + ([path_option, log_path] if path_option else []),
+    )
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
     assert all(record["model"] == model for record in records)

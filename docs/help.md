@@ -300,7 +300,7 @@ Usage: llm logs list [OPTIONS]
 Options:
   -n, --count INTEGER         Number of entries to show - defaults to 3, use 0
                               for all
-  -p, --path FILE             Path to log database
+  -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   --schema TEXT               JSON schema, filepath or ID
@@ -542,10 +542,10 @@ Usage: llm schemas list [OPTIONS]
   List stored schemas
 
 Options:
-  -p, --path FILE   Path to log database
-  -q, --query TEXT  Search for schemas matching this string
-  --full            Output full schema contents
-  --help            Show this message and exit.
+  -d, --database FILE  Path to log database
+  -q, --query TEXT     Search for schemas matching this string
+  --full               Output full schema contents
+  --help               Show this message and exit.
 ```
 
 (help-schemas-show)=
@@ -556,8 +556,8 @@ Usage: llm schemas show [OPTIONS] SCHEMA_ID
   Show a stored schema
 
 Options:
-  -p, --path FILE  Path to log database
-  --help           Show this message and exit.
+  -d, --database FILE  Path to log database
+  --help               Show this message and exit.
 ```
 
 (help-schemas-dsl)=

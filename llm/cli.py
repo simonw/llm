@@ -981,6 +981,13 @@ order by prompt_attachments."order"
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
@@ -1036,6 +1043,7 @@ order by prompt_attachments."order"
 def logs_list(
     count,
     path,
+    database,
     model,
     query,
     schema_input,
@@ -1057,6 +1065,8 @@ def logs_list(
     json_output,
 ):
     "Show recent logged prompts and their responses"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -1562,6 +1572,13 @@ def schemas():
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
 )
 @click.option(
     "queries",
@@ -1571,8 +1588,10 @@ def schemas():
     help="Search for schemas matching this string",
 )
 @click.option("--full", is_flag=True, help="Output full schema contents")
-def schemas_list(path, queries, full):
+def schemas_list(path, database, queries, full):
     "List stored schemas"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -1633,9 +1652,18 @@ def schemas_list(path, queries, full):
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
 )
-def schemas_show(schema_id, path):
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def schemas_show(schema_id, path, database):
     "Show a stored schema"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
