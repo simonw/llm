@@ -283,24 +283,23 @@ def test_openai_completion(mocked_openai_completion, user_path):
 
 def test_openai_completion_system_prompt_error():
     runner = CliRunner()
-    with pytest.raises(NotImplementedError) as ex:
-        runner.invoke(
-            cli,
-            [
-                "-m",
-                "gpt-3.5-turbo-instruct",
-                "Say this is a test",
-                "--no-stream",
-                "--key",
-                "x",
-                "--system",
-                "system prompts not allowed",
-            ],
-            catch_exceptions=False,
-        )
-        assert "System prompts are not supported for OpenAI completion models" in str(
-            ex
-        )
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-3.5-turbo-instruct",
+            "Say this is a test",
+            "--no-stream",
+            "--key",
+            "x",
+            "--system",
+            "system prompts not allowed",
+        ],
+    )
+    assert result.exit_code == 1
+    assert (
+        "System prompts are not supported for OpenAI completion models" in result.output
+    )
 
 
 def test_openai_completion_logprobs_stream(
