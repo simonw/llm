@@ -669,6 +669,7 @@ Commands:
   list*   List current fragments
   remove  Remove a fragment alias
   set     Set an alias for a fragment
+  show    Display the fragment stored under an alias or hash
 ```
 
 (help-fragments-list)=
@@ -695,7 +696,20 @@ Usage: llm fragments set [OPTIONS] ALIAS FRAGMENT
 
   Example usage:
 
-      llm fragments set docs ./docs.md
+      llm fragments set mydocs ./docs.md
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments-show)=
+#### llm fragments show --help
+```
+Usage: llm fragments show [OPTIONS] ALIAS_OR_HASH
+
+  Display the fragment stored under an alias or hash
+
+      llm fragments show mydocs
 
 Options:
   --help  Show this message and exit.

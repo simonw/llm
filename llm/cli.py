@@ -97,7 +97,7 @@ def resolve_fragments(
             db.query(
                 """
                 select content, source from fragments
-                join fragment_aliases on fragments.id = fragment_aliases.fragment_id
+                left join fragment_aliases on fragments.id = fragment_aliases.fragment_id
                 where alias = :alias or hash = :alias limit 1
                 """,
                 {"alias": fragment},
@@ -1994,9 +1994,10 @@ def fragments_set(alias, fragment):
     Example usage:
 
     \b
-        llm fragments set docs ./docs.md
+        llm fragments set mydocs ./docs.md
     """
     db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
     try:
         resolved = resolve_fragments(db, [fragment])[0]
     except FragmentNotFound as ex:
@@ -2011,6 +2012,24 @@ def fragments_set(alias, fragment):
     with db.conn:
         fragment_id = ensure_fragment(db, resolved)
         db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
+
+
+@fragments.command(name="show")
+@click.argument("alias_or_hash")
+def fragments_show(alias_or_hash):
+    """
+    Display the fragment stored under an alias or hash
+
+    \b
+        llm fragments show mydocs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    try:
+        resolved = resolve_fragments(db, [alias_or_hash])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+    click.echo(resolved)
 
 
 @fragments.command(name="remove")
