@@ -82,6 +82,15 @@ class MockModel(llm.Model):
         )
 
 
+class EchoModel(llm.Model):
+    model_id = "echo"
+
+    def execute(self, prompt, stream, response, conversation):
+        yield "system:\n{}\n\nprompt:\n{}".format(
+            prompt.system or "", prompt.prompt or ""
+        )
+
+
 class MockKeyModel(llm.KeyModel):
     model_id = "mock_key"
     needs_key = "mock"
@@ -205,6 +214,22 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
         yield
     finally:
         pm.unregister(name="undo-mock-models-plugin")
+
+
+@pytest.fixture(autouse=True)
+def register_echo_model():
+    class EchoModelPlugin:
+        __name__ = "EchoModelPlugin"
+
+        @llm.hookimpl
+        def register_models(self, register):
+            register(EchoModel())
+
+    pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
+    try:
+        yield
+    finally:
+        pm.unregister(name="undo-EchoModelPlugin")
 
 
 @pytest.fixture

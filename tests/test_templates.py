@@ -294,3 +294,35 @@ def test_execute_prompt_with_a_template(
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
         mocked_openai_chat.reset()
+
+
+@pytest.mark.parametrize(
+    "template,expected",
+    (
+        ("system: system\nprompt: prompt", "system:\nsystem\n\nprompt:\nprompt"),
+        (
+            "prompt: |\n  This is\n  ```\n  code to extract\n  ```",
+            "system:\n\n\nprompt:\nThis is\n```\ncode to extract\n```",
+        ),
+        # Now try that with extract: true
+        (
+            "extract: true\nprompt: |\n  This is\n  ```\n  code to extract\n  ```",
+            "code to extract",
+        ),
+    ),
+)
+def test_execute_prompt_from_template_url(httpx_mock, template, expected):
+    httpx_mock.add_response(
+        url="https://example.com/prompt.yaml",
+        method="GET",
+        text=template,
+        status_code=200,
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-t", "https://example.com/prompt.yaml", "-m", "echo"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.strip() == expected.strip()

@@ -59,6 +59,11 @@ This can be combined with the `-m` option to specify a different model:
 curl -s https://llm.datasette.io/en/latest/ | \
   llm -t summarize -m gpt-3.5-turbo-16k
 ```
+Templates can also be specified as full URLs to YAML files:
+```bash
+llm -t https://raw.githubusercontent.com/simonw/llm-templates/refs/heads/main/python-app.yaml \
+  'Python app to pick a random line from a file'
+```
 
 (prompt-templates-list)=
 

@@ -28,7 +28,7 @@ from .utils import (
 )
 from abc import ABC, abstractmethod
 import json
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
@@ -234,11 +234,36 @@ class AsyncConversation(_BaseConversation):
         return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
 
 
+class Annotation(BaseModel):
+    start_index: int
+    end_index: int
+    data: dict
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            start_index=row["start_index"],
+            end_index=row["end_index"],
+            data=json.loads(row["data"]),
+        )
+
+
+class Chunk(BaseModel):
+    text: str
+    annotation: Dict[str, Any] = Field(default_factory=dict)
+    start_index: Optional[int] = None
+    end_index: Optional[int] = None
+
+    def __str__(self):
+        return self.text
+
+
 class _BaseResponse:
     """Base response class shared between sync and async responses"""
 
     prompt: "Prompt"
     stream: bool
+    _annotations: List[Annotation] = field(default_factory=list)
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
 
@@ -255,7 +280,8 @@ class _BaseResponse:
         self.model = model
         self.stream = stream
         self._key = key
-        self._chunks: List[str] = []
+        self._annotations: List[Annotation] = []
+        self._chunks: List[Union[Chunk, str]] = []
         self._done = False
         self.response_json = None
         self.conversation = conversation
@@ -282,6 +308,13 @@ class _BaseResponse:
         self.output_tokens = output
         self.token_details = details
 
+    def add_annotations(self, annotations: List[Annotation]):
+        self._annotations.extend(annotations)
+
+    @property
+    def annotations(self):
+        return self._annotations or []
+
     @classmethod
     def from_row(cls, db, row, _async=False):
         from llm import get_model, get_async_model
@@ -293,7 +326,8 @@ class _BaseResponse:
 
         # Schema
         schema = None
-        if row["schema_id"]:
+        schema_id = row.get("schema_id")
+        if schema_id:
             schema = json.loads(db["schemas"].get(row["schema_id"])["content"])
 
         response = cls(
@@ -326,7 +360,57 @@ class _BaseResponse:
                 [row["id"]],
             )
         ]
+        # Annotations
+        response._annotations = [
+            Annotation.from_row(arow)
+            for arow in db.query(
+                """
+                select id, start_index, end_index, data
+                from response_annotations
+                where response_id = ?
+                order by start_index
+            """,
+                [row["id"]],
+            )
+        ]
         return response
+
+    # iterates over chunks of text, so an iterator of Chunk
+    def chunks_from_text(self, text) -> Iterator[Chunk]:
+        annotations = sorted(self.annotations, key=lambda a: a.start_index)
+
+        current_index = 0
+
+        for annotation in annotations:
+            # If there's a gap before this annotation, yield a gap chunk
+            if current_index < annotation.start_index:
+                gap_text = text[current_index : annotation.start_index]
+                yield Chunk(
+                    text=gap_text,
+                    annotation={},
+                    start_index=current_index,
+                    end_index=annotation.start_index,
+                )
+
+            # Yield the chunk for this annotation
+            chunk_text = text[annotation.start_index : annotation.end_index]
+            yield Chunk(
+                text=chunk_text,
+                annotation=annotation.data,
+                start_index=annotation.start_index,
+                end_index=annotation.end_index,
+            )
+
+            current_index = annotation.end_index
+
+        # If there's text after the last annotation, yield a final gap chunk
+        if current_index < len(text):
+            yield Chunk(
+                text=text[current_index:],
+                annotation={},
+                start_index=current_index,
+                end_index=len(text),
+            )
 
     def token_usage(self) -> str:
         return token_usage_string(
@@ -377,6 +461,18 @@ class _BaseResponse:
             "schema_id": schema_id,
         }
         db["responses"].insert(response)
+
+        if self.annotations:
+            db["response_annotations"].insert_all(
+                {
+                    "response_id": response_id,
+                    "start_index": annotation.start_index,
+                    "end_index": annotation.end_index,
+                    "data": json.dumps(annotation.data),
+                }
+                for annotation in self.annotations
+            )
+
         # Persist any attachments - loop through with index
         for index, attachment in enumerate(self.prompt.attachments):
             attachment_id = attachment.id()
@@ -403,6 +499,9 @@ class Response(_BaseResponse):
     model: "Model"
     conversation: Optional["Conversation"] = None
 
+    def chunks(self) -> Iterator[Chunk]:
+        return self.chunks_from_text(self.text())
+
     def on_done(self, callback):
         if not self._done:
             self.done_callbacks.append(callback)
@@ -422,7 +521,7 @@ class Response(_BaseResponse):
 
     def text(self) -> str:
         self._force()
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     def text_or_raise(self) -> str:
         return self.text()
@@ -447,7 +546,7 @@ class Response(_BaseResponse):
             details=self.token_details,
         )
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[Union[Chunk, str]]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
@@ -455,26 +554,32 @@ class Response(_BaseResponse):
             return
 
         if isinstance(self.model, Model):
-            for chunk in self.model.execute(
+            chunk_iter = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
-            ):
-                yield chunk
-                self._chunks.append(chunk)
+            )
         elif isinstance(self.model, KeyModel):
-            for chunk in self.model.execute(
+            chunk_iter = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
                 key=self.model.get_key(self._key),
-            ):
-                yield chunk
-                self._chunks.append(chunk)
+            )
         else:
             raise Exception("self.model must be a Model or KeyModel")
+        index = 0
+        for chunk in chunk_iter:
+            if isinstance(chunk, Chunk):
+                chunk.start_index = index
+                index += len(chunk.text)
+                chunk.end_index = index
+            else:
+                index += len(chunk)
+            yield chunk
+            self._chunks.append(chunk)
 
         if self.conversation:
             self.conversation.responses.append(self)
@@ -492,6 +597,9 @@ class Response(_BaseResponse):
 class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
+
+    async def chunks(self) -> Iterator[Chunk]:
+        return self.chunks_from_text(await self.text())
 
     @classmethod
     def from_row(cls, db, row, _async=False):
@@ -516,9 +624,10 @@ class AsyncResponse(_BaseResponse):
     def __aiter__(self):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        self._generator_index = 0
         return self
 
-    async def __anext__(self) -> str:
+    async def __anext__(self) -> Union[Chunk, str]:
         if self._done:
             if not self._chunks:
                 raise StopAsyncIteration
@@ -548,6 +657,12 @@ class AsyncResponse(_BaseResponse):
 
         try:
             chunk = await self._generator.__anext__()
+            if isinstance(chunk, Chunk):
+                chunk.start_index = self._generator_index
+                self._generator_index += len(chunk.text)
+                chunk.end_index = self._generator_index
+            else:
+                self._generator_index += len(chunk)
             self._chunks.append(chunk)
             return chunk
         except StopAsyncIteration:
@@ -567,11 +682,11 @@ class AsyncResponse(_BaseResponse):
     def text_or_raise(self) -> str:
         if not self._done:
             raise ValueError("Response not yet awaited")
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     async def text(self) -> str:
         await self._force()
-        return "".join(self._chunks)
+        return "".join(map(str, self._chunks))
 
     async def json(self) -> Optional[Dict[str, Any]]:
         await self._force()
@@ -759,7 +874,7 @@ class Model(_Model):
         stream: bool,
         response: Response,
         conversation: Optional[Conversation],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, Chunk]]:
         pass
 
 
@@ -772,7 +887,7 @@ class KeyModel(_Model):
         response: Response,
         conversation: Optional[Conversation],
         key: Optional[str],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, Chunk]]:
         pass
 
 
@@ -815,7 +930,7 @@ class AsyncModel(_AsyncModel):
         stream: bool,
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, Chunk], None]:
         yield ""
 
 
@@ -828,7 +943,7 @@ class AsyncKeyModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
         key: Optional[str],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, Chunk], None]:
         yield ""
 
 

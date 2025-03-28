@@ -255,3 +255,18 @@ def m014_schemas(db):
     db["responses"].enable_fts(
         ["prompt", "response"], create_triggers=True, replace=True
     )
+
+
+@migration
+def m015_response_annotations(db):
+    db["response_annotations"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "start_index": int,
+            "end_index": int,
+            "data": str,
+        },
+        pk="id",
+        foreign_keys=(("response_id", "responses", "id"),),
+    )

@@ -9,6 +9,7 @@ Features to consider for your model plugin include:
 - Including support for {ref}`Async models <advanced-model-plugins-async>` that can be used with Python's `asyncio` library.
 - Support for {ref}`structured output <advanced-model-plugins-schemas>` using JSON schemas.
 - Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
+- Supporting {ref}`annotations <advanced-model-plugins-annotations>` for models that return different types of text, or objects that should be attached to sections of the response.
 - Tracking {ref}`token usage <advanced-model-plugins-usage>` for models that charge by the token.
 
 (advanced-model-plugins-api-keys)=
@@ -58,7 +59,7 @@ class MyAsyncModel(llm.AsyncModel):
 
     async def execute(
         self, prompt, stream, response, conversation=None
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[llm.Chunk, str], None]:
         if stream:
             completion = await client.chat.completions.create(
                 model=self.model_id,
@@ -82,7 +83,7 @@ class MyAsyncModel(llm.AsyncKeyModel):
     ...
     async def execute(
         self, prompt, stream, response, conversation=None, key=None
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[llm.Chunk, str], None]:
 ```
 
 
@@ -243,3 +244,52 @@ This example logs 15 input tokens, 340 output tokens and notes that 37 tokens we
 ```python
 response.set_usage(input=15, output=340, details={"cached": 37})
 ```
+
+(advanced-model-plugins-annotations)=
+
+## Models that return annotations
+
+Some models may return additional structured data to accompany their text output. LLM calls these **annotations**. Common use-cases for these include:
+
+- Reasoning models that return a portion of text representing "thinking" tokens prior to the main response.
+- Models that return structured citation information attached to portions of the text.
+- Similarly, some search models return references to search reults used to generate the response.
+
+Model plugins can return these annotations directly from their `execute()` method. This method usually yields a series of strings - to attach a citation to one of these strings, return a `Chunk` object instead:
+
+```python
+from llm import Chunk
+
+...
+    # Inside the execute() method:
+    yield llm.Chunk(
+        text="This has an annotation",
+        annotation={
+            "title": "Document title",
+            "url": "https://example.com/document",
+        }
+    )
+```
+The `annotation=` must be a dictionary but can take any shape. LLM will automatically record the annotation with the start and end index of the generated text that it is attached to.
+
+Some annotations may need to be attached to a point in the document without a separate end index. In this case the `text=` parameter should be set to `None`.
+
+Models may exist that do not return their annotations as part of the general stream but instead produce them at the end of the response, specifying start and end indexes to show which parts of the text they should be attached to. This is often the case for non-streaming APIs.
+
+For these cases the `response.add_annotations()` method should be used at the end of the `.execute()` method:
+
+```python
+response.add_annotations([
+    llm.Annotation(
+        start_index=0,
+        end_index=10,
+        data={
+            "title": "Document title",
+            "url": "https://example.com/document"
+        }
+    )
+])
+```
+The method accepts a list of `llm.Annotation` objects, each with a `start_index=`, `end_index=` and `data=` dictionary describing the annotation.
+
+For annotations that are attached to a point rather than a range the `start_index=` and `end_index=` should be the same integer value.
