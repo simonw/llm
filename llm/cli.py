@@ -173,6 +173,10 @@ def cli():
     Then execute a prompt like this:
 
         llm 'Five outrageous names for a pet pelican'
+
+    For a full list of prompting options run:
+
+        llm prompt --help
     """
 
 

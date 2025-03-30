@@ -59,6 +59,10 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
 
       llm 'Five outrageous names for a pet pelican'
 
+  For a full list of prompting options run:
+
+      llm prompt --help
+
 Options:
   --version  Show the version and exit.
   --help     Show this message and exit.
