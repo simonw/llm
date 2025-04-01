@@ -770,3 +770,60 @@ def test_schemas_dsl():
         },
         "required": ["items"],
     }
+
+
+def test_api_queries_not_logged_by_default(mock_model, user_path):
+    """Test that Python API queries are not logged to the database by default."""
+    # Reset the log_path database
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    
+    # Make sure logging is enabled
+    logs_off_path = user_path / "logs-off"
+    if logs_off_path.exists():
+        logs_off_path.unlink()
+    
+    # Get a model and make a query
+    mock_model.enqueue(["hello world"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    assert response.text() == "hello world"
+    
+    # Verify that the query was not logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 0
+
+
+def test_api_queries_logged_when_enabled(mock_model, user_path):
+    """Test that Python API queries are logged to the database when enabled."""
+    # Reset the log_path database
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+    
+    # Make sure logging is enabled
+    logs_off_path = user_path / "logs-off"
+    if logs_off_path.exists():
+        logs_off_path.unlink()
+    
+    # Get a model with logging enabled and make a query
+    mock_model.enqueue(["hello world"])
+    model = llm.get_model("mock", log_queries=True)
+    response = model.prompt(prompt="hello")
+    assert response.text() == "hello world"
+    
+    # Verify that the query was logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+    
+    expected = {
+        "model": "mock",
+        "prompt": "hello",
+        "system": None,
+        "response": "hello world",
+    }
+    row = rows[0]
+    assert expected.items() <= row.items()
+    assert isinstance(row["duration_ms"], int)
+    assert isinstance(row["datetime_utc"], str)

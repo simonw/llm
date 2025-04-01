@@ -247,7 +247,7 @@ class _BaseResponse:
         prompt: Prompt,
         model: "_BaseModel",
         stream: bool,
-        conversation: Optional[_BaseConversation] = None,
+        conversation: Optional["_BaseConversation"] = None,
         key: Optional[str] = None,
     ):
         self.prompt = prompt
@@ -481,6 +481,18 @@ class Response(_BaseResponse):
         self._end = time.monotonic()
         self._done = True
         self._on_done()
+        
+        # Log to database if model has log_queries enabled
+        if hasattr(self.model, 'log_queries') and self.model.log_queries:
+            from llm.cli import logs_db_path
+            import sqlite_utils
+            from llm.migrations import migrate
+            
+            log_path = logs_db_path()
+            (log_path.parent).mkdir(parents=True, exist_ok=True)
+            db = sqlite_utils.Database(log_path)
+            migrate(db)
+            self.log_to_db(db)
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -690,6 +702,7 @@ class _BaseModel(ABC, _get_key_mixin):
     model_id: str
     can_stream: bool = False
     attachment_types: Set = set()
+    log_queries: bool = False
 
     supports_schema = False
 
@@ -739,10 +752,10 @@ class _Model(_BaseModel):
         return Response(
             Prompt(
                 prompt,
+                model=self,
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                model=self,
                 options=self.Options(**options),
             ),
             self,
@@ -795,10 +808,10 @@ class _AsyncModel(_BaseModel):
         return AsyncResponse(
             Prompt(
                 prompt,
+                model=self,
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                model=self,
                 options=self.Options(**options),
             ),
             self,

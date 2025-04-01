@@ -222,12 +222,15 @@ def get_async_model(name: Optional[str] = None) -> AsyncModel:
             raise UnknownModelError("Unknown model: " + name)
 
 
-def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
+def get_model(name: Optional[str] = None, _skip_async: bool = False, log_queries: bool = False) -> Model:
     "Get a model by name or alias"
     aliases = get_model_aliases()
     name = name or get_default_model()
     try:
-        return aliases[name]
+        model = aliases[name]
+        # Set the log_queries attribute on the model
+        model.log_queries = log_queries
+        return model
     except KeyError:
         # Does an async model exist?
         if _skip_async:
