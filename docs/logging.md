@@ -46,6 +46,16 @@ Number of responses logged:     48
 Database file size:             19.96MB
 ```
 
+(logging-python-api)=
+
+## Logging in Python API
+
+`llm.get_model()` accepts a `log_queries` argument. If `log_queries` is True, 
+all Python API queries for that model will be logged to the database like 
+command-line invocations are. 
+
+Note that the Python API does NOT respect the `llm logs on/off` settings the CLI uses.
+
 (logging-view)=
 
 ## Viewing the logs
