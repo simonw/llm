@@ -17,6 +17,7 @@ import yaml
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
         ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
         ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
+        ("$one and $$2", None, None, {"one": 1}, "1 and $2", None, None),
         (
             "$one and $two",
             None,
@@ -28,9 +29,7 @@ import yaml
         ),
     ),
 )
-def test_template_evaluate(
-    prompt, system, defaults, params, expected_prompt, expected_system, expected_error
-):
+def test_template_evaluate(prompt, system, defaults, params, expected_prompt, expected_system, expected_error):
     t = Template(name="t", prompt=prompt, system=system, defaults=defaults)
     if expected_error:
         with pytest.raises(Template.MissingVariables) as ex:
@@ -53,15 +52,9 @@ def test_templates_list_no_templates_found():
 def test_templates_list(templates_path, args):
     (templates_path / "one.yaml").write_text("template one", "utf-8")
     (templates_path / "two.yaml").write_text("template two", "utf-8")
-    (templates_path / "three.yaml").write_text(
-        "template three is very long " * 4, "utf-8"
-    )
-    (templates_path / "four.yaml").write_text(
-        "'this one\n\nhas newlines in it'", "utf-8"
-    )
-    (templates_path / "both.yaml").write_text(
-        "system: summarize this\nprompt: $input", "utf-8"
-    )
+    (templates_path / "three.yaml").write_text("template three is very long " * 4, "utf-8")
+    (templates_path / "four.yaml").write_text("'this one\n\nhas newlines in it'", "utf-8")
+    (templates_path / "both.yaml").write_text("system: summarize this\nprompt: $input", "utf-8")
     (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
     runner = CliRunner()
     result = runner.invoke(cli, args)
@@ -109,11 +102,7 @@ def test_templates_list(templates_path, args):
                 "--schema",
                 '{"properties": {"b": {"type": "string"}, "a": {"type": "string"}}}',
             ],
-            {
-                "schema_object": {
-                    "properties": {"b": {"type": "string"}, "a": {"type": "string"}}
-                }
-            },
+            {"schema_object": {"properties": {"b": {"type": "string"}, "a": {"type": "string"}}}},
             None,
         ),
     ),
@@ -124,10 +113,7 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
     result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
     if not expected_error:
         assert result.exit_code == 0
-        assert (
-            yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
-            == expected_prompt
-        )
+        assert yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8")) == expected_prompt
     else:
         assert result.exit_code == 1
         assert expected_error in result.output
@@ -135,18 +121,12 @@ def test_templates_prompt_save(templates_path, args, expected_prompt, expected_e
 
 def test_templates_error_on_missing_schema(templates_path):
     runner = CliRunner()
-    runner.invoke(
-        cli, ["the-prompt", "--save", "prompt_no_schema"], catch_exceptions=False
-    )
+    runner.invoke(cli, ["the-prompt", "--save", "prompt_no_schema"], catch_exceptions=False)
     # This should complain about no schema
-    result = runner.invoke(
-        cli, ["hi", "--schema", "t:prompt_no_schema"], catch_exceptions=False
-    )
+    result = runner.invoke(cli, ["hi", "--schema", "t:prompt_no_schema"], catch_exceptions=False)
     assert result.output == "Error: Template 'prompt_no_schema' has no schema\n"
     # And this is just an invalid template
-    result2 = runner.invoke(
-        cli, ["hi", "--schema", "t:bad_template"], catch_exceptions=False
-    )
+    result2 = runner.invoke(cli, ["hi", "--schema", "t:bad_template"], catch_exceptions=False)
     assert result2.output == "Error: Invalid template: bad_template\n"
 
 
@@ -269,9 +249,7 @@ def test_execute_prompt_with_a_template(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-stream", "-t", "template"]
-        + ([input_text] if input_text else [])
-        + extra_args,
+        ["--no-stream", "-t", "template"] + ([input_text] if input_text else []) + extra_args,
         catch_exceptions=False,
     )
     if isinstance(expected_input, str):
