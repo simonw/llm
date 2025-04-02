@@ -872,6 +872,77 @@ def keys_set(name, value):
     current[name] = value
     path.write_text(json.dumps(current, indent=2) + "\n")
 
+@keys.command(name="plugin-keys")
+def keys_plugin_keys():
+    """
+    List key names used by installed plugins
+    
+    Example usage:
+    
+    \b
+        $ llm keys plugin-keys
+    """
+    # Get all plugins
+    from llm import get_plugins, get_models_with_aliases
+    
+    # Get the mapping of plugins to models
+    plugins = get_plugins(all=True)
+    plugin_names = {plugin["name"] for plugin in plugins}
+    
+    # Get all registered models
+    models_with_aliases = get_models_with_aliases()
+    
+    # Create a dictionary to store plugin name -> key info mappings
+    plugin_key_info = {}
+    
+    # Track which plugins we've found key info for
+    found_plugins = set()
+    
+    # Examine each model to find key information
+    for model_with_aliases in models_with_aliases:
+        model = model_with_aliases.model
+        model_class = model.__class__
+        model_module = model_class.__module__
+        
+        # Determine which plugin this model belongs to
+        plugin_name = model_module.split('.')[0] if '.' in model_module else model_module
+        
+        # Skip if we already found key info for this plugin
+        if plugin_name in found_plugins:
+            continue
+        
+        # Check if model uses API keys (inherits from _get_key_mixin)
+        if hasattr(model, 'needs_key'):
+            found_plugins.add(plugin_name)
+            
+            if plugin_name not in plugin_key_info:
+                plugin_key_info[plugin_name] = []
+            
+            if model.needs_key:
+                key_name = model.needs_key
+                env_var = model.key_env_var
+            else:
+                key_name = "NONE"
+                env_var = "NONE"
+            
+            plugin_key_info[plugin_name].append({
+                'key_name': key_name,
+                'env_var': env_var
+            })
+    
+    # Output the results
+    for plugin_name in sorted(plugin_key_info.keys()):
+        key_infos = plugin_key_info[plugin_name]
+        for key_info in key_infos:
+            key_name = key_info['key_name']
+            env_var = key_info['env_var']
+            
+            info_str = f"{key_name}"
+            if env_var:
+                info_str += f" (env: {env_var})"
+            
+            click.echo(f"{plugin_name}: {info_str}")
+
 
 @cli.group(
     cls=DefaultGroup,
