@@ -173,10 +173,11 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*  List names of all stored keys
-  get    Return the value of a stored key
-  path   Output the path to the keys.json file
-  set    Save a key in the keys.json file
+  list*        List names of all stored keys
+  get          Return the value of a stored key
+  path         Output the path to the keys.json file
+  plugin-keys  List key names used by installed plugins Example usage:  $...
+  set          Save a key in the keys.json file
 ```
 
 (help-keys-list)=
@@ -231,6 +232,21 @@ Usage: llm keys set [OPTIONS] NAME
 Options:
   --value TEXT  Value to set
   --help        Show this message and exit.
+```
+
+(help-keys-plugin-keys)=
+#### llm keys plugin-keys --help
+```
+Usage: llm keys plugin-keys [OPTIONS]
+
+  List key names used by installed plugins
+
+  Example usage:
+
+      $ llm keys plugin-keys
+
+Options:
+  --help  Show this message and exit.
 ```
 
 (help-logs)=
