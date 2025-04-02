@@ -883,11 +883,7 @@ def keys_plugin_keys():
         $ llm keys plugin-keys
     """
     # Get all plugins
-    from llm import get_plugins, get_models_with_aliases
-    
-    # Get the mapping of plugins to models
-    plugins = get_plugins(all=True)
-    plugin_names = {plugin["name"] for plugin in plugins}
+    from llm import get_models_with_aliases
     
     # Get all registered models
     models_with_aliases = get_models_with_aliases()
