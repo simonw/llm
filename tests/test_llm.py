@@ -453,7 +453,7 @@ def test_prompt_select_model_with_queries(mock_model, user_path, args, exit_code
 
 
 EXPECTED_OPTIONS = """
-OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o (aliases: 4o, key: openai, env_var: OPENAI_API_KEY)
   Options:
     temperature: float
       What sampling temperature to use, between 0 and 2. Higher values like

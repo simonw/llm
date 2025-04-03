@@ -1416,13 +1416,19 @@ def models_list(options, async_, schemas, query, model_ids):
                 continue
         if schemas and not model_with_aliases.model.supports_schema:
             continue
-        extra = ""
+        extra_info = []
         if model_with_aliases.aliases:
-            extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+            extra_info.append("aliases: {}".format(", ".join(model_with_aliases.aliases)))
         model = (
             model_with_aliases.model if not async_ else model_with_aliases.async_model
         )
-        output = str(model) + extra
+        if hasattr(model, 'needs_key') and model.needs_key:
+            extra_info.append("key: {}".format(model.needs_key))
+        if hasattr(model, 'key_env_var') and model.key_env_var:
+            extra_info.append("env_var: {}".format(model.key_env_var))
+        output = str(model)
+        if extra_info:
+            output += " ({})".format(", ".join(extra_info))
         if options and model.Options.model_json_schema()["properties"]:
             output += "\n  Options:"
             for name, field in model.Options.model_json_schema()["properties"].items():

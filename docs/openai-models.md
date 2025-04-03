@@ -31,30 +31,30 @@ models = [line for line in result.output.split("\n") if line.startswith("OpenAI 
 cog.out("```\n{}\n```".format("\n".join(models)))
 ]]] -->
 ```
-OpenAI Chat: gpt-4o (aliases: 4o)
-OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
-OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-OpenAI Chat: gpt-4o-audio-preview
-OpenAI Chat: gpt-4o-audio-preview-2024-12-17
-OpenAI Chat: gpt-4o-audio-preview-2024-10-01
-OpenAI Chat: gpt-4o-mini-audio-preview
-OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-OpenAI Chat: gpt-4-1106-preview
-OpenAI Chat: gpt-4-0125-preview
-OpenAI Chat: gpt-4-turbo-2024-04-09
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-OpenAI Chat: gpt-4.5-preview-2025-02-27
-OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
-OpenAI Chat: o1
-OpenAI Chat: o1-2024-12-17
-OpenAI Chat: o1-preview
-OpenAI Chat: o1-mini
-OpenAI Chat: o3-mini
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
+OpenAI Chat: gpt-4o (aliases: 4o, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-mini (aliases: 4o-mini, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-audio-preview (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-audio-preview-2024-12-17 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-audio-preview-2024-10-01 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-mini-audio-preview (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4 (aliases: 4, gpt4, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4-32k (aliases: 4-32k, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4-1106-preview (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4-0125-preview (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4-turbo-2024-04-09 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4.5-preview-2025-02-27 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5, key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: o1 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: o1-2024-12-17 (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: o1-preview (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: o1-mini (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Chat: o3-mini (key: openai, env_var: OPENAI_API_KEY)
+OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct, key: openai, env_var: OPENAI_API_KEY)
 ```
 <!-- [[[end]]] -->
 
