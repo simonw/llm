@@ -1103,6 +1103,13 @@ order by prompt_attachments."order"
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
+@click.option(
+    "fragments",
+    "--fragment",
+    "-f",
+    help="Filter for prompts using these fragments",
+    multiple=True,
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -1158,6 +1165,7 @@ def logs_list(
     database,
     model,
     query,
+    fragments,
     schema_input,
     schema_multi,
     data,
@@ -1245,6 +1253,13 @@ def logs_list(
         "extra_where": "",
     }
     where_bits = []
+    sql_params = {
+        "model": model_id,
+        "query": query,
+        "conversation_id": conversation_id,
+        "id_gt": id_gt,
+        "id_gte": id_gte,
+    }
     if model_id:
         where_bits.append("responses.model = :model")
     if conversation_id:
@@ -1253,29 +1268,38 @@ def logs_list(
         where_bits.append("responses.id > :id_gt")
     if id_gte:
         where_bits.append("responses.id >= :id_gte")
+    if fragments:
+        frags = ", ".join(f":f{i}" for i in range(len(fragments)))
+        response_ids_sql = f"""
+            select response_id from prompt_fragments
+            where fragment_id in (
+                select fragments.id from fragments
+                where hash in ({frags})
+                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
+            )
+            union
+            select response_id from system_fragments
+            where fragment_id in (
+                select fragments.id from fragments
+                where hash in ({frags})
+                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
+            )
+        """
+        where_bits.append(f"responses.id in ({response_ids_sql})")
+        for i, fragment in enumerate(fragments):
+            sql_params["f{}".format(i)] = fragment
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
         where_bits.append("responses.schema_id = :schema_id")
+        sql_params["schema_id"] = schema_id
 
     if where_bits:
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
-    rows = list(
-        db.query(
-            final_sql,
-            {
-                "model": model_id,
-                "query": query,
-                "conversation_id": conversation_id,
-                "schema_id": schema_id,
-                "id_gt": id_gt,
-                "id_gte": id_gte,
-            },
-        )
-    )
+    rows = list(db.query(final_sql, sql_params))
 
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
@@ -1289,6 +1313,36 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    FRAGMENTS_SQL = """
+    select
+        {table}.response_id,
+        fragments.hash,
+        fragments.id as fragment_id,
+        fragments.content,
+        (
+            select json_group_array(fragment_aliases.alias)
+            from fragment_aliases
+            where fragment_aliases.fragment_id = fragments.id
+        ) as aliases
+    from {table}
+    join fragments on {table}.fragment_id = fragments.id
+    where {table}.response_id in ({placeholders})
+    order by {table}."order"
+    """
+
+    # Fetch any prompt or system prompt fragments
+    prompt_fragments_by_id = {}
+    system_fragments_by_id = {}
+    for table, dictionary in (
+        ("prompt_fragments", prompt_fragments_by_id),
+        ("system_fragments", system_fragments_by_id),
+    ):
+        for fragment in db.query(
+            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
+            ids,
+        ):
+            dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1321,6 +1375,20 @@ def logs_list(
         if truncate:
             row["prompt"] = truncate_string(row["prompt"] or "")
             row["response"] = truncate_string(row["response"] or "")
+        # Add prompt and system fragments
+        for key in ("prompt_fragments", "system_fragments"):
+            row[key] = [
+                {
+                    "hash": fragment["hash"],
+                    "content": truncate_string(fragment["content"]),
+                    "aliases": json.loads(fragment["aliases"]),
+                }
+                for fragment in (
+                    prompt_fragments_by_id.get(row["id"], [])
+                    if key == "prompt_fragments"
+                    else system_fragments_by_id.get(row["id"], [])
+                )
+            ]
         # Either decode or remove all JSON keys
         keys = list(row.keys())
         for key in keys:

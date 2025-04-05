@@ -418,3 +418,147 @@ def test_logs_schema_data_ids(schema_log_path):
     }
     for row in rows:
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
+
+
+@pytest.fixture
+def fragments_fixture(user_path):
+    log_path = str(user_path / "logs_fragments.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+    # Replace everything from here on
+
+    # Create fragments
+    for i in range(1, 5):
+        db["fragments"].insert(
+            {
+                "id": i,
+                "hash": f"hash{i}",
+                "content": f"This is fragment {i}",
+                "datetime_utc": start.isoformat(),
+            }
+        )
+
+    # Create some fragment aliases
+    db["fragment_aliases"].insert({"alias": "alias_1", "fragment_id": 3})
+    db["fragment_aliases"].insert({"alias": "alias_3", "fragment_id": 4})
+
+    def make_response(name, prompt_fragment_ids=None, system_fragment_ids=None):
+        response_id = str(ULID.from_timestamp(time.time())).lower()
+        db["responses"].insert(
+            {
+                "id": response_id,
+                "system": f"system: {name}",
+                "prompt": f"prompt: {name}",
+                "response": f"response: {name}",
+                "model": "davinci",
+                "datetime_utc": start.isoformat(),
+                "conversation_id": "abc123",
+                "input_tokens": 2,
+                "output_tokens": 5,
+            }
+        )
+        # Link fragments to this response
+        for fragment_id in prompt_fragment_ids or []:
+            db["prompt_fragments"].insert(
+                {"response_id": response_id, "fragment_id": fragment_id}
+            )
+        for fragment_id in system_fragment_ids or []:
+            db["system_fragments"].insert(
+                {"response_id": response_id, "fragment_id": fragment_id}
+            )
+        return {name: response_id}
+
+    collected = {}
+    collected.update(make_response("no_fragments"))
+    collected.update(
+        single_prompt_fragment_id=make_response("single_prompt_fragment", [1])
+    )
+    collected.update(
+        single_system_fragment_id=make_response("single_system_fragment", None, [2])
+    )
+    collected.update(
+        multi_prompt_fragment_id=make_response("multi_prompt_fragment", [1, 2])
+    )
+    collected.update(
+        multi_system_fragment_id=make_response("multi_system_fragment", None, [1, 2])
+    )
+    collected.update(both_fragments_id=make_response("both_fragments", [1, 2], [3, 4]))
+    collected.update(
+        single_prompt_fragment_with_alias_id=make_response(
+            "single_prompt_fragment_with_alias", [3], None
+        )
+    )
+    collected.update(
+        single_system_fragment_with_alias_id=make_response(
+            "single_system_fragment_with_alias", None, [4]
+        )
+    )
+    return {"path": log_path, "collected": collected}
+
+
+@pytest.mark.parametrize(
+    "fragment_refs,expected",
+    (
+        (
+            ["hash1"],
+            [
+                {
+                    "name": "multi_prompt_fragment",
+                    "prompt_fragments": ["hash1", "hash2"],
+                    "system_fragments": [],
+                },
+                {
+                    "name": "multi_system_fragment",
+                    "prompt_fragments": [],
+                    "system_fragments": ["hash1", "hash2"],
+                },
+                {
+                    "name": "both_fragments",
+                    "prompt_fragments": ["hash1", "hash2"],
+                    "system_fragments": ["hash3", "hash4"],
+                },
+            ],
+        ),
+        (
+            ["alias_3"],
+            [
+                {
+                    "name": "both_fragments",
+                    "prompt_fragments": ["hash1", "hash2"],
+                    "system_fragments": ["hash3", "hash4"],
+                },
+                {
+                    "name": "single_system_fragment_with_alias",
+                    "prompt_fragments": [],
+                    "system_fragments": ["hash4"],
+                },
+            ],
+        ),
+    ),
+)
+def test_logs_fragments_json(fragments_fixture, fragment_refs, expected):
+    fragments_log_path = fragments_fixture["path"]
+    fragments = fragments_fixture["collected"]
+    runner = CliRunner()
+    args = ["logs", "-d", fragments_log_path, "--json"]
+    for ref in fragment_refs:
+        args.extend(["-f", ref])
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    responses = json.loads(output)
+    # Re-shape that to same shape as expected
+    reshaped = [
+        {
+            "name": response["prompt"].replace("prompt: ", ""),
+            "prompt_fragments": [
+                fragment["hash"] for fragment in response["prompt_fragments"]
+            ],
+            "system_fragments": [
+                fragment["hash"] for fragment in response["system_fragments"]
+            ],
+        }
+        for response in responses
+    ]
+    assert reshaped == expected
