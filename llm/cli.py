@@ -1453,6 +1453,8 @@ def logs_list(
                             details["url"] = attachment["url"]
                         items.append(details)
                     obj["attachments"] = items
+                for key in ("prompt_fragments", "system_fragments"):
+                    obj[key] = [fragment["hash"] for fragment in row[key]]
                 if usage and (row["input_tokens"] or row["output_tokens"]):
                     usage_details = {
                         "input": row["input_tokens"],

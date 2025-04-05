@@ -9,6 +9,7 @@ import re
 import sqlite_utils
 import sys
 import time
+import yaml
 
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
@@ -537,14 +538,14 @@ def fragments_fixture(user_path):
         ),
     ),
 )
-def test_logs_fragments_json(fragments_fixture, fragment_refs, expected):
+def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     fragments_log_path = fragments_fixture["path"]
     fragments = fragments_fixture["collected"]
     runner = CliRunner()
-    args = ["logs", "-d", fragments_log_path, "--json"]
+    args = ["logs", "-d", fragments_log_path]
     for ref in fragment_refs:
         args.extend(["-f", ref])
-    result = runner.invoke(cli, args, catch_exceptions=False)
+    result = runner.invoke(cli, args + ["--json"], catch_exceptions=False)
     assert result.exit_code == 0
     output = result.output
     responses = json.loads(output)
@@ -562,3 +563,17 @@ def test_logs_fragments_json(fragments_fixture, fragment_refs, expected):
         for response in responses
     ]
     assert reshaped == expected
+    # Now test the `-s/--short` option:
+    result2 = runner.invoke(cli, args + ["-s"], catch_exceptions=False)
+    assert result2.exit_code == 0
+    output2 = result2.output
+    loaded = yaml.safe_load(output2)
+    reshaped2 = [
+        {
+            "name": item["prompt"].replace("prompt: ", ""),
+            "system_fragments": item["system_fragments"],
+            "prompt_fragments": item["prompt_fragments"],
+        }
+        for item in loaded
+    ]
+    assert reshaped2 == expected
