@@ -266,6 +266,16 @@ The `response.text()` method described earlier does this for you - it runs throu
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
 
+(python-api-logging-queries)=
+
+### Logging Queries
+
+`llm.get_model()` accepts a `log_queries` argument. If `log_queries` is True, 
+all Python API queries for that model will be logged to the database like 
+command-line invocations are. 
+
+Note that the Python API does NOT respect the `llm logs on/off` settings the CLI uses.
+
 (python-api-async)=
 
 ## Async models
