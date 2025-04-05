@@ -312,6 +312,7 @@ Options:
   -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
+  -f, --fragment TEXT         Filter for prompts using these fragments
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   --data                      Output newline-delimited JSON data for schema
