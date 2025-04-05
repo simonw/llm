@@ -240,8 +240,13 @@ def resolve_schema_input(db, schema_input, load_template):
         return
     if schema_input.strip().startswith("t:"):
         name = schema_input.strip()[2:]
-        template = load_template(name)
-        if not template.schema_object:
+        schema_object = None
+        try:
+            template = load_template(name)
+            schema_object = template.schema_object
+        except ValueError:
+            raise click.ClickException("Invalid template: {}".format(name))
+        if not schema_object:
             raise click.ClickException("Template '{}' has no schema".format(name))
         return template.schema_object
     if schema_input.strip().startswith("{"):

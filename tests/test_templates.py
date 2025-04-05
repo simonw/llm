@@ -63,6 +63,7 @@ def test_templates_list(templates_path, args):
         "system: summarize this\nprompt: $input", "utf-8"
     )
     (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
+    (templates_path / "invalid.yaml").write_text("system2: This is invalid", "utf-8")
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
