@@ -546,7 +546,7 @@ def fragments_fixture(user_path):
 )
 def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     fragments_log_path = fragments_fixture["path"]
-    fragments = fragments_fixture["collected"]
+    # fragments = fragments_fixture["collected"]
     runner = CliRunner()
     args = ["logs", "-d", fragments_log_path]
     for ref in fragment_refs:
