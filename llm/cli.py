@@ -603,8 +603,11 @@ def prompt(
         try:
             template_prompt, system = template_obj.evaluate(input_, params)
             if template_prompt:
-                # Over-ride user prompt only if the template provided one
-                prompt = template_prompt
+                # Combine with user prompt
+                if prompt and "input" not in template_obj.vars():
+                    prompt = template_prompt + "\n" + prompt
+                else:
+                    prompt = template_prompt
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:

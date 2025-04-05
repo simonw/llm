@@ -230,12 +230,13 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             marks=pytest.mark.httpx_mock(),
         ),
+        # Template generated prompt should combine with CLI prompt
         (
             "prompt: 'Say $hello'",
             "Input text",
             ["-p", "hello", "Blah"],
             "gpt-4o-mini",
-            "Say Blah",
+            "Say Blah\nInput text",
             None,
             None,
         ),
