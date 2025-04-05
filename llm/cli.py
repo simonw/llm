@@ -1506,7 +1506,6 @@ def templates_list():
     pairs = []
     for file in path.glob("*.yaml"):
         name = file.stem
-        garg = []
         try:
             template = load_template(name)
         except LoadTemplateError:
