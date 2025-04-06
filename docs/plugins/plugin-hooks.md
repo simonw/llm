@@ -115,7 +115,7 @@ Plugins can register new fragment loaders using the `register_template_loaders` 
 
 The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
 
-The callback works in a very similar way to template loaders, but returns a `str` or `llm.FragmentString` instance rather than a `llm.Template`.
+The callback works in a very similar way to template loaders, but returns either a single `llm.FragmentString` or a list of `llm.FragmentString` objects.
 
 ```python
 import llm
@@ -135,8 +135,18 @@ def my_fragment_loader(argument: str) -> llm.FragmentString:
         raise ValueError(
             f"Fragment 'my-fragments:{argument}' could not be loaded: {str(ex)}"
         )
+
+# Or for the case where you want to return multiple fragments:
+def my_fragment_loader(argument: str) -> list[llm.FragmentString]:
+    return [
+        llm.FragmentString("Fragment 1 content", "my-fragments:{argument}"),
+        llm.FragmentString("Fragment 2 content", "my-fragments:{argument}"),
+    ]
 ```
-This plugin can then be called like so:
+A plugin like this one can be called like so:
 ```bash
 llm -f my-fragments:argument
 ```
+If multiple fragments are returned they will be used as if the user passed multiple `-f X` arguments to the command.
+
+Multiple fragments are useful for things like plugins that return every file in a directory. By giving each file its own fragment we can avoid having multiple copies of the full collection stored if only a single file has changed.
