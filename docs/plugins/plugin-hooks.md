@@ -115,7 +115,9 @@ Plugins can register new fragment loaders using the `register_template_loaders` 
 
 The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
 
-The callback works in a very similar way to template loaders, but returns either a single `llm.FragmentString` or a list of `llm.FragmentString` objects.
+The callback works in a very similar way to template loaders, but returns either a single `llm.Fragment` or a list of `llm.Fragment` objects.
+
+The `llm.Fragment` constructor takes a required string argument (the content of the fragment) and an optional second `source` argument, which is a string that may be displayed as debug information. For files this is a path and for URLs it is a URL. Your plugin can use anything you like for the `source` value.
 
 ```python
 import llm
@@ -125,11 +127,11 @@ def register_fragment_loaders(register):
     register("my-fragments", my_fragment_loader)
 
 
-def my_fragment_loader(argument: str) -> llm.FragmentString:
+def my_fragment_loader(argument: str) -> llm.Fragment:
     try:
         fragment = "Fragment content for {}".format(argument)
         source = "my-fragments:{}".format(argument)
-        return llm.FragmentString(fragment, source)
+        return llm.Fragment(fragment, source)
     except Exception as ex:
         # Raise a ValueError with a clear message if the fragment cannot be loaded
         raise ValueError(
@@ -137,10 +139,10 @@ def my_fragment_loader(argument: str) -> llm.FragmentString:
         )
 
 # Or for the case where you want to return multiple fragments:
-def my_fragment_loader(argument: str) -> list[llm.FragmentString]:
+def my_fragment_loader(argument: str) -> list[llm.Fragment]:
     return [
-        llm.FragmentString("Fragment 1 content", "my-fragments:{argument}"),
-        llm.FragmentString("Fragment 2 content", "my-fragments:{argument}"),
+        llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
+        llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),
     ]
 ```
 A plugin like this one can be called like so:

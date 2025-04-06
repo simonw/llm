@@ -94,13 +94,13 @@ def test_register_fragment_loaders(logs_db):
     assert get_fragment_loaders() == {}
 
     def single_fragment(argument):
-        return llm.FragmentString("single", "single")
+        return llm.Fragment("single", "single")
 
     def three_fragments(argument):
         return [
-            llm.FragmentString(f"one:{argument}", "one"),
-            llm.FragmentString(f"two:{argument}", "two"),
-            llm.FragmentString(f"three:{argument}", "three"),
+            llm.Fragment(f"one:{argument}", "one"),
+            llm.Fragment(f"two:{argument}", "two"),
+            llm.Fragment(f"three:{argument}", "three"),
         ]
 
     class FragmentLoadersPlugin:

@@ -12,7 +12,7 @@ from llm import (
     AsyncResponse,
     Collection,
     Conversation,
-    FragmentString,
+    Fragment,
     Response,
     Template,
     UnknownModelError,
@@ -90,7 +90,7 @@ def validate_fragment_alias(ctx, param, value):
 
 def resolve_fragments(
     db: sqlite_utils.Database, fragments: Iterable[str]
-) -> List[FragmentString]:
+) -> List[Fragment]:
     """
     Resolve fragments into a list of (content, source) tuples
     """
@@ -118,9 +118,9 @@ def resolve_fragments(
             client = httpx.Client(follow_redirects=True, max_redirects=3)
             response = client.get(fragment)
             response.raise_for_status()
-            resolved.append(FragmentString(response.text, fragment))
+            resolved.append(Fragment(response.text, fragment))
         elif fragment == "-":
-            resolved.append(FragmentString(sys.stdin.read(), "-"))
+            resolved.append(Fragment(sys.stdin.read(), "-"))
         elif has_plugin_prefix(fragment):
             prefix, rest = fragment.split(":", 1)
             loaders = get_fragment_loaders()
@@ -140,14 +140,12 @@ def resolve_fragments(
             # Try from the DB
             content, source = _load_by_alias(fragment)
             if content is not None:
-                resolved.append(FragmentString(content, source))
+                resolved.append(Fragment(content, source))
             else:
                 # Now try path
                 path = pathlib.Path(fragment)
                 if path.exists():
-                    resolved.append(
-                        FragmentString(path.read_text(), str(path.resolve()))
-                    )
+                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved

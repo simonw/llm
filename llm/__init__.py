@@ -19,7 +19,7 @@ from .models import (
     Prompt,
     Response,
 )
-from .utils import schema_dsl, FragmentString
+from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
@@ -37,7 +37,7 @@ __all__ = [
     "Attachment",
     "Collection",
     "Conversation",
-    "FragmentString",
+    "Fragment",
     "get_async_model",
     "get_key",
     "get_model",
@@ -121,7 +121,7 @@ def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
 
 
 def get_fragment_loaders() -> (
-    Dict[str, Callable[[str], Union[FragmentString, List[FragmentString]]]]
+    Dict[str, Callable[[str], Union[Fragment, List[Fragment]]]]
 ):
     """Get fragment loaders registered by plugins."""
     return _get_loaders(pm.hook.register_fragment_loaders)
