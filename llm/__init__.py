@@ -19,7 +19,7 @@ from .models import (
     Prompt,
     Response,
 )
-from .utils import schema_dsl
+from .utils import schema_dsl, FragmentString
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
@@ -37,6 +37,7 @@ __all__ = [
     "Attachment",
     "Collection",
     "Conversation",
+    "FragmentString",
     "get_async_model",
     "get_key",
     "get_model",

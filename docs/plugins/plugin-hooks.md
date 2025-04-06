@@ -107,3 +107,36 @@ def my_template_loader(template_path: str) -> llm.Template:
 Consult the latest code in [llm/templates.py](https://github.com/simonw/llm/blob/main/llm/templates.py) for details of that `llm.Template` class.
 
 The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message.
+
+(plugin-hooks-register-fragment-loaders)=
+## register_fragment_loaders(register)
+
+Plugins can register new fragment loaders using the `register_template_loaders` hook. These can then be used with the `llm -f prefix:argument` syntax.
+
+The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
+
+The callback works in a very similar way to template loaders, but returns a `str` or `llm.FragmentString` instance rather than a `llm.Template`.
+
+```python
+import llm
+
+@llm.hookimpl
+def register_fragment_loaders(register):
+    register("my-fragments", my_fragment_loader)
+
+
+def my_fragment_loader(argument: str) -> llm.FragmentString:
+    try:
+        fragment = "Fragment content for {}".format(argument)
+        source = "my-fragments:{}".format(argument)
+        return llm.FragmentString(fragment, source)
+    except Exception as ex:
+        # Raise a ValueError with a clear message if the fragment cannot be loaded
+        raise ValueError(
+            f"Fragment 'my-fragments:{argument}' could not be loaded: {str(ex)}"
+        )
+```
+This plugin can then be called like so:
+```bash
+llm -f my-fragments:argument
+```

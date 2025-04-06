@@ -23,3 +23,8 @@ def register_embedding_models(register):
 @hookspec
 def register_template_loaders(register):
     "Register additional template loaders with prefixes"
+
+
+@hookspec
+def register_fragment_loaders(register):
+    "Register additional fragment loaders with prefixes"
