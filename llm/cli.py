@@ -25,6 +25,7 @@ from llm import (
     get_embedding_model_aliases,
     get_embedding_model,
     get_plugins,
+    get_fragment_loaders,
     get_template_loaders,
     get_model,
     get_model_aliases,
@@ -43,6 +44,7 @@ from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
     find_unused_key,
+    has_plugin_prefix,
     make_schema_id,
     maybe_fenced_code,
     mimetype_from_path,
@@ -109,7 +111,7 @@ def resolve_fragments(
             return row["content"], row["source"]
         return None, None
 
-    # These can be URLs or paths
+    # These can be URLs or paths or plugin references
     resolved = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
@@ -119,6 +121,21 @@ def resolve_fragments(
             resolved.append(FragmentString(response.text, fragment))
         elif fragment == "-":
             resolved.append(FragmentString(sys.stdin.read(), "-"))
+        elif has_plugin_prefix(fragment):
+            prefix, rest = fragment.split(":", 1)
+            loaders = get_fragment_loaders()
+            if prefix not in loaders:
+                raise FragmentNotFound("Unknown fragment prefix: {}".format(prefix))
+            loader = loaders[prefix]
+            try:
+                result = loader(rest)
+                if not isinstance(result, list):
+                    result = [result]
+                resolved.extend(result)
+            except Exception as ex:
+                raise FragmentNotFound(
+                    "Could not load fragment {}: {}".format(fragment, ex)
+                )
         else:
             # Try from the DB
             content, source = _load_by_alias(fragment)
@@ -3113,7 +3130,7 @@ def load_template(name: str) -> Template:
             raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
         return _parse_yaml_template(name, response.text)
 
-    if ":" in name:
+    if has_plugin_prefix(name):
         prefix, rest = name.split(":", 1)
         loaders = get_template_loaders()
         if prefix not in loaders:

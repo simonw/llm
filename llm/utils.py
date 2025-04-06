@@ -501,3 +501,11 @@ def maybe_fenced_code(content: str) -> str:
             + "`" * num_backticks
         )
     return content
+
+
+_plugin_prefix_re = re.compile(r"^[a-zA-Z0-9_-]+:")
+
+
+def has_plugin_prefix(value: str) -> bool:
+    "Check if value starts with alphanumeric prefix followed by a colon"
+    return bool(_plugin_prefix_re.match(value))
