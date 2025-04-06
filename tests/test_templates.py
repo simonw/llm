@@ -117,6 +117,15 @@ def test_templates_list(templates_path, args):
             },
             None,
         ),
+        # And fragments and system_fragments
+        (
+            ["--fragment", "f1.txt", "--system-fragment", "https://example.com/f2.txt"],
+            {
+                "fragments": ["f1.txt"],
+                "system_fragments": ["https://example.com/f2.txt"],
+            },
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):

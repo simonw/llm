@@ -39,8 +39,10 @@ from llm.models import _BaseConversation
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
+    ensure_fragment,
     extract_fenced_code_block,
     find_unused_key,
+    FragmentString,
     make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
@@ -56,6 +58,7 @@ import base64
 import httpx
 import pathlib
 import pydantic
+import re
 import readline
 from runpy import run_module
 import shutil
@@ -63,13 +66,73 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple, Any
+from typing import cast, Optional, Iterable, List, Union, Tuple, Any
 import warnings
 import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
+
+
+class FragmentNotFound(Exception):
+    pass
+
+
+def validate_fragment_alias(ctx, param, value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
+        raise click.BadParameter("Fragment alias must be alphanumeric")
+    return value
+
+
+def resolve_fragments(
+    db: sqlite_utils.Database, fragments: Iterable[str]
+) -> List[FragmentString]:
+    """
+    Resolve fragments into a list of (content, source) tuples
+    """
+
+    def _load_by_alias(fragment):
+        rows = list(
+            db.query(
+                """
+                select content, source from fragments
+                left join fragment_aliases on fragments.id = fragment_aliases.fragment_id
+                where alias = :alias or hash = :alias limit 1
+                """,
+                {"alias": fragment},
+            )
+        )
+        if rows:
+            row = rows[0]
+            return row["content"], row["source"]
+        return None, None
+
+    # These can be URLs or paths
+    resolved = []
+    for fragment in fragments:
+        if fragment.startswith("http://") or fragment.startswith("https://"):
+            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            response = client.get(fragment)
+            response.raise_for_status()
+            resolved.append(FragmentString(response.text, fragment))
+        elif fragment == "-":
+            resolved.append(FragmentString(sys.stdin.read(), "-"))
+        else:
+            # Try from the DB
+            content, source = _load_by_alias(fragment)
+            if content is not None:
+                resolved.append(FragmentString(content, source))
+            else:
+                # Now try path
+                path = pathlib.Path(fragment)
+                if path.exists():
+                    resolved.append(
+                        FragmentString(path.read_text(), str(path.resolve()))
+                    )
+                else:
+                    raise FragmentNotFound(f"Fragment '{fragment}' not found")
+    return resolved
 
 
 class AttachmentType(click.ParamType):
@@ -227,6 +290,20 @@ def cli():
     "--schema-multi",
     help="JSON schema to use for multiple results",
 )
+@click.option(
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+)
+@click.option(
+    "system_fragments",
+    "--sf",
+    "--system-fragment",
+    multiple=True,
+    help="Fragment to add to system prompt",
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -275,6 +352,8 @@ def prompt(
     options,
     schema_input,
     schema_multi,
+    fragments,
+    system_fragments,
     template,
     param,
     no_stream,
@@ -368,6 +447,7 @@ def prompt(
             and not attachments
             and not attachment_types
             and not schema
+            and not fragments
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -408,6 +488,10 @@ def prompt(
             to_save["extract_last"] = True
         if schema:
             to_save["schema_object"] = schema
+        if fragments:
+            to_save["fragments"] = list(fragments)
+        if system_fragments:
+            to_save["system_fragments"] = list(system_fragments)
         if options:
             # Need to validate and convert their types first
             model = get_model(model_id or get_default_model())
@@ -441,6 +525,11 @@ def prompt(
             raise click.ClickException(str(ex))
         extract = template_obj.extract
         extract_last = template_obj.extract_last
+        # Combine with template fragments/system_fragments
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
         input_ = ""
@@ -528,6 +617,12 @@ def prompt(
     prompt = read_prompt()
     response = None
 
+    try:
+        fragments = resolve_fragments(db, fragments)
+        system_fragments = resolve_fragments(db, system_fragments)
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+
     prompt_method = model.prompt
     if conversation:
         prompt_method = conversation.prompt
@@ -542,6 +637,8 @@ def prompt(
                         attachments=resolved_attachments,
                         system=system,
                         schema=schema,
+                        fragments=fragments,
+                        system_fragments=system_fragments,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -551,9 +648,11 @@ def prompt(
                 else:
                     response = prompt_method(
                         prompt,
+                        fragments=fragments,
                         attachments=resolved_attachments,
-                        system=system,
                         schema=schema,
+                        system=system,
+                        system_fragments=system_fragments,
                         **kwargs,
                     )
                     text = await response.text()
@@ -568,9 +667,11 @@ def prompt(
         else:
             response = prompt_method(
                 prompt,
+                fragments=fragments,
                 attachments=resolved_attachments,
                 system=system,
                 schema=schema,
+                system_fragments=system_fragments,
                 **kwargs,
             )
             if should_stream:
@@ -1008,6 +1109,13 @@ order by prompt_attachments."order"
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
+@click.option(
+    "fragments",
+    "--fragment",
+    "-f",
+    help="Filter for prompts using these fragments",
+    multiple=True,
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -1063,6 +1171,7 @@ def logs_list(
     database,
     model,
     query,
+    fragments,
     schema_input,
     schema_multi,
     data,
@@ -1150,6 +1259,13 @@ def logs_list(
         "extra_where": "",
     }
     where_bits = []
+    sql_params = {
+        "model": model_id,
+        "query": query,
+        "conversation_id": conversation_id,
+        "id_gt": id_gt,
+        "id_gte": id_gte,
+    }
     if model_id:
         where_bits.append("responses.model = :model")
     if conversation_id:
@@ -1158,29 +1274,38 @@ def logs_list(
         where_bits.append("responses.id > :id_gt")
     if id_gte:
         where_bits.append("responses.id >= :id_gte")
+    if fragments:
+        frags = ", ".join(f":f{i}" for i in range(len(fragments)))
+        response_ids_sql = f"""
+            select response_id from prompt_fragments
+            where fragment_id in (
+                select fragments.id from fragments
+                where hash in ({frags})
+                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
+            )
+            union
+            select response_id from system_fragments
+            where fragment_id in (
+                select fragments.id from fragments
+                where hash in ({frags})
+                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
+            )
+        """
+        where_bits.append(f"responses.id in ({response_ids_sql})")
+        for i, fragment in enumerate(fragments):
+            sql_params["f{}".format(i)] = fragment
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
         where_bits.append("responses.schema_id = :schema_id")
+        sql_params["schema_id"] = schema_id
 
     if where_bits:
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
-    rows = list(
-        db.query(
-            final_sql,
-            {
-                "model": model_id,
-                "query": query,
-                "conversation_id": conversation_id,
-                "schema_id": schema_id,
-                "id_gt": id_gt,
-                "id_gte": id_gte,
-            },
-        )
-    )
+    rows = list(db.query(final_sql, sql_params))
 
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
@@ -1194,6 +1319,36 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    FRAGMENTS_SQL = """
+    select
+        {table}.response_id,
+        fragments.hash,
+        fragments.id as fragment_id,
+        fragments.content,
+        (
+            select json_group_array(fragment_aliases.alias)
+            from fragment_aliases
+            where fragment_aliases.fragment_id = fragments.id
+        ) as aliases
+    from {table}
+    join fragments on {table}.fragment_id = fragments.id
+    where {table}.response_id in ({placeholders})
+    order by {table}."order"
+    """
+
+    # Fetch any prompt or system prompt fragments
+    prompt_fragments_by_id = {}
+    system_fragments_by_id = {}
+    for table, dictionary in (
+        ("prompt_fragments", prompt_fragments_by_id),
+        ("system_fragments", system_fragments_by_id),
+    ):
+        for fragment in db.query(
+            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
+            ids,
+        ):
+            dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1226,6 +1381,20 @@ def logs_list(
         if truncate:
             row["prompt"] = truncate_string(row["prompt"] or "")
             row["response"] = truncate_string(row["response"] or "")
+        # Add prompt and system fragments
+        for key in ("prompt_fragments", "system_fragments"):
+            row[key] = [
+                {
+                    "hash": fragment["hash"],
+                    "content": truncate_string(fragment["content"]),
+                    "aliases": json.loads(fragment["aliases"]),
+                }
+                for fragment in (
+                    prompt_fragments_by_id.get(row["id"], [])
+                    if key == "prompt_fragments"
+                    else system_fragments_by_id.get(row["id"], [])
+                )
+            ]
         # Either decode or remove all JSON keys
         keys = list(row.keys())
         for key in keys:
@@ -1290,6 +1459,8 @@ def logs_list(
                             details["url"] = attachment["url"]
                         items.append(details)
                     obj["attachments"] = items
+                for key in ("prompt_fragments", "system_fragments"):
+                    obj[key] = [fragment["hash"] for fragment in row[key]]
                 if usage and (row["input_tokens"] or row["output_tokens"]):
                     usage_details = {
                         "input": row["input_tokens"],
@@ -1300,6 +1471,7 @@ def logs_list(
                     obj["usage"] = usage_details
                 click.echo(yaml.dump([obj], sort_keys=False).strip())
                 continue
+            # Not short, output Markdown
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
@@ -1321,10 +1493,32 @@ def logs_list(
             if conversation_id:
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
+            if row["prompt_fragments"]:
+                click.echo(
+                    "\n### Prompt fragments\n\n{}".format(
+                        "\n".join(
+                            [
+                                "- {}".format(fragment["hash"])
+                                for fragment in row["prompt_fragments"]
+                            ]
+                        )
+                    )
+                )
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            if row["system_fragments"]:
+                click.echo(
+                    "\n### System fragments\n\n{}".format(
+                        "\n".join(
+                            [
+                                "- {}".format(fragment["hash"])
+                                for fragment in row["system_fragments"]
+                            ]
+                        )
+                    )
+                )
             if row["schema_json"]:
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
@@ -1817,6 +2011,155 @@ def aliases_remove(alias):
 def aliases_path():
     "Output the path to the aliases.json file"
     click.echo(user_dir() / "aliases.json")
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def fragments():
+    """
+    Manage fragments that are stored in the database
+
+    Fragments are reusable snippets of text that are shared across multiple prompts.
+    """
+
+
+@fragments.command(name="list")
+@click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for fragments matching these strings",
+)
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def fragments_list(queries, json_):
+    "List current fragments"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    params = {}
+    param_count = 0
+    where_bits = []
+    for q in queries:
+        param_count += 1
+        p = f"p{param_count}"
+        params[p] = q
+        where_bits.append(
+            f"""
+            (fragments.hash = :{p} or fragment_aliases.alias = :{p}
+            or fragments.source like '%' || :{p} || '%'
+            or fragments.content like '%' || :{p} || '%')
+        """
+        )
+    where = "\n      and\n  ".join(where_bits)
+    if where:
+        where = " where " + where
+    sql = """
+    select
+        fragments.hash,
+        json_group_array(fragment_aliases.alias) filter (
+            where
+            fragment_aliases.alias is not null
+        ) as aliases,
+        fragments.datetime_utc,
+        fragments.source,
+        fragments.content
+    from
+        fragments
+    left join
+        fragment_aliases on fragment_aliases.fragment_id = fragments.id
+    {where}
+    group by
+        fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source;
+    """.format(
+        where=where
+    )
+    results = list(db.query(sql, params))
+    for result in results:
+        result["aliases"] = json.loads(result["aliases"])
+    if json_:
+        click.echo(json.dumps(results, indent=4))
+    else:
+        yaml.add_representer(
+            str,
+            lambda dumper, data: dumper.represent_scalar(
+                "tag:yaml.org,2002:str", data, style="|" if "\n" in data else None
+            ),
+        )
+        for result in results:
+            result["content"] = truncate_string(result["content"])
+            click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
+
+
+@fragments.command(name="set")
+@click.argument("alias", callback=validate_fragment_alias)
+@click.argument("fragment")
+def fragments_set(alias, fragment):
+    """
+    Set an alias for a fragment
+
+    Accepts an alias and a file path, URL, hash or '-' for stdin
+
+    Example usage:
+
+    \b
+        llm fragments set mydocs ./docs.md
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    try:
+        resolved = resolve_fragments(db, [fragment])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+    migrate(db)
+    alias_sql = """
+    insert into fragment_aliases (alias, fragment_id)
+    values (:alias, :fragment_id)
+    on conflict(alias) do update set
+        fragment_id = excluded.fragment_id;
+    """
+    with db.conn:
+        fragment_id = ensure_fragment(db, resolved)
+        db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
+
+
+@fragments.command(name="show")
+@click.argument("alias_or_hash")
+def fragments_show(alias_or_hash):
+    """
+    Display the fragment stored under an alias or hash
+
+    \b
+        llm fragments show mydocs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    try:
+        resolved = resolve_fragments(db, [alias_or_hash])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+    click.echo(resolved)
+
+
+@fragments.command(name="remove")
+@click.argument("alias", callback=validate_fragment_alias)
+def fragments_remove(alias):
+    """
+    Remove a fragment alias
+
+    Example usage:
+
+    \b
+        llm fragments remove docs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    with db.conn:
+        db.conn.execute(
+            "delete from fragment_aliases where alias = :alias", {"alias": alias}
+        )
 
 
 @cli.command(name="plugins")

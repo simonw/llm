@@ -14,6 +14,22 @@ MIME_TYPE_FIXES = {
 }
 
 
+class FragmentString(str):
+    def __new__(cls, content, source):
+        # We need to use __new__ since str is immutable
+        instance = super().__new__(cls, content)
+        return instance
+
+    def __init__(self, content, source):
+        self.source = source
+
+    def __str__(self):
+        return super().__str__()
+
+    def __repr__(self):
+        return super().__repr__()
+
+
 def mimetype_from_string(content) -> Optional[str]:
     try:
         type_ = puremagic.from_string(content, mime=True)
@@ -436,3 +452,20 @@ def truncate_string(
     else:
         # Fall back to simple truncation for very small max_length
         return text[: max_length - 3] + "..."
+
+
+def ensure_fragment(db, content):
+    sql = """
+    insert into fragments (hash, content, datetime_utc, source)
+    values (:hash, :content, datetime('now'), :source)
+    on conflict(hash) do nothing
+    """
+    hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    source = None
+    if isinstance(content, FragmentString):
+        source = content.source
+    with db.conn:
+        db.execute(sql, {"hash": hash, "content": content, "source": source})
+        return list(
+            db.query("select id from fragments where hash = :hash", {"hash": hash})
+        )[0]["id"]

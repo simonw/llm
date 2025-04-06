@@ -75,6 +75,7 @@ Commands:
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once in the...
+  fragments     Manage fragments that are stored in the database
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -126,6 +127,9 @@ Options:
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
+  -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
+                                  add to the prompt
+  --sf, --system-fragment TEXT    Fragment to add to system prompt
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
@@ -308,6 +312,7 @@ Options:
   -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
+  -f, --fragment TEXT         Filter for prompts using these fragments
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   --data                      Output newline-delimited JSON data for schema
@@ -650,6 +655,84 @@ Options:
 Usage: llm aliases path [OPTIONS]
 
   Output the path to the aliases.json file
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments)=
+### llm fragments --help
+```
+Usage: llm fragments [OPTIONS] COMMAND [ARGS]...
+
+  Manage fragments that are stored in the database
+
+  Fragments are reusable snippets of text that are shared across multiple
+  prompts.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*   List current fragments
+  remove  Remove a fragment alias
+  set     Set an alias for a fragment
+  show    Display the fragment stored under an alias or hash
+```
+
+(help-fragments-list)=
+#### llm fragments list --help
+```
+Usage: llm fragments list [OPTIONS]
+
+  List current fragments
+
+Options:
+  -q, --query TEXT  Search for fragments matching these strings
+  --json            Output as JSON
+  --help            Show this message and exit.
+```
+
+(help-fragments-set)=
+#### llm fragments set --help
+```
+Usage: llm fragments set [OPTIONS] ALIAS FRAGMENT
+
+  Set an alias for a fragment
+
+  Accepts an alias and a file path, URL, hash or '-' for stdin
+
+  Example usage:
+
+      llm fragments set mydocs ./docs.md
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments-show)=
+#### llm fragments show --help
+```
+Usage: llm fragments show [OPTIONS] ALIAS_OR_HASH
+
+  Display the fragment stored under an alias or hash
+
+      llm fragments show mydocs
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-fragments-remove)=
+#### llm fragments remove --help
+```
+Usage: llm fragments remove [OPTIONS] ALIAS
+
+  Remove a fragment alias
+
+  Example usage:
+
+      llm fragments remove docs
 
 Options:
   --help  Show this message and exit.
