@@ -337,6 +337,7 @@ llm similar quotations -c 'computer science'
 This embeds the provided string and returns a newline-delimited list of JSON objects like this:
 ```json
 {"id": "philkarlton-1", "score": 0.8323904531677017, "content": null, "metadata": null}
+```
 Use `-p/--plain` to get back results in plain text instead of JSON:
 ```bash
 llm -similar quotations -c 'computer science' -p
