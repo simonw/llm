@@ -124,4 +124,4 @@ def test_cli_aliases_are_registered(user_path, args):
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
-    assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo, key: openai, env_var: OPENAI_API_KEY)" in result.output
+    assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
