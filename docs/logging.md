@@ -321,19 +321,21 @@ CREATE TABLE [fragment_aliases] (
   [alias] TEXT PRIMARY KEY,
   [fragment_id] INTEGER REFERENCES [fragments]([id])
 );
-CREATE TABLE [prompt_fragments] (
+CREATE TABLE "prompt_fragments" (
   [response_id] TEXT REFERENCES [responses]([id]),
   [fragment_id] INTEGER REFERENCES [fragments]([id]),
   [order] INTEGER,
   PRIMARY KEY ([response_id],
-  [fragment_id])
+  [fragment_id],
+  [order])
 );
-CREATE TABLE [system_fragments] (
+CREATE TABLE "system_fragments" (
   [response_id] TEXT REFERENCES [responses]([id]),
   [fragment_id] INTEGER REFERENCES [fragments]([id]),
   [order] INTEGER,
   PRIMARY KEY ([response_id],
-  [fragment_id])
+  [fragment_id],
+  [order])
 );
 ```
 <!-- [[[end]]] -->

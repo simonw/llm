@@ -302,3 +302,10 @@ def m015_fragments_tables(db):
         ),
         pk=("response_id", "fragment_id"),
     )
+
+@migration
+def m016_fragments_table_pks(db):
+    # The same fragment can be attached to a response multiple times
+    # https://github.com/simonw/llm/issues/863#issuecomment-2781720064
+    db["prompt_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+    db["system_fragments"].transform(pk=("response_id", "fragment_id", "order"))
