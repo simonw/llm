@@ -8,6 +8,7 @@ import pytest
 import re
 import sqlite_utils
 import sys
+import textwrap
 import time
 import yaml
 
@@ -451,6 +452,7 @@ def fragments_fixture(user_path):
     db["fragment_aliases"].insert({"alias": "alias_3", "fragment_id": 4})
 
     def make_response(name, prompt_fragment_ids=None, system_fragment_ids=None):
+        time.sleep(0.05)  # To ensure ULIDs order predictably
         response_id = str(ULID.from_timestamp(time.time())).lower()
         db["responses"].insert(
             {
@@ -511,6 +513,11 @@ def fragments_fixture(user_path):
             ["hash1"],
             [
                 {
+                    "name": "single_prompt_fragment",
+                    "prompt_fragments": ["hash1"],
+                    "system_fragments": [],
+                },
+                {
                     "name": "multi_prompt_fragment",
                     "prompt_fragments": ["hash1", "hash2"],
                     "system_fragments": [],
@@ -548,7 +555,7 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     fragments_log_path = fragments_fixture["path"]
     # fragments = fragments_fixture["collected"]
     runner = CliRunner()
-    args = ["logs", "-d", fragments_log_path]
+    args = ["logs", "-d", fragments_log_path, "-n", "0"]
     for ref in fragment_refs:
         args.extend(["-f", ref])
     result = runner.invoke(cli, args + ["--json"], catch_exceptions=False)
@@ -583,3 +590,183 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
         for item in loaded
     ]
     assert reshaped2 == expected
+
+
+def test_logs_fragments_markdown(fragments_fixture):
+    fragments_log_path = fragments_fixture["path"]
+    runner = CliRunner()
+    args = ["logs", "-d", fragments_log_path, "-n", "0"]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    # Replace dates and IDs
+    output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
+    output = id_re.sub("id: xxx", output)
+    assert (
+        output.strip()
+        == """
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: no_fragments
+
+## System
+
+system: no_fragments
+
+## Response
+
+response: no_fragments
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: single_prompt_fragment
+
+### Prompt fragments
+
+- hash1
+
+## System
+
+system: single_prompt_fragment
+
+## Response
+
+response: single_prompt_fragment
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: single_system_fragment
+
+## System
+
+system: single_system_fragment
+
+### System fragments
+
+- hash2
+
+## Response
+
+response: single_system_fragment
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: multi_prompt_fragment
+
+### Prompt fragments
+
+- hash1
+- hash2
+
+## System
+
+system: multi_prompt_fragment
+
+## Response
+
+response: multi_prompt_fragment
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: multi_system_fragment
+
+## System
+
+system: multi_system_fragment
+
+### System fragments
+
+- hash1
+- hash2
+
+## Response
+
+response: multi_system_fragment
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: both_fragments
+
+### Prompt fragments
+
+- hash1
+- hash2
+
+## System
+
+system: both_fragments
+
+### System fragments
+
+- hash3
+- hash4
+
+## Response
+
+response: both_fragments
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: single_prompt_fragment_with_alias
+
+### Prompt fragments
+
+- hash3
+
+## System
+
+system: single_prompt_fragment_with_alias
+
+## Response
+
+response: single_prompt_fragment_with_alias
+
+# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
+
+Model: **davinci**
+
+## Prompt
+
+prompt: single_system_fragment_with_alias
+
+## System
+
+system: single_system_fragment_with_alias
+
+### System fragments
+
+- hash4
+
+## Response
+
+response: single_system_fragment_with_alias
+    """.strip()
+    )

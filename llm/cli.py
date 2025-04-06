@@ -1465,6 +1465,7 @@ def logs_list(
                     obj["usage"] = usage_details
                 click.echo(yaml.dump([obj], sort_keys=False).strip())
                 continue
+            # Not short, output Markdown
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
@@ -1486,10 +1487,32 @@ def logs_list(
             if conversation_id:
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
+            if row["prompt_fragments"]:
+                click.echo(
+                    "\n### Prompt fragments\n\n{}".format(
+                        "\n".join(
+                            [
+                                "- {}".format(fragment["hash"])
+                                for fragment in row["prompt_fragments"]
+                            ]
+                        )
+                    )
+                )
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            if row["system_fragments"]:
+                click.echo(
+                    "\n### System fragments\n\n{}".format(
+                        "\n".join(
+                            [
+                                "- {}".format(fragment["hash"])
+                                for fragment in row["system_fragments"]
+                            ]
+                        )
+                    )
+                )
             if row["schema_json"]:
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
