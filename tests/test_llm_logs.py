@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.utils import FragmentString
 from ulid import ULID
 import datetime
 import json
@@ -435,19 +436,24 @@ def fragments_fixture(user_path):
     start = datetime.datetime.now(datetime.timezone.utc)
     # Replace everything from here on
 
+    fragment_hashes_by_slug = {}
     # Create fragments
     for i in range(1, 6):
+        content = f"This is fragment {i}" * (100 if i == 5 else 1)
+        fragment = FragmentString(content, "fragment")
         db["fragments"].insert(
             {
                 "id": i,
-                "hash": f"hash{i}",
+                "hash": fragment.id(),
                 # 5 is a long one:
-                "content": f"This is fragment {i}" * (100 if i == 5 else 1),
+                "content": content,
                 "datetime_utc": start.isoformat(),
             }
         )
+        db["fragment_aliases"].insert({"alias": f"hash{i}", "fragment_id": i})
+        fragment_hashes_by_slug[f"hash{i}"] = fragment.id()
 
-    # Create some fragment aliases
+    # Create some more fragment aliases
     db["fragment_aliases"].insert({"alias": "alias_1", "fragment_id": 3})
     db["fragment_aliases"].insert({"alias": "alias_3", "fragment_id": 4})
     db["fragment_aliases"].insert({"alias": "long_5", "fragment_id": 5})
@@ -504,7 +510,11 @@ def fragments_fixture(user_path):
             "single_system_fragment_with_alias", None, [4]
         )
     )
-    return {"path": log_path, "collected": collected}
+    return {
+        "path": log_path,
+        "fragment_hashes_by_slug": fragment_hashes_by_slug,
+        "collected": collected,
+    }
 
 
 @pytest.mark.parametrize(
@@ -554,7 +564,7 @@ def fragments_fixture(user_path):
 )
 def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     fragments_log_path = fragments_fixture["path"]
-    # fragments = fragments_fixture["collected"]
+    fragment_hashes_by_slug = fragments_fixture["fragment_hashes_by_slug"]
     runner = CliRunner()
     args = ["logs", "-d", fragments_log_path, "-n", "0"]
     for ref in fragment_refs:
@@ -576,6 +586,14 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
         }
         for response in responses
     ]
+    # Replace aliases with hash IDs in expected
+    for item in expected:
+        item["prompt_fragments"] = [
+            fragment_hashes_by_slug.get(ref, ref) for ref in item["prompt_fragments"]
+        ]
+        item["system_fragments"] = [
+            fragment_hashes_by_slug.get(ref, ref) for ref in item["system_fragments"]
+        ]
     assert reshaped == expected
     # Now test the `-s/--short` option:
     result2 = runner.invoke(cli, args + ["-s"], catch_exceptions=False)
@@ -595,6 +613,7 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
 
 def test_logs_fragments_markdown(fragments_fixture):
     fragments_log_path = fragments_fixture["path"]
+    fragment_hashes_by_slug = fragments_fixture["fragment_hashes_by_slug"]
     runner = CliRunner()
     args = ["logs", "-d", fragments_log_path, "-n", "0"]
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -603,9 +622,7 @@ def test_logs_fragments_markdown(fragments_fixture):
     # Replace dates and IDs
     output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
     output = id_re.sub("id: xxx", output)
-    assert (
-        output.strip()
-        == """
+    expected_output = """
 # YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
 
 Model: **davinci**
@@ -769,8 +786,11 @@ system: single_system_fragment_with_alias
 ## Response
 
 response: single_system_fragment_with_alias
-    """.strip()
-    )
+    """
+    # Replace hash4 etc with their proper IDs
+    for key, value in fragment_hashes_by_slug.items():
+        expected_output = expected_output.replace(key, value)
+    assert output.strip() == expected_output.strip()
 
 
 @pytest.mark.parametrize("arg", ("-e", "--expand"))
@@ -796,6 +816,7 @@ def test_expand_fragment_json(fragments_fixture, arg):
 
 def test_expand_fragment_markdown(fragments_fixture):
     fragments_log_path = fragments_fixture["path"]
+    fragment_hashes_by_slug = fragments_fixture["fragment_hashes_by_slug"]
     runner = CliRunner()
     args = ["logs", "-d", fragments_log_path, "-f", "long_5", "--expand"]
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -806,7 +827,7 @@ def test_expand_fragment_markdown(fragments_fixture):
         .split("## System")[0]
         .strip()
     )
-    assert interesting_bit.startswith(
-        "### Prompt fragments\n\n<details><summary>hash5</summary>\n\nThis is fragment 5"
-    )
+    hash = fragment_hashes_by_slug["hash5"]
+    expected_prefix = f"### Prompt fragments\n\n<details><summary>{hash}</summary>\nThis is fragment 5"
+    assert interesting_bit.startswith(expected_prefix)
     assert interesting_bit.endswith("</details>")
