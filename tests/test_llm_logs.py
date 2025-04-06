@@ -8,7 +8,6 @@ import pytest
 import re
 import sqlite_utils
 import sys
-import textwrap
 import time
 import yaml
 
