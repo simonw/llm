@@ -275,7 +275,7 @@ def cli():
     type=(str, str),
     multiple=True,
     callback=attachment_types_callback,
-    help="Attachment with explicit mimetype",
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
 )
 @click.option(
     "options",

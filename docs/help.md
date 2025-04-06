@@ -123,7 +123,8 @@ Options:
   -q, --query TEXT                Use first model matching these strings
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
-                                  Attachment with explicit mimetype
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
