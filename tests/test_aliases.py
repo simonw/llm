@@ -124,4 +124,5 @@ def test_cli_aliases_are_registered(user_path, args):
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
+    # Check for model line only, without keys, as --options is not used
     assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
