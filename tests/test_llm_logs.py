@@ -436,12 +436,13 @@ def fragments_fixture(user_path):
     # Replace everything from here on
 
     # Create fragments
-    for i in range(1, 5):
+    for i in range(1, 6):
         db["fragments"].insert(
             {
                 "id": i,
                 "hash": f"hash{i}",
-                "content": f"This is fragment {i}",
+                # 5 is a long one:
+                "content": f"This is fragment {i}" * (100 if i == 5 else 1),
                 "datetime_utc": start.isoformat(),
             }
         )
@@ -449,6 +450,7 @@ def fragments_fixture(user_path):
     # Create some fragment aliases
     db["fragment_aliases"].insert({"alias": "alias_1", "fragment_id": 3})
     db["fragment_aliases"].insert({"alias": "alias_3", "fragment_id": 4})
+    db["fragment_aliases"].insert({"alias": "long_5", "fragment_id": 5})
 
     def make_response(name, prompt_fragment_ids=None, system_fragment_ids=None):
         time.sleep(0.05)  # To ensure ULIDs order predictably
@@ -493,8 +495,8 @@ def fragments_fixture(user_path):
     )
     collected.update(both_fragments_id=make_response("both_fragments", [1, 2], [3, 4]))
     collected.update(
-        single_prompt_fragment_with_alias_id=make_response(
-            "single_prompt_fragment_with_alias", [3], None
+        single_long_prompt_fragment_with_alias_id=make_response(
+            "single_long_prompt_fragment_with_alias", [5], None
         )
     )
     collected.update(
@@ -734,19 +736,19 @@ Model: **davinci**
 
 ## Prompt
 
-prompt: single_prompt_fragment_with_alias
+prompt: single_long_prompt_fragment_with_alias
 
 ### Prompt fragments
 
-- hash3
+- hash5
 
 ## System
 
-system: single_prompt_fragment_with_alias
+system: single_long_prompt_fragment_with_alias
 
 ## Response
 
-response: single_prompt_fragment_with_alias
+response: single_long_prompt_fragment_with_alias
 
 # YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx
 
@@ -769,3 +771,42 @@ system: single_system_fragment_with_alias
 response: single_system_fragment_with_alias
     """.strip()
     )
+
+
+@pytest.mark.parametrize("arg", ("-e", "--expand"))
+def test_expand_fragment_json(fragments_fixture, arg):
+    fragments_log_path = fragments_fixture["path"]
+    runner = CliRunner()
+    args = ["logs", "-d", fragments_log_path, "-f", "long_5", "--json"]
+    # Without -e the JSON is truncated
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    fragment = data[0]["prompt_fragments"][0]["content"]
+    assert fragment.startswith("This is fragment 5This is fragment 5")
+    assert len(fragment) < 200
+    # With -e the JSON is expanded
+    result2 = runner.invoke(cli, args + [arg], catch_exceptions=False)
+    assert result2.exit_code == 0
+    data2 = json.loads(result2.output)
+    fragment2 = data2[0]["prompt_fragments"][0]["content"]
+    assert fragment2.startswith("This is fragment 5This is fragment 5")
+    assert len(fragment2) > 200
+
+
+def test_expand_fragment_markdown(fragments_fixture):
+    fragments_log_path = fragments_fixture["path"]
+    runner = CliRunner()
+    args = ["logs", "-d", fragments_log_path, "-f", "long_5", "--expand"]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    interesting_bit = (
+        output.split("prompt: single_long_prompt_fragment_with_alias")[1]
+        .split("## System")[0]
+        .strip()
+    )
+    assert interesting_bit.startswith(
+        "### Prompt fragments\n\n<details><summary>hash5</summary>\n\nThis is fragment 5"
+    )
+    assert interesting_bit.endswith("</details>")

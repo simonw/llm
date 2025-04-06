@@ -201,6 +201,29 @@ You can filter to logs just for a specific model (or model alias) using `-m/--mo
 llm logs -m chatgpt
 ```
 
+(logging-filter-fragments)=
+
+### Filtering by prompts that used a specific fragment
+
+The `-f/--fragment X` option will filter for just responses that were created using the specified {ref}`fragment <usage-fragments>` hash or alias or URL or filename.
+
+Fragments are displayed in the logs as their hash ID. Add `-e/--expand` to display fragments as their full content - this option works for both the default Markdown and the `--json` mode:
+
+```bash
+llm logs -f https://llm.datasette.io/robots.txt --expand
+```
+You can display just the content for a specific fragment hash ID (or alias) using the `llm fragments show` command:
+
+```bash
+llm fragments show 993fd38d898d2b59fd2d16c811da5bdac658faa34f0f4d411edde7c17ebb0680
+```
+
+(logging-filter-schemas)=
+
+### Browsing data collected using schemas
+
+The `--schema X` option can be used to view responses that used the specified schema. This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
+
 (logging-datasette)=
 
 ### Browsing logs using Datasette
@@ -210,10 +233,6 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 ```bash
 datasette "$(llm logs path)"
 ```
-
-### Browsing data collected using schemas
-
-The `--schema X` option can be used to view responses that used the specified schema. This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
 
 (logging-sql-schema)=
 

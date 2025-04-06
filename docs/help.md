@@ -249,7 +249,7 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list*   Show recent logged prompts and their responses
+  list*   Show logged prompts and their responses
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
@@ -305,7 +305,7 @@ Options:
 ```
 Usage: llm logs list [OPTIONS]
 
-  Show recent logged prompts and their responses
+  Show logged prompts and their responses
 
 Options:
   -n, --count INTEGER         Number of entries to show - defaults to 3, use 0
@@ -331,6 +331,7 @@ Options:
   --id-gt TEXT                Return responses with ID > this
   --id-gte TEXT               Return responses with ID >= this
   --json                      Output logs as JSON
+  -e, --expand                Expand fragments to show their content
   --help                      Show this message and exit.
 ```
 

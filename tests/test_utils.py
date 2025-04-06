@@ -2,6 +2,7 @@ import pytest
 from llm.utils import (
     simplify_usage_dict,
     extract_fenced_code_block,
+    maybe_fenced_code,
     truncate_string,
     schema_dsl,
 )
@@ -327,3 +328,66 @@ def test_test_truncate_string_keep_end(
         assert result[:prefix_len] == text[:prefix_len]
         assert result[-prefix_len:] == text[-prefix_len:]
         assert "... " in result
+
+
+@pytest.mark.parametrize(
+    "content,expected_fenced",
+    [
+        # Case 1: Contains many angle brackets (>10)
+        (
+            "<div><p>Test</p><span>Test</span><a>Test</a><b>Test</b><i>Test</i><u>Test</u>",
+            True,
+        ),
+        # Case 2: Short content with few angle brackets
+        ("<p>Just a paragraph</p>", False),
+        # Case 3: Many short lines (>3 lines, 90% under 120 chars)
+        ("line1\nline2\nline3\nline4\nline5", True),
+        # Case 4: Many long lines (>3 lines, <90% under 120 chars)
+        ("x" * 130 + "\n" + "x" * 130 + "\n" + "x" * 130 + "\n" + "x" * 50, False),
+        # Case 5: Mixed case (many angle brackets and short lines)
+        ("<div>\n<p>Line 1</p>\n<p>Line 2</p>\n<p>Line 3</p>\n</div>", True),
+        # Case 6: Mixed case with few lines
+        ("<div><p>Only two</p></div>", False),
+        # Case 7: Empty string
+        ("", False),
+        # Case 8: Content with existing backticks (should use more backticks)
+        ("```\ndef test():\n    pass\n```", True),
+    ],
+)
+def test_maybe_fenced_code(content: str, expected_fenced: bool):
+    result = maybe_fenced_code(content)
+
+    if expected_fenced:
+        # Should be wrapped in fenced code block
+        assert result != content
+        assert result.strip().startswith("```")
+        assert result.strip().endswith("```")
+        assert content.strip() in result
+    else:
+        # Should remain unchanged
+        assert result == content
+
+
+@pytest.mark.parametrize(
+    "content,backtick_count",
+    [
+        # Content with no backticks should use 3 backticks
+        ("def test():\n    pass", 3),
+        # Content with 3 backticks should use 4 backticks
+        ("```\ndef test():\n    pass\n```", 4),
+        # Content with 4 backticks should use 5 backticks
+        ("````\ndef test():\n    pass\n````", 5),
+    ],
+)
+def test_backtick_count_adjustment(content: str, backtick_count: int):
+    # Force the content to be treated as code by adding many angle brackets
+    content_with_brackets = content + "<" * 11
+
+    result = maybe_fenced_code(content_with_brackets)
+
+    # Check if the correct number of backticks is used
+    expected_start = "\n" + "`" * backtick_count + "\n"
+    expected_end = "\n" + "`" * backtick_count
+
+    assert result.startswith(expected_start)
+    assert result.endswith(expected_end)

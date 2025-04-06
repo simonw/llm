@@ -44,6 +44,7 @@ from .utils import (
     find_unused_key,
     FragmentString,
     make_schema_id,
+    maybe_fenced_code,
     mimetype_from_path,
     mimetype_from_string,
     multi_schema,
@@ -1165,6 +1166,12 @@ order by prompt_attachments."order"
     is_flag=True,
     help="Output logs as JSON",
 )
+@click.option(
+    "--expand",
+    "-e",
+    is_flag=True,
+    help="Expand fragments to show their content",
+)
 def logs_list(
     count,
     path,
@@ -1189,8 +1196,9 @@ def logs_list(
     id_gt,
     id_gte,
     json_output,
+    expand,
 ):
-    "Show recent logged prompts and their responses"
+    "Show logged prompts and their responses"
     if database and not path:
         path = database
     path = pathlib.Path(path or logs_db_path())
@@ -1275,25 +1283,27 @@ def logs_list(
     if id_gte:
         where_bits.append("responses.id >= :id_gte")
     if fragments:
+        # Resolve the fragments to their hashes
+        fragment_hashes = [
+            fragment.id() for fragment in resolve_fragments(db, fragments)
+        ]
         frags = ", ".join(f":f{i}" for i in range(len(fragments)))
         response_ids_sql = f"""
             select response_id from prompt_fragments
             where fragment_id in (
                 select fragments.id from fragments
                 where hash in ({frags})
-                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
             )
             union
             select response_id from system_fragments
             where fragment_id in (
                 select fragments.id from fragments
                 where hash in ({frags})
-                or fragments.id in (select fragment_id from fragment_aliases where alias in ({frags}))
             )
         """
         where_bits.append(f"responses.id in ({response_ids_sql})")
-        for i, fragment in enumerate(fragments):
-            sql_params["f{}".format(i)] = fragment
+        for i, fragment_hash in enumerate(fragment_hashes):
+            sql_params["f{}".format(i)] = fragment_hash
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
@@ -1386,7 +1396,11 @@ def logs_list(
             row[key] = [
                 {
                     "hash": fragment["hash"],
-                    "content": truncate_string(fragment["content"]),
+                    "content": (
+                        fragment["content"]
+                        if expand
+                        else truncate_string(fragment["content"])
+                    ),
                     "aliases": json.loads(fragment["aliases"]),
                 }
                 for fragment in (
@@ -1428,6 +1442,25 @@ def logs_list(
         click.echo(output)
     else:
         # Output neatly formatted human-readable logs
+        def _display_fragments(fragments, title):
+            if not fragments:
+                return
+            if not expand:
+                content = "\n".join(
+                    ["- {}".format(fragment["hash"]) for fragment in fragments]
+                )
+            else:
+                # <details><summary> for each one
+                bits = []
+                for fragment in fragments:
+                    bits.append(
+                        "<details><summary>{}</summary>\n{}\n</details>".format(
+                            fragment["hash"], maybe_fenced_code(fragment["content"])
+                        )
+                    )
+                content = "\n".join(bits)
+            click.echo(f"\n### {title}\n\n{content}")
+
         current_system = None
         should_show_conversation = True
         for row in rows:
@@ -1493,32 +1526,12 @@ def logs_list(
             if conversation_id:
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
-            if row["prompt_fragments"]:
-                click.echo(
-                    "\n### Prompt fragments\n\n{}".format(
-                        "\n".join(
-                            [
-                                "- {}".format(fragment["hash"])
-                                for fragment in row["prompt_fragments"]
-                            ]
-                        )
-                    )
-                )
+            _display_fragments(row["prompt_fragments"], "Prompt fragments")
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
-            if row["system_fragments"]:
-                click.echo(
-                    "\n### System fragments\n\n{}".format(
-                        "\n".join(
-                            [
-                                "- {}".format(fragment["hash"])
-                                for fragment in row["system_fragments"]
-                            ]
-                        )
-                    )
-                )
+            _display_fragments(row["system_fragments"], "System fragments")
             if row["schema_json"]:
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(

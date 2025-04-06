@@ -29,6 +29,9 @@ class FragmentString(str):
     def __repr__(self):
         return super().__repr__()
 
+    def id(self):
+        return hashlib.sha256(self.encode("utf-8")).hexdigest()
+
 
 def mimetype_from_string(content) -> Optional[str]:
     try:
@@ -469,3 +472,32 @@ def ensure_fragment(db, content):
         return list(
             db.query("select id from fragments where hash = :hash", {"hash": hash})
         )[0]["id"]
+
+
+def maybe_fenced_code(content: str) -> str:
+    "Return the content as a fenced code block if it looks like code"
+    is_code = False
+    if content.count("<") > 10:
+        is_code = True
+    if not is_code:
+        # Are 90% of the lines under 120 chars?
+        lines = content.splitlines()
+        if len(lines) > 3:
+            num_short = sum(1 for line in lines if len(line) < 120)
+            if num_short / len(lines) > 0.9:
+                is_code = True
+    if is_code:
+        # Find number of backticks not already present
+        num_backticks = 3
+        while "`" * num_backticks in content:
+            num_backticks += 1
+        # Add backticks
+        content = (
+            "\n"
+            + "`" * num_backticks
+            + "\n"
+            + content.strip()
+            + "\n"
+            + "`" * num_backticks
+        )
+    return content
