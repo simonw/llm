@@ -1,5 +1,75 @@
 # Changelog
 
+(v0_24)=
+## 0.24 (2025-04-07)
+
+Support for **fragments** to help assemble prompts for long context models. Improved support for **templates** to support attachments and fragments. New plugin hooks for providing custom loaders for both templates and fragments.
+
+The new [llm-docs](https://github.com/simonw/llm-docs) plugin demonstrates these new features. Install it like this:
+
+```bash
+llm install llm-docs
+```
+Now you can ask questions of the LLM documentation like this:
+
+```bash
+llm -f docs: 'How do I save a new template?'
+```
+The `docs:` prefix is registered by the plugin. The plugin fetches the LLM documentation for your installed version (from the [docs-for-llms](https://github.com/simonw/docs-for-llms) repository) and uses that as a prompt fragment to help answer your question.
+
+Two more new plugins are [llm-templates-github](https://github.com/simonw/llm-templates-github) and [llm-templates-fabric](https://github.com/simonw/llm-templates-fabric).
+
+`llm-templates-github` lets you share and use templates on GitHub. You can run my [Pelican riding a bicycle](https://simonwillison.net/tags/pelican-riding-a-bicycle/) benchmark against a model like this:
+
+```bash
+llm install llm-templates-github
+llm -t gh:simonw/pelican-svg -m o3-mini
+```
+This executes [this pelican-svg.yaml](https://github.com/simonw/llm-templates/blob/main/pelican-svg.yaml) template stored in my [simonw/llm-templates](https://github.com/simonw/llm-templates) repository, using a new repository naming convention.
+
+To share your own templates, create a repository on GitHub under your user account called `llm-templates` and start saving `.yaml` files to it.
+
+[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric) provides a similar mechanism for loading templates from  Daniel Miessler's [fabric collection](https://github.com/danielmiessler/fabric):
+
+```bash
+llm install llm-templates-fabric
+curl https://simonwillison.net/2025/Apr/6/only-miffy/ | \
+  llm -t f:extract_main_idea
+```
+
+Major new features:
+
+- New {ref}`fragments feature <fragments>`. Fragments can be used to assemble long prompts from multiple existing pieces - URLs, file paths or previously used fragments. These will be stored de-duplicated in the database avoiding wasting space storing multiple long context pieces. Example usage: `llm -f https://llm.datasette.io/robots.txt 'explain this file'`. [#617](https://github.com/simonw/llm/issues/617)
+- The `llm logs` file now accepts `-f` fragment references too, and will show just logged prompts that used those fragments.
+- {ref}`register_template_loaders() plugin hook <plugin-hooks-register-template-loaders>` allowing plugins to register new `prefix:value` custom template loaders. [#809](https://github.com/simonw/llm/issues/809)
+- {ref}`register_fragment_loaders() plugin hook <plugin-hooks-register-fragment-loaders>` allowing plugins to register new `prefix:value` custom fragment loaders. [#886](https://github.com/simonw/llm/issues/886)
+- {ref}`llm fragments <fragments-browsing>` family of commands for browsing fragments that have been previously logged to the database.
+- The new [llm-openai plugin](https://github.com/simonw/llm-openai-plugin) provides support for **o1-pro** (which is not supported by the OpenAI mechanism used by LLM core). Future OpenAI features will migrate to this plugin instead of LLM core itself.
+
+Improvements to templates:
+
+- `llm -t $URL` option can now take a URL to a YAML template. [#856](https://github.com/simonw/llm/issues/856)
+- Templates can now store default model options. [#845](https://github.com/simonw/llm/issues/845)
+- Executing a template that does not use the `$input` variable no longer blocks LLM waiting for input, so prompt templates can now be used to try different models using `llm -t pelican-svg -m model_id`. [#835](https://github.com/simonw/llm/issues/835)
+- `llm templates` command no longer crashes if one of the listed template files contains invalid YAML. [#880](https://github.com/simonw/llm/issues/880)
+- Attachments can now be stored in templates. [#826](https://github.com/simonw/llm/issues/826)
+
+Other changes:
+
+- New {ref}`llm models options <usage-executing-default-options>` family of commands for setting default options for particular models. [#829](https://github.com/simonw/llm/issues/829)
+- `llm logs list`, `llm schemas list` and `llm schemas show` all now take a `-d/--database` option with an optional path to a SQLite database. They used to take `-p/--path` but that was inconsistent with other commands. `-p/--path` still works but is excluded from `--help` and will be removed in a future LLM release. [#857](https://github.com/simonw/llm/issues/857)
+- `llm logs -e/--expand` option for expanding fragments. [#881](https://github.com/simonw/llm/issues/881)
+- `llm prompt -d path-to-sqlite.db` option can now be used to write logs to a custom SQLite database. [#858](https://github.com/simonw/llm/issues/858)
+- `llm similar -p/--plain` option providing more human-readable output than the default JSON. [#853](https://github.com/simonw/llm/issues/853)
+- `llm logs -s/--short` now truncates to include the end of the prompt too. Thanks, [Sukhbinder Singh](https://github.com/sukhbinder). [#759](https://github.com/simonw/llm/issues/759)
+- Set the `LLM_RAISE_ERRORS=1` environment variable to raise errors during prompts rather than suppressing them, which means you can run `python -i -m llm 'prompt'` and then drop into a debugger on errors with `import pdb; pdb.pm()`. [#817](https://github.com/simonw/llm/issues/817)
+- Improved [--help output](https://llm.datasette.io/en/stable/help.html#llm-embed-multi-help) for `llm embed-multi`. [#824](https://github.com/simonw/llm/issues/824)
+- `llm models -m X` option which can be passed multiple times with model IDs to see the details of just those models. [#825](https://github.com/simonw/llm/issues/825)
+- OpenAI models now accept PDF attachments. [#834](https://github.com/simonw/llm/issues/834)
+- `llm prompt -q gpt -q 4o` option - pass `-q searchterm` one or more times to execute a prompt against the first model that matches all of those strings - useful for if you can't remember the full model ID. [#841](https://github.com/simonw/llm/issues/841)
+- {ref}`OpenAI compatible models <openai-compatible-models>` configured using `extra-openai-models.yaml` now support `supports_schema: true`, `vision: true` and `audio: true` options. Thanks [@adaitche](https://github.com/adaitche) and [@giuli007](https://github.com/giuli007). [#819](https://github.com/simonw/llm/pull/819), [#843](https://github.com/simonw/llm/pull/843)
+
+
 (v0_24a1)=
 ## 0.24a1 (2025-04-06)
 
