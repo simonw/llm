@@ -151,6 +151,18 @@ system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
 ```
 
+### Fragments
+
+Templates can reference {ref}`Fragments <fragments>` using the `fragments:` and `system_fragments:` keys. These should be a list of fragment URLs, filepaths or hashes:
+
+```yaml
+fragments:
+- https://example.com/robots.txt
+- /path/to/file.txt
+- 993fd38d898d2b59fd2d16c811da5bdac658faa34f0f4d411edde7c17ebb0680
+system_fragments:
+- https://example.com/systm-prompt.txt
+```
 
 (prompt-templates-options)=
 
