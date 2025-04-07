@@ -113,6 +113,8 @@ llm logs -c -f 0d6e368f9bc21f8db78c01e192ecf925841a957d8b991f5bf9f6239aa4d81815
 ```
 This accepts URLs, file paths, aliases, and hash IDs.
 
+Multiple `-f` options will return responses that used **all** of the specified fragments.
+
 Fragments are returned by `llm logs --json` as well. By default these are truncated but you can add the `-e/--expand` option to show the full content of each fragment.
 
 ```bash

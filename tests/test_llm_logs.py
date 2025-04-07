@@ -560,6 +560,17 @@ def fragments_fixture(user_path):
                 },
             ],
         ),
+        # Testing for AND condition
+        (
+            ["hash1", "hash4"],
+            [
+                {
+                    "name": "both_fragments",
+                    "prompt_fragments": ["hash1", "hash2"],
+                    "system_fragments": ["hash3", "hash4"],
+                },
+            ],
+        ),
     ),
 )
 def test_logs_fragments(fragments_fixture, fragment_refs, expected):

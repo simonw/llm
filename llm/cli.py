@@ -1302,23 +1302,30 @@ def logs_list(
         fragment_hashes = [
             fragment.id() for fragment in resolve_fragments(db, fragments)
         ]
-        frags = ", ".join(f":f{i}" for i in range(len(fragments)))
-        response_ids_sql = f"""
-            select response_id from prompt_fragments
-            where fragment_id in (
-                select fragments.id from fragments
-                where hash in ({frags})
-            )
-            union
-            select response_id from system_fragments
-            where fragment_id in (
-                select fragments.id from fragments
-                where hash in ({frags})
-            )
-        """
-        where_bits.append(f"responses.id in ({response_ids_sql})")
+        exists_clauses = []
+
         for i, fragment_hash in enumerate(fragment_hashes):
+            exists_clause = f"""
+            exists (
+                select 1 from prompt_fragments
+                where prompt_fragments.response_id = responses.id
+                and prompt_fragments.fragment_id in (
+                    select fragments.id from fragments
+                    where hash = :f{i}
+                )
+                union
+                select 1 from system_fragments
+                where system_fragments.response_id = responses.id
+                and system_fragments.fragment_id in (
+                    select fragments.id from fragments
+                    where hash = :f{i}
+                )
+            )
+            """
+            exists_clauses.append(exists_clause)
             sql_params["f{}".format(i)] = fragment_hash
+
+        where_bits.append(" AND ".join(exists_clauses))
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
