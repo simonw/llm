@@ -92,6 +92,7 @@ openai-models
 other-models
 schemas
 templates
+fragments
 aliases
 embeddings/index
 plugins/index
