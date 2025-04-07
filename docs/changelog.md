@@ -3,7 +3,7 @@
 (v0_24)=
 ## 0.24 (2025-04-07)
 
-Support for **fragments** to help assemble prompts for long context models. Improved support for **templates** to support attachments and fragments. New plugin hooks for providing custom loaders for both templates and fragments.
+Support for **fragments** to help assemble prompts for long context models. Improved support for **templates** to support attachments and fragments. New plugin hooks for providing custom loaders for both templates and fragments. See [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/) for more on this release.
 
 The new [llm-docs](https://github.com/simonw/llm-docs) plugin demonstrates these new features. Install it like this:
 
