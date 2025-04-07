@@ -44,7 +44,8 @@ def test_fragments_set_show_remove(user_path):
         assert "Fragment 'badalias' not found" in result4.output
 
         # Remove that alias
-        assert runner.invoke(cli, ["fragments", "remove", "f1"]).exit_code == 0
+        result5 = runner.invoke(cli, ["fragments", "remove", "f1"])
+        assert result5.exit_code == 0
         # Should still be in list but no alias
         loaded2 = get_list()
         assert loaded2[0]["aliases"] == []
