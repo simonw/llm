@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_24a1)=
+## 0.24a1 (2025-04-06)
+
+- New Fragments feature. [#617](https://github.com/simonw/llm/issues/617)
+- `register_fragment_loaders()` plugin hook. [#809](https://github.com/simonw/llm/issues/886)
+
 (v0_24a0)=
 ## 0.24a0 (2025-02-28)
 
