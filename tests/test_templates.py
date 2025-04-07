@@ -4,6 +4,7 @@ from llm import Template
 from llm.cli import cli
 import os
 from unittest import mock
+import pathlib
 import pytest
 import yaml
 
@@ -78,7 +79,7 @@ def test_templates_list(templates_path, args):
 
 
 @pytest.mark.parametrize(
-    "args,expected_prompt,expected_error",
+    "args,expected,expected_error",
     (
         (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
         (["hello $foo"], {"prompt": "hello $foo"}, None),
@@ -126,18 +127,36 @@ def test_templates_list(templates_path, args):
             },
             None,
         ),
+        # And attachments and attachment_types
+        (
+            ["--attachment", "a.txt", "--attachment-type", "b.txt", "text/plain"],
+            {
+                "attachments": ["a.txt"],
+                "attachment_types": [{"type": "text/plain", "value": "b.txt"}],
+            },
+            None,
+        ),
     ),
 )
-def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
+def test_templates_prompt_save(templates_path, args, expected, expected_error):
     assert not (templates_path / "saved.yaml").exists()
     runner = CliRunner()
-    result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
+    with runner.isolated_filesystem():
+        # Create a file to test attachment
+        pathlib.Path("a.txt").write_text("attachment", "utf-8")
+        pathlib.Path("b.txt").write_text("attachment type", "utf-8")
+        result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
     if not expected_error:
         assert result.exit_code == 0
-        assert (
-            yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
-            == expected_prompt
-        )
+        yaml_data = yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
+        # Adjust attachment and attachment_types paths to be just the filename
+        if "attachments" in yaml_data:
+            yaml_data["attachments"] = [
+                os.path.basename(path) for path in yaml_data["attachments"]
+            ]
+        for item in yaml_data.get("attachment_types", []):
+            item["value"] = os.path.basename(item["value"])
+        assert yaml_data == expected
     else:
         assert result.exit_code == 1
         assert expected_error in result.output
