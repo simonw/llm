@@ -2069,14 +2069,17 @@ def fragments():
     multiple=True,
     help="Search for fragments matching these strings",
 )
+@click.option("--aliases", is_flag=True, help="Show only fragments with aliases")
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
-def fragments_list(queries, json_):
+def fragments_list(queries, aliases, json_):
     "List current fragments"
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     params = {}
     param_count = 0
     where_bits = []
+    if aliases:
+        where_bits.append("fragment_aliases.alias is not null")
     for q in queries:
         param_count += 1
         p = f"p{param_count}"

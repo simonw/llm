@@ -97,6 +97,11 @@ You can then use that alias in place of the fragment hash ID:
 ```bash
 llm -f mydocs 'How do I access metadata?'
 ```
+Use `llm fragments --aliases` to see a full list of fragments that have been assigned aliases:
+```bash
+llm fragments --aliases
+```
+
 (fragments-logs)=
 ## Viewing fragments in your logs
 

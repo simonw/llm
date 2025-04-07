@@ -691,6 +691,7 @@ Usage: llm fragments list [OPTIONS]
 
 Options:
   -q, --query TEXT  Search for fragments matching these strings
+  --aliases         Show only fragments with aliases
   --json            Output as JSON
   --help            Show this message and exit.
 ```

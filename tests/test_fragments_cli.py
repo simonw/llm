@@ -7,6 +7,9 @@ def test_fragments_set_show_remove(user_path):
     runner = CliRunner()
     with runner.isolated_filesystem():
         open("fragment1.txt", "w").write("Hello fragment 1")
+
+        # llm fragments --aliases should return nothing
+        assert runner.invoke(cli, ["fragments", "list", "--aliases"]).output == ""
         assert (
             runner.invoke(cli, ["fragments", "set", "f1", "fragment1.txt"]).exit_code
             == 0
@@ -20,6 +23,9 @@ def test_fragments_set_show_remove(user_path):
             result2 = runner.invoke(cli, ["fragments", "list"])
             assert result2.exit_code == 0
             return yaml.safe_load(result2.output)
+
+        # And in llm fragments --aliases
+        assert "f1" in runner.invoke(cli, ["fragments", "list", "--aliases"]).output
 
         loaded1 = get_list()
         assert set(loaded1[0].keys()) == {
@@ -50,3 +56,6 @@ def test_fragments_set_show_remove(user_path):
         loaded2 = get_list()
         assert loaded2[0]["aliases"] == []
         assert loaded2[0]["content"] == "Hello fragment 1"
+
+        # And --aliases list should be empty
+        assert runner.invoke(cli, ["fragments", "list", "--aliases"]).output == ""
