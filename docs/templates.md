@@ -151,6 +151,8 @@ system: You speak like an excitable Victorian adventurer
 prompt: 'Summarize this: $input'
 ```
 
+(prompt-templates-fragments)=
+
 ### Fragments
 
 Templates can reference {ref}`Fragments <fragments>` using the `fragments:` and `system_fragments:` keys. These should be a list of fragment URLs, filepaths or hashes:
