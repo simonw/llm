@@ -15,12 +15,14 @@ A CLI utility and Python library for interacting with Large Language Models, bot
 Here's a [YouTube video demo](https://www.youtube.com/watch?v=QUXQNi6jQ30) and [accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
 Background on this project:
+
 - [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
 - [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
 - [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
 - [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
 - [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
 - [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
+- [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
 
 For more check out [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 
