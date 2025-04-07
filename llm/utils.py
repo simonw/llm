@@ -14,20 +14,14 @@ MIME_TYPE_FIXES = {
 }
 
 
-class FragmentString(str):
-    def __new__(cls, content, source):
-        # We need to use __new__ since str is immutable
-        instance = super().__new__(cls, content)
-        return instance
+class Fragment(str):
+    def __new__(cls, content, *args, **kwargs):
+        # For immutable classes like str, __new__ creates the string object
+        return super().__new__(cls, content)
 
-    def __init__(self, content, source):
+    def __init__(self, content, source=""):
+        # Initialize our custom attributes
         self.source = source
-
-    def __str__(self):
-        return super().__str__()
-
-    def __repr__(self):
-        return super().__repr__()
 
     def id(self):
         return hashlib.sha256(self.encode("utf-8")).hexdigest()
@@ -465,7 +459,7 @@ def ensure_fragment(db, content):
     """
     hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     source = None
-    if isinstance(content, FragmentString):
+    if isinstance(content, Fragment):
         source = content.source
     with db.conn:
         db.execute(sql, {"hash": hash, "content": content, "source": source})
@@ -501,3 +495,11 @@ def maybe_fenced_code(content: str) -> str:
             + "`" * num_backticks
         )
     return content
+
+
+_plugin_prefix_re = re.compile(r"^[a-zA-Z0-9_-]+:")
+
+
+def has_plugin_prefix(value: str) -> bool:
+    "Check if value starts with alphanumeric prefix followed by a colon"
+    return bool(_plugin_prefix_re.match(value))

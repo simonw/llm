@@ -303,6 +303,7 @@ def m015_fragments_tables(db):
         pk=("response_id", "fragment_id"),
     )
 
+
 @migration
 def m016_fragments_table_pks(db):
     # The same fragment can be attached to a response multiple times

@@ -107,3 +107,48 @@ def my_template_loader(template_path: str) -> llm.Template:
 Consult the latest code in [llm/templates.py](https://github.com/simonw/llm/blob/main/llm/templates.py) for details of that `llm.Template` class.
 
 The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message.
+
+(plugin-hooks-register-fragment-loaders)=
+## register_fragment_loaders(register)
+
+Plugins can register new fragment loaders using the `register_template_loaders` hook. These can then be used with the `llm -f prefix:argument` syntax.
+
+The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
+
+The callback works in a very similar way to template loaders, but returns either a single `llm.Fragment` or a list of `llm.Fragment` objects.
+
+The `llm.Fragment` constructor takes a required string argument (the content of the fragment) and an optional second `source` argument, which is a string that may be displayed as debug information. For files this is a path and for URLs it is a URL. Your plugin can use anything you like for the `source` value.
+
+```python
+import llm
+
+@llm.hookimpl
+def register_fragment_loaders(register):
+    register("my-fragments", my_fragment_loader)
+
+
+def my_fragment_loader(argument: str) -> llm.Fragment:
+    try:
+        fragment = "Fragment content for {}".format(argument)
+        source = "my-fragments:{}".format(argument)
+        return llm.Fragment(fragment, source)
+    except Exception as ex:
+        # Raise a ValueError with a clear message if the fragment cannot be loaded
+        raise ValueError(
+            f"Fragment 'my-fragments:{argument}' could not be loaded: {str(ex)}"
+        )
+
+# Or for the case where you want to return multiple fragments:
+def my_fragment_loader(argument: str) -> list[llm.Fragment]:
+    return [
+        llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
+        llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),
+    ]
+```
+A plugin like this one can be called like so:
+```bash
+llm -f my-fragments:argument
+```
+If multiple fragments are returned they will be used as if the user passed multiple `-f X` arguments to the command.
+
+Multiple fragments are useful for things like plugins that return every file in a directory. By giving each file its own fragment we can avoid having multiple copies of the full collection stored if only a single file has changed.

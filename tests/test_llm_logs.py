@@ -1,7 +1,7 @@
 from click.testing import CliRunner
 from llm.cli import cli
 from llm.migrations import migrate
-from llm.utils import FragmentString
+from llm import Fragment
 from ulid import ULID
 import datetime
 import json
@@ -440,7 +440,7 @@ def fragments_fixture(user_path):
     # Create fragments
     for i in range(1, 6):
         content = f"This is fragment {i}" * (100 if i == 5 else 1)
-        fragment = FragmentString(content, "fragment")
+        fragment = Fragment(content, "fragment")
         db["fragments"].insert(
             {
                 "id": i,

@@ -19,12 +19,12 @@ from .models import (
     Prompt,
     Response,
 )
-from .utils import schema_dsl
+from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
 import click
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, Union
 import json
 import os
 import pathlib
@@ -37,6 +37,7 @@ __all__ = [
     "Attachment",
     "Collection",
     "Conversation",
+    "Fragment",
     "get_async_model",
     "get_key",
     "get_model",
@@ -98,7 +99,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     return model_aliases
 
 
-def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
+def _get_loaders(hook_method) -> Dict[str, Callable]:
     load_plugins()
     loaders = {}
 
@@ -110,8 +111,20 @@ def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
             prefix_to_try = f"{prefix}_{suffix}"
         loaders[prefix_to_try] = loader
 
-    pm.hook.register_template_loaders(register=register)
+    hook_method(register=register)
     return loaders
+
+
+def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
+    """Get template loaders registered by plugins."""
+    return _get_loaders(pm.hook.register_template_loaders)
+
+
+def get_fragment_loaders() -> (
+    Dict[str, Callable[[str], Union[Fragment, List[Fragment]]]]
+):
+    """Get fragment loaders registered by plugins."""
+    return _get_loaders(pm.hook.register_fragment_loaders)
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
