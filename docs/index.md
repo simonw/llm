@@ -90,12 +90,12 @@ setup
 usage
 openai-models
 other-models
-embeddings/index
-plugins/index
-aliases
-python-api
 schemas
 templates
+aliases
+embeddings/index
+plugins/index
+python-api
 logging
 related-tools
 help

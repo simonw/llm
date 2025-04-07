@@ -1,7 +1,7 @@
 (prompt-templates)=
-# Prompt templates
+# Templates
 
-Prompt templates can be created to reuse useful prompts with different input data.
+Templates can be created for prompts to make them reusable and shareable.
 
 (prompt-templates-save)=
 
