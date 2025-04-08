@@ -5,6 +5,7 @@ from llm import Fragment
 from ulid import ULID
 import datetime
 import json
+import pathlib
 import pytest
 import re
 import sqlite_utils
@@ -842,3 +843,19 @@ def test_expand_fragment_markdown(fragments_fixture):
     expected_prefix = f"### Prompt fragments\n\n<details><summary>{hash}</summary>\nThis is fragment 5"
     assert interesting_bit.startswith(expected_prefix)
     assert interesting_bit.endswith("</details>")
+
+
+def test_logs_backup(logs_db):
+    assert not logs_db.tables
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["-m", "echo", "simple prompt"])
+        assert logs_db.tables
+        expected_path = pathlib.Path("backup.db")
+        assert not expected_path.exists()
+        # Now back it up
+        result = runner.invoke(cli, ["logs", "backup", "backup.db"])
+        assert result.exit_code == 0
+        assert result.output.startswith("Backed up ")
+        assert result.output.endswith("to backup.db\n")
+        assert expected_path.exists()

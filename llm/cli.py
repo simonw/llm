@@ -1085,6 +1085,22 @@ def logs_status():
     )
 
 
+@logs.command(name="backup")
+@click.argument("path", type=click.Path(dir_okay=True, writable=True))
+def backup(path):
+    "Backup your logs database to this file"
+    logs_path = logs_db_path()
+    path = pathlib.Path(path)
+    db = sqlite_utils.Database(logs_path)
+    try:
+        db.execute("vacuum into ?", [str(path)])
+    except Exception as ex:
+        raise click.ClickException(str(ex))
+    click.echo(
+        "Backed up {} to {}".format(_human_readable_size(path.stat().st_size), path)
+    )
+
+
 @logs.command(name="on")
 def logs_turn_on():
     "Turn on logging for all prompts"

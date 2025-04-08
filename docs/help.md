@@ -250,6 +250,7 @@ Options:
 
 Commands:
   list*   Show logged prompts and their responses
+  backup  Backup your logs database to this file
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
@@ -273,6 +274,17 @@ Options:
 Usage: llm logs status [OPTIONS]
 
   Show current status of database logging
+
+Options:
+  --help  Show this message and exit.
+```
+
+(help-logs-backup)=
+#### llm logs backup --help
+```
+Usage: llm logs backup [OPTIONS] PATH
+
+  Backup your logs database to this file
 
 Options:
   --help  Show this message and exit.
