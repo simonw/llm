@@ -60,6 +60,15 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
 
+## Fragments and template loaders
+
+{ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.
+
+- **[llm-templates-github](https://github.com/simonw/llm-templates-github)** supports loading templates shared on GitHub, e.g. `llm -t gh:simonw/pelican-svg`.
+- **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t f:explain_code`.
+- **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`.
+- **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
+
 ## Just for fun
 
 - **[llm-markov](https://github.com/simonw/llm-markov)** adds a simple model that generates output using a [Markov chain](https://en.wikipedia.org/wiki/Markov_chain). This example is used in the tutorial [Writing a plugin to support a new model](https://llm.datasette.io/en/latest/plugins/tutorial-model-plugin.html).
