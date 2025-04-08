@@ -356,3 +356,17 @@ def test_execute_prompt_from_template_url(httpx_mock, template, expected):
     )
     assert result.exit_code == 0
     assert result.output.strip() == expected.strip()
+
+
+def test_execute_prompt_from_template_path():
+    runner = CliRunner()
+    with runner.isolated_filesystem() as temp_dir:
+        path = pathlib.Path(temp_dir) / "my-template.yaml"
+        path.write_text("system: system\nprompt: prompt", "utf-8")
+        result = runner.invoke(
+            cli,
+            ["-t", str(path), "-m", "echo"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == "system:\nsystem\n\nprompt:\nprompt"

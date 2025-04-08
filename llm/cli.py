@@ -3198,7 +3198,7 @@ def _parse_yaml_template(name, content):
 
 
 def load_template(name: str) -> Template:
-    "Or raises LoadTemplateError(msg)"
+    "Load template, or raise LoadTemplateError(msg)"
     if name.startswith("https://") or name.startswith("http://"):
         response = httpx.get(name)
         try:
@@ -3218,7 +3218,13 @@ def load_template(name: str) -> Template:
         except Exception as ex:
             raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
 
-    path = template_dir() / f"{name}.yaml"
+    # First try local file
+    potential_path = pathlib.Path(name)
+    if potential_path.exists():
+        path = potential_path
+    else:
+        # Look for in template_dir()
+        path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()

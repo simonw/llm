@@ -64,6 +64,10 @@ Templates can also be specified as full URLs to YAML files:
 llm -t https://raw.githubusercontent.com/simonw/llm-templates/refs/heads/main/python-app.yaml \
   'Python app to pick a random line from a file'
 ```
+Or as a direct path to a YAML file on disk:
+```bash
+llm -t path/to/template.yaml 'extra prompt here'
+```
 
 (prompt-templates-list)=
 
