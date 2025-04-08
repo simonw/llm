@@ -65,7 +65,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 {ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.
 
 - **[llm-templates-github](https://github.com/simonw/llm-templates-github)** supports loading templates shared on GitHub, e.g. `llm -t gh:simonw/pelican-svg`.
-- **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t f:explain_code`.
+- **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
 - **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`.
 - **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
 
