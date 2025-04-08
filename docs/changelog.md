@@ -1,5 +1,11 @@
 # Changelog
 
+(v0_24_1)=
+## 0.24.1 (2025-04-08)
+
+- Templates can now be specified as a path to a file on disk, using `llm -t path/to/file.yaml`. This makes them consistent with how `-f` fragments are loaded. [#897](https://github.com/simonw/llm/issues/897)
+- `llm logs backup /tmp/backup.db` command for {ref}`backing up your <logging-backup>` `logs.db` database. [#879](https://github.com/simonw/llm/issues/879)
+
 (v0_24)=
 ## 0.24 (2025-04-07)
 
