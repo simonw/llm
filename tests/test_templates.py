@@ -18,6 +18,7 @@ import yaml
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
         ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
         ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
+        ("$one and $$2", None, None, {"one": 1}, "1 and $2", None, None),
         (
             "$one and $two",
             None,

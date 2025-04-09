@@ -74,4 +74,5 @@ class Template(BaseModel):
         return [
             match.group("named")
             for match in string_template.pattern.finditer(string_template.template)
+            if match.group("named")
         ]
