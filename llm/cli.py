@@ -1418,7 +1418,9 @@ def models_list(options, async_, schemas, query, model_ids):
             continue
         extra_info = []
         if model_with_aliases.aliases:
-            extra_info.append("aliases: {}".format(", ".join(model_with_aliases.aliases)))
+            extra_info.append(
+                "aliases: {}".format(", ".join(model_with_aliases.aliases))
+            )
         model = (
             model_with_aliases.model if not async_ else model_with_aliases.async_model
         )
@@ -1466,11 +1468,11 @@ def models_list(options, async_, schemas, query, model_ids):
             output += "\n  Features:\n{}".format(
                 "\n".join("  - {}".format(feature) for feature in features)
             )
-        if options and hasattr(model, 'needs_key') and model.needs_key:
+        if options and hasattr(model, "needs_key") and model.needs_key:
             output += "\n  Keys:"
-            if hasattr(model, 'needs_key') and model.needs_key:
+            if hasattr(model, "needs_key") and model.needs_key:
                 output += "\n    key: {}".format(model.needs_key)
-            if hasattr(model, 'key_env_var') and model.key_env_var:
+            if hasattr(model, "key_env_var") and model.key_env_var:
                 output += "\n    env_var: {}".format(model.key_env_var)
         click.echo(output)
     if not query and not options and not schemas and not model_ids:
