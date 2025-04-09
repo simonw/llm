@@ -433,6 +433,9 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   - streaming
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Options:
     temperature: float
@@ -449,6 +452,9 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -466,6 +472,9 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   - streaming
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview
   Options:
     temperature: float
@@ -482,6 +491,9 @@ OpenAI Chat: gpt-4o-audio-preview
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -498,6 +510,9 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
   Options:
     temperature: float
@@ -514,6 +529,9 @@ OpenAI Chat: gpt-4o-audio-preview-2024-10-01
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini-audio-preview
   Options:
     temperature: float
@@ -530,6 +548,9 @@ OpenAI Chat: gpt-4o-mini-audio-preview
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -546,6 +567,9 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
@@ -560,6 +584,9 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   Options:
     temperature: float
@@ -574,6 +601,9 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Options:
     temperature: float
@@ -588,6 +618,9 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   Options:
     temperature: float
@@ -602,6 +635,9 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-1106-preview
   Options:
     temperature: float
@@ -616,6 +652,9 @@ OpenAI Chat: gpt-4-1106-preview
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-0125-preview
   Options:
     temperature: float
@@ -630,6 +669,9 @@ OpenAI Chat: gpt-4-0125-preview
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-turbo-2024-04-09
   Options:
     temperature: float
@@ -644,6 +686,9 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   Options:
     temperature: float
@@ -658,6 +703,9 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4.5-preview-2025-02-27
   Options:
     temperature: float
@@ -675,6 +723,9 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
   - streaming
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Options:
     temperature: float
@@ -692,6 +743,9 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   - streaming
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1
   Options:
     temperature: float
@@ -709,6 +763,9 @@ OpenAI Chat: o1
   Features:
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-2024-12-17
   Options:
     temperature: float
@@ -726,6 +783,9 @@ OpenAI Chat: o1-2024-12-17
   Features:
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-preview
   Options:
     temperature: float
@@ -740,6 +800,9 @@ OpenAI Chat: o1-preview
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-mini
   Options:
     temperature: float
@@ -754,6 +817,9 @@ OpenAI Chat: o1-mini
   Features:
   - streaming
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o3-mini
   Options:
     temperature: float
@@ -770,6 +836,9 @@ OpenAI Chat: o3-mini
   - streaming
   - schemas
   - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
@@ -803,6 +872,9 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Include the log probabilities of most likely N per token
   Features:
   - streaming
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 
 ```
 <!-- [[[end]]] -->
