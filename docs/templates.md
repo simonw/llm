@@ -32,6 +32,11 @@ Or options:
 ```bash
 llm --system 'Speak in French' -o temperature 1.8 --save wild-french
 ```
+If you want to include a literal `$` sign in your prompt, use `$$` instead:
+```bash
+llm --system 'Estimate the cost in $$ of this: $input' --save estimate
+```
+
 Add `--schema` to bake a {ref}`schema <usage-schemas>` into your template:
 
 ```bash
