@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_24_2)=
+## 0.24.2 (2025-04-08)
+
+- Fixed a bug on Windows with the new `llm -t path/to/file.yaml` feature. [#901](https://github.com/simonw/llm/issues/901)
+
 (v0_24_1)=
 ## 0.24.1 (2025-04-08)
 
