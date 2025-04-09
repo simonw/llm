@@ -3207,7 +3207,9 @@ def load_template(name: str) -> Template:
             raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
         return _parse_yaml_template(name, response.text)
 
-    if has_plugin_prefix(name):
+    potential_path = pathlib.Path(name)
+
+    if has_plugin_prefix(name) and not potential_path.exists():
         prefix, rest = name.split(":", 1)
         loaders = get_template_loaders()
         if prefix not in loaders:
@@ -3218,12 +3220,11 @@ def load_template(name: str) -> Template:
         except Exception as ex:
             raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
 
-    # First try local file
-    potential_path = pathlib.Path(name)
+    # Try local file
     if potential_path.exists():
         path = potential_path
     else:
-        # Look for in template_dir()
+        # Look for template in template_dir()
         path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
