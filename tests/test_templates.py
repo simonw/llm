@@ -368,5 +368,5 @@ def test_execute_prompt_from_template_path():
             ["-t", str(path), "-m", "echo"],
             catch_exceptions=False,
         )
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert result.output.strip() == "system:\nsystem\n\nprompt:\nprompt"

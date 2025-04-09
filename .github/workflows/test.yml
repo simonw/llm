@@ -25,7 +25,7 @@ jobs:
         pip install -e '.[test]'
     - name: Run tests
       run: |
-        pytest
+        python -m pytest -vv
     - name: Check if cog needs to be run
       if: matrix.os != 'windows-latest'
       run: |
