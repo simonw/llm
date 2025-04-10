@@ -53,7 +53,7 @@ jobs:
         llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh
     - name: Upload artifact of builds
-      if: matrix.os != 'windows-latest'
+      if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
         name: dist-${{ matrix.os }}-${{ matrix.python-version }}
