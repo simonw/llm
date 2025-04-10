@@ -58,7 +58,7 @@ You'll need [Just](https://github.com/casey/just) installed to run this command.
 To release a new version:
 
 1. Update `docs/changelog.md` with the new changes.
-2. Update the version number in `setup.py`
+2. Update the version number in `pyproject.toml`
 3. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
 4. Wait for the package to push to PyPI and then...
 5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.

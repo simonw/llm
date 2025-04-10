@@ -1,0 +1,71 @@
+[project]
+name = "llm"
+version = "0.24.2"
+description = "CLI utility and Python library for interacting with Large Language Models from organizations like OpenAI, Anthropic and Gemini plus local models installed on your own machine."
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [
+    { name = "Simon Willison" },
+]
+license = "Apache-2.0"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "click",
+    "condense-json>=0.1.2",
+    "openai>=1.55.3",
+    "click-default-group>=1.2.3",
+    "sqlite-utils>=3.37",
+    "sqlite-migrate>=0.1a2",
+    "pydantic>=2.0.0",
+    "PyYAML",
+    "pluggy",
+    "python-ulid",
+    "setuptools",
+    "pip",
+    "pyreadline3; sys_platform == 'win32'",
+    "puremagic",
+]
+
+[project.urls]
+Homepage = "https://github.com/simonw/llm"
+Documentation = "https://llm.datasette.io/"
+Issues = "https://github.com/simonw/llm/issues"
+CI = "https://github.com/simonw/llm/actions"
+Changelog = "https://github.com/simonw/llm/releases"
+
+[project.scripts]
+llm = "llm.cli:cli"
+
+[project.optional-dependencies]
+test = [
+    "build",
+    "pytest",
+    "numpy",
+    "pytest-httpx>=0.33.0",
+    "pytest-asyncio",
+    "cogapp",
+    "mypy>=1.10.0",
+    "black>=25.1.0",
+    "ruff",
+    "types-click",
+    "types-PyYAML",
+    "types-setuptools",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
