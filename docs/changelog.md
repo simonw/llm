@@ -1,5 +1,13 @@
 # Changelog
 
+(v0_25a0)=
+## 0.25a0 (2025-04-10)
+
+- `llm models --options` now shows keys and environment variables for models that use API keys. Thanks, [Steve Morin](https://github.com/smorin). [#903](https://github.com/simonw/llm/issues/903)
+- Added `py.typed` marker file so LLM can now be used as a dependency in projects that use `mypy` without a warning. [#887](https://github.com/simonw/llm/issues/887)
+- `$` characters can now be used in templates by escaping them as `$$`. Thanks, [@guspix](https://github.com/guspix). [#904](https://github.com/simonw/llm/issues/904)
+- LLM now uses `pyproject.toml` instead of `setup.py`. [#908](https://github.com/simonw/llm/issues/908)
+
 (v0_24_2)=
 ## 0.24.2 (2025-04-08)
 
