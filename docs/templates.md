@@ -1,11 +1,13 @@
 (prompt-templates)=
 # Templates
 
-Templates can be created for prompts to make them reusable and shareable.
+A **template** can combine a prompt, system prompt, model, default model options, schema, and fragments into a single reusable unit.
+
+Only one template can be used at a time. To compose multiple shorter pieces of prompts together consider using {ref}`fragments <fragments>` instead.
 
 (prompt-templates-save)=
 
-## Getting started with --save
+## Getting started with <code>--save</code>
 
 The easiest way to create a template is using the `--save template_name` option.
 
