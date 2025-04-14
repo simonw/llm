@@ -574,8 +574,6 @@ def prompt(
     if template:
         params = dict(param)
         # Cannot be used with system
-        if system:
-            raise click.ClickException("Cannot use -t/--template and --system together")
         try:
             template_obj = load_template(template)
         except LoadTemplateError as ex:
@@ -601,13 +599,15 @@ def prompt(
         if "input" in template_obj.vars():
             input_ = read_prompt()
         try:
-            template_prompt, system = template_obj.evaluate(input_, params)
+            template_prompt, template_system = template_obj.evaluate(input_, params)
             if template_prompt:
                 # Combine with user prompt
                 if prompt and "input" not in template_obj.vars():
                     prompt = template_prompt + "\n" + prompt
                 else:
                     prompt = template_prompt
+            if template_system and not system:
+                system = template_system
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
@@ -853,9 +853,6 @@ def chat(
     template_obj = None
     if template:
         params = dict(param)
-        # Cannot be used with system
-        if system:
-            raise click.ClickException("Cannot use -t/--template and --system together")
         try:
             template_obj = load_template(template)
         except LoadTemplateError as ex:
@@ -929,9 +926,16 @@ def chat(
                 continue
         if template_obj:
             try:
-                prompt, system = template_obj.evaluate(prompt, params)
+                template_prompt, template_system = template_obj.evaluate(prompt, params)
             except Template.MissingVariables as ex:
                 raise click.ClickException(str(ex))
+            if template_system and not system:
+                system = template_system
+            if template_prompt:
+                new_prompt = template_prompt
+                if prompt:
+                    new_prompt += "\n" + prompt
+                prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
         response = conversation.prompt(prompt, system=system, **kwargs)

@@ -211,13 +211,17 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             None,
         ),
+        # -s system prompt should over-ride template system prompt
         pytest.param(
             "boo",
             "Input text",
-            ["-s", "s"],
+            ["-s", "custom system"],
+            "gpt-4o-mini",
+            [
+                {"role": "system", "content": "custom system"},
+                {"role": "user", "content": "boo\nInput text"},
+            ],
             None,
-            None,
-            "Error: Cannot use -t/--template and --system together",
             None,
             marks=pytest.mark.httpx_mock(),
         ),
