@@ -12,6 +12,7 @@ from enum import Enum
 import httpx
 import openai
 import os
+import warnings
 
 from pydantic import field_validator, Field
 
@@ -535,8 +536,16 @@ class _Shared:
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["default_headers"] = self.headers
+
+        # Configure SSL certificate handling from environment variables
+        ssl_client = _configure_ssl_client(self.model_id)
+
+        if ssl_client:
+            kwargs["http_client"] = ssl_client
+
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
+            if "http_client" not in kwargs:
+                kwargs["http_client"] = logging_client()
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:
@@ -798,3 +807,54 @@ def redact_data(input_dict):
         for item in input_dict:
             redact_data(item)
     return input_dict
+
+
+def _configure_ssl_client(model_id):
+    """Configure SSL certificate handling based on environment variables."""
+    # Check for SSL config in environment variables
+    ssl_config = os.environ.get("LLM_SSL_CONFIG")
+    ca_bundle = os.environ.get("LLM_CA_BUNDLE")
+
+    if not ssl_config and not ca_bundle:
+        return None
+
+    # Import here to handle potential import errors
+    try:
+        from openai import DefaultHttpxClient
+        import httpx
+    except ImportError:
+        warnings.warn(
+            "Unable to import DefaultHttpxClient from openai - SSL configuration not available."
+        )
+        return None
+
+    # Validate ssl_config value
+    valid_ssl_configs = ["native_tls", "no_verify"]
+    if ssl_config and ssl_config not in valid_ssl_configs:
+        warnings.warn(
+            f"Invalid ssl_config value: {ssl_config}. Valid values are: {', '.join(valid_ssl_configs)}"
+        )
+        return None
+
+    try:
+        if ssl_config == "native_tls":
+            # Use the system's native certificate store
+            return DefaultHttpxClient(transport=httpx.HTTPTransport(verify=True))
+        elif ssl_config == "no_verify":
+            # Disable SSL verification entirely (less secure)
+            return DefaultHttpxClient(transport=httpx.HTTPTransport(verify=False))
+        elif ca_bundle:
+            # Check if certificate file exists
+            if not os.path.exists(ca_bundle):
+                warnings.warn(f"Certificate file not found: {ca_bundle}")
+                return None
+            else:
+                # Use a specific CA bundle file
+                return DefaultHttpxClient(
+                    transport=httpx.HTTPTransport(verify=ca_bundle)
+                )
+    except Exception as e:
+        warnings.warn(f"Error configuring SSL client: {str(e)}")
+        return None
+
+    return None
