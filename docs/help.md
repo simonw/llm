@@ -344,6 +344,7 @@ Options:
   --id-gte TEXT               Return responses with ID >= this
   --json                      Output logs as JSON
   -e, --expand                Expand fragments to show their content
+  --nth INTEGER               List the nth entry from the last
   --help                      Show this message and exit.
 ```
 

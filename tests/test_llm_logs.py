@@ -153,6 +153,23 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
+def test_logs_nth(log_path):
+    "Test that logs command correctly returns requested --nth record"
+    runner = CliRunner()
+    args = ["logs", "-p", str(log_path), "-n", "3", "--json"]
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    expected_logs = json.loads(result.output)
+
+    # Test last 3 vals as -nth
+    for i in range(1, 3):
+        runner = CliRunner()
+        args = ["logs", "-p", str(log_path), "--nth", str(i), "--json"]
+        result = runner.invoke(cli, args, catch_exceptions=False)
+        assert result.exit_code == 0
+        logs = json.loads(result.output)
+        assert logs[0] == expected_logs[3 - i]
+
+
 @pytest.mark.parametrize(
     "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
 )

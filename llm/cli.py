@@ -73,6 +73,7 @@ from typing import cast, Optional, Iterable, List, Union, Tuple, Any
 import warnings
 import yaml
 
+
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
@@ -1260,6 +1261,7 @@ order by prompt_attachments."order"
     is_flag=True,
     help="Expand fragments to show their content",
 )
+@click.option("--nth", type=int, help="List the nth entry from the last", default=None)
 def logs_list(
     count,
     path,
@@ -1285,6 +1287,7 @@ def logs_list(
     id_gte,
     json_output,
     expand,
+    nth,
 ):
     "Show logged prompts and their responses"
     if database and not path:
@@ -1404,6 +1407,11 @@ def logs_list(
         schema_id = make_schema_id(schema)[0]
         where_bits.append("responses.schema_id = :schema_id")
         sql_params["schema_id"] = schema_id
+
+    if nth is not None:
+        if nth <= 0:
+            raise click.ClickException("Invalid `--nth` value. Must be 1 or greater.")
+        sql_format["limit"] = f" limit 1 offset {nth - 1}"
 
     if where_bits:
         where_ = " and " if query else " where "
