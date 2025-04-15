@@ -8,6 +8,8 @@ import pytest
     ("append", "input from stdin describe this"),
     ("fence-prepend", "describe this\n\n```\ninput from stdin\n```"),
     ("fence-append", "```\ninput from stdin\n```\n\ndescribe this"),
+    ("fence-both", "describe this\n\n```\ninput from stdin\n```\n\ndescribe this"),
+    ("both", "describe this input from stdin describe this"),
 ])
 def test_prompt_input_style(mock_model, logs_db, style, expected):
     runner = CliRunner()
