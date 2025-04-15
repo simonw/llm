@@ -325,7 +325,7 @@ def cli():
 )
 @click.option(
     "--input-style",
-    type=click.Choice(["prepend", "append", "fence-prepend", "fence-append"]),
+    type=click.Choice(["prepend", "append", "both", "fence-prepend", "fence-append", "fence-both"]),
     default="prepend",
     help=(
        "How to combine input given on the standard input, if any, with the prompt on the command line. "
@@ -499,7 +499,10 @@ def prompt(
                 sep = " "
             bits = [stdin_prompt]
             if prompt:
-                bits.insert(0 if "prepend" in input_style else 1, prompt)
+                if "prepend" in input_style or "both" in input_style:
+                    bits.insert(0, prompt)
+                if "append" in input_style or "both" in input_style:
+                    bits.append(prompt)
             prompt = sep.join(bits)
 
         if (
