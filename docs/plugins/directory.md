@@ -68,6 +68,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
 - **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`.
 - **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
+- **[llm-youtube](https://github.com/irfansofyana/llm-youtube) by Irfan Sofyana Putra to import youtube videos transcript as fragments: `llm -f yt:https://www.youtube.com/watch\?v\=zv72WMmVkPw 'Please summarize this video'`.
 
 ## Just for fun
 
