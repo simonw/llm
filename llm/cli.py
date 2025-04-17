@@ -30,6 +30,9 @@ from llm import (
     get_model,
     get_model_aliases,
     get_models_with_aliases,
+    get_installed_plugins,
+    remove_installed_plugin,
+    save_installed_plugin,
     user_dir,
     set_alias,
     set_default_model,
@@ -2330,6 +2333,9 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
     if no_cache_dir:
         args += ["--no-cache-dir"]
     args += list(packages)
+    for package in packages:
+        if package.startswith("llm-"):
+            save_installed_plugin(package)
     sys.argv = args
     run_module("pip", run_name="__main__")
 
@@ -2339,7 +2345,28 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
 @click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
 def uninstall(packages, yes):
     """Uninstall Python packages from the LLM environment"""
+    for package in packages:
+        if package.startswith("llm-"):
+            remove_installed_plugin(package)
     sys.argv = ["pip", "uninstall"] + list(packages) + (["-y"] if yes else [])
+    run_module("pip", run_name="__main__")
+
+
+@cli.command()
+@click.option("--no-cache-dir", is_flag=True, help="Disable the cache")
+@click.option("--force-reinstall", is_flag=True, help="Reinstall all packages even if they are already up-to-date")
+def upgrade(no_cache_dir, force_reinstall):
+    """Upgrade LLM and plugins"""
+    plugins = set(get_installed_plugins()) | set(p["name"] for p in get_plugins())
+    args = ["pip", "install", "--upgrade"]
+    if no_cache_dir:
+        args += ["--no-cache-dir"]
+    if force_reinstall:
+        args += ["--force-reinstall"]
+    args += ["llm"]
+    if plugins:
+        args += list(plugins)
+    sys.argv = args
     run_module("pip", run_name="__main__")
 
 

@@ -43,12 +43,15 @@ __all__ = [
     "get_model",
     "hookimpl",
     "KeyModel",
+    "get_installed_plugins",
     "Model",
     "ModelError",
     "NeedsKeyException",
     "Options",
     "Prompt",
+    "remove_installed_plugin",
     "Response",
+    "save_installed_plugin",
     "Template",
     "user_dir",
     "schema_dsl",
@@ -289,6 +292,33 @@ def load_keys():
         return json.loads(path.read_text())
     else:
         return {}
+
+
+def get_installed_plugins():
+    path = user_dir() / "plugins.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("[]\n")
+    try:
+        return json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        return []
+
+
+def save_installed_plugin(plugin_name):
+    plugins = get_installed_plugins()
+    if plugin_name not in plugins:
+        plugins.append(plugin_name)
+        path = user_dir() / "plugins.json"
+        path.write_text(json.dumps(plugins, indent=2))
+
+
+def remove_installed_plugin(plugin_name):
+    plugins = get_installed_plugins()
+    if plugin_name in plugins:
+        plugins.remove(plugin_name)
+        path = user_dir() / "plugins.json"
+        path.write_text(json.dumps(plugins, indent=2))
 
 
 def user_dir():
