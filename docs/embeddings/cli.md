@@ -31,6 +31,13 @@ The `llm embed` command returns a JSON array of floating point numbers directly 
 ```
 You can omit the `-m/--model` option if you set a {ref}`default embedding model <embeddings-cli-embed-models-default>`.
 
+You can also set the `LLM_EMBEDDING_MODEL` environment variable to set a default model for all `llm embed` commands in the current shell session:
+
+```bash
+export LLM_EMBEDDING_MODEL=3-small
+llm embed -c 'This is some content'
+```
+
 LLM also offers a binary storage format for embeddings, described in {ref}`embeddings storage format <embeddings-storage>`.
 
 You can output embeddings using that format as raw bytes using `--format blob`, or in hexadecimal using `--format hex`, or in Base64 using `--format base64`:

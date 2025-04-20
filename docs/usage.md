@@ -30,8 +30,13 @@ Or if you know the name is too long to type, use `-q` once or more to provide se
 ```bash
 llm 'Ten names for cheesecakes' -q 4o -q mini
 ```
+To change the default model for the current session, set the `LLM_MODEL` environment variable:
+```bash
+export LLM_MODEL=gpt-4.1-mini
+llm 'Ten names for cheesecakes' # Uses gpt-4.1-mini
+```
 
-You can also send a prompt to standard input, for example:
+You can send a prompt directly to standard input like this:
 ```bash
 echo 'Ten names for cheesecakes' | llm
 ```

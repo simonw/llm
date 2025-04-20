@@ -624,6 +624,18 @@ def test_schema(mock_model, use_pydantic):
     assert response.prompt.schema == dog_schema
 
 
+def test_model_environment_variable(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "echo")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-stream", "hello", "-s", "sys"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == "system:\nsys\n\nprompt:\nhello\n"
+
+
 @pytest.mark.parametrize("use_filename", (True, False))
 def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     user_path = tmpdir / "user"

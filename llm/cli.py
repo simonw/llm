@@ -292,7 +292,7 @@ def cli():
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
     "-d",
     "--database",
@@ -783,7 +783,7 @@ def prompt(
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
     "_continue",
     "-c",
@@ -2352,7 +2352,9 @@ def uninstall(packages, yes):
     type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed",
 )
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -2494,7 +2496,9 @@ def embed(
     "--batch-size", type=int, help="Batch size to use when running embeddings"
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
