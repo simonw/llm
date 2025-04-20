@@ -164,6 +164,7 @@ Options:
   -o, --option <TEXT TEXT>...  key/value options for the model
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
+  -d, --database FILE          Path to log database
   --help                       Show this message and exit.
 ```
 
