@@ -159,13 +159,13 @@ llm fragments loaders
 Example output:
 ```
 github:
-  Load files from a GitHub repository as fragments.
+  Load files from a GitHub repository as fragments
 
   Argument is a GitHub repository URL or username/repository
 
 issue:
   Fetch GitHub issue and comments as Markdown
 
-  argument is either "owner/repo/NUMBER"
+  Argument is either "owner/repo/NUMBER"
   or "https://github.com/owner/repo/issues/NUMBER"
 ```
