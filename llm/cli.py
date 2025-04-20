@@ -909,7 +909,11 @@ def chat(
     accumulated = []
     end_token = "!end"
     while True:
-        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        prompt = ""
+        while prompt == "" or prompt.isspace():
+            # use click.termui.visible_prompt_func (overridden during tests) directly
+            # to avoid bug in click.prompt
+            prompt = click.termui.visible_prompt_func("> " if not in_multi else "")
         if prompt.strip().startswith("!multi"):
             in_multi = True
             bits = prompt.strip().split()
