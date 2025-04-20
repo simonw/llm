@@ -237,10 +237,9 @@ def test_chat_multi(mock_model, logs_db, input, expected):
     rows = list(logs_db["responses"].rows_where(select="prompt, response"))
     assert rows == expected
 
+
 @pytest.mark.parametrize("custom_database_path", (False, True))
-def test_llm_chat_creates_log_database(
-    tmpdir, monkeypatch, custom_database_path
-):
+def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -248,7 +247,12 @@ def test_llm_chat_creates_log_database(
     args = ["chat", "-m", "mock"]
     if custom_database_path:
         args.extend(["--database", str(custom_db_path)])
-    result = runner.invoke(llm.cli.cli, args, catch_exceptions=False, input="Hi\nHi two\nquit\n",)
+    result = runner.invoke(
+        llm.cli.cli,
+        args,
+        catch_exceptions=False,
+        input="Hi\nHi two\nquit\n",
+    )
     assert result.exit_code == 0
     # Should have created user_path and put a logs.db in it
     if custom_database_path:

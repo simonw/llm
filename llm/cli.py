@@ -629,7 +629,9 @@ def prompt(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id, async_=async_, database=database)
+            conversation = load_conversation(
+                conversation_id, async_=async_, database=database
+            )
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
@@ -956,7 +958,8 @@ def chat(
 
 
 def load_conversation(
-    conversation_id: Optional[str], async_=False,
+    conversation_id: Optional[str],
+    async_=False,
     database=None,
 ) -> Optional[_BaseConversation]:
     log_path = pathlib.Path(database) if database else logs_db_path()

@@ -790,9 +790,12 @@ def test_schemas_dsl():
         "required": ["items"],
     }
 
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
-def test_llm_prompt_continue_with_database(tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path):
+def test_llm_prompt_continue_with_database(
+    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+):
     httpx_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
