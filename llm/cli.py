@@ -775,6 +775,11 @@ def prompt(
             ),
             err=True,
         )
+        # Show timing info too
+        click.echo(
+            click.style(response.speed_estimate(), fg="yellow", bold=True),
+            err=True,
+        )
 
     # Log to the database
     if (logs_on() or log) and not no_log:

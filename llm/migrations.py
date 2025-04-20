@@ -310,3 +310,8 @@ def m016_fragments_table_pks(db):
     # https://github.com/simonw/llm/issues/863#issuecomment-2781720064
     db["prompt_fragments"].transform(pk=("response_id", "fragment_id", "order"))
     db["system_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+
+
+@migration
+def m017_first_token_ms(db):
+    db["responses"].add_column("first_token_ms", int)

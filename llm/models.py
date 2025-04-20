@@ -37,6 +37,46 @@ CONVERSATION_NAME_LENGTH = 32
 
 
 @dataclass
+class SpeedEstimate:
+    input_tokens: int
+    output_tokens: int
+    first_token_ms: int
+    duration_ms: int
+
+    def __str__(self):
+        bits = []
+        if self.input_tokens is not None:
+            bits.append("{} input tokens".format(self.input_tokens))
+            if self.first_token_ms:
+                bits.append("first token after {} ms".format(self.first_token_ms))
+                # So that's X input tokens/second
+                input_tokens_per_second = self.input_tokens / (
+                    self.first_token_ms / 1000
+                )
+                bits.append(
+                    "estimated {:.2f} input tokens/second\n".format(
+                        input_tokens_per_second
+                    )
+                )
+        if self.output_tokens is not None:
+            bits.append(
+                "{} output tokens between {} and {}".format(
+                    self.output_tokens, self.first_token_ms, self.duration_ms
+                )
+            )
+            if self.duration_ms and self.first_token_ms:
+                time_in_ms = self.duration_ms - self.first_token_ms
+                time_in_s = time_in_ms / 1000
+                output_tokens_per_second = self.output_tokens / time_in_s
+                bits.append(
+                    "estimated {:.2f} output tokens/second".format(
+                        output_tokens_per_second
+                    )
+                )
+        return ", ".join(bits)
+
+
+@dataclass
 class Usage:
     input: Optional[int] = None
     output: Optional[int] = None
@@ -310,6 +350,7 @@ class _BaseResponse:
         self.conversation = conversation
         self.attachments: List[Attachment] = []
         self._start: Optional[float] = None
+        self._first_token: Optional[float] = None
         self._end: Optional[float] = None
         self._start_utcnow: Optional[datetime.datetime] = None
         self.input_tokens: Optional[int] = None
@@ -531,6 +572,22 @@ class Response(_BaseResponse):
         self._force()
         return int(((self._end or 0) - (self._start or 0)) * 1000)
 
+    def first_token_ms(self) -> Optional[int]:
+        self._force()
+        if self._first_token is None:
+            return None
+        return int((self._first_token - (self._start or 0)) * 1000)
+
+    def speed_estimate(self) -> SpeedEstimate:
+        # Estimate tokens/second for input and output
+        self._force()
+        return SpeedEstimate(
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            first_token_ms=self.first_token_ms(),
+            duration_ms=self.duration_ms(),
+        )
+
     def datetime_utc(self) -> str:
         self._force()
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
@@ -557,6 +614,8 @@ class Response(_BaseResponse):
                 response=self,
                 conversation=self.conversation,
             ):
+                if self.stream and self._first_token is None:
+                    self._first_token = time.monotonic()
                 yield chunk
                 self._chunks.append(chunk)
         elif isinstance(self.model, KeyModel):
@@ -567,6 +626,8 @@ class Response(_BaseResponse):
                 conversation=self.conversation,
                 key=self.model.get_key(self._key),
             ):
+                if self.stream and self._first_token is None:
+                    self._first_token = time.monotonic()
                 yield chunk
                 self._chunks.append(chunk)
         else:
@@ -644,6 +705,8 @@ class AsyncResponse(_BaseResponse):
 
         try:
             chunk = await self._generator.__anext__()
+            if self.stream and self._first_token is None:
+                self._first_token = time.monotonic()
             self._chunks.append(chunk)
             return chunk
         except StopAsyncIteration:
