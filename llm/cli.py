@@ -2283,6 +2283,26 @@ def fragments_remove(alias):
         )
 
 
+@fragments.command(name="loaders")
+def fragments_loaders():
+    """Show fragment loaders registered by plugins"""
+    from llm import get_fragment_loaders
+
+    found = False
+    for prefix, loader in get_fragment_loaders().items():
+        if found:
+            # Extra newline on all after the first
+            click.echo("")
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No fragment loaders found")
+
+
 @cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
 def plugins_list(all):

@@ -94,6 +94,7 @@ def test_register_fragment_loaders(logs_db):
     assert get_fragment_loaders() == {}
 
     def single_fragment(argument):
+        "This is the fragment documentation"
         return llm.Fragment("single", "single")
 
     def three_fragments(argument):
@@ -127,6 +128,18 @@ def test_register_fragment_loaders(logs_db):
         assert result.exit_code == 0
         expected = "prompt:\n" "one:x\n" "two:x\n" "three:x\n"
         assert expected in result.output
+        # And the llm fragments loaders command:
+        result2 = runner.invoke(cli.cli, ["fragments", "loaders"])
+        assert result2.exit_code == 0
+        expected2 = (
+            "single:\n"
+            "  This is the fragment documentation\n"
+            "\n"
+            "three:\n"
+            "  Undocumented\n"
+        )
+        assert result2.output == expected2
+
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")
         assert get_fragment_loaders() == {}
