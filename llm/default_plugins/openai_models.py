@@ -110,6 +110,10 @@ def register_models(register):
         Chat("o3-mini", reasoning=True, supports_schema=True),
         AsyncChat("o3-mini", reasoning=True, supports_schema=True),
     )
+    register(
+        Chat("o3", reasoning=True, supports_schema=True),
+        AsyncChat("o3", reasoning=True, supports_schema=True),
+    )
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
