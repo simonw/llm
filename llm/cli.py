@@ -816,14 +816,14 @@ def prompt(
     multiple=True,
     help="key/value options for the model",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
-@click.option("--key", help="API key to use")
 @click.option(
     "-d",
     "--database",
     type=click.Path(readable=True, dir_okay=False),
     help="Path to log database",
 )
+@click.option("--no-stream", is_flag=True, help="Do not stream output")
+@click.option("--key", help="API key to use")
 def chat(
     system,
     model_id,
