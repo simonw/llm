@@ -131,7 +131,7 @@ llm logs -c --json --expand
 
 LLM plugins can provide custom fragment loaders which do useful things.
 
-One example is the [llm-fragments-github plugin](https://github.com/simonw/llm-fragments-github). This can convert the file from a public GitHub repository into a list of fragments, allowing you to ask questions about the full repository.
+One example is the [llm-fragments-github plugin](https://github.com/simonw/llm-fragments-github). This can convert the files from a public GitHub repository into a list of fragments, allowing you to ask questions about the full repository.
 
 Here's how to try that out:
 
