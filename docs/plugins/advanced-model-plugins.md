@@ -11,6 +11,14 @@ Features to consider for your model plugin include:
 - Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
 - Tracking {ref}`token usage <advanced-model-plugins-usage>` for models that charge by the token.
 
+(advanced-model-plugins-lazy)=
+
+## Tip: lazily load expensive dependencies
+
+If your plugin depends on an expensive library such as [PyTorch](https://pytorch.org/) you should avoid importing that dependency (or a dependency that uses that dependency) at the top level of your module. Expensive imports in plugins mean that even simple commands like `llm --help` can take a long time to run.
+
+Instead, move those imports to inside the methods that need them. Here's an example [change to llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers/commit/f87df71e8a652a8cb05ad3836a79b815bcbfa64b) that shaved 1.8 seconds off the time it took to run `llm --help`!
+
 (advanced-model-plugins-api-keys)=
 
 ## Models that accept API keys
