@@ -347,6 +347,12 @@ def complete_embedding_model(ctx: click.Context, param: click.Parameter, incompl
 
     return [CompletionItem(alias) for alias in get_embedding_model_aliases().keys() if alias.startswith(incomplete)]
 
+def complete_template(ctx: click.Context, param: click.Parameter, incomplete: str):
+    from click.shell_completion import CompletionItem
+
+    path = template_dir()
+    return [CompletionItem(file.stem) for file in path.glob(incomplete + "*.yaml")]
+
 
 
 @cli.command(name="prompt")
@@ -446,7 +452,7 @@ def complete_embedding_model(ctx: click.Context, param: click.Parameter, incompl
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Template to use", shell_complete=complete_template)
 @click.option(
     "-p",
     "--param",
@@ -960,7 +966,7 @@ def prompt(
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Template to use", shell_complete=complete_template)
 @click.option(
     "-p",
     "--param",
