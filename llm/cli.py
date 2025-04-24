@@ -342,6 +342,12 @@ def complete_model(ctx: click.Context, param: click.Parameter, incomplete: str):
 
     return [CompletionItem(alias) for alias in get_model_aliases().keys() if alias.startswith(incomplete)]
 
+def complete_embedding_model(ctx: click.Context, param: click.Parameter, incomplete: str):
+    from click.shell_completion import CompletionItem
+
+    return [CompletionItem(alias) for alias in get_embedding_model_aliases().keys() if alias.startswith(incomplete)]
+
+
 
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
@@ -2997,7 +3003,8 @@ def uninstall(packages, yes):
     help="File to embed",
 )
 @click.option(
-    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL",
+    shell_complete=complete_embedding_model
 )
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
@@ -3141,7 +3148,8 @@ def embed(
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option(
-    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL",
+    shell_complete=complete_embedding_model
 )
 @click.option(
     "--prepend",
