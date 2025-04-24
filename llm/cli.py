@@ -337,10 +337,16 @@ def cli():
     """
 
 
+def complete_model(ctx: click.Context, param: click.Parameter, incomplete: str):
+    from click.shell_completion import CompletionItem
+
+    return [CompletionItem(alias) for alias in get_model_aliases().keys() if alias.startswith(incomplete)]
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL", shell_complete=complete_model)
 @click.option(
     "-d",
     "--database",
@@ -919,7 +925,7 @@ def prompt(
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL", shell_complete=complete_model)
 @click.option(
     "_continue",
     "-c",
