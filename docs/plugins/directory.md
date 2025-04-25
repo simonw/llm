@@ -15,6 +15,7 @@ These plugins all help you run LLMs directly on your own computer:
 - **[llm-mlc](https://github.com/simonw/llm-mlc)** can run local models released by the [MLC project](https://mlc.ai/mlc-llm/), including models that can take advantage of the GPU on Apple Silicon M1/M2 devices.
 - **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)** adds support for various models released by the [GPT4All](https://gpt4all.io/) project that are optimized to run locally on your own machine. These models include versions of Vicuna, Orca, Falcon and MPT - here's [a full list of models](https://observablehq.com/@simonw/gpt4all-models).
 - **[llm-mpt30b](https://github.com/simonw/llm-mpt30b)** adds support for the [MPT-30B](https://huggingface.co/mosaicml/mpt-30b) local model.
+- **[llm-lmstudio](https://github.com/agustif/llm-lmstudio)** provides access to local models using [LM Studio](https://lmstudio.ai/),
 
 ## Remote APIs
 
@@ -40,7 +41,6 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-deepseek](https://github.com/abrasumente233/llm-deepseek)** adds support for the [DeepSeek](https://deepseek.com)'s DeepSeek-Chat and DeepSeek-Coder models.
 - **[llm-lambda-labs](https://github.com/simonw/llm-lambda-labs)** provides access to models hosted by [Lambda Labs](https://docs.lambdalabs.com/public-cloud/lambda-chat-api/), including the Nous Hermes 3 series.
 - **[llm-venice](https://github.com/ar-jan/llm-venice)** provides access to uncensored models hosted by privacy-focused [Venice AI](https://docs.venice.ai/), including Llama 3.1 405B.
-- **[llm-lmstudio](https://github.com/agustif/llm-lmstudio)** provides access to local models using [LM Studio](https://lmstudio.ai/),
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
