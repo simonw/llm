@@ -347,6 +347,20 @@ def complete_embedding_model(ctx: click.Context, param: click.Parameter, incompl
 
     return [CompletionItem(alias) for alias in get_embedding_model_aliases().keys() if alias.startswith(incomplete)]
 
+def complete_option(ctx: click.Context, param: click.Parameter, incomplete):
+    from click.shell_completion import CompletionItem
+
+    # This function is actually hit for the option 'value' as well.
+    # But there's no way to tell without patching click.
+
+    try:
+        model_id = ctx.params["model_id"]
+        model = get_model(model_id or get_default_model())
+    except (AttributeError, UnknownModelError):
+        return []
+    options = model.Options.model_json_schema()["properties"].keys()
+    return [CompletionItem(option) for option in options if option.startswith(incomplete)]
+
 class TemplateType(click.ParamType):
     name = "template"
 
@@ -434,6 +448,7 @@ class TemplateType(click.ParamType):
     type=(str, str),
     multiple=True,
     help="key/value options for the model",
+    shell_complete=complete_option,
 )
 @schema_option
 @click.option(
@@ -983,6 +998,7 @@ def prompt(
     type=(str, str),
     multiple=True,
     help="key/value options for the model",
+    shell_complete=complete_option,
 )
 @click.option(
     "-d",
