@@ -48,7 +48,23 @@ def register_models(register):
         register(
             Chat(audio_model_id, audio=True),
             AsyncChat(audio_model_id, audio=True),
-        )
+        ) 
+    # GPT-4.1
+    register(
+        Chat("gpt-4.1", vision=True, supports_schema=True),
+        AsyncChat("gpt-4.1", vision=True, supports_schema=True),
+        aliases=("4.1",),
+    )
+    register(
+        Chat("gpt-4.1-mini", vision=True, supports_schema=True),
+        AsyncChat("gpt-4.1-mini", vision=True, supports_schema=True),
+        aliases=("4.1-mini",),
+    )
+    register(
+        Chat("gpt-4.1-nano", vision=True, supports_schema=True),
+        AsyncChat("gpt-4.1-nano", vision=True, supports_schema=True),
+        aliases=("4.1-nano",),
+    )
     # 3.5 and 4
     register(
         Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
