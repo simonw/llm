@@ -1,5 +1,9 @@
 # Changelog
 
+(v0_25_1)=
+## 0.25.1 (2025-04-29)
+- Add gpt-4.1 family to default openai models
+
 (v0_25a0)=
 ## 0.25a0 (2025-04-10)
 
