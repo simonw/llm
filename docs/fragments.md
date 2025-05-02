@@ -131,7 +131,7 @@ llm logs -c --json --expand
 
 LLM plugins can provide custom fragment loaders which do useful things.
 
-One example is the [llm-fragments-github plugin](https://github.com/simonw/llm-fragments-github). This can convert the file from a public GitHub repository into a list of fragments, allowing you to ask questions about the full repository.
+One example is the [llm-fragments-github plugin](https://github.com/simonw/llm-fragments-github). This can convert the files from a public GitHub repository into a list of fragments, allowing you to ask questions about the full repository.
 
 Here's how to try that out:
 
@@ -146,3 +146,26 @@ Running `llm logs -c` will show that this prompt incorporated 26 fragments, one 
 Running `llm logs -c --usage --expand` includes token usage information and turns each fragment ID into a full copy of that file. [Here's the output of that command](https://gist.github.com/simonw/c9bbbc5f6560b01f4b7882ac0194fb25).
 
 See the {ref}`register_fragment_loaders() plugin hook <plugin-hooks-register-fragment-loaders>` documentation for details on writing your own custom fragment plugin.
+
+(fragments-loaders)=
+## Listing available fragment prefixes
+
+The `llm fragments loaders` command shows all prefixes that have been installed by plugins, along with their documentation:
+
+```bash
+llm install llm-fragments-github
+llm fragments loaders
+```
+Example output:
+```
+github:
+  Load files from a GitHub repository as fragments
+
+  Argument is a GitHub repository URL or username/repository
+
+issue:
+  Fetch GitHub issue and comments as Markdown
+
+  Argument is either "owner/repo/NUMBER"
+  or "https://github.com/owner/repo/issues/NUMBER"
+```
