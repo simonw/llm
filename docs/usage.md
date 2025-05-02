@@ -325,6 +325,7 @@ llm chat -t cheesecake
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -345,6 +346,7 @@ If your pasted text might itself contain a `!end` line, you can set a custom del
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
 > !multi custom-end
  Explain this error:
 
@@ -355,6 +357,16 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>
 
  !end custom-end
+```
+
+You can also use `!edit` to open your default editor and modify the prompt before sending it to the model.
+
+```
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+> !edit
 ```
 
 ## Listing available models

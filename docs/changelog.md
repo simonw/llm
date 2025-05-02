@@ -419,6 +419,7 @@ This starts a chat session:
 ```
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
 > Who are you?
 Hello! I'm just an AI, here to assist you with any questions you may have.
 My name is LLaMA, and I'm a large language model trained to provide helpful

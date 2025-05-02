@@ -905,6 +905,7 @@ def chat(
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    click.echo("Type '!edit' to open your default editor and modify the prompt")
     in_multi = False
     accumulated = []
     end_token = "!end"
@@ -916,6 +917,15 @@ def chat(
             if len(bits) > 1:
                 end_token = "!end {}".format(" ".join(bits[1:]))
             continue
+        if prompt.strip() == "!edit":
+            edited_prompt = click.edit()
+            if edited_prompt is None:
+                click.echo("Editor closed without saving.", err=True)
+                continue
+            prompt = edited_prompt.strip()
+            if not prompt:
+                continue
+            click.echo(prompt)
         if in_multi:
             if prompt.strip() == end_token:
                 prompt = "\n".join(accumulated)
