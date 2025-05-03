@@ -667,7 +667,7 @@ def prompt(
             raise click.ClickException(render_errors(ex.errors()))
 
     # Add on any default model options
-    default_options = get_model_options(model_id)
+    default_options = get_model_options(model.model_id)
     for key_, value in default_options.items():
         if key_ not in validated_options:
             validated_options[key_] = value
