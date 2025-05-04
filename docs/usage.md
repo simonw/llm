@@ -935,6 +935,25 @@ OpenAI Chat: o3
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
+OpenAI Chat: o4-mini
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    reasoning_effort: str
+  Features:
+  - streaming
+  - schemas
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
