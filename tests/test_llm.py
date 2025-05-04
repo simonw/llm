@@ -789,3 +789,59 @@ def test_schemas_dsl():
         },
         "required": ["items"],
     }
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_continue_with_database(
+    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"]
+    if custom_database_path:
+        args2.extend(["--database", str(custom_db_path)])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 2

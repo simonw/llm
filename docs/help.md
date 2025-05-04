@@ -162,6 +162,7 @@ Options:
   -t, --template TEXT          Template to use
   -p, --param <TEXT TEXT>...   Parameters for template
   -o, --option <TEXT TEXT>...  key/value options for the model
+  -d, --database FILE          Path to log database
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
   --help                       Show this message and exit.

@@ -637,7 +637,9 @@ def prompt(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id, async_=async_)
+            conversation = load_conversation(
+                conversation_id, async_=async_, database=database
+            )
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
@@ -834,6 +836,12 @@ def prompt(
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, dir_okay=False),
+    help="Path to log database",
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
 def chat(
@@ -846,6 +854,7 @@ def chat(
     options,
     no_stream,
     key,
+    database,
 ):
     """
     Hold an ongoing chat with a model.
@@ -857,7 +866,7 @@ def chat(
     else:
         readline.parse_and_bind("bind -x '\\e[D: backward-char'")
         readline.parse_and_bind("bind -x '\\e[C: forward-char'")
-    log_path = logs_db_path()
+    log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -866,7 +875,7 @@ def chat(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id)
+            conversation = load_conversation(conversation_id, database=database)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
@@ -979,9 +988,12 @@ def chat(
 
 
 def load_conversation(
-    conversation_id: Optional[str], async_=False
+    conversation_id: Optional[str],
+    async_=False,
+    database=None,
 ) -> Optional[_BaseConversation]:
-    db = sqlite_utils.Database(logs_db_path())
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
         # Return the most recent conversation, or None if there are none
