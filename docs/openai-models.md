@@ -39,6 +39,9 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
 OpenAI Chat: gpt-4o-mini-audio-preview
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
+OpenAI Chat: gpt-4.1 (aliases: 4.1)
+OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
+OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)

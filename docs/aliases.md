@@ -22,6 +22,9 @@ cog.out("```\n{}```".format(result.output))
 4o                  : gpt-4o
 chatgpt-4o          : chatgpt-4o-latest
 4o-mini             : gpt-4o-mini
+4.1                 : gpt-4.1
+4.1-mini            : gpt-4.1-mini
+4.1-nano            : gpt-4.1-nano
 3.5                 : gpt-3.5-turbo
 chatgpt             : gpt-3.5-turbo
 chatgpt-16k         : gpt-3.5-turbo-16k

@@ -49,6 +49,13 @@ def register_models(register):
             Chat(audio_model_id, audio=True),
             AsyncChat(audio_model_id, audio=True),
         )
+    # GPT-4.1
+    for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+        register(
+            Chat(model_id, vision=True, supports_schema=True),
+            AsyncChat(model_id, vision=True, supports_schema=True),
+            aliases=(model_id.replace("gpt-", ""),),
+        )
     # 3.5 and 4
     register(
         Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
