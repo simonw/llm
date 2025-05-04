@@ -112,7 +112,7 @@ def resolve_fragments(
         return None, None
 
     # The fragment strings could be URLs or paths or plugin references
-    resolved = []
+    resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
             client = httpx.Client(follow_redirects=True, max_redirects=3)
