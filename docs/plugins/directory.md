@@ -68,6 +68,7 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
 - **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`.
 - **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
+- **[llm-arxiv](https://github.com/agustif/llm-arxiv)** provides a `-f arxiv:2504.17544` loader that can load and parse arxiv PDF research papers as fragments.
 
 ## Just for fun
 
