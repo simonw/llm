@@ -96,7 +96,6 @@ llm chat -m mistral-7b-instruct-v0
 Chatting with mistral-7b-instruct-v0
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
-Type '!edit' to open your default editor and modify the prompt.
 > 
 ```
 
