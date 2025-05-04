@@ -79,3 +79,40 @@ def test_model_options_clear(user_path):
     assert result2.exit_code == 0
     data = json.loads(path.read_text("utf-8"))
     assert data == {"gpt-4o": {"temperature": 0.7}}
+
+
+def test_prompt_uses_model_options(user_path):
+    path = user_path / "model_options.json"
+    path.write_text("{}", "utf-8")
+    # Prompt should not use an option
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "echo", "prompt"])
+    assert result.exit_code == 0
+    assert result.output == "system:\n\n\nprompt:\nprompt\n"
+    # Now set an option
+    path.write_text(json.dumps({"echo": {"example_int": 1}}), "utf-8")
+
+    result2 = runner.invoke(cli, ["-m", "echo", "prompt"])
+    assert result2.exit_code == 0
+    assert (
+        result2.output
+        == 'system:\n\n\nprompt:\nprompt\n\noptions: {"example_int": 1}\n'
+    )
+
+    # Option can be over-ridden
+    result3 = runner.invoke(cli, ["-m", "echo", "prompt", "-o", "example_int", "2"])
+    assert result3.exit_code == 0
+    assert (
+        result3.output
+        == 'system:\n\n\nprompt:\nprompt\n\noptions: {"example_int": 2}\n'
+    )
+
+    # Using an alias should also pick up that option
+    aliases_path = user_path / "aliases.json"
+    aliases_path.write_text('{"e": "echo"}', "utf-8")
+    result4 = runner.invoke(cli, ["-m", "e", "prompt"])
+    assert result4.exit_code == 0
+    assert (
+        result4.output
+        == 'system:\n\n\nprompt:\nprompt\n\noptions: {"example_int": 1}\n'
+    )
