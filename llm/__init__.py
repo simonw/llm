@@ -120,9 +120,10 @@ def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
     return _get_loaders(pm.hook.register_template_loaders)
 
 
-def get_fragment_loaders() -> (
-    Dict[str, Callable[[str], Union[Fragment, List[Fragment]]]]
-):
+def get_fragment_loaders() -> Dict[
+    str,
+    Callable[[str], Union[Fragment, Attachment, List[Union[Fragment, Attachment]]]],
+]:
     """Get fragment loaders registered by plugins."""
     return _get_loaders(pm.hook.register_fragment_loaders)
 
