@@ -575,6 +575,66 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1 (aliases: 4.1)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
