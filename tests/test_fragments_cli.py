@@ -1,6 +1,8 @@
 from click.testing import CliRunner
 from llm.cli import cli
 import yaml
+import sqlite_utils
+import textwrap
 
 
 def test_fragments_set_show_remove(user_path):
@@ -59,3 +61,65 @@ def test_fragments_set_show_remove(user_path):
 
         # And --aliases list should be empty
         assert runner.invoke(cli, ["fragments", "list", "--aliases"]).output == ""
+
+
+def test_fragments_list(user_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        # This is just to create the database schema
+        open("fragment1.txt", "w").write("1")
+        assert (
+            runner.invoke(cli, ["fragments", "set", "f1", "fragment1.txt"]).exit_code
+            == 0
+        )
+        # Now add the rest directly to the database
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        db["fragments"].delete_where()
+        db["fragments"].insert(
+            {
+                "content": "1",
+                "datetime_utc": "2023-10-01T00:00:00Z",
+                "source": "file1.txt",
+                "hash": "hash1",
+            },
+        )
+        db["fragments"].insert(
+            {
+                "content": "2",
+                "datetime_utc": "2022-10-01T00:00:00Z",
+                "source": "file2.txt",
+                "hash": "hash2",
+            },
+        )
+        db["fragments"].insert(
+            {
+                "content": "3",
+                "datetime_utc": "2024-10-01T00:00:00Z",
+                "source": "file3.txt",
+                "hash": "hash3",
+            },
+        )
+        result = runner.invoke(cli, ["fragments", "list"])
+        assert result.exit_code == 0
+        assert result.output.strip() == (
+            textwrap.dedent(
+                """
+                - hash: hash2
+                  aliases: []
+                  datetime_utc: '2022-10-01T00:00:00Z'
+                  source: file2.txt
+                  content: '2'
+                - hash: hash1
+                  aliases:
+                  - f1
+                  datetime_utc: '2023-10-01T00:00:00Z'
+                  source: file1.txt
+                  content: '1'
+                - hash: hash3
+                  aliases: []
+                  datetime_utc: '2024-10-01T00:00:00Z'
+                  source: file3.txt
+                  content: '3'
+                """
+            ).strip()
+        )

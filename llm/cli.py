@@ -2203,7 +2203,8 @@ def fragments_list(queries, aliases, json_):
         fragment_aliases on fragment_aliases.fragment_id = fragments.id
     {where}
     group by
-        fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source;
+        fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
+    order by fragments.datetime_utc
     """.format(
         where=where
     )
