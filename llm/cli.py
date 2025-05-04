@@ -89,13 +89,13 @@ def validate_fragment_alias(ctx, param, value):
 
 
 def resolve_fragments(
-    db: sqlite_utils.Database, fragments: Iterable[str]
-) -> List[Fragment]:
+    db: sqlite_utils.Database, fragments: Iterable[str], allow_attachments: bool = False
+) -> List[Union[Fragment, Attachment]]:
     """
-    Resolve fragments into a list of (content, source) tuples
+    Resolve fragment strings into a mixed of llm.Fragment() and llm.Attachment() objects.
     """
 
-    def _load_by_alias(fragment):
+    def _load_by_alias(fragment: str) -> Tuple[Optional[str], Optional[str]]:
         rows = list(
             db.query(
                 """
@@ -111,8 +111,8 @@ def resolve_fragments(
             return row["content"], row["source"]
         return None, None
 
-    # These can be URLs or paths or plugin references
-    resolved = []
+    # The fragment strings could be URLs or paths or plugin references
+    resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
             client = httpx.Client(follow_redirects=True, max_redirects=3)
@@ -131,6 +131,14 @@ def resolve_fragments(
                 result = loader(rest)
                 if not isinstance(result, list):
                     result = [result]
+                if not allow_attachments and any(
+                    isinstance(r, Attachment) for r in result
+                ):
+                    raise FragmentNotFound(
+                        "Fragment loader {} returned a disallowed attachment".format(
+                            prefix
+                        )
+                    )
                 resolved.extend(result)
             except Exception as ex:
                 raise FragmentNotFound(
@@ -687,8 +695,20 @@ def prompt(
     response = None
 
     try:
-        fragments = resolve_fragments(db, fragments)
-        system_fragments = resolve_fragments(db, system_fragments)
+        fragments_and_attachments = resolve_fragments(
+            db, fragments, allow_attachments=True
+        )
+        resolved_fragments = [
+            fragment
+            for fragment in fragments_and_attachments
+            if isinstance(fragment, Fragment)
+        ]
+        resolved_attachments.extend(
+            attachment
+            for attachment in fragments_and_attachments
+            if isinstance(attachment, Attachment)
+        )
+        resolved_system_fragments = resolve_fragments(db, system_fragments)
     except FragmentNotFound as ex:
         raise click.ClickException(str(ex))
 
@@ -706,8 +726,8 @@ def prompt(
                         attachments=resolved_attachments,
                         system=system,
                         schema=schema,
-                        fragments=fragments,
-                        system_fragments=system_fragments,
+                        fragments=resolved_fragments,
+                        system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -717,11 +737,11 @@ def prompt(
                 else:
                     response = prompt_method(
                         prompt,
-                        fragments=fragments,
+                        fragments=resolved_fragments,
                         attachments=resolved_attachments,
                         schema=schema,
                         system=system,
-                        system_fragments=system_fragments,
+                        system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
                     text = await response.text()
@@ -736,11 +756,11 @@ def prompt(
         else:
             response = prompt_method(
                 prompt,
-                fragments=fragments,
+                fragments=resolved_fragments,
                 attachments=resolved_attachments,
                 system=system,
                 schema=schema,
-                system_fragments=system_fragments,
+                system_fragments=resolved_system_fragments,
                 **kwargs,
             )
             if should_stream:

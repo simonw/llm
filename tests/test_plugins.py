@@ -3,6 +3,7 @@ import click
 import importlib
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
+import textwrap
 
 
 def test_register_commands():
@@ -90,7 +91,15 @@ def test_register_template_loaders():
         assert get_template_loaders() == {}
 
 
-def test_register_fragment_loaders(logs_db):
+def test_register_fragment_loaders(logs_db, httpx_mock):
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/attachment.png",
+        content=b"attachment",
+        headers={"Content-Type": "image/png"},
+        is_reusable=True,
+    )
+
     assert get_fragment_loaders() == {}
 
     def single_fragment(argument):
@@ -104,6 +113,12 @@ def test_register_fragment_loaders(logs_db):
             llm.Fragment(f"three:{argument}", "three"),
         ]
 
+    def fragment_and_attachment(argument):
+        return [
+            llm.Fragment(f"one:{argument}", "one"),
+            llm.Attachment(url="https://example.com/attachment.png"),
+        ]
+
     class FragmentLoadersPlugin:
         __name__ = "FragmentLoadersPlugin"
 
@@ -111,6 +126,7 @@ def test_register_fragment_loaders(logs_db):
         def register_fragment_loaders(self, register):
             register("single", single_fragment)
             register("three", three_fragments)
+            register("mixed", fragment_and_attachment)
 
     try:
         plugins.pm.register(FragmentLoadersPlugin(), name="FragmentLoadersPlugin")
@@ -118,6 +134,7 @@ def test_register_fragment_loaders(logs_db):
         assert loaders == {
             "single": single_fragment,
             "three": three_fragments,
+            "mixed": fragment_and_attachment,
         }
 
         # Test the CLI command
@@ -137,8 +154,29 @@ def test_register_fragment_loaders(logs_db):
             "\n"
             "three:\n"
             "  Undocumented\n"
+            "\n"
+            "mixed:\n"
+            "  Undocumented\n"
         )
         assert result2.output == expected2
+
+        # Test the one that includes an attachment
+        result3 = runner.invoke(
+            cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
+        )
+        assert result3.exit_code == 0
+        result3.output.strip == textwrap.dedent(
+            """\
+            system:
+
+
+            prompt:
+            one:x
+
+            attachments:
+            - https://example.com/attachment.png
+            """
+        ).strip()
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")

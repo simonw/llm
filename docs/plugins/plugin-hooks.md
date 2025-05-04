@@ -113,11 +113,19 @@ The loader function should raise a `ValueError` if the template cannot be found 
 
 Plugins can register new fragment loaders using the `register_template_loaders` hook. These can then be used with the `llm -f prefix:argument` syntax.
 
+Fragment loader plugins differ from template loader plugins in that you can stack more than one fragment loader call together in the same prompt.
+
+A fragment loader can return one or more string fragments or attachments, or a mixture of the two. The fragments will be concatenated together into the prompt string, while any attachments will be added to the list of attachments to be sent to the model.
+
 The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
 
-The callback works in a very similar way to template loaders, but returns either a single `llm.Fragment` or a list of `llm.Fragment` objects.
+The callback works in a very similar way to template loaders, but returns either a single `llm.Fragment`, a list of `llm.Fragment` objects, a single `llm.Attachment`, or a list that can mix `llm.Attachment` and `llm.Fragment` objects.
 
 The `llm.Fragment` constructor takes a required string argument (the content of the fragment) and an optional second `source` argument, which is a string that may be displayed as debug information. For files this is a path and for URLs it is a URL. Your plugin can use anything you like for the `source` value.
+
+See {ref}`the Python API documentation for attachments <python-api-attachments>` for details of the `llm.Attachment` class.
+
+Here is some example code:
 
 ```python
 import llm
@@ -138,11 +146,12 @@ def my_fragment_loader(argument: str) -> llm.Fragment:
             f"Fragment 'my-fragments:{argument}' could not be loaded: {str(ex)}"
         )
 
-# Or for the case where you want to return multiple fragments:
+# Or for the case where you want to return multiple fragments and attachments:
 def my_fragment_loader(argument: str) -> list[llm.Fragment]:
     return [
         llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
         llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),
+        llm.Attachment(path="/path/to/image.png"),
     ]
 ```
 A plugin like this one can be called like so:
@@ -151,4 +160,4 @@ llm -f my-fragments:argument
 ```
 If multiple fragments are returned they will be used as if the user passed multiple `-f X` arguments to the command.
 
-Multiple fragments are useful for things like plugins that return every file in a directory. By giving each file its own fragment we can avoid having multiple copies of the full collection stored if only a single file has changed.
+Multiple fragments are particularly useful for things like plugins that return every file in a directory. If these were concatenated together by the plugin, a change to a single file would invalidate the de-duplicatino cache for that whole fragment. Giving each file its own fragment means we can avoid storing multiple copies of that full collection if only a single file has changed.

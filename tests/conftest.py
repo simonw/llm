@@ -85,6 +85,7 @@ class MockModel(llm.Model):
 class EchoModel(llm.Model):
     model_id = "echo"
     can_stream = True
+    attachment_types = {"image/png"}
 
     class Options(llm.Options):
         example_int: Optional[int] = Field(
@@ -100,6 +101,10 @@ class EchoModel(llm.Model):
         }
         if non_null_options:
             yield "\n\noptions: {}".format(json.dumps(non_null_options))
+        if prompt.attachments:
+            yield "\n\nattachments:\n"
+            for attachment in prompt.attachments:
+                yield f"  - {attachment.url}\n"
 
 
 class MockKeyModel(llm.KeyModel):

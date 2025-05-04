@@ -143,7 +143,9 @@ This plugin turns a single call to `-f github:simonw/s3-credentials` into multip
 
 Running `llm logs -c` will show that this prompt incorporated 26 fragments, one for each file.
 
-Running `llm logs -c --usage --expand` includes token usage information and turns each fragment ID into a full copy of that file. [Here's the output of that command](https://gist.github.com/simonw/c9bbbc5f6560b01f4b7882ac0194fb25).
+Running `llm logs -c --usage --expand` (shortcut: `llm logs -cue`) includes token usage information and turns each fragment ID into a full copy of that file. [Here's the output of that command](https://gist.github.com/simonw/c9bbbc5f6560b01f4b7882ac0194fb25).
+
+Fragment plugins can return {ref}`attachments <usage-attachments>` (such as images) as well.
 
 See the {ref}`register_fragment_loaders() plugin hook <plugin-hooks-register-fragment-loaders>` documentation for details on writing your own custom fragment plugin.
 
