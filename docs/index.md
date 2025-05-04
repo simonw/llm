@@ -75,6 +75,7 @@ llm chat -m gpt-4o
 Chatting with gpt-4o
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
 > Tell me a joke about a pelican
 Why don't pelicans like to tip waiters?
 
