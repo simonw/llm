@@ -137,11 +137,14 @@ Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want 
 
 ```yaml
 - model_id: gpt-3.5-turbo-0613
+  model_name: gpt-3.5-turbo-0613
   aliases: ["0613"]
 ```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+
+If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
 For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
 
