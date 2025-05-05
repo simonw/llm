@@ -11,7 +11,7 @@
 - `llm chat` now includes a `!edit` command for editing a prompt using your default terminal text editor. Thanks, [Benedikt Willi](https://github.com/Hopiu). [#969](https://github.com/simonw/llm/pull/969)
 - Allow `-t` and `--system` to be used at the same time. [#916](https://github.com/simonw/llm/issues/916)
 - Fixed a bug where accessing a model via its alias would fail to respect any default options set for that model. [#968](https://github.com/simonw/llm/issues/968)
-- Improved documentation for {ref}`extra-openai-models.yaml <openai-extra-models>`. Thanks, [Rahim Nathwani](https://github.com/rahimnathwani) and [Dan Guido](https://github.com/dguido). [#950](https://github.com/simonw/llm/pull/950), [#957](https://github.com/simonw/llm/pull/957)
+- Improved documentation for {ref}`extra-openai-models.yaml <openai-compatible-models>`. Thanks, [Rahim Nathwani](https://github.com/rahimnathwani) and [Dan Guido](https://github.com/dguido). [#950](https://github.com/simonw/llm/pull/950), [#957](https://github.com/simonw/llm/pull/957)
 - `llm -c/--continue` now works correctly with the `-d/--database` option. `llm chat` now accepts that `-d/--database` option. Thanks, [Sukhbinder Singh](https://github.com/sukhbinder). [#933](https://github.com/simonw/llm/issues/933)
 
 (v0_25a0)=
