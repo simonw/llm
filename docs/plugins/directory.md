@@ -7,7 +7,6 @@ The following plugins are available for LLM. Here's {ref}`how to install them <i
 
 These plugins all help you run LLMs directly on your own computer:
 
-
 - **[llm-gguf](https://github.com/simonw/llm-gguf)** uses [llama.cpp](https://github.com/ggerganov/llama.cpp) to run models published in the GGUF format.
 - **[llm-mlx](https://github.com/simonw/llm-mlx)** (Mac only) uses Apple's MLX framework to provide extremely high performance access to a large number of local models.
 - **[llm-ollama](https://github.com/taketwo/llm-ollama)** adds support for local models run using [Ollama](https://ollama.ai/).
@@ -43,6 +42,17 @@ These plugins can be used to interact with remotely hosted models via their API:
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
+## Fragments and template loaders
+
+{ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.
+
+- **[llm-video-frames](https://github.com/simonw/llm-video-frames)** uses `ffmpeg` to turn a video into a sequence of JPEG frames suitable for feeding into a vision model that doesn't support video inputs: `llm -f video-frames:video.mp4 'describe the key scenes in this video'`.
+- **[llm-templates-github](https://github.com/simonw/llm-templates-github)** supports loading templates shared on GitHub, e.g. `llm -t gh:simonw/pelican-svg`.
+- **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
+- **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`. It can also fetch issue threads as Markdown using `llm -f issue:https://github.com/simonw/llm-fragments-github/issues/3`.
+- **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
+- **[llm-fragments-pypi](https://github.com/samueldg/llm-fragments-pypi)** loads [PyPI](https://pypi.org/) packages' description and metadata as fragments: `llm -f pypi:ruff "What flake8 plugins does ruff re-implement?"`.
+
 ## Embedding models
 
 {ref}`Embedding models <embeddings>` are models that can be used to generate and store embedding vectors for text.
@@ -59,16 +69,6 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-python](https://github.com/simonw/llm-python)** adds a `llm python` command for running a Python interpreter in the same virtual environment as LLM. This is useful for debugging, and also provides a convenient way to interact with the LLM {ref}`python-api` if you installed LLM using Homebrew or `pipx`.
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
-
-## Fragments and template loaders
-
-{ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.
-
-- **[llm-templates-github](https://github.com/simonw/llm-templates-github)** supports loading templates shared on GitHub, e.g. `llm -t gh:simonw/pelican-svg`.
-- **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
-- **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`.
-- **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
-- **[llm-fragments-pypi](https://github.com/samueldg/llm-fragments-pypi)** loads [PyPI](https://pypi.org/) packages' description and metadata as fragments: `llm -f pypi:ruff "What flake8 plugins does ruff re-implement?"`.
 
 ## Just for fun
 
