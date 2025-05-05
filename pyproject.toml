@@ -1,6 +1,6 @@
 [project]
 name = "llm"
-version = "0.25a0"
+version = "0.25"
 description = "CLI utility and Python library for interacting with Large Language Models from organizations like OpenAI, Anthropic and Gemini plus local models installed on your own machine."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
