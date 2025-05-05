@@ -1399,7 +1399,7 @@ def logs_list(
     where_bits = []
     sql_params = {
         "model": model_id,
-        "query": query,
+        "query": f'"{query}"',
         "conversation_id": conversation_id,
         "id_gt": id_gt,
         "id_gte": id_gte,
