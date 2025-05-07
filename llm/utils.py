@@ -6,7 +6,9 @@ import pathlib
 import puremagic
 import re
 import sqlite_utils
+import ssl
 import textwrap
+import truststore
 from typing import Any, List, Dict, Optional, Tuple
 
 MIME_TYPE_FIXES = {
@@ -139,12 +141,34 @@ def _log_response(response: httpx.Response):
     click.echo("  Body:", err=True)
 
 
-def logging_client() -> httpx.Client:
-    return httpx.Client(
-        transport=_LogTransport(httpx.HTTPTransport()),
-        event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
-    )
+def create_client(native:bool, cafile: str | None=None, show_response: str|None=None) -> httpx.Client:
+    """
+    Creates an httpx client with logging and SSL verification.
 
+    Args:
+    - native (bool): Use the system certificats stores
+    - cafile (str): Path to the SSL certificat file. Defaults to None
+    - show_response (str): Whether to enable logging
+    """
+    if native:
+        # Use system certificats stores
+        ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        verify=ctx
+    elif cafile:
+        ctx = ssl.create_default_context(cafile=cafile)
+        verify=ctx
+    else:
+        verify=True
+
+    transport = httpx.HTTPTransport(verify=verify)
+    event_hook = []
+
+    if show_response:
+        transport=_LogTransport(transport)
+        event_hook["request"]=[_no_accept_encoding]
+        event_hook["response"]=[_log_response]
+
+    return httpx.Client(transport, event_hook)
 
 def simplify_usage_dict(d):
     # Recursively remove keys with value 0 and empty dictionaries
