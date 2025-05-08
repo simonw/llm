@@ -400,11 +400,11 @@ def cli():
     help="Extract last fenced code block",
 )
 @click.option(
-    "rich_text",
-    "-r",
-    "--rich-text",
+    "markdown",
+    "--mk",
+    "--markdown",
     is_flag=True,
-    help="Interpret output as rich text",
+    help="Interpret output as markdown",
 )
 def prompt(
     prompt,
@@ -432,7 +432,7 @@ def prompt(
     usage,
     extract,
     extract_last,
-    rich_text,
+    markdown,
 ):
     """
     Execute a prompt
@@ -755,7 +755,7 @@ def prompt(
                         **kwargs,
                     )
 
-                await _async_output(should_stream, rich_text, response)
+                await _async_output(should_stream, markdown, response)
 
                 return response
 
@@ -771,7 +771,7 @@ def prompt(
                 **kwargs,
             )
 
-            _output(should_stream, rich_text, response)
+            _output(should_stream, markdown, response)
 
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
@@ -843,11 +843,11 @@ def prompt(
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
 @click.option(
-    "rich_text",
-    "-r",
-    "--rich-text",
+    "markdown",
+    "--mk",
+    "--markdown",
     is_flag=True,
-    help="Interpret output as rich text",
+    help="Interpret output as markdown",
 )
 def chat(
     system,
@@ -860,7 +860,7 @@ def chat(
     no_stream,
     key,
     database,
-    rich_text,
+    markdown,
 ):
     """
     Hold an ongoing chat with a model.
@@ -987,16 +987,16 @@ def chat(
         # System prompt only sent for the first message:
         system = None
 
-        _output(should_stream, rich_text, response)
+        _output(should_stream, markdown, response)
 
         response.log_to_db(db)
 
 
-def _output(should_stream: bool, rich_text: bool, response):
+def _output(should_stream: bool, markdown: bool, response):
     console = Console()
 
     if should_stream:
-        if rich_text:
+        if markdown:
             live = Live(md := "", console=console, refresh_per_second=10)
             live.start()
 
@@ -1012,7 +1012,7 @@ def _output(should_stream: bool, rich_text: bool, response):
         if extract or extract_last:
             text = extract_fenced_code_block(text, last=extract_last) or text
 
-        if rich_text:
+        if markdown:
             console.print(Markdown(text))
         else:
             console.print(text)
@@ -1020,11 +1020,11 @@ def _output(should_stream: bool, rich_text: bool, response):
     print("")
 
 
-async def _async_output(should_stream: bool, rich_text: bool, response):
+async def _async_output(should_stream: bool, markdown: bool, response):
     console = Console()
 
     if should_stream:
-        if rich_text:
+        if markdown:
             live = Live(md := "", console=console, refresh_per_second=10)
             live.start()
 
@@ -1040,7 +1040,7 @@ async def _async_output(should_stream: bool, rich_text: bool, response):
         if extract or extract_last:
             text = extract_fenced_code_block(text, last=extract_last) or text
 
-        if rich_text:
+        if markdown:
             console.print(Markdown(text))
         else:
             console.print(text)
