@@ -744,8 +744,6 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-
-                    await _async_output(should_stream, rich_text, response)
                 else:
                     response = prompt_method(
                         prompt,
@@ -757,7 +755,7 @@ def prompt(
                         **kwargs,
                     )
 
-                    await _async_output(should_stream, rich_text, response)
+                await _async_output(should_stream, rich_text, response)
 
                 return response
 
