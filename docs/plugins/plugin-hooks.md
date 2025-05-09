@@ -136,6 +136,10 @@ def register_fragment_loaders(register):
 
 
 def my_fragment_loader(argument: str) -> llm.Fragment:
+    """
+    Documentation for the fragment loader goes here. It will be displayed
+    when users run the 'llm fragments loaders' command.
+    """
     try:
         fragment = "Fragment content for {}".format(argument)
         source = "my-fragments:{}".format(argument)
@@ -148,6 +152,7 @@ def my_fragment_loader(argument: str) -> llm.Fragment:
 
 # Or for the case where you want to return multiple fragments and attachments:
 def my_fragment_loader(argument: str) -> list[llm.Fragment]:
+    "Docs go here."
     return [
         llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
         llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),
