@@ -33,19 +33,27 @@ First, install LLM using `pip` or Homebrew or `pipx`:
 ```bash
 pip install llm
 ```
+
 Or with Homebrew (see {ref}`warning note <homebrew-warning>`):
+
 ```bash
 brew install llm
 ```
+
 Or with [pipx](https://pypa.github.io/pipx/):
+
 ```bash
 pipx install llm
 ```
+
 Or with [uv](https://docs.astral.sh/uv/guides/tools/)
+
 ```bash
 uv tool install llm
 ```
+
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
+
 ```bash
 # Paste your OpenAI API key into this
 llm keys set openai
@@ -59,7 +67,9 @@ llm "extract text" -a scanned-document.jpg
 # Use a system prompt against a file
 cat myfile.py | llm -s "Explain this code"
 ```
+
 Or you can {ref}`install a plugin <installing-plugins>` and use models that can run on your local device:
+
 ```bash
 # Install the plugin
 llm install llm-gpt4all
@@ -67,10 +77,13 @@ llm install llm-gpt4all
 # Download and run a prompt against the Orca Mini 7B model
 llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
 ```
+
 To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
+
 ```bash
 llm chat -m gpt-4o
 ```
+
 ```
 Chatting with gpt-4o
 Type 'exit' or 'quit' to exit
