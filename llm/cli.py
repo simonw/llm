@@ -1,7 +1,9 @@
 import asyncio
+import calendar
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
+from datetime import datetime, timezone, timedelta
 import io
 import json
 import os
@@ -1290,6 +1292,7 @@ order by prompt_attachments."order"
 )
 @click.option("--id-gt", help="Return responses with ID > this")
 @click.option("--id-gte", help="Return responses with ID >= this")
+@click.option("--since", help="Responses since 1d, 2w, 3m or 4y ago")
 @click.option(
     "json_output",
     "--json",
@@ -1325,6 +1328,7 @@ def logs_list(
     conversation_id,
     id_gt,
     id_gte,
+    since,
     json_output,
     expand,
 ):
@@ -1412,6 +1416,10 @@ def logs_list(
         where_bits.append("responses.id > :id_gt")
     if id_gte:
         where_bits.append("responses.id >= :id_gte")
+    if since:
+        since_datetime = get_past_datetime(since)
+        where_bits.append("responses.datetime_utc >= :since")
+        sql_params["since"] = since_datetime.isoformat()
     if fragments:
         # Resolve the fragments to their hashes
         fragment_hashes = [
@@ -1669,7 +1677,7 @@ def logs_list(
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             _display_fragments(row["system_fragments"], "System fragments")
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
@@ -1701,7 +1709,7 @@ def logs_list(
 
             # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
             response = row["response"]
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 try:
                     parsed = json.loads(response)
                     response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
@@ -3311,3 +3319,37 @@ def load_template(name: str) -> Template:
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
     return _parse_yaml_template(name, content)
+
+
+def get_past_datetime(offset_str: str) -> datetime:
+    """
+    Returns a UTC datetime object representing the time 'offset_str' ago.
+    Supported formats: '1d', '2w', '3m', '2y' (days, weeks, months, years).
+    All logic is contained within this single function, using only the standard library.
+    """
+    match = re.fullmatch(r'(\d+)([dwmy])', offset_str)
+    if not match:
+        raise ValueError(f"Invalid offset string: {offset_str}")
+    value, unit = int(match.group(1)), match.group(2)
+    now = datetime.now(timezone.utc)
+
+    if unit == 'd':
+        return now - timedelta(days=value)
+    elif unit == 'w':
+        return now - timedelta(weeks=value)
+    elif unit == 'm':
+        # Subtract months
+        total_months = now.year * 12 + now.month - 1 - value
+        year = total_months // 12
+        month = total_months % 12 + 1
+        day = min(now.day, calendar.monthrange(year, month)[1])
+        return now.replace(year=year, month=month, day=day)
+    elif unit == 'y':
+        # Subtract years
+        year = now.year - value
+        month = now.month
+        day = min(now.day, calendar.monthrange(year, month)[1])
+        return now.replace(year=year, month=month, day=day)
+    else:
+        # This should never happen due to the regex, but included for completeness
+        raise ValueError(f"Unknown time unit: {unit}")
