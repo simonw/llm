@@ -22,7 +22,6 @@ from typing import (
     Union,
     get_type_hints,
 )
-from typing import Any, get_type_hints
 from .utils import (
     ensure_fragment,
     make_schema_id,
@@ -183,6 +182,7 @@ class Prompt:
     system_fragments: Optional[List[str]]
     prompt_json: Optional[str]
     schema: Optional[Union[Dict, type[BaseModel]]]
+    tools: Optional[List[Tool]]
     options: "Options"
 
     def __init__(
@@ -197,6 +197,7 @@ class Prompt:
         prompt_json=None,
         options=None,
         schema=None,
+        tools=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -208,6 +209,7 @@ class Prompt:
         if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
             schema = schema.model_json_schema()
         self.schema = schema
+        self.tools = tools or []
         self.options = options or {}
 
     @property
@@ -247,6 +249,7 @@ class Conversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
@@ -260,6 +263,7 @@ class Conversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
+                tools=tools,
                 system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
@@ -295,6 +299,7 @@ class AsyncConversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
@@ -308,6 +313,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
+                tools=tools,
                 system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
@@ -900,6 +906,7 @@ class _Model(_BaseModel):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
         **options,
     ) -> Response:
         key = options.pop("key", None)
@@ -911,6 +918,7 @@ class _Model(_BaseModel):
                 attachments=attachments,
                 system=system,
                 schema=schema,
+                tools=tools,
                 system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
@@ -958,6 +966,7 @@ class _AsyncModel(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         **options,
@@ -971,6 +980,7 @@ class _AsyncModel(_BaseModel):
                 attachments=attachments,
                 system=system,
                 schema=schema,
+                tools=tools,
                 system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
