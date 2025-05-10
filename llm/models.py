@@ -20,7 +20,9 @@ from typing import (
     Optional,
     Set,
     Union,
+    get_type_hints,
 )
+from typing import Any, get_type_hints
 from .utils import (
     ensure_fragment,
     make_schema_id,
@@ -29,8 +31,9 @@ from .utils import (
     token_usage_string,
 )
 from abc import ABC, abstractmethod
+import inspect
 import json
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, create_model
 from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
@@ -100,6 +103,73 @@ class Attachment:
             path=row["path"],
             url=row["url"],
             content=row["content"],
+        )
+
+
+@dataclass
+class Tool:
+    name: str
+    description: Optional[str] = None
+    input_schema: Dict = field(default_factory=dict)
+    output_schema: Dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        # Convert Pydantic models to JSON schema dictionaries if needed
+        self.input_schema = self._ensure_dict_schema(self.input_schema)
+        self.output_schema = self._ensure_dict_schema(self.output_schema)
+
+    def _ensure_dict_schema(self, schema):
+        """Convert a Pydantic model to a JSON schema dict if needed."""
+        if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
+            schema_dict = schema.model_json_schema()
+            # Strip annoying "title" fields which are just the "name" in title case
+            schema_dict.pop("title", None)
+            for value in schema_dict.get("properties", {}).values():
+                value.pop("title", None)
+            return schema_dict
+        return schema
+
+    @classmethod
+    def for_function(cls, function):
+        """
+        Turn a Python function into a Tool object by:
+         - Extracting the function name
+         - Using the function docstring for the Tool description
+         - Building a Pydantic model for inputs by inspecting the function signature
+         - Building a Pydantic model for the return value by using the function's return annotation
+        """
+        signature = inspect.signature(function)
+        type_hints = get_type_hints(function)
+
+        fields = {}
+        for param_name, param in signature.parameters.items():
+            # Determine the type annotation (default to Any if missing)
+            annotated_type = type_hints.get(param_name, Any)
+
+            # Handle default value if present; if there's no default, use '...'
+            if param.default is inspect.Parameter.empty:
+                fields[param_name] = (annotated_type, ...)
+            else:
+                fields[param_name] = (annotated_type, param.default)
+
+        input_schema = create_model(f"{function.__name__}InputSchema", **fields)
+
+        return_annotation = signature.return_annotation
+        if return_annotation is inspect.Signature.empty:
+            # No return annotation - create a minimal model
+            output_schema = create_model(f"{function.__name__}OutputSchema")
+        else:
+            # We create a single-field schema named 'result'
+            resolved_return_type = type_hints.get("return", return_annotation)
+            output_schema = create_model(
+                f"{function.__name__}OutputSchema", result=(resolved_return_type, ...)
+            )
+
+        return cls(
+            name=function.__name__,
+            description=function.__doc__ or None,
+            input_schema=input_schema,
+            output_schema=output_schema,
         )
 
 
