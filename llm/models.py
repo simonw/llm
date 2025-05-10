@@ -172,6 +172,13 @@ class ToolCall:
 
 
 @dataclass
+class ToolResult:
+    name: str
+    output: str
+    tool_call_id: Optional[str] = None
+
+
+@dataclass
 class Prompt:
     _prompt: Optional[str]
     model: "Model"
