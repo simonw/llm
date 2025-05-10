@@ -189,6 +189,7 @@ class Prompt:
     prompt_json: Optional[str]
     schema: Optional[Union[Dict, type[BaseModel]]]
     tools: Optional[List[Tool]]
+    tool_results: Optional[List[ToolResult]]
     options: "Options"
 
     def __init__(
@@ -204,6 +205,7 @@ class Prompt:
         options=None,
         schema=None,
         tools=None,
+        tool_results=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -216,6 +218,7 @@ class Prompt:
             schema = schema.model_json_schema()
         self.schema = schema
         self.tools = tools or []
+        self.tool_results = tool_results or []
         self.options = options or {}
 
     @property
@@ -256,6 +259,7 @@ class Conversation(_BaseConversation):
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
@@ -270,6 +274,7 @@ class Conversation(_BaseConversation):
                 system=system,
                 schema=schema,
                 tools=tools,
+                tool_results=tool_results,
                 system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
@@ -306,6 +311,7 @@ class AsyncConversation(_BaseConversation):
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         key: Optional[str] = None,
@@ -320,6 +326,7 @@ class AsyncConversation(_BaseConversation):
                 system=system,
                 schema=schema,
                 tools=tools,
+                tool_results=tool_results,
                 system_fragments=system_fragments,
                 options=self.model.Options(**options),
             ),
@@ -929,6 +936,7 @@ class _Model(_BaseModel):
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         **options,
     ) -> Response:
         key = options.pop("key", None)
@@ -941,6 +949,7 @@ class _Model(_BaseModel):
                 system=system,
                 schema=schema,
                 tools=tools,
+                tool_results=tool_results,
                 system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
@@ -989,6 +998,7 @@ class _AsyncModel(_BaseModel):
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         **options,
@@ -1003,6 +1013,7 @@ class _AsyncModel(_BaseModel):
                 system=system,
                 schema=schema,
                 tools=tools,
+                tool_results=tool_results,
                 system_fragments=system_fragments,
                 model=self,
                 options=self.Options(**options),
