@@ -109,14 +109,12 @@ class Attachment:
 class Tool:
     name: str
     description: Optional[str] = None
-    implementation: Optional[Callable] = None
     input_schema: Dict = field(default_factory=dict)
-    output_schema: Dict = field(default_factory=dict)
+    implementation: Optional[Callable] = None
 
     def __post_init__(self):
-        # Convert Pydantic models to JSON schema dictionaries if needed
+        # Convert Pydantic model to JSON schema if needed
         self.input_schema = self._ensure_dict_schema(self.input_schema)
-        self.output_schema = self._ensure_dict_schema(self.output_schema)
 
     def _ensure_dict_schema(self, schema):
         """Convert a Pydantic model to a JSON schema dict if needed."""
@@ -159,23 +157,11 @@ class Tool:
 
         input_schema = create_model(f"{function.__name__}InputSchema", **fields)
 
-        return_annotation = signature.return_annotation
-        if return_annotation is inspect.Signature.empty:
-            # No return annotation - create a minimal model
-            output_schema = create_model(f"{function.__name__}OutputSchema")
-        else:
-            # We create a single-field schema named 'result'
-            resolved_return_type = type_hints.get("return", return_annotation)
-            output_schema = create_model(
-                f"{function.__name__}OutputSchema", result=(resolved_return_type, ...)
-            )
-
         return cls(
             name=name or function.__name__,
             description=function.__doc__ or None,
-            implementation=function,
             input_schema=input_schema,
-            output_schema=output_schema,
+            implementation=function,
         )
 
 
