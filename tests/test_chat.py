@@ -4,6 +4,7 @@ from unittest.mock import ANY
 import pytest
 import sys
 import sqlite_utils
+import json
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -166,13 +167,23 @@ def test_chat_system(mock_model, logs_db):
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-def test_chat_options(mock_model, logs_db):
+def test_chat_options(mock_model, logs_db, user_path):
+    options_path = user_path / "model_options.json"
+    options_path.write_text(json.dumps({"mock": {"max_tokens": "5"}}), "utf-8")
+    
     runner = CliRunner()
-    mock_model.enqueue(["Some text"])
+    mock_model.enqueue(["Default options response"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nquit\n",
+    )
+    assert result.exit_code == 0
+    mock_model.enqueue(["Override options response"])
     result = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "mock", "--option", "max_tokens", "10"],
-        input="Hi\nquit\n",
+        input="Hi with override\nquit\n",
     )
     assert result.exit_code == 0
     responses = list(logs_db["responses"].rows)
@@ -183,13 +194,30 @@ def test_chat_options(mock_model, logs_db):
             "prompt": "Hi",
             "system": None,
             "prompt_json": None,
-            "options_json": '{"max_tokens": 10}',
-            "response": "Some text",
+            "options_json": '{"max_tokens": 5}',
+            "response": "Default options response",
             "response_json": None,
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
             "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
+        },
+        {
+            "id": ANY,
+            "model": "mock",
+            "prompt": "Hi with override",
+            "system": None,
+            "prompt_json": None,
+            "options_json": '{"max_tokens": 10}',
+            "response": "Override options response",
+            "response_json": None,
+            "conversation_id": ANY,
+            "duration_ms": ANY,
+            "datetime_utc": ANY,
+            "input_tokens": 3,
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
