@@ -188,8 +188,8 @@ class Prompt:
     system_fragments: Optional[List[str]]
     prompt_json: Optional[str]
     schema: Optional[Union[Dict, type[BaseModel]]]
-    tools: Optional[List[Tool]]
-    tool_results: Optional[List[ToolResult]]
+    tools: List[Tool]
+    tool_results: List[ToolResult]
     options: "Options"
 
     def __init__(
