@@ -18,6 +18,7 @@ from .models import (
     Options,
     Prompt,
     Response,
+    Tool,
 )
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
@@ -50,6 +51,7 @@ __all__ = [
     "Prompt",
     "Response",
     "Template",
+    "Tool",
     "user_dir",
     "schema_dsl",
 ]

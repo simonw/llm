@@ -24,8 +24,8 @@ import yaml
 def register_models(register):
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True, supports_schema=True),
-        AsyncChat("gpt-4o", vision=True, supports_schema=True),
+        Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
         aliases=("4o",),
     )
     register(
@@ -34,8 +34,10 @@ def register_models(register):
         aliases=("chatgpt-4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True),
-        AsyncChat("gpt-4o-mini", vision=True, supports_schema=True),
+        Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat(
+            "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
+        ),
         aliases=("4o-mini",),
     )
     for audio_model_id in (
@@ -52,8 +54,8 @@ def register_models(register):
     # GPT-4.1
     for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
         register(
-            Chat(model_id, vision=True, supports_schema=True),
-            AsyncChat(model_id, vision=True, supports_schema=True),
+            Chat(model_id, vision=True, supports_schema=True, supports_tools=True),
+            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True),
             aliases=(model_id.replace("gpt-", ""),),
         )
     # 3.5 and 4
@@ -78,12 +80,24 @@ def register_models(register):
     )
     # GPT-4.5
     register(
-        Chat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
-        AsyncChat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
+        Chat(
+            "gpt-4.5-preview-2025-02-27",
+            vision=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "gpt-4.5-preview-2025-02-27",
+            vision=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
     )
     register(
-        Chat("gpt-4.5-preview", vision=True, supports_schema=True),
-        AsyncChat("gpt-4.5-preview", vision=True, supports_schema=True),
+        Chat("gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat(
+            "gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True
+        ),
         aliases=("gpt-4.5",),
     )
     # o1
@@ -95,6 +109,7 @@ def register_models(register):
                 can_stream=False,
                 reasoning=True,
                 supports_schema=True,
+                supports_tools=True,
             ),
             AsyncChat(
                 model_id,
@@ -102,6 +117,7 @@ def register_models(register):
                 can_stream=False,
                 reasoning=True,
                 supports_schema=True,
+                supports_tools=True,
             ),
         )
 
@@ -438,11 +454,13 @@ class _Shared:
         audio=False,
         reasoning=False,
         supports_schema=False,
+        supports_tools=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
         self.key = key
         self.supports_schema = supports_schema
+        self.supports_tools = supports_tools
         self.model_name = model_name
         self.api_base = api_base
         self.api_type = api_type

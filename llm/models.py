@@ -129,7 +129,7 @@ class Tool:
         return schema
 
     @classmethod
-    def for_function(cls, function):
+    def function(cls, function, name=None):
         """
         Turn a Python function into a Tool object by:
          - Extracting the function name
@@ -140,10 +140,15 @@ class Tool:
         signature = inspect.signature(function)
         type_hints = get_type_hints(function)
 
+        if not name and function.__name__ == "<lambda>":
+            raise ValueError(
+                "Cannot create a Tool from a lambda function without providing name="
+            )
+
         fields = {}
         for param_name, param in signature.parameters.items():
-            # Determine the type annotation (default to Any if missing)
-            annotated_type = type_hints.get(param_name, Any)
+            # Determine the type annotation (default to string if missing)
+            annotated_type = type_hints.get(param_name, str)
 
             # Handle default value if present; if there's no default, use '...'
             if param.default is inspect.Parameter.empty:
@@ -165,7 +170,7 @@ class Tool:
             )
 
         return cls(
-            name=function.__name__,
+            name=name or function.__name__,
             description=function.__doc__ or None,
             input_schema=input_schema,
             output_schema=output_schema,
@@ -395,6 +400,9 @@ class _BaseResponse:
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
+
+        if self.prompt.tools and not self.model.supports_tools:
+            raise ValueError(f"{self.model} does not support tools")
 
     def set_usage(
         self,
@@ -864,6 +872,7 @@ class _BaseModel(ABC, _get_key_mixin):
     attachment_types: Set = set()
 
     supports_schema = False
+    supports_tools = False
 
     class Options(_Options):
         pass
