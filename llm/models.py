@@ -393,7 +393,7 @@ class _BaseResponse:
         self._key = key
         self._chunks: List[str] = []
         self._done = False
-        self.tool_calls: List[ToolCall] = []
+        self._tool_calls: List[ToolCall] = []
         self.response_json = None
         self.conversation = conversation
         self.attachments: List[Attachment] = []
@@ -412,7 +412,7 @@ class _BaseResponse:
             raise ValueError(f"{self.model} does not support tools")
 
     def add_tool_call(self, tool_call: ToolCall):
-        self.tool_calls.append(tool_call)
+        self._tool_calls.append(tool_call)
 
     def set_usage(
         self,
@@ -617,6 +617,10 @@ class Response(_BaseResponse):
     def text_or_raise(self) -> str:
         return self.text()
 
+    def tool_calls(self) -> List[ToolCall]:
+        self._force()
+        return self._tool_calls
+
     def json(self) -> Optional[Dict[str, Any]]:
         self._force()
         return self.response_json
@@ -762,6 +766,10 @@ class AsyncResponse(_BaseResponse):
     async def text(self) -> str:
         await self._force()
         return "".join(self._chunks)
+
+    async def tool_calls(self) -> List[ToolCall]:
+        await self._force()
+        return self._tool_calls
 
     async def json(self) -> Optional[Dict[str, Any]]:
         await self._force()
