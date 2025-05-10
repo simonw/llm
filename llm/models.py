@@ -109,6 +109,7 @@ class Attachment:
 class Tool:
     name: str
     description: Optional[str] = None
+    implementation: Optional[Callable] = None
     input_schema: Dict = field(default_factory=dict)
     output_schema: Dict = field(default_factory=dict)
 
@@ -172,6 +173,7 @@ class Tool:
         return cls(
             name=name or function.__name__,
             description=function.__doc__ or None,
+            implementation=function,
             input_schema=input_schema,
             output_schema=output_schema,
         )
