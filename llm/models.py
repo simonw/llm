@@ -178,6 +178,12 @@ class Tool:
 
 
 @dataclass
+class ToolCall:
+    name: str
+    arguments: dict
+
+
+@dataclass
 class Prompt:
     _prompt: Optional[str]
     model: "Model"
@@ -387,6 +393,7 @@ class _BaseResponse:
         self._key = key
         self._chunks: List[str] = []
         self._done = False
+        self.tool_calls: List[ToolCall] = []
         self.response_json = None
         self.conversation = conversation
         self.attachments: List[Attachment] = []
@@ -403,6 +410,9 @@ class _BaseResponse:
 
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
+
+    def add_tool_call(self, tool_call: ToolCall):
+        self.tool_calls.append(tool_call)
 
     def set_usage(
         self,
