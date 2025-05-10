@@ -587,6 +587,18 @@ class _Shared:
                 "type": "json_schema",
                 "json_schema": {"name": "output", "schema": prompt.schema},
             }
+        if prompt.tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description or None,
+                        "parameters": tool.input_schema,
+                    },
+                }
+                for tool in prompt.tools
+            ]
         if stream:
             kwargs["stream_options"] = {"include_usage": True}
         return kwargs
@@ -618,10 +630,19 @@ class Chat(_Shared, KeyModel):
                 **kwargs,
             )
             chunks = []
+            tool_calls = {}
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
+                if chunk.choices and chunk.choices[0].delta:
+                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        index = tool_call.index
+                        if index not in tool_calls:
+                            tool_calls[index] = tool_call
+                        tool_calls[
+                            index
+                        ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
@@ -629,6 +650,16 @@ class Chat(_Shared, KeyModel):
                 if content is not None:
                     yield content
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
+            if tool_calls:
+                for value in tool_calls.values():
+                    # value.function looks like this:
+                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
+                    response.add_tool_call(
+                        llm.ToolCall(
+                            name=value.function.name,
+                            arguments=json.loads(value.function.arguments),
+                        )
+                    )
         else:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
