@@ -93,6 +93,7 @@ setup
 usage
 openai-models
 other-models
+tools
 schemas
 templates
 fragments
