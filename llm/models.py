@@ -24,6 +24,7 @@ from typing import (
 )
 from .utils import (
     ensure_fragment,
+    ensure_tool,
     make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
@@ -126,6 +127,15 @@ class Tool:
                 value.pop("title", None)
             return schema_dict
         return schema
+
+    def hash(self):
+        """Hash for tool based on its name, description and input schema (preserving key order)"""
+        to_hash = {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
+        return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
     @classmethod
     def function(cls, function, name=None):
@@ -597,6 +607,10 @@ class _BaseResponse:
         response_text = self.text_or_raise()
         replacements[f"r:{response_id}"] = response_text
         json_data = self.json()
+
+        # Temporary workraound TODO remove this
+        json_data = {}
+
         response = {
             "id": response_id,
             "model": self.model.model_id,
@@ -641,6 +655,38 @@ class _BaseResponse:
                     "attachment_id": attachment_id,
                     "order": index,
                 },
+            )
+
+        # Persist any tools, tool calls and tool results
+        tool_ids_by_name = {}
+        for tool in self.prompt.tools:
+            tool_id = ensure_tool(db, tool)
+            tool_ids_by_name[tool.name] = tool_id
+            db["tool_responses"].insert(
+                {
+                    "tool_id": tool_id,
+                    "response_id": response_id,
+                }
+            )
+        for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
+            db["tool_calls"].insert(
+                {
+                    "response_id": response_id,
+                    "tool_id": tool_ids_by_name.get(tool_call.name) or None,
+                    "name": tool_call.name,
+                    "arguments": json.dumps(tool_call.arguments),
+                    "tool_call_id": tool_call.tool_call_id,
+                }
+            )
+        for tool_result in self.prompt.tool_results:
+            db["tool_results"].insert(
+                {
+                    "response_id": response_id,
+                    "tool_id": tool_ids_by_name.get(tool_result.name) or None,
+                    "name": tool_result.name,
+                    "output": tool_result.output,
+                    "tool_call_id": tool_result.tool_call_id,
+                }
             )
 
 
@@ -942,6 +988,7 @@ class _BaseChainResponse:
         while response:
             count += 1
             yield response
+            self._responses.append(response)
             if count > self.chain_limit:
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded. ")
             tool_calls = response.tool_calls()
