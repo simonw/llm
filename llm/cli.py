@@ -60,6 +60,7 @@ from .utils import (
 )
 import base64
 import httpx
+import inspect
 import pathlib
 import pydantic
 import re
@@ -2095,6 +2096,43 @@ def schemas_dsl_debug(input, multi):
     """
     schema = schema_dsl(input, multi)
     click.echo(json.dumps(schema, indent=2))
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def tools():
+    "Manage tools that can be made available to LLMs"
+
+
+@tools.command(name="list")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def tools_list(json_):
+    "List available tools that have been provided by plugins"
+    tools = get_tools()
+    if json_:
+        click.echo(
+            json.dumps(
+                {
+                    name: {
+                        "description": tool.description,
+                        "arguments": tool.input_schema,
+                    }
+                    for name, tool in tools.items()
+                },
+                indent=2,
+            )
+        )
+    else:
+        for name, tool in tools.items():
+            sig = "()"
+            if tool.implementation:
+                sig = str(inspect.signature(tool.implementation))
+            click.echo("{}{}".format(name, sig))
+            if tool.description:
+                click.echo(textwrap.indent(tool.description, "  "))
 
 
 @cli.group(
