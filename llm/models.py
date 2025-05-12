@@ -313,6 +313,7 @@ class Conversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         details: bool = False,
+        key: Optional[str] = None,
         **options,
     ):
         self.model._validate_attachments(attachments)
@@ -332,7 +333,7 @@ class Conversation(_BaseConversation):
             model=self.model,
             stream=stream,
             conversation=self,
-            key=options.pop("key", None),
+            key=key,
             details=details,
         )
 
@@ -954,7 +955,9 @@ class _BaseChainResponse:
                 if details:
                     yield "\nTool call requested: {}({})\n".format(
                         tool_call.name,
-                        ", ".join(f"{k}={v}" for k, v in tool_call.arguments.items()),
+                        ", ".join(
+                            f"{k}={repr(v)}" for k, v in tool_call.arguments.items()
+                        ),
                     )
                 implementation = tools_by_name.get(tool_calls[0].name)
                 if not implementation:
