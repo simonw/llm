@@ -897,7 +897,7 @@ class _BaseChainResponse:
         conversation: _BaseConversation = None,
         key: Optional[str] = None,
         details: bool = False,
-        chain_limit: int = 10,
+        chain_limit: int = 5,
     ):
         self.prompt = prompt
         self.model = model
@@ -910,6 +910,7 @@ class _BaseChainResponse:
 
     def responses(self) -> Iterator[Union[Response, AsyncResponse]]:
         prompt = self.prompt
+        count = 0
         response = Response(
             prompt,
             self.model,
@@ -918,7 +919,12 @@ class _BaseChainResponse:
             conversation=self.conversation,
         )
         while response:
+            count += 1
             yield response
+            if count > self.chain_limit:
+                raise ValueError(
+                    f"Chain limit of {self.chain_limit} exceeded. "
+                )
             tool_calls = response.tool_calls()
             if not tool_calls:
                 return
