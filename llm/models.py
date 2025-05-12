@@ -722,6 +722,9 @@ class Response(_BaseResponse):
         self._force()
         return self._tool_calls
 
+    def tool_calls_or_raise(self) -> str:
+        return self.tool_calls()
+
     def json(self) -> Optional[Dict[str, Any]]:
         self._force()
         return self.response_json
@@ -871,6 +874,11 @@ class AsyncResponse(_BaseResponse):
     async def tool_calls(self) -> List[ToolCall]:
         await self._force()
         return self._tool_calls
+
+    def tool_calls_or_raise(self) -> str:
+        if not self._done:
+            raise ValueError("Response not yet awaited")
+        return self.tool_calls()
 
     async def json(self) -> Optional[Dict[str, Any]]:
         await self._force()
