@@ -276,7 +276,7 @@ def test_register_tools():
             cli.cli, ["tools", "--python-tools", "def reverse(s: str): return s[::-1]"]
         )
         assert result3.exit_code == 0
-        assert 'reverse(s: str)' in result3.output
+        assert "reverse(s: str)" in result3.output
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
