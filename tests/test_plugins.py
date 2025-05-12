@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 import click
 import importlib
+import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import textwrap
@@ -234,6 +235,40 @@ def test_register_tools():
                 },
                 implementation=count_character_in_word,
             ),
+        }
+        # Test the CLI command
+        runner = CliRunner()
+        result = runner.invoke(cli.cli, ["tools", "list"])
+        assert result.exit_code == 0
+        assert result.output == (
+            "upper(text: str) -> str\n"
+            "  Convert text to uppercase.\n"
+            "count_character_in_word(text: str, character: str) -> int\n"
+            "  Count the number of occurrences of a character in a word.\n"
+        )
+        # And --json
+        result = runner.invoke(cli.cli, ["tools", "list", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "upper": {
+                "description": "Convert text to uppercase.",
+                "arguments": {
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                    "type": "object",
+                },
+            },
+            "count_character_in_word": {
+                "description": "Count the number of occurrences of a character in a word.",
+                "arguments": {
+                    "properties": {
+                        "text": {"type": "string"},
+                        "character": {"type": "string"},
+                    },
+                    "required": ["text", "character"],
+                    "type": "object",
+                },
+            },
         }
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
