@@ -656,6 +656,7 @@ class Chat(_Shared, KeyModel):
                     # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
                     response.add_tool_call(
                         llm.ToolCall(
+                            tool_call_id=value.id,
                             name=value.function.name,
                             arguments=json.loads(value.function.arguments),
                         )
