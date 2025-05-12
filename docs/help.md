@@ -85,6 +85,7 @@ Commands:
   schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
   templates     Manage stored prompt templates
+  tools         Manage tools that can be made available to LLMs
   uninstall     Uninstall Python packages from the LLM environment
 ```
 
@@ -125,6 +126,7 @@ Options:
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype,
                                   --at image.jpg image/jpeg
+  -T, --tool TEXT                 Name of a tool to make available to the model
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
@@ -597,6 +599,32 @@ Usage: llm schemas dsl [OPTIONS] INPUT
 Options:
   --multi  Wrap in an array
   --help   Show this message and exit.
+```
+
+(help-tools)=
+### llm tools --help
+```
+Usage: llm tools [OPTIONS] COMMAND [ARGS]...
+
+  Manage tools that can be made available to LLMs
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  list*  List available tools that have been provided by plugins
+```
+
+(help-tools-list)=
+#### llm tools list --help
+```
+Usage: llm tools list [OPTIONS]
+
+  List available tools that have been provided by plugins
+
+Options:
+  --json  Output as JSON
+  --help  Show this message and exit.
 ```
 
 (help-aliases)=
