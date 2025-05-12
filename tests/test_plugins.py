@@ -247,9 +247,9 @@ def test_register_tools():
             "  Count the number of occurrences of a character in a word.\n"
         )
         # And --json
-        result = runner.invoke(cli.cli, ["tools", "list", "--json"])
-        assert result.exit_code == 0
-        assert json.loads(result.output) == {
+        result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
+        assert result2.exit_code == 0
+        assert json.loads(result2.output) == {
             "upper": {
                 "description": "Convert text to uppercase.",
                 "arguments": {
@@ -270,6 +270,13 @@ def test_register_tools():
                 },
             },
         }
+        # And test the --python-tools option
+        # llm tools --python-tools 'def reverse(s: str): return s[::-1]'
+        result3 = runner.invoke(
+            cli.cli, ["tools", "--python-tools", "def reverse(s: str): return s[::-1]"]
+        )
+        assert result3.exit_code == 0
+        assert 'reverse(s: str)' in result3.output
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}

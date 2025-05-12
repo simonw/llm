@@ -127,6 +127,8 @@ Options:
                                   Attachment with explicit mimetype,
                                   --at image.jpg image/jpeg
   -T, --tool TEXT                 Name of a tool to make available to the model
+  --python-tools TEXT             Python code block defining functions to
+                                  register as tools
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
@@ -623,8 +625,9 @@ Usage: llm tools list [OPTIONS]
   List available tools that have been provided by plugins
 
 Options:
-  --json  Output as JSON
-  --help  Show this message and exit.
+  --json               Output as JSON
+  --python-tools TEXT  Python code block defining functions to register as tools
+  --help               Show this message and exit.
 ```
 
 (help-aliases)=
