@@ -520,17 +520,36 @@ class _Shared:
                     for attachment in prev_response.attachments:
                         attachment_message.append(_attachment(attachment))
                     messages.append({"role": "user", "content": attachment_message})
-                else:
+                elif prev_response.prompt.prompt:
                     messages.append(
                         {"role": "user", "content": prev_response.prompt.prompt}
                     )
                 messages.append(
                     {"role": "assistant", "content": prev_response.text_or_raise()}
                 )
+                tool_calls = prev_response.tool_calls()
+                if tool_calls:
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "id": tool_call.tool_call_id,
+                                    "function": {
+                                        "name": tool_call.name,
+                                        "arguments": json.dumps(tool_call.arguments),
+                                    },
+                                }
+                                for tool_call in tool_calls
+                            ],
+                        }
+                    )
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
         if not prompt.attachments:
-            messages.append({"role": "user", "content": prompt.prompt or ""})
+            if prompt.prompt:
+                messages.append({"role": "user", "content": prompt.prompt or ""})
         else:
             attachment_message = []
             if prompt.prompt:
@@ -538,6 +557,14 @@ class _Shared:
             for attachment in prompt.attachments:
                 attachment_message.append(_attachment(attachment))
             messages.append({"role": "user", "content": attachment_message})
+        for tool_result in prompt.tool_results:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_result.tool_call_id,
+                    "content": tool_result.output,
+                }
+            )
         return messages
 
     def set_usage(self, response, usage):
