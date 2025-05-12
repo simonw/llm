@@ -15,6 +15,7 @@ from llm import (
     Fragment,
     Response,
     Template,
+    Tool,
     UnknownModelError,
     KeyModel,
     encode,
@@ -341,6 +342,11 @@ def cli():
     help="Name of a tool to make available to the model",
 )
 @click.option(
+    "python_tools",
+    "--python-tools",
+    help="Python code block defining functions to register as tools",
+)
+@click.option(
     "options",
     "-o",
     "--option",
@@ -413,6 +419,7 @@ def prompt(
     attachments,
     attachment_types,
     tools,
+    python_tools,
     options,
     schema_input,
     schema_multi,
@@ -669,7 +676,7 @@ def prompt(
     except UnknownModelError as ex:
         raise click.ClickException(ex)
 
-    if conversation is None and tools:
+    if conversation is None and (tools or python_tools):
         conversation = model.conversation()
 
     if conversation:
@@ -731,7 +738,11 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
-    if tools:
+    extra_tools = []
+    if python_tools:
+        extra_tools = _tools_from_code(python_tools)
+
+    if tools or python_tools:
         prompt_method = lambda *args, **kwargs: conversation.chain(
             *args, **kwargs
         ).details()
@@ -745,7 +756,7 @@ def prompt(
                     ", ".join(bad_tools), ", ".join(registered_tools.keys())
                 )
             )
-        kwargs["tools"] = [registered_tools[tool] for tool in tools]
+        kwargs["tools"] = [registered_tools[tool] for tool in tools] + extra_tools
     try:
         if async_:
 
@@ -2109,9 +2120,17 @@ def tools():
 
 @tools.command(name="list")
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
-def tools_list(json_):
+@click.option(
+    "python_tools",
+    "--python-tools",
+    help="Python code block defining functions to register as tools",
+)
+def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
     tools = get_tools()
+    if python_tools:
+        for tool in _tools_from_code(python_tools):
+            tools[tool.name] = tool
     if json_:
         click.echo(
             json.dumps(
@@ -3380,3 +3399,20 @@ def load_template(name: str) -> Template:
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
     return _parse_yaml_template(name, content)
+
+
+def _tools_from_code(code: str) -> List[Tool]:
+    """
+    Treat all Python functions in the code as tools
+    """
+    globals = {}
+    tools = []
+    try:
+        exec(code, globals)
+    except SyntaxError as ex:
+        raise click.ClickException("Error in --python-tools definition: {}".format(ex))
+    # Register all callables in the locals dict:
+    for name, value in globals.items():
+        if callable(value) and not name.startswith("_"):
+            tools.append(Tool.function(value))
+    return tools
