@@ -922,9 +922,7 @@ class _BaseChainResponse:
             count += 1
             yield response
             if count > self.chain_limit:
-                raise ValueError(
-                    f"Chain limit of {self.chain_limit} exceeded. "
-                )
+                raise ValueError(f"Chain limit of {self.chain_limit} exceeded. ")
             tool_calls = response.tool_calls()
             if not tool_calls:
                 return
