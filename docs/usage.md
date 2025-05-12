@@ -449,6 +449,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -488,6 +489,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -603,6 +605,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -623,6 +626,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -643,6 +647,7 @@ OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -799,6 +804,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -819,6 +825,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -839,6 +846,7 @@ OpenAI Chat: o1
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -859,6 +867,7 @@ OpenAI Chat: o1-2024-12-17
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
   - async
   Keys:
     key: openai
