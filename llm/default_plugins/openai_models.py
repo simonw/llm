@@ -527,7 +527,7 @@ class _Shared:
                 messages.append(
                     {"role": "assistant", "content": prev_response.text_or_raise()}
                 )
-                tool_calls = prev_response.tool_calls()
+                tool_calls = prev_response.tool_calls_or_raise()
                 if tool_calls:
                     messages.append(
                         {
