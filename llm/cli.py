@@ -1857,6 +1857,7 @@ def models_list(options, async_, schemas, query, model_ids):
             []
             + (["streaming"] if model.can_stream else [])
             + (["schemas"] if model.supports_schema else [])
+            + (["tools"] if model.supports_tools else [])
             + (["async"] if model_with_aliases.async_model else [])
         )
         if options and features:
