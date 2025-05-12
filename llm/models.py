@@ -908,7 +908,7 @@ class _BaseChainResponse:
         self.conversation = conversation
         self.chain_limit = chain_limit
 
-    def responses(self) -> Iterator[Union[Response, AsyncResponse]]:
+    def responses(self, details=False) -> Iterator[Union[Response, AsyncResponse, str]]:
         prompt = self.prompt
         count = 0
         response = Response(
@@ -931,6 +931,11 @@ class _BaseChainResponse:
             }
             tool_results = []
             for tool_call in tool_calls:
+                if details:
+                    yield "\nTool call requested: {}({})\n".format(
+                        tool_call.name,
+                        ", ".join(f"{k}={v}" for k, v in tool_call.arguments.items()),
+                    )
                 implementation = tools_by_name.get(tool_calls[0].name)
                 if not implementation:
                     # TODO: send this as an error instead
@@ -939,8 +944,12 @@ class _BaseChainResponse:
                     result = implementation(**tool_call.arguments)
                     if not isinstance(result, str):
                         result = json.dumps(result, default=repr)
+                    if details:
+                        yield f"\n{result}\n"
                 except Exception as ex:
-                    raise ValueError(f"Error executing tool {tool_call.name}: {ex}")
+                    if details:
+                        yield f"\nError:\ns{ex}\n"
+                    result = f"Error: {ex}"
                 tool_results.append(
                     ToolResult(
                         name=tool_call.name,
@@ -967,6 +976,13 @@ class _BaseChainResponse:
     def __iter__(self) -> Iterator[str]:
         for response in self.responses():
             yield from response
+
+    def details(self) -> Iterator[str]:
+        for thing in self.responses(details=True):
+            if isinstance(thing, str):
+                yield thing
+            else:
+                yield from thing
 
     def text(self) -> str:
         return "".join(self)
