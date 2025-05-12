@@ -169,6 +169,7 @@ class Tool:
 class ToolCall:
     name: str
     arguments: dict
+    tool_call_id: Optional[str] = None
 
 
 @dataclass
