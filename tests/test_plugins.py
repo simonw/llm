@@ -188,3 +188,53 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
         {"content": "two:x", "source": "two"},
         {"content": "three:x", "source": "three"},
     ]
+
+
+def test_register_tools():
+    def upper(text: str) -> str:
+        """Convert text to uppercase."""
+        return text.upper()
+
+    def count_character_in_word(text: str, character: str) -> int:
+        """Count the number of occurrences of a character in a word."""
+        return text.count(character)
+
+    class ToolsPlugin:
+        __name__ = "ToolsPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            register(upper)
+            register(llm.Tool.function(count_character_in_word), name="count_chars")
+
+    try:
+        plugins.pm.register(ToolsPlugin(), name="ToolsPlugin")
+        tools = llm.get_tools()
+        assert tools == {
+            "upper": llm.Tool(
+                name="upper",
+                description="Convert text to uppercase.",
+                input_schema={
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                    "type": "object",
+                },
+                implementation=upper,
+            ),
+            "count_character_in_word": llm.Tool(
+                name="count_character_in_word",
+                description="Count the number of occurrences of a character in a word.",
+                input_schema={
+                    "properties": {
+                        "text": {"type": "string"},
+                        "character": {"type": "string"},
+                    },
+                    "required": ["text", "character"],
+                    "type": "object",
+                },
+                implementation=count_character_in_word,
+            ),
+        }
+    finally:
+        plugins.pm.unregister(name="ToolsPlugin")
+        assert llm.get_tools() == {}
