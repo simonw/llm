@@ -1786,6 +1786,7 @@ _type_lookup = {
 )
 @click.option("async_", "--async", is_flag=True, help="List async models")
 @click.option("--schemas", is_flag=True, help="List models that support schemas")
+@click.option("--tools", is_flag=True, help="List models that support tools")
 @click.option(
     "-q",
     "--query",
@@ -1793,7 +1794,7 @@ _type_lookup = {
     help="Search for models matching these strings",
 )
 @click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
-def models_list(options, async_, schemas, query, model_ids):
+def models_list(options, async_, schemas, tools, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
@@ -1810,6 +1811,8 @@ def models_list(options, async_, schemas, query, model_ids):
             if not ids_and_aliases.intersection(model_ids):
                 continue
         if schemas and not model_with_aliases.model.supports_schema:
+            continue
+        if tools and not model_with_aliases.model.supports_tools:
             continue
         extra_info = []
         if model_with_aliases.aliases:
