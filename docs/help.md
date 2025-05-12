@@ -379,6 +379,7 @@ Options:
   --options         Show options for each model, if available
   --async           List async models
   --schemas         List models that support schemas
+  --tools           List models that support tools
   -q, --query TEXT  Search for models matching these strings
   -m, --model TEXT  Specific model IDs
   --help            Show this message and exit.
