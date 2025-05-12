@@ -310,3 +310,61 @@ def m016_fragments_table_pks(db):
     # https://github.com/simonw/llm/issues/863#issuecomment-2781720064
     db["prompt_fragments"].transform(pk=("response_id", "fragment_id", "order"))
     db["system_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+
+
+@migration
+def m017_tools_tables(db):
+    db["tools"].create(
+        {
+            "id": int,
+            "hash": str,
+            "name": str,
+            "description": str,
+            "input_schema": str,
+        },
+        pk="id",
+    )
+    db["tools"].create_index(["hash"], unique=True)
+    # Many-to-many relationship between tools and responses
+    db["tool_responses"].create(
+        {
+            "tool_id": int,
+            "response_id": str,
+        },
+        foreign_keys=(
+            ("tool_id", "tools", "id"),
+            ("response_id", "responses", "id"),
+        ),
+        pk=("tool_id", "response_id"),
+    )
+    # tool_calls and tool_results are one-to-many against responses
+    db["tool_calls"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "arguments": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+    db["tool_results"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "output": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )

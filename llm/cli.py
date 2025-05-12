@@ -743,9 +743,7 @@ def prompt(
         extra_tools = _tools_from_code(python_tools)
 
     if tools or python_tools:
-        prompt_method = lambda *args, **kwargs: conversation.chain(
-            *args, **kwargs
-        ).details()
+        prompt_method = conversation.chain
         # prompt_method = conversation.chain
         # Look up all those tools
         registered_tools: dict = get_tools()
@@ -825,25 +823,29 @@ def prompt(
             raise
         raise click.ClickException(str(ex))
 
-    if not isinstance(response, (Response, AsyncResponse)):
-        # Terminate early, logging for tool streaming mechanism not implemented yet
-        return
+    if isinstance(response, ChainResponse):
+        responses = response._responses
+    else:
+        responses = [response]
 
-    if isinstance(response, AsyncResponse):
-        response = asyncio.run(response.to_sync_response())
+    for response in responses:
+        if isinstance(response, AsyncResponse):
+            response = asyncio.run(response.to_sync_response())
 
-    if usage:
-        # Show token usage to stderr in yellow
-        click.echo(
-            click.style(
-                "Token usage: {}".format(response.token_usage()), fg="yellow", bold=True
-            ),
-            err=True,
-        )
+        if usage:
+            # Show token usage to stderr in yellow
+            click.echo(
+                click.style(
+                    "Token usage: {}".format(response.token_usage()),
+                    fg="yellow",
+                    bold=True,
+                ),
+                err=True,
+            )
 
-    # Log to the database
-    if (logs_on() or log) and not no_log:
-        response.log_to_db(db)
+        # Log to the database
+        if (logs_on() or log) and not no_log:
+            response.log_to_db(db)
 
 
 @cli.command()

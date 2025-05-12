@@ -457,14 +457,35 @@ def ensure_fragment(db, content):
     values (:hash, :content, datetime('now'), :source)
     on conflict(hash) do nothing
     """
-    hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    hash_id = hashlib.sha256(content.encode("utf-8")).hexdigest()
     source = None
     if isinstance(content, Fragment):
         source = content.source
     with db.conn:
-        db.execute(sql, {"hash": hash, "content": content, "source": source})
+        db.execute(sql, {"hash": hash_id, "content": content, "source": source})
         return list(
-            db.query("select id from fragments where hash = :hash", {"hash": hash})
+            db.query("select id from fragments where hash = :hash", {"hash": hash_id})
+        )[0]["id"]
+
+
+def ensure_tool(db, tool):
+    sql = """
+    insert into tools (hash, name, description, input_schema)
+    values (:hash, :name, :description, :input_schema)
+    on conflict(hash) do nothing
+    """
+    with db.conn:
+        db.execute(
+            sql,
+            {
+                "hash": tool.hash(),
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": json.dumps(tool.input_schema),
+            },
+        )
+        return list(
+            db.query("select id from tools where hash = :hash", {"hash": tool.hash()})
         )[0]["id"]
 
 
