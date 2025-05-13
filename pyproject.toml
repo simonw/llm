@@ -53,6 +53,7 @@ llm = "llm.cli:cli"
 [project.optional-dependencies]
 test = [
     "build",
+    "click<8.2.0", # https://github.com/simonw/llm/issues/1024
     "pytest",
     "numpy",
     "pytest-httpx>=0.33.0",
