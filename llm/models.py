@@ -708,9 +708,6 @@ class _BaseResponse:
         replacements[f"r:{response_id}"] = response_text
         json_data = self.json()
 
-        # Temporary workraound TODO remove this
-        json_data = {}
-
         response = {
             "id": response_id,
             "model": self.model.model_id,
