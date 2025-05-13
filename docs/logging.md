@@ -243,7 +243,7 @@ You can backup your logs to another file using the `llm logs backup` command:
 ```bash
 llm logs backup /tmp/backup.db
 ```
-This uses SQLite [VACCUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
+This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
 (logging-sql-schema)=
 
