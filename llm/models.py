@@ -443,6 +443,7 @@ class _BaseResponse:
     stream: bool
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
+    _tool_calls: List[ToolCall] = []
 
     def __init__(
         self,
@@ -506,6 +507,40 @@ class _BaseResponse:
         if row["schema_id"]:
             schema = json.loads(db["schemas"].get(row["schema_id"])["content"])
 
+        # Tool definitions and results for prompt
+        tools = [
+            Tool(
+                name=tool_row["name"],
+                description=tool_row["description"],
+                input_schema=json.loads(tool_row["input_schema"]),
+                # In this case we don't have a reference to the actual Python code
+                # but that's OK, we should not need it for prompts deserialized from DB
+                implementation=None,
+            )
+            for tool_row in db.query(
+                """
+                select tools.* from tools
+                join tool_responses on tools.id = tool_responses.tool_id
+                where tool_responses.response_id = ?
+            """,
+                [row["id"]],
+            )
+        ]
+        tool_results = [
+            ToolResult(
+                name=tool_results_row["name"],
+                output=tool_results_row["output"],
+                tool_call_id=tool_results_row["tool_call_id"],
+            )
+            for tool_results_row in db.query(
+                """
+                select * from tool_results
+                where response_id = ?
+            """,
+                [row["id"]],
+            )
+        ]
+
         all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
         fragments = [
             row["content"] for row in all_fragments if row["fragment_type"] == "prompt"
@@ -522,6 +557,8 @@ class _BaseResponse:
                 attachments=[],
                 system=row["system"],
                 schema=schema,
+                tools=tools,
+                tool_results=tool_results,
                 system_fragments=system_fragments,
                 options=model.Options(**json.loads(row["options_json"])),
             ),
@@ -546,6 +583,23 @@ class _BaseResponse:
                 [row["id"]],
             )
         ]
+        # Tool calls
+        response._tool_calls = [
+            ToolCall(
+                name=tool_row["name"],
+                arguments=json.loads(tool_row["arguments"]),
+                tool_call_id=tool_row["tool_call_id"],
+            )
+            for tool_row in db.query(
+                """
+                select * from tool_calls
+                where response_id = ?
+                order by tool_call_id
+            """,
+                [row["id"]],
+            )
+        ]
+
         return response
 
     def token_usage(self) -> str:
