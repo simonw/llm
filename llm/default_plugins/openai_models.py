@@ -524,9 +524,17 @@ class _Shared:
                     messages.append(
                         {"role": "user", "content": prev_response.prompt.prompt}
                     )
-                messages.append(
-                    {"role": "assistant", "content": prev_response.text_or_raise()}
-                )
+                for tool_result in prev_response.prompt.tool_results:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_result.tool_call_id,
+                            "content": tool_result.output,
+                        }
+                    )
+                prev_text = prev_response.text_or_raise()
+                if prev_text:
+                    messages.append({"role": "assistant", "content": prev_text})
                 tool_calls = prev_response.tool_calls_or_raise()
                 if tool_calls:
                     messages.append(
@@ -697,7 +705,16 @@ class Chat(_Shared, KeyModel):
             )
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
-            yield completion.choices[0].message.content
+            for tool_call in completion.choices[0].message.tool_calls or []:
+                response.add_tool_call(
+                    llm.ToolCall(
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        arguments=json.loads(tool_call.function.arguments),
+                    )
+                )
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -750,7 +767,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
-            yield completion.choices[0].message.content
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 

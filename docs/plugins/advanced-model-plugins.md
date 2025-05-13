@@ -81,7 +81,8 @@ class MyAsyncModel(llm.AsyncModel):
                 messages=messages,
                 stream=False,
             )
-            yield completion.choices[0].message.content
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
 ```
 If your model takes an API key you should instead subclass `llm.AsyncKeyModel` and have a `key=` parameter on your `.execute()` method:
 
