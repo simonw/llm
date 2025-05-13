@@ -60,3 +60,35 @@ def test_tool_use_basic(vcr):
     assert tool_results[0]["response_id"] == second_response["id"]
     assert tool_results[0]["output"] == "2869461"
     assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+
+
+@pytest.mark.vcr
+def test_tool_use_chain_of_two_calls(vcr):
+    model = llm.get_model("gpt-4o-mini")
+
+    def lookup_population(country: str) -> int:
+        "Returns the current population of the specified fictional country"
+        return 123124
+
+    def can_have_dragons(population: int) -> bool:
+        "Returns True if the specified population can have dragons, False otherwise"
+        return population > 10000
+
+    chain_response = model.chain(
+        "Can the country of Crumpet have dragons? Answer with only YES or NO",
+        tools=[lookup_population, can_have_dragons],
+        stream=False,
+        key=API_KEY,
+    )
+
+    output = chain_response.text()
+    assert output == "YES"
+    assert len(chain_response._responses) == 3
+
+    first, second, third = chain_response._responses
+    assert first.tool_calls()[0].arguments == {"country": "Crumpet"}
+    assert first.prompt.tool_results == []
+    assert second.prompt.tool_results[0].output == "123124"
+    assert second.tool_calls()[0].arguments == {"population": 123124}
+    assert third.prompt.tool_results[0].output == "true"
+    assert third.tool_calls() == []
