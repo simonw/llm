@@ -1358,6 +1358,9 @@ class _AsyncModel(_BaseModel):
             key=key,
         )
 
+    def chain(self, *args, **kwargs):
+        raise NotImplementedError("AsyncModel does not yet support tools")
+
 
 class AsyncModel(_AsyncModel):
     @abstractmethod
