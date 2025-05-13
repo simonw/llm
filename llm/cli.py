@@ -794,7 +794,7 @@ def prompt(
                     err=True,
                 )
                 if not click.confirm("Approve tool call?"):
-                    raise CancelToolCall()
+                    raise CancelToolCall("User cancelled tool call")
 
             kwargs["before_call"] = approve_tool_call
         # Look up all those tools
