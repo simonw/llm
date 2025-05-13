@@ -1847,6 +1847,28 @@ def logs_list(
                         json.dumps(row["schema_json"], indent=2)
                     )
                 )
+            # Show tool calls and results
+            if row["tools"]:
+                click.echo("\n### Tools\n")
+                for tool in row["tools"]:
+                    click.echo(
+                        "- **{}**: `{}`<br>\n    {}<br>\n    Arguments: {}".format(
+                            tool["name"],
+                            tool["hash"],
+                            tool["description"],
+                            json.dumps(tool["input_schema"]["properties"]),
+                        )
+                    )
+            if row["tool_results"]:
+                click.echo("\n### Tool results\n")
+                for tool_result in row["tool_results"]:
+                    click.echo(
+                        "- **{}**: `{}`<br>\n    {}".format(
+                            tool_result["name"],
+                            tool_result["tool_call_id"],
+                            tool_result["output"],
+                        )
+                    )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -1879,7 +1901,20 @@ def logs_list(
                     response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
                 except ValueError:
                     pass
-            click.echo("\n## Response\n\n{}\n".format(response))
+            click.echo("\n## Response\n")
+            if row["tool_calls"]:
+                click.echo("### Tool calls\n")
+                for tool_call in row["tool_calls"]:
+                    click.echo(
+                        "- **{}**: `{}`<br>\n    Arguments: {}".format(
+                            tool_call["name"],
+                            tool_call["tool_call_id"],
+                            json.dumps(tool_call["arguments"]),
+                        )
+                    )
+                click.echo("")
+            if response:
+                click.echo("{}\n".format(response))
             if usage:
                 token_usage = token_usage_string(
                     row["input_tokens"],
