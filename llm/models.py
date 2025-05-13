@@ -1131,13 +1131,6 @@ class _BaseChainResponse:
             else:
                 yield from response
 
-    def details(self) -> Iterator[str]:
-        for thing in self.responses(details=True):
-            if isinstance(thing, str):
-                yield thing
-            else:
-                yield from thing
-
     def text(self) -> str:
         return "".join(self)
 
