@@ -921,6 +921,7 @@ OpenAI Chat: o3-mini
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -940,6 +941,7 @@ OpenAI Chat: o3
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -959,6 +961,7 @@ OpenAI Chat: o4-mini
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
