@@ -1621,6 +1621,66 @@ def logs_list(
         click.echo(output_rows_as_json(to_output, not data_array))
         return
 
+    # Tool usage information
+    TOOLS_SQL = """
+    SELECT responses.id,
+    -- Tools related to this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', t.id,
+            'hash', t.hash,
+            'name', t.name,
+            'description', t.description,
+            'input_schema', json(t.input_schema)
+        ))
+        FROM tools t
+        JOIN tool_responses tr ON t.id = tr.tool_id
+        WHERE tr.response_id = responses.id
+        ),
+        '[]'
+    ) AS tools,
+    -- Tool calls for this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', tc.id,
+            'tool_id', tc.tool_id,
+            'name', tc.name,
+            'arguments', json(tc.arguments),
+            'tool_call_id', tc.tool_call_id
+        ))
+        FROM tool_calls tc
+        WHERE tc.response_id = responses.id
+        ),
+        '[]'
+    ) AS tool_calls,
+    -- Tool results for this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', tr.id,
+            'tool_id', tr.tool_id,
+            'name', tr.name,
+            'output', tr.output,
+            'tool_call_id', tr.tool_call_id
+        ))
+        FROM tool_results tr
+        WHERE tr.response_id = responses.id
+        ),
+        '[]'
+    ) AS tool_results
+    FROM responses
+    where id in ({placeholders})
+    """
+    tool_info_by_id = {
+        row["id"]: {
+            "tools": json.loads(row["tools"]),
+            "tool_calls": json.loads(row["tool_calls"]),
+            "tool_results": json.loads(row["tool_results"]),
+        }
+        for row in db.query(
+            TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
+        )
+    }
+
     for row in rows:
         if truncate:
             row["prompt"] = truncate_string(row["prompt"] or "")
@@ -1651,6 +1711,7 @@ def logs_list(
                     del row[key]
                 else:
                     row[key] = json.loads(row[key])
+        row.update(tool_info_by_id[row["id"]])
 
     output = None
     if json_output:
@@ -1712,6 +1773,20 @@ def logs_list(
                     "datetime": row["datetime_utc"].split(".")[0],
                     "conversation": cid,
                 }
+                if row["tool_calls"]:
+                    obj["tool_calls"] = [
+                        "{}({})".format(
+                            tool_call["name"], json.dumps(tool_call["arguments"])
+                        )
+                        for tool_call in row["tool_calls"]
+                    ]
+                if row["tool_results"]:
+                    obj["tool_results"] = [
+                        "{}: {}".format(
+                            tool_result["name"], truncate_string(tool_result["output"])
+                        )
+                        for tool_result in row["tool_results"]
+                    ]
                 if system:
                     obj["system"] = system
                 if prompt:
