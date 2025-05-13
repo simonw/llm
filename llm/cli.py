@@ -875,29 +875,25 @@ def prompt(
             raise
         raise click.ClickException(str(ex))
 
-    if isinstance(response, ChainResponse):
-        responses = response._responses
-    else:
-        responses = [response]
-
-    for response in responses:
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
-
-        if usage:
+    if usage:
+        if isinstance(response, ChainResponse):
+            responses = response._responses
+        else:
+            responses = [response]
+        for response_object in responses:
             # Show token usage to stderr in yellow
             click.echo(
                 click.style(
-                    "Token usage: {}".format(response.token_usage()),
+                    "Token usage: {}".format(response_object.token_usage()),
                     fg="yellow",
                     bold=True,
                 ),
                 err=True,
             )
 
-        # Log to the database
-        if (logs_on() or log) and not no_log:
-            response.log_to_db(db)
+    # Log to the database
+    if (logs_on() or log) and not no_log:
+        response.log_to_db(db)
 
 
 @cli.command()

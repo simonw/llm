@@ -1134,6 +1134,12 @@ class _BaseChainResponse:
     def text(self) -> str:
         return "".join(self)
 
+    def log_to_db(self, db):
+        for response in self._responses:
+            if isinstance(response, AsyncResponse):
+                response = asyncio.run(response.to_sync_response())
+            response.log_to_db(db)
+
 
 class ChainResponse(_BaseChainResponse):
     "Know how to chain multiple responses e.g. for tool calls"
