@@ -789,7 +789,7 @@ def prompt(
             def approve_tool_call(_, tool_call):
                 click.echo(
                     click.style(
-                        "Tool call: {}".format(tool_call),
+                        "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
                         fg="yellow",
                         bold=True,
                     ),
