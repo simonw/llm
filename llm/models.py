@@ -326,6 +326,8 @@ class Conversation(_BaseConversation):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
         details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
@@ -349,6 +351,8 @@ class Conversation(_BaseConversation):
             conversation=self,
             key=key,
             details=details,
+            before_call=before_call,
+            after_call=after_call,
         )
 
     @classmethod
@@ -1064,6 +1068,8 @@ class _BaseChainResponse:
         key: Optional[str] = None,
         details: bool = False,
         chain_limit: int = 10,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
     ):
         self.prompt = prompt
         self.model = model
@@ -1074,6 +1080,8 @@ class _BaseChainResponse:
         self._responses: List[Response] = []
         self.conversation = conversation
         self.chain_limit = chain_limit
+        self.before_call = before_call
+        self.after_call = after_call
 
     def responses(
         self, details=False
@@ -1096,20 +1104,25 @@ class _BaseChainResponse:
             if count > self.chain_limit:
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded. ")
             # This could raise llm.CancelToolCall:
-            tool_results = response.execute_tool_calls()
-            response = Response(
-                Prompt(
-                    "",
-                    self.model,
-                    tools=response.prompt.tools,
-                    tool_results=tool_results,
-                    options=self.prompt.options,
-                ),
-                self.model,
-                stream=self.stream,
-                key=self._key,
-                conversation=self.conversation,
+            tool_results = response.execute_tool_calls(
+                before_call=self.before_call, after_call=self.after_call
             )
+            if tool_results:
+                response = Response(
+                    Prompt(
+                        "",
+                        self.model,
+                        tools=response.prompt.tools,
+                        tool_results=tool_results,
+                        options=self.prompt.options,
+                    ),
+                    self.model,
+                    stream=self.stream,
+                    key=self._key,
+                    conversation=self.conversation,
+                )
+            else:
+                response = None
 
     def __iter__(self) -> Iterator[str]:
         for response in self.responses():
@@ -1259,6 +1272,8 @@ class _Model(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
         details: bool = False,
         options: Optional[dict] = None,
     ):
@@ -1272,6 +1287,8 @@ class _Model(_BaseModel):
             schema=schema,
             tools=tools,
             tool_results=tool_results,
+            before_call=before_call,
+            after_call=after_call,
             details=details,
             options=options,
         )
