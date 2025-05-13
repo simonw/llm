@@ -20,4 +20,4 @@ In LLM every tool is a defined as a Python function. The function can take any n
 
 Tool functions should include a docstring that describes what the function does. This docstring will become the description that is passed to the model.
 
-The Python API can accept functions directly. The command-line interface has two ways for tools to be defined: via plugins that implement the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`, or directly on the command-line using the `--tools` argument to specify a block of Python code defining one or more functions.
+The Python API can accept functions directly. The command-line interface has two ways for tools to be defined: via plugins that implement the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`, or directly on the command-line using the `--functions` argument to specify a block of Python code defining one or more functions - or a path to a Python file containing the same.
