@@ -344,8 +344,9 @@ def cli():
 )
 @click.option(
     "python_tools",
-    "--tools",
-    help="Python code block defining functions to register as tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
 )
 @click.option(
     "tools_debug",
@@ -757,7 +758,8 @@ def prompt(
 
     extra_tools = []
     if python_tools:
-        extra_tools = _tools_from_code(python_tools)
+        for code_or_path in python_tools:
+            extra_tools = _tools_from_code(code_or_path)
 
     if tools or python_tools:
         prompt_method = conversation.chain
@@ -2286,15 +2288,17 @@ def tools():
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
-    "--tools",
-    help="Python code block defining functions to register as tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
     tools = get_tools()
     if python_tools:
-        for tool in _tools_from_code(python_tools):
-            tools[tool.name] = tool
+        for code_or_path in python_tools:
+            for tool in _tools_from_code(code_or_path):
+                tools[tool.name] = tool
     if json_:
         click.echo(
             json.dumps(
@@ -3565,16 +3569,21 @@ def load_template(name: str) -> Template:
     return _parse_yaml_template(name, content)
 
 
-def _tools_from_code(code: str) -> List[Tool]:
+def _tools_from_code(code_or_path: str) -> List[Tool]:
     """
     Treat all Python functions in the code as tools
     """
+    if "\n" not in code_or_path and code_or_path.endswith(".py"):
+        try:
+            code_or_path = pathlib.Path(code_or_path).read_text()
+        except FileNotFoundError:
+            raise click.ClickException("File not found: {}".format(code_or_path))
     globals = {}
     tools = []
     try:
-        exec(code, globals)
+        exec(code_or_path, globals)
     except SyntaxError as ex:
-        raise click.ClickException("Error in --tools definition: {}".format(ex))
+        raise click.ClickException("Error in --functions definition: {}".format(ex))
     # Register all callables in the locals dict:
     for name, value in globals.items():
         if callable(value) and not name.startswith("_"):

@@ -191,7 +191,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
     ]
 
 
-def test_register_tools():
+def test_register_tools(tmpdir):
     def upper(text: str) -> str:
         """Convert text to uppercase."""
         return text.upper()
@@ -271,11 +271,22 @@ def test_register_tools():
             },
         }
         # And test the --tools option
+        functions_path = str(tmpdir / "functions.py")
+        with open(functions_path, "w") as fp:
+            fp.write("def example(s: str, i: int):\n    return s + '-' + str(i)")
         result3 = runner.invoke(
-            cli.cli, ["tools", "--tools", "def reverse(s: str): return s[::-1]"]
+            cli.cli,
+            [
+                "tools",
+                "--functions",
+                "def reverse(s: str): return s[::-1]",
+                "--functions",
+                functions_path,
+            ],
         )
         assert result3.exit_code == 0
         assert "reverse(s: str)" in result3.output
+        assert "example(s: str, i: int)" in result3.output
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
