@@ -130,16 +130,16 @@ def register_models(register):
         AsyncChat("o1-mini", allows_system_prompt=False),
     )
     register(
-        Chat("o3-mini", reasoning=True, supports_schema=True),
-        AsyncChat("o3-mini", reasoning=True, supports_schema=True),
+        Chat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        AsyncChat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
     )
     register(
-        Chat("o3", reasoning=True, supports_schema=True),
-        AsyncChat("o3", reasoning=True, supports_schema=True),
+        Chat("o3", reasoning=True, supports_schema=True, supports_tools=True),
+        AsyncChat("o3", reasoning=True, supports_schema=True, supports_tools=True),
     )
     register(
-        Chat("o4-mini", reasoning=True, supports_schema=True),
-        AsyncChat("o4-mini", reasoning=True, supports_schema=True),
+        Chat("o4-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        AsyncChat("o4-mini", reasoning=True, supports_schema=True, supports_tools=True),
     )
     # The -instruct completion model
     register(
