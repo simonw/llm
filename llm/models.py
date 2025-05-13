@@ -856,6 +856,7 @@ class Response(_BaseResponse):
                 response=self,
                 conversation=self.conversation,
             ):
+                assert chunk is not None
                 yield chunk
                 self._chunks.append(chunk)
         elif isinstance(self.model, KeyModel):
@@ -866,6 +867,7 @@ class Response(_BaseResponse):
                 conversation=self.conversation,
                 key=self.model.get_key(self._key),
             ):
+                assert chunk is not None
                 yield chunk
                 self._chunks.append(chunk)
         else:
@@ -943,6 +945,7 @@ class AsyncResponse(_BaseResponse):
 
         try:
             chunk = await self._generator.__anext__()
+            assert chunk is not None
             self._chunks.append(chunk)
             return chunk
         except StopAsyncIteration:
