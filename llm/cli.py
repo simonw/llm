@@ -73,7 +73,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, List, Union, Tuple, Any
+from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Any
 import warnings
 import yaml
 
@@ -800,7 +800,7 @@ def prompt(
 
             kwargs["before_call"] = approve_tool_call
         # Look up all those tools
-        registered_tools: dict = get_tools()
+        registered_tools = get_tools()
         bad_tools = [tool for tool in tools if tool not in registered_tools]
         if bad_tools:
             raise click.ClickException(
@@ -3580,14 +3580,14 @@ def _tools_from_code(code_or_path: str) -> List[Tool]:
             code_or_path = pathlib.Path(code_or_path).read_text()
         except FileNotFoundError:
             raise click.ClickException("File not found: {}".format(code_or_path))
-    globals = {}
+    namespace: Dict[str, Any] = {}
     tools = []
     try:
-        exec(code_or_path, globals)
+        exec(code_or_path, namespace)
     except SyntaxError as ex:
         raise click.ClickException("Error in --functions definition: {}".format(ex))
     # Register all callables in the locals dict:
-    for name, value in globals.items():
+    for name, value in namespace.items():
         if callable(value) and not name.startswith("_"):
             tools.append(Tool.function(value))
     return tools
