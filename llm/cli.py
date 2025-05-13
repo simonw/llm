@@ -768,7 +768,7 @@ def prompt(
             def debug_tool_call(_, tool_call, tool_result):
                 click.echo(
                     click.style(
-                        "Tool call: {}".format(tool_call),
+                        "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
                         fg="yellow",
                         bold=True,
                     ),
@@ -776,8 +776,8 @@ def prompt(
                 )
                 click.echo(
                     click.style(
-                        "Tool result: {}".format(tool_result),
-                        fg="yellow",
+                        "  {}".format(tool_result.output),
+                        fg="green",
                         bold=True,
                     ),
                     err=True,
