@@ -344,7 +344,7 @@ def cli():
 )
 @click.option(
     "python_tools",
-    "--python-tools",
+    "--tools",
     help="Python code block defining functions to register as tools",
 )
 @click.option(
@@ -2180,7 +2180,7 @@ def tools():
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
-    "--python-tools",
+    "--tools",
     help="Python code block defining functions to register as tools",
 )
 def tools_list(json_, python_tools):
@@ -3468,7 +3468,7 @@ def _tools_from_code(code: str) -> List[Tool]:
     try:
         exec(code, globals)
     except SyntaxError as ex:
-        raise click.ClickException("Error in --python-tools definition: {}".format(ex))
+        raise click.ClickException("Error in --tools definition: {}".format(ex))
     # Register all callables in the locals dict:
     for name, value in globals.items():
         if callable(value) and not name.startswith("_"):

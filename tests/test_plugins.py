@@ -270,10 +270,9 @@ def test_register_tools():
                 },
             },
         }
-        # And test the --python-tools option
-        # llm tools --python-tools 'def reverse(s: str): return s[::-1]'
+        # And test the --tools option
         result3 = runner.invoke(
-            cli.cli, ["tools", "--python-tools", "def reverse(s: str): return s[::-1]"]
+            cli.cli, ["tools", "--tools", "def reverse(s: str): return s[::-1]"]
         )
         assert result3.exit_code == 0
         assert "reverse(s: str)" in result3.output
