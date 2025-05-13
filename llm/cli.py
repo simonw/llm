@@ -895,6 +895,8 @@ def prompt(
 
     # Log to the database
     if (logs_on() or log) and not no_log:
+        if isinstance(response, AsyncResponse):
+            response = asyncio.run(response.to_sync_response())
         response.log_to_db(db)
 
 
