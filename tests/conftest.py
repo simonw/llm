@@ -489,3 +489,8 @@ def collection():
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"filter_headers": ["Authorization"]}
