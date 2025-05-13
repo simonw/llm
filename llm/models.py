@@ -1268,6 +1268,7 @@ class _Model(_BaseModel):
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
         details: bool = False,
+        key: Optional[str] = None,
         options: Optional[dict] = None,
     ):
         return self.conversation().chain(
@@ -1283,6 +1284,7 @@ class _Model(_BaseModel):
             before_call=before_call,
             after_call=after_call,
             details=details,
+            key=key,
             options=options,
         )
 
