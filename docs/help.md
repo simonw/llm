@@ -129,6 +129,8 @@ Options:
   -T, --tool TEXT                 Name of a tool to make available to the model
   --python-tools TEXT             Python code block defining functions to
                                   register as tools
+  --td, --tools-debug             Show full details of tool executions
+  --ta, --tools-approve           Manually approve every tool execution
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results

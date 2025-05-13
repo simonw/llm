@@ -10,6 +10,7 @@ from llm import (
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    CancelToolCall,
     Collection,
     Conversation,
     Fragment,
@@ -347,6 +348,20 @@ def cli():
     help="Python code block defining functions to register as tools",
 )
 @click.option(
+    "tools_debug",
+    "--td",
+    "--tools-debug",
+    is_flag=True,
+    help="Show full details of tool executions",
+)
+@click.option(
+    "tools_approve",
+    "--ta",
+    "--tools-approve",
+    is_flag=True,
+    help="Manually approve every tool execution",
+)
+@click.option(
     "options",
     "-o",
     "--option",
@@ -420,6 +435,8 @@ def prompt(
     attachment_types,
     tools,
     python_tools,
+    tools_debug,
+    tools_approve,
     options,
     schema_input,
     schema_multi,
@@ -744,7 +761,42 @@ def prompt(
 
     if tools or python_tools:
         prompt_method = conversation.chain
-        # prompt_method = conversation.chain
+        if tools_debug:
+
+            def debug_tool_call(_, tool_call, tool_result):
+                click.echo(
+                    click.style(
+                        "Tool call: {}".format(tool_call),
+                        fg="yellow",
+                        bold=True,
+                    ),
+                    err=True,
+                )
+                click.echo(
+                    click.style(
+                        "Tool result: {}".format(tool_result),
+                        fg="yellow",
+                        bold=True,
+                    ),
+                    err=True,
+                )
+
+            kwargs["after_call"] = debug_tool_call
+        if tools_approve:
+
+            def approve_tool_call(_, tool_call):
+                click.echo(
+                    click.style(
+                        "Tool call: {}".format(tool_call),
+                        fg="yellow",
+                        bold=True,
+                    ),
+                    err=True,
+                )
+                if not click.confirm("Approve tool call?"):
+                    raise CancelToolCall()
+
+            kwargs["before_call"] = approve_tool_call
         # Look up all those tools
         registered_tools: dict = get_tools()
         bad_tools = [tool for tool in tools if tool not in registered_tools]
