@@ -438,6 +438,7 @@ order by fragment_type desc, ord asc;
 class _BaseResponse:
     """Base response class shared between sync and async responses"""
 
+    id: str
     prompt: "Prompt"
     stream: bool
     conversation: Optional["_BaseConversation"] = None
@@ -451,6 +452,7 @@ class _BaseResponse:
         conversation: Optional[_BaseConversation] = None,
         key: Optional[str] = None,
     ):
+        self.id = str(ULID()).lower()
         self.prompt = prompt
         self._prompt_json = None
         self.model = model
@@ -570,7 +572,7 @@ class _BaseResponse:
             schema_id, schema_json = make_schema_id(self.prompt.schema)
             db["schemas"].insert({"id": schema_id, "content": schema_json}, ignore=True)
 
-        response_id = str(ULID()).lower()
+        response_id = self.id
         replacements = {}
         # Include replacements from previous responses
         for previous_response in conversation.responses[:-1]:
