@@ -490,42 +490,6 @@ class _BaseResponse:
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(tool_call)
 
-    def execute_tool_calls(
-        self,
-        *,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
-    ) -> List[ToolResult]:
-        tool_results = []
-        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
-        # TODO: make this work async
-        for tool_call in self.tool_calls():
-            tool = tools_by_name.get(tool_call.name)
-            if tool is None:
-                raise CancelToolCall("Unknown tool: {}".format(tool_call.name))
-            if before_call:
-                # This may raise CancelToolCall:
-                before_call(tool, tool_call)
-            if not tool.implementation:
-                raise CancelToolCall(
-                    "No implementation available for tool: {}".format(tool_call.name)
-                )
-            try:
-                result = tool.implementation(**tool_call.arguments)
-                if not isinstance(result, str):
-                    result = json.dumps(result, default=repr)
-            except Exception as ex:
-                result = f"Error: {ex}"
-            tool_result = ToolResult(
-                name=tool_call.name,
-                output=result,
-                tool_call_id=tool_call.tool_call_id,
-            )
-            if after_call:
-                after_call(tool, tool_call, tool_result)
-            tool_results.append(tool_result)
-        return tool_results
-
     def set_usage(
         self,
         *,
@@ -815,11 +779,47 @@ class Response(_BaseResponse):
     def text_or_raise(self) -> str:
         return self.text()
 
+    def execute_tool_calls(
+        self,
+        *,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+    ) -> List[ToolResult]:
+        tool_results = []
+        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        # TODO: make this work async
+        for tool_call in self.tool_calls():
+            tool = tools_by_name.get(tool_call.name)
+            if tool is None:
+                raise CancelToolCall("Unknown tool: {}".format(tool_call.name))
+            if before_call:
+                # This may raise CancelToolCall:
+                before_call(tool, tool_call)
+            if not tool.implementation:
+                raise CancelToolCall(
+                    "No implementation available for tool: {}".format(tool_call.name)
+                )
+            try:
+                result = tool.implementation(**tool_call.arguments)
+                if not isinstance(result, str):
+                    result = json.dumps(result, default=repr)
+            except Exception as ex:
+                result = f"Error: {ex}"
+            tool_result = ToolResult(
+                name=tool_call.name,
+                output=result,
+                tool_call_id=tool_call.tool_call_id,
+            )
+            if after_call:
+                after_call(tool, tool_call, tool_result)
+            tool_results.append(tool_result)
+        return tool_results
+
     def tool_calls(self) -> List[ToolCall]:
         self._force()
         return self._tool_calls
 
-    def tool_calls_or_raise(self) -> str:
+    def tool_calls_or_raise(self) -> List[ToolCall]:
         return self.tool_calls()
 
     def json(self) -> Optional[Dict[str, Any]]:
@@ -1122,7 +1122,7 @@ class _BaseChainResponse:
                     conversation=self.conversation,
                 )
             else:
-                response = None
+                break
 
     def __iter__(self) -> Iterator[str]:
         for response in self.responses():
