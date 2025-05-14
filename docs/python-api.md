@@ -45,6 +45,50 @@ If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.
 
 Calling `llm.get_model()` with an invalid model ID will raise a `llm.UnknownModelError` exception.
 
+(python-api-tools)=
+
+### Tools
+
+{ref}`Tools <tools>` are functions that can be executed by the model as part of a chain of responses.
+
+You can define tools in Python code - with a docstring to describe what they do - and then pass them to the `model.prompt()` method using the `tools=` keyword argument. If the model decides to request a tool call the `response.tool_calls()` method show what the model wants to execute:
+
+```python
+import llm
+
+def upper(text: str) -> str:
+    """Convert text to uppercase."""
+    return text.upper()
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.prompt("Convert panda to upper", tools=[upper])
+tool_calls = response.tool_calls()
+# [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
+```
+You can call `response.execute_tool_calls()` to execute those calls and get back the results:
+```python
+tool_results = response.execute_tool_calls()
+# [ToolResult(name='upper', output='PANDA', tool_call_id='...')]
+```
+To pass the results of the tool calls back to the model you need to use a utility method called `model.chain()`:
+```python
+chain_response = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+print(chain_response.text())
+# The word "panda" converted to uppercase is "PANDA".
+```
+You can also loop through the `model.chain()` response to get a stream of tokens, like this:
+```python
+for chunk in model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+):
+    print(chunk, end="", flush=True)
+```
+This will stream each of the chain of responses in turn as they are generated.
+
 (python-api-system-prompts)=
 
 ### System prompts
