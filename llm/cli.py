@@ -363,6 +363,14 @@ def cli():
     help="Manually approve every tool execution",
 )
 @click.option(
+    "chain_limit",
+    "--cl",
+    "--chain-limit",
+    type=int,
+    default=5,
+    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+)
+@click.option(
     "options",
     "-o",
     "--option",
@@ -438,6 +446,7 @@ def prompt(
     python_tools,
     tools_debug,
     tools_approve,
+    chain_limit,
     options,
     schema_input,
     schema_multi,
@@ -763,6 +772,7 @@ def prompt(
 
     if tools or python_tools:
         prompt_method = conversation.chain
+        kwargs["chain_limit"] = chain_limit
         if tools_debug:
 
             def debug_tool_call(_, tool_call, tool_result):

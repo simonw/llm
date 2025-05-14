@@ -326,6 +326,7 @@ class Conversation(_BaseConversation):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
+        chain_limit: Optional[int] = None,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
         details: bool = False,
@@ -353,6 +354,7 @@ class Conversation(_BaseConversation):
             details=details,
             before_call=before_call,
             after_call=after_call,
+            chain_limit=chain_limit,
         )
 
     @classmethod
@@ -1067,7 +1069,7 @@ class _BaseChainResponse:
         conversation: _BaseConversation,
         key: Optional[str] = None,
         details: bool = False,
-        chain_limit: int = 10,
+        chain_limit: Optional[int] = 10,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
     ):
@@ -1101,7 +1103,7 @@ class _BaseChainResponse:
             count += 1
             yield response
             self._responses.append(response)
-            if count > self.chain_limit:
+            if self.chain_limit and count > self.chain_limit:
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded. ")
             # This could raise llm.CancelToolCall:
             tool_results = response.execute_tool_calls(

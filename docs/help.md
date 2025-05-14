@@ -131,6 +131,8 @@ Options:
                                   functions to register as tools
   --td, --tools-debug             Show full details of tool executions
   --ta, --tools-approve           Manually approve every tool execution
+  --cl, --chain-limit INTEGER     How many chained tool responses to allow,
+                                  default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
