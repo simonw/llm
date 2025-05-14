@@ -1,5 +1,40 @@
 # Changelog
 
+(v0_26_a0)=
+## 0.26a0 (2025-05-13)
+
+This is the first alpha to introduce {ref}`support for tools<tools>`! Models with tool capability (which includes the default OpenAI model family) can now be granted access to execute Python functions as part of responding to a prompt.
+
+Tools are supported by {ref}`the command-line interface <usage-tools>`:
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345'
+```
+And in {ref}`the Python API <python-api-tools>`, using a new `model.chain()` method for executing multiple prompts in a sequence:
+```python
+import llm
+
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.chain(
+    "What is 34234 * 213345?",
+    tools=[multiply]
+)
+print(response.text())
+```
+New tools can also be defined using the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`. They can then be called by name from the command-line like this:
+```bash
+llm -T multiply 'What is 34234 * 213345?'
+```
+Tool support is currently under **active development**. Consult [this milestone](https://github.com/simonw/llm/milestone/12) for the latest status.
+
 (v0_25)=
 ## 0.25 (2025-05-04)
 
