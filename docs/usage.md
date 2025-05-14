@@ -120,6 +120,48 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-tools)=
+### Tools
+
+Many models support the ability to call {ref}`external tools <tools>`. Tools can be provided {ref}`by plugins <plugin-hooks-register-tools>` or you can pass a `--functions CODE` option to LLM to define one or more Python functions that the model can then call.
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345'
+```
+Add `--td/--tools-debug` to see full details of the tools that are being executed:
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --td
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+  7303652730
+34234 multiplied by 213345 is 7,303,652,730.
+```
+Or add `--ta/--tools-approve` to approve each tool call interactively before it is executed:
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --ta
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+Approve tool call? [y/N]:
+```
+The `--functions` option can be passed more than once, and can also point to the filename of a `.py` file containing one or more functions.
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
