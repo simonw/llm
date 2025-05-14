@@ -2127,7 +2127,7 @@ def templates_edit(name):
     path = template_dir() / f"{name}.yaml"
     if not path.exists():
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
-    click.edit(filename=path)
+    click.edit(filename=str(path))
     # Validate that template
     load_template(name)
 
