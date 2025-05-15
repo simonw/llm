@@ -980,6 +980,8 @@ OpenAI Chat: o3
     seed: int
     json_object: boolean
     reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
@@ -1000,6 +1002,8 @@ OpenAI Chat: o4-mini
     seed: int
     json_object: boolean
     reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
