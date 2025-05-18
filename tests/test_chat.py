@@ -98,7 +98,9 @@ def test_chat_basic(mock_model, logs_db):
     )
     new_responses = list(
         logs_db.query(
-            "select * from responses where id not in ({})".format(", ".join("?" for _ in responses)),
+            "select * from responses where id not in ({})".format(
+                ", ".join("?" for _ in responses)
+            ),
             [r["id"] for r in responses],
         )
     )
@@ -234,7 +236,9 @@ def test_chat_multi(mock_model, logs_db, input, expected):
     mock_model.enqueue(["One\n"])
     mock_model.enqueue(["Two\n"])
     mock_model.enqueue(["Three\n"])
-    result = runner.invoke(llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input)
+    result = runner.invoke(
+        llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input
+    )
     assert result.exit_code == 0
     rows = list(logs_db["responses"].rows_where(select="prompt, response"))
     assert rows == expected
