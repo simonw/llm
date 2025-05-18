@@ -62,6 +62,25 @@ This demonstrates how to register a model with both sync and async versions, and
 
 The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
 
+(plugin-hooks-register-embedding-models)=
+## register_embedding_models(register)
+
+This hook can be used to register one or more additional embedding models.
+
+```python
+import llm
+
+@llm.hookimpl
+def register_embedding_models(register):
+    register(HelloWorld())
+
+class HelloWorld(llm.EmbeddingModel):
+    model_id = "helloworld"
+
+    def embed_batch(self, items):
+        return [[1, 2, 3], [4, 5, 6]]
+```
+
 (plugin-hooks-register-tools)=
 ## register_tools(register)
 

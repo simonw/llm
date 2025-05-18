@@ -52,6 +52,8 @@ If an API model host provides an OpenAI-compatible API you can also [configure L
 - **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`. It can also fetch issue threads as Markdown using `llm -f issue:https://github.com/simonw/llm-fragments-github/issues/3`.
 - **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
 - **[llm-fragments-pypi](https://github.com/samueldg/llm-fragments-pypi)** loads [PyPI](https://pypi.org/) packages' description and metadata as fragments: `llm -f pypi:ruff "What flake8 plugins does ruff re-implement?"`.
+- **[llm-fragments-pdf](https://github.com/daturkel/llm-fragments-pdf)** by Dan Turkel converts PDFs to markdown with [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/index.html) to use as fragments: `llm -f pdf:something.pdf "what's this about?"`.
+- **[llm-fragments-site-text](https://github.com/daturkel/llm-fragments-site-text)** by Dan Turkel converts websites to markdown with [Trafilatura](https://trafilatura.readthedocs.io/en/latest/) to use as fragments: `llm -f site:https://example.com "summarize this"`.
 
 ## Embedding models
 
