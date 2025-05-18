@@ -354,6 +354,7 @@ def cli():
     "--tools-debug",
     is_flag=True,
     help="Show full details of tool executions",
+    envvar="LLM_TOOLS_DEBUG",
 )
 @click.option(
     "tools_approve",
