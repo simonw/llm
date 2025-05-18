@@ -76,6 +76,10 @@ import textwrap
 from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Any
 import warnings
 import yaml
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
+
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -435,6 +439,13 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "markdown",
+    "--mk",
+    "--markdown",
+    is_flag=True,
+    help="Interpret output as markdown",
+)
 def prompt(
     prompt,
     system,
@@ -466,6 +477,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    markdown,
 ):
     """
     Execute a prompt
@@ -834,10 +846,6 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
-                    print("")
                 else:
                     response = prompt_method(
                         prompt,
@@ -848,12 +856,9 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    text = await response.text()
-                    if extract or extract_last:
-                        text = (
-                            extract_fenced_code_block(text, last=extract_last) or text
-                        )
-                    print(text)
+
+                await _async_output(should_stream, markdown, response)
+
                 return response
 
             response = asyncio.run(inner())
@@ -867,16 +872,9 @@ def prompt(
                 system_fragments=resolved_system_fragments,
                 **kwargs,
             )
-            if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
-                print("")
-            else:
-                text = response.text()
-                if extract or extract_last:
-                    text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+
+            _output(should_stream, markdown, response)
+
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -952,6 +950,13 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
+@click.option(
+    "markdown",
+    "--mk",
+    "--markdown",
+    is_flag=True,
+    help="Interpret output as markdown",
+)
 def chat(
     system,
     model_id,
@@ -963,6 +968,7 @@ def chat(
     no_stream,
     key,
     database,
+    markdown,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1088,11 +1094,66 @@ def chat(
         response = conversation.prompt(prompt, system=system, **kwargs)
         # System prompt only sent for the first message:
         system = None
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+
+        _output(should_stream, markdown, response)
+
         response.log_to_db(db)
-        print("")
+
+
+def _output(should_stream: bool, markdown: bool, response):
+    console = Console()
+
+    if should_stream:
+        if markdown:
+            live = Live(md := "", console=console, refresh_per_second=10)
+            live.start()
+
+            for chunk in response:
+                live.update(Markdown(md := md + chunk))
+
+            live.stop()
+        else:
+            for chunk in response:
+                console.print(chunk, end="")
+    else:
+        text = response.text()
+        if extract or extract_last:
+            text = extract_fenced_code_block(text, last=extract_last) or text
+
+        if markdown:
+            console.print(Markdown(text))
+        else:
+            console.print(text)
+
+    print("")
+
+
+async def _async_output(should_stream: bool, markdown: bool, response):
+    console = Console()
+
+    if should_stream:
+        if markdown:
+            live = Live(md := "", console=console, refresh_per_second=10)
+            live.start()
+
+            async for chunk in response:
+                live.update(Markdown(md := md + chunk))
+
+            live.stop()
+        else:
+            async for chunk in response:
+                console.print(chunk, end="")
+    else:
+        text = response.text()
+        if extract or extract_last:
+            text = extract_fenced_code_block(text, last=extract_last) or text
+
+        if markdown:
+            console.print(Markdown(text))
+        else:
+            console.print(text)
+
+    print("")
 
 
 def load_conversation(
