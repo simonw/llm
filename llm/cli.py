@@ -1006,13 +1006,14 @@ def chat(
                 continue
             click.echo(prompt)
         if prompt.strip().startswith("!fragment "):
-            fragments.append(prompt.strip().removeprefix("!fragment "))
-            # try:
-            #     fragments_and_attachments = resolve_fragments(db, fragments=[fragment_str], allow_attachments=True)
-            #     fragments = [fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)]
-            #     attachments = [attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)]
-            # except FragmentNotFound as ex:
-            #     raise click.ClickException(str(ex))
+            fragment_str = prompt.strip().removeprefix("!fragment ")
+            try:
+                fragments_and_attachments = resolve_fragments(db, fragments=[fragment_str], allow_attachments=True)
+                fragments = [fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)]
+                attachments = [attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)]
+            except FragmentNotFound as ex:
+                raise click.ClickException(str(ex))
+            prompt = ""
 
         if in_multi:
             if prompt.strip() == end_token:
@@ -1024,7 +1025,8 @@ def chat(
                 accumulated_fragments = []
                 accumulated_attachments = []
             else:
-                accumulated.append(prompt)
+                if prompt:
+                    accumulated.append(prompt)
                 accumulated_fragments += fragments
                 accumulated_attachments += attachments
                 continue
@@ -1042,7 +1044,7 @@ def chat(
                 prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, fragments=fragments, attachments=attachments, system=system, **kwargs)
+        response = conversation.prompt(prompt, fragments=[str(fragment) for fragment in fragments], attachments=attachments, system=system, **kwargs)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:
