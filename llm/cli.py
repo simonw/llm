@@ -155,6 +155,27 @@ def resolve_fragments(db: sqlite_utils.Database, fragments: Iterable[str], allow
     return resolved
 
 
+def process_fragments_in_chat(db: sqlite_utils.Database, prompt: str) -> tuple[str, list[Fragment], list[Attachment]]:
+    """
+    Process any !fragment commands in a chat prompt and return the modified prompt plus resolved fragments and attachments.
+    """
+    prompt_lines = []
+    fragments = []
+    attachments = []
+    for line in prompt.splitlines():
+        if line.startswith("!fragment "):
+            try:
+                fragment_strs = line.strip().removeprefix("!fragment ").split()
+                fragments_and_attachments = resolve_fragments(db, fragments=fragment_strs, allow_attachments=True)
+                fragments += [fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)]
+                attachments += [attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)]
+            except FragmentNotFound as ex:
+                raise click.ClickException(str(ex))
+        else:
+            prompt_lines.append(line)
+    return "\n".join(prompt_lines), fragments, attachments
+
+
 class AttachmentError(Exception):
     """Exception raised for errors in attachment resolution."""
 
@@ -1001,20 +1022,12 @@ def chat(
             if edited_prompt is None:
                 click.echo("Editor closed without saving.", err=True)
                 continue
-            prompt = edited_prompt.strip()
-            if not prompt:
+            prompt, fragments, attachments = process_fragments_in_chat(db, edited_prompt.strip())
+            if not prompt and not fragments and not attachments:
                 continue
             click.echo(prompt)
         if prompt.strip().startswith("!fragment "):
-            fragment_strs = prompt.strip().removeprefix("!fragment ").split()
-            try:
-                fragments_and_attachments = resolve_fragments(db, fragments=fragment_strs, allow_attachments=True)
-                fragments = [fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)]
-                attachments = [attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)]
-            except FragmentNotFound as ex:
-                raise click.ClickException(str(ex))
-            # Don't add the literal "!fragment <something>" to our prompt
-            prompt = ""
+            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
 
         if in_multi:
             if prompt.strip() == end_token:
