@@ -46,6 +46,17 @@ from .plugins import pm, load_plugins
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
+    find_unused_key,
+    has_plugin_prefix,
+    make_schema_id,
+    maybe_fenced_code,
+    mimetype_from_path,
+    mimetype_from_string,
+    multi_schema,
+    output_rows_as_json,
+    resolve_schema_input,
+    schema_dsl,
+    schema_summary,
     token_usage_string,
     truncate_string,
 )
