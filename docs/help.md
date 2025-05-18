@@ -163,17 +163,20 @@ Usage: llm chat [OPTIONS]
   Hold an ongoing chat with a model.
 
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  -d, --database FILE          Path to log database
-  --no-stream                  Do not stream output
-  --key TEXT                   API key to use
-  --help                       Show this message and exit.
+  -s, --system TEXT             System prompt to use
+  -m, --model TEXT              Model to use
+  -c, --continue                Continue the most recent conversation.
+  --cid, --conversation TEXT    Continue the conversation with the given ID.
+  -f, --fragment TEXT           Fragment (alias, URL, hash or file path) to add
+                                to the prompt
+  --sf, --system-fragment TEXT  Fragment to add to system prompt
+  -t, --template TEXT           Template to use
+  -p, --param <TEXT TEXT>...    Parameters for template
+  -o, --option <TEXT TEXT>...   key/value options for the model
+  -d, --database FILE           Path to log database
+  --no-stream                   Do not stream output
+  --key TEXT                    API key to use
+  --help                        Show this message and exit.
 ```
 
 (help-keys)=
