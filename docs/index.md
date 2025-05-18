@@ -76,6 +76,7 @@ Chatting with gpt-4o
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > Tell me a joke about a pelican
 Why don't pelicans like to tip waiters?
 
