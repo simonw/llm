@@ -811,8 +811,9 @@ Usage: llm plugins [OPTIONS]
   List installed plugins
 
 Options:
-  --all   Include built-in default plugins
-  --help  Show this message and exit.
+  --all        Include built-in default plugins
+  --hook TEXT  Filter for plugins that implement this hook
+  --help       Show this message and exit.
 ```
 
 (help-install)=

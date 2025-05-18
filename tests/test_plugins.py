@@ -290,3 +290,25 @@ def test_register_tools(tmpdir):
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
+
+
+def test_plugins_command():
+    runner = CliRunner()
+    result = runner.invoke(cli.cli, ["plugins"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [
+        {"name": "EchoModelPlugin", "hooks": ["register_models"]},
+        {
+            "name": "MockModelsPlugin",
+            "hooks": ["register_embedding_models", "register_models"],
+        },
+    ]
+    # Test the --hook option
+    result2 = runner.invoke(cli.cli, ["plugins", "--hook", "register_embedding_models"])
+    assert result2.exit_code == 0
+    assert json.loads(result2.output) == [
+        {
+            "name": "MockModelsPlugin",
+            "hooks": ["register_embedding_models", "register_models"],
+        },
+    ]

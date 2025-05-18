@@ -2617,9 +2617,16 @@ def fragments_loaders():
 
 @cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
-def plugins_list(all):
+@click.option(
+    "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
+)
+def plugins_list(all, hooks):
     "List installed plugins"
-    click.echo(json.dumps(get_plugins(all), indent=2))
+    plugins = get_plugins(all)
+    hooks = set(hooks)
+    if hooks:
+        plugins = [plugin for plugin in plugins if hooks.intersection(plugin["hooks"])]
+    click.echo(json.dumps(plugins, indent=2))
 
 
 def display_truncated(text):
