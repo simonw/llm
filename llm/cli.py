@@ -980,7 +980,7 @@ def chat(
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
     click.echo("Type '!edit' to open your default editor and modify the prompt")
-    click.echo("Type '!fragment <my_fragment>' to insert a fragment")
+    click.echo("Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments")
     in_multi = False
     accumulated = []
     accumulated_fragments = []
@@ -1006,13 +1006,14 @@ def chat(
                 continue
             click.echo(prompt)
         if prompt.strip().startswith("!fragment "):
-            fragment_str = prompt.strip().removeprefix("!fragment ")
+            fragment_strs = prompt.strip().removeprefix("!fragment ").split()
             try:
-                fragments_and_attachments = resolve_fragments(db, fragments=[fragment_str], allow_attachments=True)
+                fragments_and_attachments = resolve_fragments(db, fragments=fragment_strs, allow_attachments=True)
                 fragments = [fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)]
                 attachments = [attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)]
             except FragmentNotFound as ex:
                 raise click.ClickException(str(ex))
+            # Don't add the literal "!fragment <something>" to our prompt
             prompt = ""
 
         if in_multi:
