@@ -365,6 +365,26 @@ async for chunk in model.prompt(
 ```
 This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
 
+(python-api-async-tools)=
+
+### Async tools
+
+{ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
+
+If an `async def` function is used in a synchronous context LLM will automatically execute it in a thread pool using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
+
+```python
+async def hello(name: str) -> str:
+    "Say hello to name"
+    return "Hello there " + name
+
+model = llm.get_model("gpt-4.1-mini")
+chain_response = model.chain(
+    "Say hello to Percival", tools=[hello]
+)
+print(chain_response.text())
+```
+
 (python-api-conversations)=
 
 ## Conversations

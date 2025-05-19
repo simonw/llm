@@ -1,3 +1,4 @@
+import json
 import llm
 from llm.migrations import migrate
 import os
@@ -92,3 +93,16 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert second.tool_calls()[0].arguments == {"population": 123124}
     assert third.prompt.tool_results[0].output == "true"
     assert third.tool_calls() == []
+
+
+def test_tool_use_async():
+    async def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    responses = list(chain_response.responses())
+    output = responses[-1].text()
+    assert '[{"name": "hello", "output": "world"' in output

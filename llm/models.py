@@ -789,7 +789,6 @@ class Response(_BaseResponse):
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
-        # TODO: make this work async
         for tool_call in self.tool_calls():
             tool = tools_by_name.get(tool_call.name)
             if tool is None:
@@ -802,7 +801,10 @@ class Response(_BaseResponse):
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
             try:
-                result = tool.implementation(**tool_call.arguments)
+                if asyncio.iscoroutinefunction(tool.implementation):
+                    result = asyncio.run(tool.implementation(**tool_call.arguments))
+                else:
+                    result = tool.implementation(**tool_call.arguments)
                 if not isinstance(result, str):
                     result = json.dumps(result, default=repr)
             except Exception as ex:
