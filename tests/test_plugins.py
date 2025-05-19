@@ -296,13 +296,16 @@ def test_plugins_command():
     runner = CliRunner()
     result = runner.invoke(cli.cli, ["plugins"])
     assert result.exit_code == 0
-    assert json.loads(result.output) == [
+    expected = [
         {"name": "EchoModelPlugin", "hooks": ["register_models"]},
         {
             "name": "MockModelsPlugin",
             "hooks": ["register_embedding_models", "register_models"],
         },
     ]
+    actual = json.loads(result.output)
+    actual.sort(key=lambda p: p["name"])
+    assert actual == expected
     # Test the --hook option
     result2 = runner.invoke(cli.cli, ["plugins", "--hook", "register_embedding_models"])
     assert result2.exit_code == 0
