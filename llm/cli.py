@@ -302,7 +302,7 @@ def cli():
 
 
 @cli.command(name="prompt")
-@click.argument("prompt", required=False)
+@click.argument("prompt", required=False, nargs=-1)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -494,6 +494,8 @@ def prompt(
     \b
         llm 'JavaScript function for reversing a string' -x
     """
+    prompt = " ".join(prompt) if prompt else None
+
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
