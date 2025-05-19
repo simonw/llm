@@ -296,13 +296,18 @@ def test_plugins_command():
     runner = CliRunner()
     result = runner.invoke(cli.cli, ["plugins"])
     assert result.exit_code == 0
-    assert json.loads(result.output) == [
-        {"name": "EchoModelPlugin", "hooks": ["register_models"]},
-        {
-            "name": "MockModelsPlugin",
-            "hooks": ["register_embedding_models", "register_models"],
-        },
-    ]
+    plugins_output = sorted(json.loads(result.output), key=lambda x: x["name"])
+    expected_plugins = sorted(
+        [
+            {"name": "EchoModelPlugin", "hooks": ["register_models"]},
+            {
+                "name": "MockModelsPlugin",
+                "hooks": ["register_embedding_models", "register_models"],
+            },
+        ],
+        key=lambda x: x["name"],
+    )
+    assert plugins_output == expected_plugins
     # Test the --hook option
     result2 = runner.invoke(cli.cli, ["plugins", "--hook", "register_embedding_models"])
     assert result2.exit_code == 0
