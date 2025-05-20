@@ -249,7 +249,7 @@ class Collection:
             vector (list): Vector to search by
             number (int, optional): Number of similar items to return
             skip_id (str, optional): An ID to exclude from the results
-            prefix: (str, optional): An ID prefix which all results must have
+            prefix: (str, optional): Filter results to IDs witih this prefix
 
         Returns:
             list: List of Entry objects
@@ -303,7 +303,7 @@ class Collection:
         Args:
             id (str): ID to search by
             number (int, optional): Number of similar items to return
-            prefix: (str, optional): An ID prefix which all results must share.
+            prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
@@ -332,7 +332,7 @@ class Collection:
         Args:
             value (str or bytes): value to search by
             number (int, optional): Number of similar items to return
-            prefix: (str, optional): An ID prefix which all results must share.
+            prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects

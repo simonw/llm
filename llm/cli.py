@@ -3033,7 +3033,7 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option(
-    "--prefix", help="Only results with this prefix will be returned", default=""
+    "--prefix", help="Filters results to those with this prefix in their ID", default=""
 )
 def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
