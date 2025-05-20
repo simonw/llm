@@ -2213,9 +2213,7 @@ def schemas_list(path, database, queries, full):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(
-        where_sql
-    )
+    """.format(where_sql)
     rows = db.query(sql, params)
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
@@ -2506,9 +2504,7 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(
-        where=where
-    )
+    """.format(where=where)
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3036,7 +3032,10 @@ def embed_multi(
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, binary, number, plain, database):
+@click.option(
+    "--prefix", help="Only results with this prefix will be returned", default=""
+)
+def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -3068,7 +3067,7 @@ def similar(collection, id, input, content, binary, number, plain, database):
 
     if id:
         try:
-            results = collection_obj.similar_by_id(id, number)
+            results = collection_obj.similar_by_id(id, number, prefix=prefix)
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
@@ -3084,7 +3083,7 @@ def similar(collection, id, input, content, binary, number, plain, database):
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number)
+        results = collection_obj.similar(content, number, prefix=prefix)
 
     for result in results:
         if plain:
