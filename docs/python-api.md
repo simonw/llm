@@ -170,6 +170,41 @@ response = model.prompt("Describe a nice dog", schema={
 })
 ```
 
+You can turn a schema dictionary into a multi schema using the `multi_schema(schema)` function imported from `llm.utils`:
+
+```python
+from llm.utils import multi_schema
+schema = {
+    "properties": {
+        "name": {"title": "Name", "type": "string"},
+        "age": {"title": "Age", "type": "integer"},
+    },
+    "required": ["name", "age"],
+    "title": "Dog",
+    "type": "object",
+}
+response = model.prompt(
+    "Describe 3 nice dogs",
+    schema=multi_schema(schema)
+)
+```
+
+You can use `multi_schema` with a Pydantic `BaseModel` subclass using the `model_json_schema()` function, which outputs a JSON schema dict:
+
+```python
+from pydantic import BaseModel
+from llm.utils import multi_schema
+
+class Dog(BaseModel):
+    name: str
+    age: int
+
+response = model.prompt(
+    "Describe 3 nice dogs",
+    schema=multi_schema(Dog.model_json_schema())
+)
+```
+
 You can also use LLM's {ref}`alternative schema syntax <schemas-dsl>` via the `llm.schema_dsl(schema_dsl)` function. This provides a quick way to construct a JSON schema for simple cases:
 
 ```python
