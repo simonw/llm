@@ -15,18 +15,11 @@ from unittest.mock import ANY
         ("json", "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"),
         (
             "base64",
-            (
-                "AACgQAAAoEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\n"
-            ),
+            ("AACgQAAAoEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\n"),
         ),
         (
             "hex",
-            (
-                "0000a0400000a04000000000000000000000000000000000000000000"
-                "000000000000000000000000000000000000000000000000000000000"
-                "00000000000000\n"
-            ),
+            ("0000a0400000a0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\n"),
         ),
         (
             "blob",
@@ -135,9 +128,7 @@ def test_embed_store(user_path, metadata, metadata_error):
         result2 = runner.invoke(cli, args)
         assert result2.exit_code == 0
         if is_json:
-            assert json.loads(result2.output) == [
-                {"name": "items", "model": "embed-demo", "num_embeddings": 1}
-            ]
+            assert json.loads(result2.output) == [{"name": "items", "model": "embed-demo", "num_embeddings": 1}]
         else:
             assert result2.output == "items: embed-demo\n  1 embedding\n"
 
@@ -181,9 +172,7 @@ def test_collection_delete_errors(user_path):
     assert db["collections"].count == 1
     assert db["embeddings"].count == 1
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["collections", "delete", "does-not-exist"], catch_exceptions=False
-    )
+    result = runner.invoke(cli, ["collections", "delete", "does-not-exist"], catch_exceptions=False)
     assert result.exit_code == 1
     assert "Collection does not exist" in result.output
     assert db["collections"].count == 1
@@ -219,9 +208,7 @@ def test_similar_by_id_cli(user_path_with_embeddings):
 @pytest.mark.parametrize("option", ("-p", "--plain"))
 def test_similar_by_id_cli_output_plain(user_path_with_embeddings, option):
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["similar", "demo", "1", option], catch_exceptions=False
-    )
+    result = runner.invoke(cli, ["similar", "demo", "1", option], catch_exceptions=False)
     assert result.exit_code == 0
     # Replace score with a placeholder
     output = result.output.split("(")[0] + "(score)" + result.output.split(")")[1]
@@ -258,6 +245,36 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         "content": "goodbye world",
         "metadata": None,
     }
+
+
+@pytest.mark.parametrize(
+    "prefix,expected_result",
+    (
+        (
+            1,
+            {
+                "id": "1",
+                "score": pytest.approx(0.7071067811865475),
+                "content": "hello world",
+                "metadata": None,
+            },
+        ),
+        (
+            2,
+            {
+                "id": "2",
+                "score": pytest.approx(0.8137334712067349),
+                "content": "goodbye world",
+                "metadata": None,
+            },
+        ),
+    ),
+)
+def test_similar_by_content_prefixed(user_path_with_embeddings, prefix, expected_result):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output) == expected_result
 
 
 @pytest.mark.parametrize("use_stdin", (False, True))
@@ -571,9 +588,7 @@ def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
         assert result.exit_code == 0
         assert not result.stderr
         embeddings_db = sqlite_utils.Database(db_path)
-        rows = list(
-            embeddings_db.query("select id, content from embeddings order by id")
-        )
+        rows = list(embeddings_db.query("select id, content from embeddings order by id"))
         assert rows == [
             {"id": "ignored.ini", "content": "Has weird \x96 character"},
         ]
@@ -621,9 +636,7 @@ def test_llm_embed_models_query(user_path, args, expected_model_id):
 def test_default_embed_model_errors(user_path, default_is_set, command):
     runner = CliRunner()
     if default_is_set:
-        (user_path / "default_embedding_model.txt").write_text(
-            "embed-demo", encoding="utf8"
-        )
+        (user_path / "default_embedding_model.txt").write_text("embed-demo", encoding="utf8")
     args = []
     input = None
     if command == "embed-multi":
@@ -636,10 +649,7 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         assert result.exit_code == 0
     else:
         assert result.exit_code == 1
-        assert (
-            "You need to specify an embedding model (no default model is set)"
-            in result.output
-        )
+        assert "You need to specify an embedding model (no default model is set)" in result.output
         # Now set the default model and try again
         result2 = runner.invoke(cli, ["embed-models", "default", "embed-demo"])
         assert result2.exit_code == 0
@@ -671,9 +681,7 @@ def test_duplicate_content_embedded_only_once(embed_demo):
     assert len(embed_demo.embedded_content) == 3
 
     # Same again for embed_multi
-    collection.embed_multi(
-        (("1", "hello world"), ("2", "goodbye world"), ("3", "this is new"))
-    )
+    collection.embed_multi((("1", "hello world"), ("2", "goodbye world"), ("3", "this is new")))
     # Should have only embedded one more thing
     assert db["embeddings"].count == 4
     assert len(embed_demo.embedded_content) == 4
