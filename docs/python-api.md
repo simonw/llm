@@ -89,6 +89,19 @@ for chunk in model.chain(
 ```
 This will stream each of the chain of responses in turn as they are generated.
 
+You can access the individual responses that make up the chain using `chain.responses()`. This can be iterated over as the chain executes like this:
+
+```python
+chain = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+for response in chain.responses():
+    print(response.prompt)
+    for chunk in response:
+        print(chunk, end="", flush=True)
+```
+
 (python-api-system-prompts)=
 
 ### System prompts
@@ -351,10 +364,9 @@ model = llm.get_async_model("gpt-4o")
 You can then run a prompt using `await model.prompt(...)`:
 
 ```python
-response = await model.prompt(
+print(await model.prompt(
     "Five surprising names for a pet pelican"
-)
-print(await response.text())
+).text())
 ```
 Or use `async for chunk in ...` to stream the response as it is generated:
 ```python
@@ -384,7 +396,20 @@ chain_response = model.chain(
 )
 print(chain_response.text())
 ```
+Tool use is also supported for async models, using either synchronous or asynchronous tool functions. Synchronous functions will block the event loop so only use those in asynchronous context if you are certain they are extremely fast.
 
+The `response.execute_tool_calls()` and `chain_response.text()` and `chain_response.responses()` methods must all be awaited when run against asynchronous models:
+
+TODO code example
+
+To iterate over the chained response output as it arrives use `async for`:
+```python
+async for chunk in model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper]
+):
+    print(chunk, end="", flush=True)
+```
 (python-api-conversations)=
 
 ## Conversations

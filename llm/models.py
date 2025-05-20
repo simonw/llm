@@ -12,6 +12,7 @@ import time
 from typing import (
     Any,
     AsyncGenerator,
+    AsyncIterator,
     Callable,
     Dict,
     Iterable,
@@ -375,6 +376,49 @@ class Conversation(_BaseConversation):
 
 @dataclass
 class AsyncConversation(_BaseConversation):
+    def chain(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        fragments: Optional[List[str]] = None,
+        attachments: Optional[List[Attachment]] = None,
+        system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
+        stream: bool = True,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
+        chain_limit: Optional[int] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        details: bool = False,
+        key: Optional[str] = None,
+        options: Optional[dict] = None,
+    ) -> "AsyncChainResponse":
+        self.model._validate_attachments(attachments)
+        return AsyncChainResponse(
+            Prompt(
+                prompt,
+                fragments=fragments,
+                attachments=attachments,
+                system=system,
+                schema=schema,
+                tools=tools,
+                tool_results=tool_results,
+                system_fragments=system_fragments,
+                model=self.model,
+                options=self.model.Options(**(options or {})),
+            ),
+            model=self.model,
+            stream=stream,
+            conversation=self,
+            key=key,
+            details=details,
+            before_call=before_call,
+            after_call=after_call,
+            chain_limit=chain_limit,
+        )
+
     def prompt(
         self,
         prompt: Optional[str] = None,
@@ -914,6 +958,45 @@ class AsyncResponse(_BaseResponse):
             if asyncio.iscoroutine(callback):
                 await callback
 
+    async def execute_tool_calls(
+        self,
+        *,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+    ) -> List[ToolResult]:
+        tool_results = []
+        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        for tool_call in await self.tool_calls():
+            tool = tools_by_name.get(tool_call.name)
+            if tool is None:
+                raise CancelToolCall("Unknown tool: {}".format(tool_call.name))
+            # TODO: before_call/after_call should optionally be async
+            if before_call:
+                # This may raise CancelToolCall:
+                before_call(tool, tool_call)
+            if not tool.implementation:
+                raise CancelToolCall(
+                    "No implementation available for tool: {}".format(tool_call.name)
+                )
+            try:
+                if asyncio.iscoroutinefunction(tool.implementation):
+                    result = await tool.implementation(**tool_call.arguments)
+                else:
+                    result = tool.implementation(**tool_call.arguments)
+                if not isinstance(result, str):
+                    result = json.dumps(result, default=repr)
+            except Exception as ex:
+                result = f"Error: {ex}"
+            tool_result = ToolResult(
+                name=tool_call.name,
+                output=result,
+                tool_call_id=tool_call.tool_call_id,
+            )
+            if after_call:
+                after_call(tool, tool_call, tool_result)
+            tool_results.append(tool_result)
+        return tool_results
+
     def __aiter__(self):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
@@ -1087,11 +1170,15 @@ class _BaseChainResponse:
         self.before_call = before_call
         self.after_call = after_call
 
-    def responses(
-        self, details=False
-    ) -> Iterator[
-        Union[Response, str]
-    ]:  # Iterator[Union[Response, AsyncResponse, str]]:
+    def log_to_db(self, db):
+        for response in self._responses:
+            if isinstance(response, AsyncResponse):
+                response = asyncio.run(response.to_sync_response())
+            response.log_to_db(db)
+
+
+class ChainResponse(_BaseChainResponse):
+    def responses(self) -> Iterator[Union[Response, str]]:
         prompt = self.prompt
         count = 0
         response = Response(
@@ -1138,15 +1225,50 @@ class _BaseChainResponse:
     def text(self) -> str:
         return "".join(self)
 
-    def log_to_db(self, db):
-        for response in self._responses:
-            if isinstance(response, AsyncResponse):
-                response = asyncio.run(response.to_sync_response())
-            response.log_to_db(db)
 
+class AsyncChainResponse(_BaseChainResponse):
+    async def responses(self) -> AsyncIterator[Union[AsyncResponse, str]]:
+        prompt = self.prompt
+        count = 0
+        response = AsyncResponse(
+            prompt,
+            self.model,
+            self.stream,
+            key=self._key,
+            conversation=self.conversation,
+        )
+        while response:
+            count += 1
+            yield response
+            self._responses.append(response)
+            if self.chain_limit and count > self.chain_limit:
+                raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
+            # This could raise llm.CancelToolCall:
+            tool_results = await response.execute_tool_calls(
+                before_call=self.before_call, after_call=self.after_call
+            )
+            if tool_results:
+                response = AsyncResponse(
+                    Prompt(
+                        "",
+                        self.model,
+                        tools=response.prompt.tools,
+                        tool_results=tool_results,
+                        options=self.prompt.options,
+                    ),
+                    self.model,
+                    stream=self.stream,
+                    key=self._key,
+                    conversation=self.conversation,
+                )
+            else:
+                break
 
-class ChainResponse(_BaseChainResponse):
-    "Know how to chain multiple responses e.g. for tool calls"
+    def __aiter__(self) -> AsyncIterator[str]:
+        return self.responses()
+
+    async def text(self) -> str:
+        return "".join([item async for item in self.responses()])
 
 
 class Options(BaseModel):
@@ -1280,7 +1402,7 @@ class _Model(_BaseModel):
         details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
-    ):
+    ) -> ChainResponse:
         return self.conversation().chain(
             prompt=prompt,
             fragments=fragments,
@@ -1362,8 +1484,40 @@ class _AsyncModel(_BaseModel):
             key=key,
         )
 
-    def chain(self, *args, **kwargs):
-        raise NotImplementedError("AsyncModel does not yet support tools")
+    def chain(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        fragments: Optional[List[str]] = None,
+        attachments: Optional[List[Attachment]] = None,
+        system: Optional[str] = None,
+        system_fragments: Optional[List[str]] = None,
+        stream: bool = True,
+        schema: Optional[Union[dict, type[BaseModel]]] = None,
+        tools: Optional[List[Tool]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        details: bool = False,
+        key: Optional[str] = None,
+        options: Optional[dict] = None,
+    ) -> AsyncChainResponse:
+        return self.conversation().chain(
+            prompt=prompt,
+            fragments=fragments,
+            attachments=attachments,
+            system=system,
+            system_fragments=system_fragments,
+            stream=stream,
+            schema=schema,
+            tools=tools,
+            tool_results=tool_results,
+            before_call=before_call,
+            after_call=after_call,
+            details=details,
+            key=key,
+            options=options,
+        )
 
 
 class AsyncModel(_AsyncModel):
