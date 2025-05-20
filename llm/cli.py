@@ -3619,6 +3619,24 @@ def options_clear(model, key):
             )
 
 
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def context():
+    """Manage context providers"""
+
+
+@context.command(name="list")
+def context_list():
+    """List available context providers"""
+    from llm import get_context_providers
+
+    for provider in get_context_providers():
+        click.echo(provider.name)
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
