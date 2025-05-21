@@ -829,6 +829,7 @@ Options:
   --force-reinstall    Reinstall all packages even if they are already up-to-
                        date
   --no-cache-dir       Disable the cache
+  --pre                Include pre-release and development versions
   --help               Show this message and exit.
 ```
 

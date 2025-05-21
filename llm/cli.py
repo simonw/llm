@@ -2657,7 +2657,12 @@ def display_truncated(text):
     is_flag=True,
     help="Disable the cache",
 )
-def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
+@click.option(
+    "--pre",
+    is_flag=True,
+    help="Include pre-release and development versions",
+)
+def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
@@ -2668,6 +2673,8 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
         args += ["--force-reinstall"]
     if no_cache_dir:
         args += ["--no-cache-dir"]
+    if pre:
+        args += ["--pre"]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
