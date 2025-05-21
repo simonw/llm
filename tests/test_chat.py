@@ -1,9 +1,11 @@
 from click.testing import CliRunner
+import json
 import llm.cli
 from unittest.mock import ANY
 import pytest
 import sys
 import sqlite_utils
+import textwrap
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -265,3 +267,69 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
     assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_tools(logs_db):
+    runner = CliRunner()
+    functions = textwrap.dedent(
+        """
+    def upper(text: str) -> str:
+        "Convert text to upper case"
+        return text.upper()                         
+    """
+    )
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "echo", "--functions", functions],
+        input="\n".join(
+            [
+                json.dumps(
+                    {
+                        "prompt": "Convert hello to uppercase",
+                        "tool_calls": [
+                            {"name": "upper", "arguments": {"text": "hello"}}
+                        ],
+                    }
+                ),
+                "quit",
+            ]
+        ),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == (
+        "Chatting with echo\n"
+        "Type 'exit' or 'quit' to exit\n"
+        "Type '!multi' to enter multiple lines, then '!end' to finish\n"
+        "Type '!edit' to open your default editor and modify the prompt\n"
+        '> {"prompt": "Convert hello to uppercase", "tool_calls": [{"name": "upper", '
+        '"arguments": {"text": "hello"}}]}\n'
+        "{\n"
+        '  "prompt": "Convert hello to uppercase",\n'
+        '  "system": "",\n'
+        '  "attachments": [],\n'
+        '  "stream": true,\n'
+        '  "previous": []\n'
+        "}{\n"
+        '  "prompt": "",\n'
+        '  "system": "",\n'
+        '  "attachments": [],\n'
+        '  "stream": true,\n'
+        '  "previous": [\n'
+        "    {\n"
+        '      "prompt": "{\\"prompt\\": \\"Convert hello to uppercase\\", '
+        '\\"tool_calls\\": [{\\"name\\": \\"upper\\", \\"arguments\\": {\\"text\\": '
+        '\\"hello\\"}}]}"\n'
+        "    }\n"
+        "  ],\n"
+        '  "tool_results": [\n'
+        "    {\n"
+        '      "name": "upper",\n'
+        '      "output": "HELLO",\n'
+        '      "tool_call_id": null\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "> quit\n"
+    )

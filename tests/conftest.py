@@ -2,6 +2,7 @@ import pytest
 import sqlite_utils
 import json
 import llm
+import llm_echo
 from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
@@ -233,19 +234,20 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
 
 
 @pytest.fixture(autouse=True)
-def register_echo_model():
-    class SimpleEchoModelPlugin:
-        __name__ = "SimpleEchoModelPlugin"
+def register_echo_models():
+    class EchoModelsPlugin:
+        __name__ = "EchoModelsPlugin"
 
         @llm.hookimpl
         def register_models(self, register):
             register(SimpleEchoModel())
+            register(llm_echo.Echo(), llm_echo.EchoAsync())
 
-    pm.register(SimpleEchoModelPlugin(), name="undo-SimpleEchoModelPlugin")
+    pm.register(EchoModelsPlugin(), name="undo-EchoModelsPlugin")
     try:
         yield
     finally:
-        pm.unregister(name="undo-SimpleEchoModelPlugin")
+        pm.unregister(name="undo-EchoModelsPlugin")
 
 
 @pytest.fixture
