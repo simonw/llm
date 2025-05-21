@@ -258,3 +258,36 @@ llm -f my-fragments:argument
 If multiple fragments are returned they will be used as if the user passed multiple `-f X` arguments to the command.
 
 Multiple fragments are particularly useful for things like plugins that return every file in a directory. If these were concatenated together by the plugin, a change to a single file would invalidate the de-duplicatino cache for that whole fragment. Giving each file its own fragment means we can avoid storing multiple copies of that full collection if only a single file has changed.
+
+(plugin-hooks-register-context-providers)=
+## register_context_providers(register)
+
+Context providers can store additional information for a conversation and return
+it to the model with each prompt. Plugins can implement a provider by
+subclassing `llm.ContextProvider` and registering an instance using this hook.
+
+```python
+import llm
+from llm.context import Context, ContextMetadata, ContextProvider
+
+class DummyProvider(ContextProvider):
+    name = "dummy"
+
+    def initialize_context(self, conversation_id: str) -> Context:
+        return Context(
+            data={},
+            metadata=ContextMetadata(provider_name=self.name, context_id=conversation_id),
+        )
+
+    def update_context(self, conversation_id, response, previous_context=None) -> Context:
+        return previous_context or self.initialize_context(conversation_id)
+
+    def get_context(self, conversation_id):
+        return None
+
+@llm.hookimpl
+def register_context_providers(register):
+    register(DummyProvider())
+```
+
+Running `llm context list` will display the names of all registered providers.
