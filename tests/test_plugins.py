@@ -297,11 +297,11 @@ def test_plugins_command():
     result = runner.invoke(cli.cli, ["plugins"])
     assert result.exit_code == 0
     expected = [
+        {"name": "EchoModelsPlugin", "hooks": ["register_models"]},
         {
             "name": "MockModelsPlugin",
             "hooks": ["register_embedding_models", "register_models"],
         },
-        {"name": "SimpleEchoModelPlugin", "hooks": ["register_models"]},
     ]
     actual = json.loads(result.output)
     actual.sort(key=lambda p: p["name"])
