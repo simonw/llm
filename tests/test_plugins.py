@@ -141,7 +141,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
         # Test the CLI command
         runner = CliRunner()
         result = runner.invoke(
-            cli.cli, ["-m", "echo", "-f", "three:x"], catch_exceptions=False
+            cli.cli, ["-m", "simple-echo", "-f", "three:x"], catch_exceptions=False
         )
         assert result.exit_code == 0
         expected = "prompt:\n" "one:x\n" "two:x\n" "three:x\n"
@@ -163,7 +163,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
 
         # Test the one that includes an attachment
         result3 = runner.invoke(
-            cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
+            cli.cli, ["-m", "simple-echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
         result3.output.strip == textwrap.dedent(
@@ -297,11 +297,11 @@ def test_plugins_command():
     result = runner.invoke(cli.cli, ["plugins"])
     assert result.exit_code == 0
     expected = [
-        {"name": "EchoModelPlugin", "hooks": ["register_models"]},
         {
             "name": "MockModelsPlugin",
             "hooks": ["register_embedding_models", "register_models"],
         },
+        {"name": "SimpleEchoModelPlugin", "hooks": ["register_models"]},
     ]
     actual = json.loads(result.output)
     actual.sort(key=lambda p: p["name"])

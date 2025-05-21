@@ -356,7 +356,7 @@ def test_execute_prompt_from_template_url(httpx_mock, template, expected):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["-t", "https://example.com/prompt.yaml", "-m", "echo"],
+        ["-t", "https://example.com/prompt.yaml", "-m", "simple-echo"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0
@@ -370,7 +370,7 @@ def test_execute_prompt_from_template_path():
         path.write_text("system: system\nprompt: prompt", "utf-8")
         result = runner.invoke(
             cli,
-            ["-t", str(path), "-m", "echo"],
+            ["-t", str(path), "-m", "simple-echo"],
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output

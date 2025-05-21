@@ -82,8 +82,8 @@ class MockModel(llm.Model):
         )
 
 
-class EchoModel(llm.Model):
-    model_id = "echo"
+class SimpleEchoModel(llm.Model):
+    model_id = "simple-echo"
     can_stream = True
     attachment_types = {"image/png"}
 
@@ -234,18 +234,18 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
 
 @pytest.fixture(autouse=True)
 def register_echo_model():
-    class EchoModelPlugin:
-        __name__ = "EchoModelPlugin"
+    class SimpleEchoModelPlugin:
+        __name__ = "SimpleEchoModelPlugin"
 
         @llm.hookimpl
         def register_models(self, register):
-            register(EchoModel())
+            register(SimpleEchoModel())
 
-    pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
+    pm.register(SimpleEchoModelPlugin(), name="undo-SimpleEchoModelPlugin")
     try:
         yield
     finally:
-        pm.unregister(name="undo-EchoModelPlugin")
+        pm.unregister(name="undo-SimpleEchoModelPlugin")
 
 
 @pytest.fixture
