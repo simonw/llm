@@ -1028,7 +1028,8 @@ def chat(
             raise click.ClickException(render_errors(ex.errors()))
 
     kwargs = {}
-    kwargs.update(validated_options)
+    if validated_options:
+        kwargs["options"] = validated_options
 
     tool_functions = _gather_tools(tools, python_tools)
 
