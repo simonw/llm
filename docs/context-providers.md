@@ -36,6 +36,16 @@ Plugins can register additional providers using the
 `register_context_providers` plugin hook (see
 {ref}`plugin-hooks-register-context-providers`).
 
+## FragmentsContextProvider
+
+LLM also includes a built‑in `FragmentsContextProvider`. It searches stored
+prompt fragments (see {ref}`fragments`) using embeddings to find the most
+relevant fragments and returns them as context items.
+
+Plugins can register additional providers using the
+`register_context_providers` plugin hook (see
+{ref}`plugin-hooks-register-context-providers`).
+
 ## CLI usage
 
 Run `llm context list` to see the names of all installed context providers.

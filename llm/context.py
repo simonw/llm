@@ -161,3 +161,67 @@ class EmbeddingsContextProvider(ContextProvider):
                 )
             )
         return items
+
+
+class FragmentsContextProvider(ContextProvider):
+    """Context provider that searches stored fragments using embeddings."""
+
+    name = "fragments"
+
+    def __init__(self, db=None, model_id: Optional[str] = None) -> None:
+        self.db = db
+        self.model_id = model_id
+
+    def _collection(self) -> Collection:
+        return Collection("fragments", db=self.db, model_id=self.model_id)
+
+    def _ensure_indexed(self) -> None:
+        collection = self._collection()
+        for row in self._collection().db.query(
+            "select id, hash, content, source from fragments"
+        ):
+            if not collection.db["embeddings"].count_where(
+                "collection_id = ? and id = ?", [collection.id, str(row["id"])]
+            ):
+                collection.embed(
+                    str(row["id"]),
+                    row["content"],
+                    metadata={"hash": row["hash"], "source": row["source"]},
+                    store=True,
+                )
+
+    def initialize_context(self, conversation_id: str) -> Context:
+        return Context(
+            data={},
+            metadata=ContextMetadata(
+                provider_name=self.name, context_id=conversation_id
+            ),
+        )
+
+    def update_context(
+        self,
+        conversation_id: str,
+        response: Any,
+        previous_context: Optional[Context] = None,
+    ) -> Context:
+        return previous_context or self.initialize_context(conversation_id)
+
+    def get_context(self, conversation_id: str) -> Optional[Context]:
+        return None
+
+    def search_context(self, conversation_id: str, query: str, limit: int = 5) -> List[ContextItem]:
+        self._ensure_indexed()
+        collection = self._collection()
+        results: List[Entry] = collection.similar(query, limit)
+        items = []
+        for entry in results:
+            items.append(
+                ContextItem(
+                    content=entry.content or "",
+                    role="fragment",
+                    timestamp=float(entry.id),
+                    relevance=entry.score,
+                    metadata=entry.metadata,
+                )
+            )
+        return items

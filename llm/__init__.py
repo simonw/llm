@@ -32,6 +32,7 @@ from .context import (
     ContextMetadata,
     ContextProvider,
     EmbeddingsContextProvider,
+    FragmentsContextProvider,
 )
 from .templates import Template
 from .plugins import pm, load_plugins
@@ -73,6 +74,7 @@ __all__ = [
     "ContextMetadata",
     "ContextProvider",
     "EmbeddingsContextProvider",
+    "FragmentsContextProvider",
     "user_dir",
     "schema_dsl",
 ]
