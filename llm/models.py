@@ -332,7 +332,7 @@ class Conversation(_BaseConversation):
         details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
-    ):
+    ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
         return ChainResponse(
             Prompt(

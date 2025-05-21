@@ -173,6 +173,13 @@ Options:
   -d, --database FILE          Path to log database
   --no-stream                  Do not stream output
   --key TEXT                   API key to use
+  -T, --tool TEXT              Name of a tool to make available to the model
+  --functions TEXT             Python code block or file path defining functions
+                               to register as tools
+  --td, --tools-debug          Show full details of tool executions
+  --ta, --tools-approve        Manually approve every tool execution
+  --cl, --chain-limit INTEGER  How many chained tool responses to allow, default
+                               5, set 0 for unlimited
   --help                       Show this message and exit.
 ```
 

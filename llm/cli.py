@@ -909,6 +909,42 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Name of a tool to make available to the model",
+)
+@click.option(
+    "python_tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
+)
+@click.option(
+    "tools_debug",
+    "--td",
+    "--tools-debug",
+    is_flag=True,
+    help="Show full details of tool executions",
+    envvar="LLM_TOOLS_DEBUG",
+)
+@click.option(
+    "tools_approve",
+    "--ta",
+    "--tools-approve",
+    is_flag=True,
+    help="Manually approve every tool execution",
+)
+@click.option(
+    "chain_limit",
+    "--cl",
+    "--chain-limit",
+    type=int,
+    default=5,
+    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+)
 def chat(
     system,
     model_id,
@@ -920,6 +956,11 @@ def chat(
     no_stream,
     key,
     database,
+    tools,
+    python_tools,
+    tools_debug,
+    tools_approve,
+    chain_limit,
 ):
     """
     Hold an ongoing chat with a model.
@@ -987,7 +1028,18 @@ def chat(
             raise click.ClickException(render_errors(ex.errors()))
 
     kwargs = {}
-    kwargs.update(validated_options)
+    if validated_options:
+        kwargs["options"] = validated_options
+
+    tool_functions = _gather_tools(tools, python_tools)
+
+    if tool_functions:
+        kwargs["chain_limit"] = chain_limit
+        if tools_debug:
+            kwargs["after_call"] = _debug_tool_call
+        if tools_approve:
+            kwargs["before_call"] = _approve_tool_call
+        kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -1042,7 +1094,7 @@ def chat(
                 prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system=system, **kwargs)
+        response = conversation.chain(prompt, system=system, **kwargs)
         # System prompt only sent for the first message:
         system = None
         for chunk in response:

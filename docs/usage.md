@@ -162,6 +162,17 @@ Approve tool call? [y/N]:
 ```
 The `--functions` option can be passed more than once, and can also point to the filename of a `.py` file containing one or more functions.
 
+If you have any tools that have been made available via plugins you can add them to the prompt using `--tool/-T` option. For example, using [llm-tools-simpleeval](https://github.com/simonw/llm-tools-simpleeval) like this:
+
+```bash
+llm install llm-tools-simpleeval
+llm --tool simple_eval "4444 * 233423" --td
+```
+Run this command to see a list of available tools from plugins:
+```bash
+llm tools
+```
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
@@ -415,6 +426,8 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 > !edit
 ```
+
+`llm chat` takes the same `--tool/-T` and `--functions` options as `llm prompt`. You can use this to start a chat with the specified {ref}`tools <usage-tools>` enabled.
 
 ## Listing available models
 
