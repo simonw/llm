@@ -334,14 +334,29 @@ def test_execute_prompt_with_a_template(
 @pytest.mark.parametrize(
     "template,expected",
     (
-        ("system: system\nprompt: prompt", "system:\nsystem\n\nprompt:\nprompt"),
+        (
+            "system: system\nprompt: prompt",
+            {
+                "prompt": "prompt",
+                "system": "system",
+                "attachments": [],
+                "stream": True,
+                "previous": [],
+            },
+        ),
         (
             "prompt: |\n  This is\n  ```\n  code to extract\n  ```",
-            "system:\n\n\nprompt:\nThis is\n```\ncode to extract\n```",
+            {
+                "prompt": "This is\n```\ncode to extract\n```",
+                "system": "",
+                "attachments": [],
+                "stream": True,
+                "previous": [],
+            },
         ),
         # Now try that with extract: true
         (
-            "extract: true\nprompt: |\n  This is\n  ```\n  code to extract\n  ```",
+            'extract: true\nprompt: |\n  {"raw": "This is\\n```\\ncode to extract\\n```"}',
             "code to extract",
         ),
     ),
@@ -356,11 +371,14 @@ def test_execute_prompt_from_template_url(httpx_mock, template, expected):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["-t", "https://example.com/prompt.yaml", "-m", "simple-echo"],
+        ["-t", "https://example.com/prompt.yaml", "-m", "echo"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.output.strip() == expected.strip()
+    if isinstance(expected, dict):
+        assert json.loads(result.output.strip()) == expected
+    else:
+        assert result.output.strip() == expected
 
 
 def test_execute_prompt_from_template_path():
@@ -370,8 +388,14 @@ def test_execute_prompt_from_template_path():
         path.write_text("system: system\nprompt: prompt", "utf-8")
         result = runner.invoke(
             cli,
-            ["-t", str(path), "-m", "simple-echo"],
+            ["-t", str(path), "-m", "echo"],
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        assert result.output.strip() == "system:\nsystem\n\nprompt:\nprompt"
+        assert json.loads(result.output) == {
+            "prompt": "prompt",
+            "system": "system",
+            "attachments": [],
+            "stream": True,
+            "previous": [],
+        }

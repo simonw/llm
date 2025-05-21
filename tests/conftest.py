@@ -83,31 +83,6 @@ class MockModel(llm.Model):
         )
 
 
-class SimpleEchoModel(llm.Model):
-    model_id = "simple-echo"
-    can_stream = True
-    attachment_types = {"image/png"}
-
-    class Options(llm.Options):
-        example_int: Optional[int] = Field(
-            description="Example integer option", default=None
-        )
-
-    def execute(self, prompt, stream, response, conversation):
-        yield "system:\n{}\n\n".format(prompt.system or "")
-        yield "prompt:\n{}".format(prompt.prompt or "")
-        # Only show non-null options
-        non_null_options = {
-            k: v for k, v in prompt.options.model_dump().items() if v is not None
-        }
-        if non_null_options:
-            yield "\n\noptions: {}".format(json.dumps(non_null_options))
-        if prompt.attachments:
-            yield "\n\nattachments:\n"
-            for attachment in prompt.attachments:
-                yield f"  - {attachment.url}\n"
-
-
 class MockKeyModel(llm.KeyModel):
     model_id = "mock_key"
     needs_key = "mock"
@@ -234,20 +209,19 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
 
 
 @pytest.fixture(autouse=True)
-def register_echo_models():
-    class EchoModelsPlugin:
-        __name__ = "EchoModelsPlugin"
+def register_echo_model():
+    class EchoModelPlugin:
+        __name__ = "EchoModelPlugin"
 
         @llm.hookimpl
         def register_models(self, register):
-            register(SimpleEchoModel())
             register(llm_echo.Echo(), llm_echo.EchoAsync())
 
-    pm.register(EchoModelsPlugin(), name="undo-EchoModelsPlugin")
+    pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
     try:
         yield
     finally:
-        pm.unregister(name="undo-EchoModelsPlugin")
+        pm.unregister(name="undo-EchoModelPlugin")
 
 
 @pytest.fixture

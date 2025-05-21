@@ -849,7 +849,7 @@ def test_logs_backup(logs_db):
     assert not logs_db.tables
     runner = CliRunner()
     with runner.isolated_filesystem():
-        runner.invoke(cli, ["-m", "simple-echo", "simple prompt"])
+        runner.invoke(cli, ["-m", "echo", "simple prompt"])
         assert logs_db.tables
         expected_path = pathlib.Path("backup.db")
         assert not expected_path.exists()

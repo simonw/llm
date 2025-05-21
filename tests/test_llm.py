@@ -625,7 +625,7 @@ def test_schema(mock_model, use_pydantic):
 
 
 def test_model_environment_variable(monkeypatch):
-    monkeypatch.setenv("LLM_MODEL", "simple-echo")
+    monkeypatch.setenv("LLM_MODEL", "echo")
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -633,7 +633,13 @@ def test_model_environment_variable(monkeypatch):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.output == "system:\nsys\n\nprompt:\nhello\n"
+    assert json.loads(result.output) == {
+        "prompt": "hello",
+        "system": "sys",
+        "attachments": [],
+        "stream": False,
+        "previous": [],
+    }
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
