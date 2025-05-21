@@ -95,7 +95,7 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
-def test_tool_use_async():
+def test_tool_use_async_tool_function():
     async def hello():
         return "world"
 
@@ -103,6 +103,21 @@ def test_tool_use_async():
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
     )
-    responses = list(chain_response.responses())
-    output = responses[-1].text()
-    assert '[{"name": "hello", "output": "world"' in output
+    output = chain_response.text()
+    # That's two JSON objects separated by '\n}{\n'
+    bits = output.split("\n}{\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    assert objects == [
+        {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
+        {
+            "prompt": "",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [{"prompt": '{"tool_calls": [{"name": "hello"}]}'}],
+            "tool_results": [
+                {"name": "hello", "output": "world", "tool_call_id": None}
+            ],
+        },
+    ]
