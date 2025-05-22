@@ -763,16 +763,38 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 **kwargs,
             )
             chunks = []
+            tool_calls = {}
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 chunks.append(chunk)
+                if chunk.usage:
+                    usage = chunk.usage.model_dump()
+                if chunk.choices and chunk.choices[0].delta:
+                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        index = tool_call.index
+                        if index not in tool_calls:
+                            tool_calls[index] = tool_call
+                        tool_calls[
+                            index
+                        ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
                 if content is not None:
                     yield content
+            if tool_calls:
+                for value in tool_calls.values():
+                    # value.function looks like this:
+                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
+                    response.add_tool_call(
+                        llm.ToolCall(
+                            tool_call_id=value.id,
+                            name=value.function.name,
+                            arguments=json.loads(value.function.arguments),
+                        )
+                    )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
             completion = await client.chat.completions.create(
@@ -783,6 +805,14 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
+            for tool_call in completion.choices[0].message.tool_calls or []:
+                response.add_tool_call(
+                    llm.ToolCall(
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        arguments=json.loads(tool_call.function.arguments),
+                    )
+                )
             if completion.choices[0].message.content is not None:
                 yield completion.choices[0].message.content
         self.set_usage(response, usage)
