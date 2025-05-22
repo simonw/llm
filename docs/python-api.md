@@ -464,6 +464,33 @@ response = conversation.prompt(
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
 
+### Conversations using tools
+
+You can pass a list of tool functions to the `tools=[]` argument when you start a new conversation:
+```python
+import llm
+
+def upper(text: str) -> str:
+    "convert text to upper case"
+    return text.upper()
+
+def reverse(text: str) -> str:
+    "reverse text"
+    return text[::-1]
+
+model = llm.get_model("gpt-4.1-mini")
+conversation = model.conversation(tools=[upper, reverse])
+```
+You can then call the `conversation.chain()` method multiple times to have a conversation that uses those tools:
+```python
+print(conversation.chain(
+    "Convert panda to uppercase and reverse it"
+).text())
+print(conversation.chain(
+    "Same with pangolin"
+).text())
+```
+
 (python-api-listing-models)=
 
 ## Listing models

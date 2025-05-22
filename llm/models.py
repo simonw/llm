@@ -273,6 +273,7 @@ class _BaseConversation:
     id: str = field(default_factory=lambda: str(ULID()).lower())
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
+    tools: Optional[List[Tool]] = None
 
     @classmethod
     @abstractmethod
@@ -305,7 +306,7 @@ class Conversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools,
+                tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 options=self.model.Options(**options),
@@ -343,7 +344,7 @@ class Conversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools,
+                tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 model=self.model,
@@ -408,7 +409,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools,
+                tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 model=self.model,
@@ -1481,8 +1482,8 @@ class _BaseModel(ABC, _get_key_mixin):
 
 
 class _Model(_BaseModel):
-    def conversation(self) -> Conversation:
-        return Conversation(model=self)
+    def conversation(self, tools: Optional[List[Tool]] = None) -> Conversation:
+        return Conversation(model=self, tools=tools)
 
     def prompt(
         self,
@@ -1580,8 +1581,8 @@ class KeyModel(_Model):
 
 
 class _AsyncModel(_BaseModel):
-    def conversation(self) -> AsyncConversation:
-        return AsyncConversation(model=self)
+    def conversation(self, tools: Optional[List[Tool]] = None) -> AsyncConversation:
+        return AsyncConversation(model=self, tools=tools)
 
     def prompt(
         self,

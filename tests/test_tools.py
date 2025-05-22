@@ -170,3 +170,34 @@ async def test_async_tools_run_tools_in_parallel():
     delta_ns = start_timestamps[1][1] - start_timestamps[0][1]
     # They should have run in parallel so it should be less than 0.02s difference
     assert delta_ns < (100_000_000 * 0.2)
+
+
+@pytest.mark.vcr
+def test_conversation_with_tools(vcr):
+    import llm
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    def multiply(a: int, b: int) -> int:
+        return a * b
+
+    model = llm.get_model("echo")
+    conversation = model.conversation(tools=[add, multiply])
+
+    output1 = conversation.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "multiply", "arguments": {"a": 5324, "b": 23233}}]}
+        )
+    ).text()
+    assert "123692492" in output1
+    output2 = conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "add", "arguments": {"a": 841758375, "b": 123123}}
+                ]
+            }
+        )
+    ).text()
+    assert "841881498" in output2
