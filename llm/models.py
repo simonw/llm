@@ -1666,7 +1666,7 @@ class AsyncModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
     ) -> AsyncGenerator[str, None]:
-        if False:  # Ensure it's a generator type, but don't actually yield.
+        if False:  # Ensure it's a generator type
             yield ""
         pass
 
