@@ -998,47 +998,93 @@ class AsyncResponse(_BaseResponse):
             Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
         ] = None,
     ) -> List[ToolResult]:
-        tool_results = []
+        print("async def execute_tool_calls")
+        tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
-        for tool_call in await self.tool_calls():
-            tool = tools_by_name.get(tool_call.name)
+
+        indexed_results: List[tuple[int, ToolResult]] = []
+        async_tasks: List[asyncio.Task] = []
+
+        for idx, tc in enumerate(tool_calls_list):
+            tool = tools_by_name.get(tc.name)
             if tool is None:
-                raise CancelToolCall("Unknown tool: {}".format(tool_call.name))
-
-            if before_call:
-                # This may raise CancelToolCall:
-                cb_result = before_call(tool, tool_call)
-                if inspect.isawaitable(cb_result):
-                    await cb_result
-
+                raise CancelToolCall(f"Unknown tool: {tc.name}")
             if not tool.implementation:
-                raise CancelToolCall(
-                    "No implementation available for tool: {}".format(tool_call.name)
+                raise CancelToolCall(f"No implementation for tool: {tc.name}")
+
+            # If it's an async implementation, wrap it
+            if inspect.iscoroutinefunction(tool.implementation):
+
+                async def run_async(tc=tc, tool=tool, idx=idx):
+                    # before_call inside the task
+                    if before_call:
+                        cb = before_call(tool, tc)
+                        if inspect.isawaitable(cb):
+                            await cb
+
+                    try:
+                        result = await tool.implementation(**tc.arguments)
+                        output = (
+                            result
+                            if isinstance(result, str)
+                            else json.dumps(result, default=repr)
+                        )
+                    except Exception as ex:
+                        output = f"Error: {ex}"
+
+                    tr = ToolResult(
+                        name=tc.name,
+                        output=output,
+                        tool_call_id=tc.tool_call_id,
+                    )
+
+                    # after_call inside the task
+                    if after_call:
+                        cb2 = after_call(tool, tc, tr)
+                        if inspect.isawaitable(cb2):
+                            await cb2
+
+                    return idx, tr
+
+                async_tasks.append(asyncio.create_task(run_async()))
+
+            else:
+                # Sync implementation: do hooks and call inline
+                if before_call:
+                    cb = before_call(tool, tc)
+                    if inspect.isawaitable(cb):
+                        await cb
+
+                try:
+                    res = tool.implementation(**tc.arguments)
+                    if inspect.isawaitable(res):
+                        res = await res
+                    output = (
+                        res if isinstance(res, str) else json.dumps(res, default=repr)
+                    )
+                except Exception as ex:
+                    output = f"Error: {ex}"
+
+                tr = ToolResult(
+                    name=tc.name,
+                    output=output,
+                    tool_call_id=tc.tool_call_id,
                 )
 
-            try:
-                if asyncio.iscoroutinefunction(tool.implementation):
-                    result = await tool.implementation(**tool_call.arguments)
-                else:
-                    result = tool.implementation(**tool_call.arguments)
+                if after_call:
+                    cb2 = after_call(tool, tc, tr)
+                    if inspect.isawaitable(cb2):
+                        await cb2
 
-                if not isinstance(result, str):
-                    result = json.dumps(result, default=repr)
-            except Exception as ex:
-                result = f"Error: {ex}"
+                indexed_results.append((idx, tr))
 
-            tool_result_obj = ToolResult(
-                name=tool_call.name,
-                output=result,
-                tool_call_id=tool_call.tool_call_id,
-            )
+        # Await all async tasks in parallel
+        if async_tasks:
+            indexed_results.extend(await asyncio.gather(*async_tasks))
 
-            if after_call:
-                cb_result = after_call(tool, tool_call, tool_result_obj)
-                if inspect.isawaitable(cb_result):
-                    await cb_result
-            tool_results.append(tool_result_obj)
-        return tool_results
+        # Reorder by original index
+        indexed_results.sort(key=lambda x: x[0])
+        return [tr for _, tr in indexed_results]
 
     def __aiter__(self):
         self._start = time.monotonic()
