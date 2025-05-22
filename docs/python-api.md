@@ -379,7 +379,7 @@ This `await model.prompt()` method takes the same arguments as the synchronous `
 
 (python-api-async-tools)=
 
-### Async tools
+### Tool functions can be sync or async
 
 {ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
 
@@ -396,6 +396,9 @@ chain_response = model.chain(
 )
 print(chain_response.text())
 ```
+
+### Tool use for async models
+
 Tool use is also supported for async models, using either synchronous or asynchronous tool functions. Synchronous functions will block the event loop so only use those in asynchronous context if you are certain they are extremely fast.
 
 The `response.execute_tool_calls()` and `chain_response.text()` and `chain_response.responses()` methods must all be awaited when run against asynchronous models:
