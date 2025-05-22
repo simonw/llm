@@ -145,10 +145,10 @@ def get_tools() -> Dict[str, Tool]:
     ) -> None:
         # If they handed us a bare function, wrap it in a Tool
         if not isinstance(tool_or_function, Tool):
-            tool_or_function = Tool.function(tool_or_function)
+            tool_or_function = Tool.function(tool_or_function, name=name)
 
         tool = cast(Tool, tool_or_function)
-        prefix = tool.name
+        prefix = name or tool.name
         suffix = 0
         candidate = prefix
 

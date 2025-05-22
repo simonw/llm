@@ -210,8 +210,8 @@ def test_register_tools(tmpdir):
 
         @hookimpl
         def register_tools(self, register):
-            register(upper)
-            register(llm.Tool.function(count_character_in_word), name="count_chars")
+            register(llm.Tool.function(upper))
+            register(count_character_in_word, name="count_chars")
 
     try:
         plugins.pm.register(ToolsPlugin(), name="ToolsPlugin")
@@ -227,8 +227,8 @@ def test_register_tools(tmpdir):
                 },
                 implementation=upper,
             ),
-            "count_character_in_word": llm.Tool(
-                name="count_character_in_word",
+            "count_chars": llm.Tool(
+                name="count_chars",
                 description="Count the number of occurrences of a character in a word.",
                 input_schema={
                     "properties": {
@@ -248,7 +248,7 @@ def test_register_tools(tmpdir):
         assert result.output == (
             "upper(text: str) -> str\n"
             "  Convert text to uppercase.\n"
-            "count_character_in_word(text: str, character: str) -> int\n"
+            "count_chars(text: str, character: str) -> int\n"
             "  Count the number of occurrences of a character in a word.\n"
         )
         # And --json
@@ -263,7 +263,7 @@ def test_register_tools(tmpdir):
                     "type": "object",
                 },
             },
-            "count_character_in_word": {
+            "count_chars": {
                 "description": "Count the number of occurrences of a character in a word.",
                 "arguments": {
                     "properties": {
