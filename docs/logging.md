@@ -268,7 +268,8 @@ def cleanup_sql(sql):
 cog.out("```sql\n")
 for table in (
     "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
-    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments"
+    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
+    "tool_responses", "tool_calls", "tool_results"
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -347,6 +348,35 @@ CREATE TABLE "system_fragments" (
   PRIMARY KEY ([response_id],
   [fragment_id],
   [order])
+);
+CREATE TABLE [tools] (
+  [id] INTEGER PRIMARY KEY,
+  [hash] TEXT,
+  [name] TEXT,
+  [description] TEXT,
+  [input_schema] TEXT
+);
+CREATE TABLE [tool_responses] (
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [response_id] TEXT REFERENCES [responses]([id]),
+  PRIMARY KEY ([tool_id],
+  [response_id])
+);
+CREATE TABLE [tool_calls] (
+  [id] INTEGER PRIMARY KEY,
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [name] TEXT,
+  [arguments] TEXT,
+  [tool_call_id] TEXT
+);
+CREATE TABLE [tool_results] (
+  [id] INTEGER PRIMARY KEY,
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [name] TEXT,
+  [output] TEXT,
+  [tool_call_id] TEXT
 );
 ```
 <!-- [[[end]]] -->
