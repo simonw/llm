@@ -400,7 +400,21 @@ Tool use is also supported for async models, using either synchronous or asynchr
 
 The `response.execute_tool_calls()` and `chain_response.text()` and `chain_response.responses()` methods must all be awaited when run against asynchronous models:
 
-TODO code example
+```python
+import llm
+model = llm.get_async_model("gpt-4.1")
+
+def upper(string):
+    "Converts string to uppercase"
+    return string.upper()
+
+chain = model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper],
+    after_call=print
+)
+print(await chain.text())
+```
 
 To iterate over the chained response output as it arrives use `async for`:
 ```python

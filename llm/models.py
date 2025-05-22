@@ -998,7 +998,6 @@ class AsyncResponse(_BaseResponse):
             Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
         ] = None,
     ) -> List[ToolResult]:
-        print("async def execute_tool_calls")
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
 
