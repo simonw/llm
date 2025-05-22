@@ -470,3 +470,11 @@ def collection():
 @pytest.fixture(scope="module")
 def vcr_config():
     return {"filter_headers": ["Authorization"]}
+
+
+def extract_braces(s):
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and first < last:
+        return s[first : last + 1]
+    return None

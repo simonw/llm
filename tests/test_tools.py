@@ -1,8 +1,11 @@
+import asyncio
+import json
 import llm
 from llm.migrations import migrate
 import os
 import pytest
 import sqlite_utils
+import time
 
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
@@ -92,3 +95,78 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert second.tool_calls()[0].arguments == {"population": 123124}
     assert third.prompt.tool_results[0].output == "true"
     assert third.tool_calls() == []
+
+
+def test_tool_use_async_tool_function():
+    async def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    output = chain_response.text()
+    # That's two JSON objects separated by '\n}{\n'
+    bits = output.split("\n}{\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    assert objects == [
+        {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
+        {
+            "prompt": "",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [{"prompt": '{"tool_calls": [{"name": "hello"}]}'}],
+            "tool_results": [
+                {"name": "hello", "output": "world", "tool_call_id": None}
+            ],
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_tools_run_tools_in_parallel():
+    start_timestamps = []
+
+    start_ns = time.monotonic_ns()
+
+    async def hello():
+        start_timestamps.append(("hello", time.monotonic_ns() - start_ns))
+        await asyncio.sleep(0.2)
+        return "world"
+
+    async def hello2():
+        start_timestamps.append(("hello2", time.monotonic_ns() - start_ns))
+        await asyncio.sleep(0.2)
+        return "world2"
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}, {"name": "hello2"}]}),
+        tools=[hello, hello2],
+    )
+    output = await chain_response.text()
+    # That's two JSON objects separated by '\n}{\n'
+    bits = output.split("\n}{\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    assert objects == [
+        {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
+        {
+            "prompt": "",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [
+                {"prompt": '{"tool_calls": [{"name": "hello"}, {"name": "hello2"}]}'}
+            ],
+            "tool_results": [
+                {"name": "hello", "output": "world", "tool_call_id": None},
+                {"name": "hello2", "output": "world2", "tool_call_id": None},
+            ],
+        },
+    ]
+    delta_ns = start_timestamps[1][1] - start_timestamps[0][1]
+    # They should have run in parallel so it should be less than 0.02s difference
+    assert delta_ns < (100_000_000 * 0.2)

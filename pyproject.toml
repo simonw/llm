@@ -67,7 +67,7 @@ test = [
     "types-click",
     "types-PyYAML",
     "types-setuptools",
-    "llm-echo==0.3a2",
+    "llm-echo==0.3a3",
 ]
 
 [build-system]
