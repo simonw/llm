@@ -10,6 +10,7 @@ import pytest
 import re
 import sqlite_utils
 import sys
+import textwrap
 import time
 import yaml
 
@@ -843,6 +844,37 @@ def test_expand_fragment_markdown(fragments_fixture):
     expected_prefix = f"### Prompt fragments\n\n<details><summary>{hash}</summary>\nThis is fragment 5"
     assert interesting_bit.startswith(expected_prefix)
     assert interesting_bit.endswith("</details>")
+
+
+def test_logs_tools(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent(
+        """
+    def demo():
+        return "one\\ntwo\\nthree"
+    """
+    )
+    result1 = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            code,
+            json.dumps({"tool_calls": [{"name": "demo"}]}),
+        ],
+    )
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, ["logs", "-c"])
+    assert (
+        "### Tool results\n"
+        "\n"
+        "- **demo**: `None`<br>\n"
+        "    one\n"
+        "    two\n"
+        "    three\n"
+        "\n"
+    ) in result2.output
 
 
 def test_logs_backup(logs_db):
