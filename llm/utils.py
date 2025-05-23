@@ -488,8 +488,8 @@ def ensure_fragment(db, content):
 
 def ensure_tool(db, tool):
     sql = """
-    insert into tools (hash, name, description, input_schema)
-    values (:hash, :name, :description, :input_schema)
+    insert into tools (hash, name, description, input_schema, plugin)
+    values (:hash, :name, :description, :input_schema, :plugin)
     on conflict(hash) do nothing
     """
     with db.conn:
@@ -500,6 +500,7 @@ def ensure_tool(db, tool):
                 "name": tool.name,
                 "description": tool.description,
                 "input_schema": json.dumps(tool.input_schema),
+                "plugin": tool.plugin,
             },
         )
         return list(

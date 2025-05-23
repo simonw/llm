@@ -196,7 +196,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
     ]
 
 
-def test_register_tools(tmpdir):
+def test_register_tools(tmpdir, logs_db):
     def upper(text: str) -> str:
         """Convert text to uppercase."""
         return text.upper()
@@ -296,6 +296,25 @@ def test_register_tools(tmpdir):
         assert result3.exit_code == 0
         assert "reverse(s: str)" in result3.output
         assert "example(s: str, i: int)" in result3.output
+        # Now run a prompt using a plugin tool and to check it gets logged correctly
+        result4 = runner.invoke(
+            cli.cli,
+            [
+                "-m",
+                "echo",
+                "--tool",
+                "upper",
+                json.dumps(
+                    {"tool_calls": [{"name": "upper", "arguments": {"text": "hi"}}]}
+                ),
+            ],
+        )
+        assert result4.exit_code == 0
+        assert '"output": "HI"' in result4.output
+        # Now check in the database
+        tool_row = [row for row in logs_db["tools"].rows][0]
+        assert tool_row["name"] == "upper"
+        assert tool_row["plugin"] == "ToolsPlugin"
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}

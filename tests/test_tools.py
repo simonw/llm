@@ -50,6 +50,7 @@ def test_tool_use_basic(vcr):
     assert len(tools) == 1
     assert tools[0]["name"] == "multiply"
     assert tools[0]["description"] == "Multiply two numbers."
+    assert tools[0]["plugin"] is None
 
     tool_results = list(db["tool_results"].rows)
     tool_calls = list(db["tool_calls"].rows)
