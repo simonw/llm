@@ -3683,28 +3683,3 @@ def _gather_tools(tools, python_tools):
         )
     tool_functions.extend(registered_tools[tool] for tool in tools)
     return tool_functions
-
-
-def _stream_json(iterator, json_cols=None):
-    # We have to iterate two-at-a-time so we can know if we
-    # should output a trailing comma
-    json_cols = json_cols or ()
-    current_iter, next_iter = itertools.tee(iterator, 2)
-    next(next_iter, None)
-    first = True
-    for row, next_row in itertools.zip_longest(current_iter, next_iter):
-        is_last = next_row is None
-        data = row
-        for col in json_cols:
-            row[col] = json.loads(row[col])
-        line = (
-            ("[" if first else " ")
-            + json.dumps(data, default=repr)
-            + ("," if not is_last else "")
-            + ("]" if is_last else "")
-        )
-        yield line
-        first = False
-    if first:
-        # We didn't output any rows, so yield the empty list
-        yield "[]"
