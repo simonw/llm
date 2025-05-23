@@ -139,6 +139,9 @@ def get_tools() -> Dict[str, Tool]:
     load_plugins()
     tools: Dict[str, Tool] = {}
 
+    # Variable to track current plugin name
+    current_plugin_name = None
+
     def register(
         tool_or_function: Union[Tool, Callable[..., Any]],
         name: Optional[str] = None,
@@ -148,6 +151,9 @@ def get_tools() -> Dict[str, Tool]:
             tool_or_function = Tool.function(tool_or_function, name=name)
 
         tool = cast(Tool, tool_or_function)
+        if current_plugin_name:
+            tool.plugin = current_plugin_name
+
         prefix = name or tool.name
         suffix = 0
         candidate = prefix
@@ -159,7 +165,16 @@ def get_tools() -> Dict[str, Tool]:
 
         tools[candidate] = tool
 
-    pm.hook.register_tools(register=register)
+    # Call each plugin's register_tools hook individually to track current_plugin_name
+    for plugin in pm.get_plugins():
+        current_plugin_name = pm.get_name(plugin)
+        hook_caller = pm.hook.register_tools
+        plugin_impls = [
+            impl for impl in hook_caller.get_hookimpls() if impl.plugin is plugin
+        ]
+        for impl in plugin_impls:
+            impl.function(register=register)
+
     return tools
 
 

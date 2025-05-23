@@ -114,6 +114,7 @@ class Tool:
     description: Optional[str] = None
     input_schema: Dict = field(default_factory=dict)
     implementation: Optional[Callable] = None
+    plugin: Optional[str] = None  # plugin tool came from, e.g. 'llm_tools_sqlite'
 
     def __post_init__(self):
         # Convert Pydantic model to JSON schema if needed
@@ -137,6 +138,8 @@ class Tool:
             "description": self.description,
             "input_schema": self.input_schema,
         }
+        if self.plugin:
+            to_hash["plugin"] = self.plugin
         return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
     @classmethod

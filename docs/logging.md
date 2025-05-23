@@ -354,7 +354,8 @@ CREATE TABLE [tools] (
   [hash] TEXT,
   [name] TEXT,
   [description] TEXT,
-  [input_schema] TEXT
+  [input_schema] TEXT,
+  [plugin] TEXT
 );
 CREATE TABLE [tool_responses] (
   [tool_id] INTEGER REFERENCES [tools]([id]),

@@ -368,3 +368,8 @@ def m017_tools_tables(db):
             ("tool_id", "tools", "id"),
         ),
     )
+
+
+@migration
+def m017_tools_plugin(db):
+    db["tools"].add_column("plugin")

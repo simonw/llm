@@ -226,6 +226,7 @@ def test_register_tools(tmpdir):
                     "type": "object",
                 },
                 implementation=upper,
+                plugin="ToolsPlugin",
             ),
             "count_chars": llm.Tool(
                 name="count_chars",
@@ -239,6 +240,7 @@ def test_register_tools(tmpdir):
                     "type": "object",
                 },
                 implementation=count_character_in_word,
+                plugin="ToolsPlugin",
             ),
         }
         # Test the CLI command
@@ -246,9 +248,9 @@ def test_register_tools(tmpdir):
         result = runner.invoke(cli.cli, ["tools", "list"])
         assert result.exit_code == 0
         assert result.output == (
-            "upper(text: str) -> str\n"
+            "upper(text: str) -> str (plugin: ToolsPlugin)\n"
             "  Convert text to uppercase.\n"
-            "count_chars(text: str, character: str) -> int\n"
+            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n"
             "  Count the number of occurrences of a character in a word.\n"
         )
         # And --json
@@ -262,6 +264,7 @@ def test_register_tools(tmpdir):
                     "required": ["text"],
                     "type": "object",
                 },
+                "plugin": "ToolsPlugin",
             },
             "count_chars": {
                 "description": "Count the number of occurrences of a character in a word.",
@@ -273,6 +276,7 @@ def test_register_tools(tmpdir):
                     "required": ["text", "character"],
                     "type": "object",
                 },
+                "plugin": "ToolsPlugin",
             },
         }
         # And test the --tools option

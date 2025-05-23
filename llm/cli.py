@@ -2337,6 +2337,7 @@ def tools_list(json_, python_tools):
                     name: {
                         "description": tool.description,
                         "arguments": tool.input_schema,
+                        "plugin": tool.plugin,
                     }
                     for name, tool in tools.items()
                 },
@@ -2348,7 +2349,13 @@ def tools_list(json_, python_tools):
             sig = "()"
             if tool.implementation:
                 sig = str(inspect.signature(tool.implementation))
-            click.echo("{}{}".format(name, sig))
+            click.echo(
+                "{}{}{}".format(
+                    name,
+                    sig,
+                    " (plugin: {})".format(tool.plugin) if tool.plugin else "",
+                )
+            )
             if tool.description:
                 click.echo(textwrap.indent(tool.description, "  "))
 
