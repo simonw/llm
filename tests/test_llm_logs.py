@@ -430,6 +430,52 @@ def test_logs_schema_data_ids(schema_log_path):
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
 
 
+_expected_yaml_re = r"""- id: [a-f0-9]{32}
+  summary: \|
+    
+  usage: \|
+    4 times, most recently \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00
+- id: [a-f0-9]{32}
+  summary: \|
+    
+  usage: \|
+    2 times, most recently \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00"""
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    (
+        (["schemas"], _expected_yaml_re),
+        (["schemas", "list"], _expected_yaml_re),
+    ),
+)
+def test_schemas_list_yaml(schema_log_path, args, expected):
+    result = CliRunner().invoke(cli, args + ["-d", str(schema_log_path)])
+    assert result.exit_code == 0
+    assert re.match(expected, result.output.strip())
+
+
+@pytest.mark.parametrize("is_nl", (False, True))
+def test_schemas_list_json(schema_log_path, is_nl):
+    result = CliRunner().invoke(
+        cli,
+        ["schemas", "list"]
+        + (["--nl"] if is_nl else ["--json"])
+        + ["-d", str(schema_log_path)],
+    )
+    assert result.exit_code == 0
+    if is_nl:
+        rows = [json.loads(line) for line in result.output.strip().split("\n")]
+    else:
+        rows = json.loads(result.output)
+    assert len(rows) == 2
+    assert rows[0]["content"] == {"name": "array"}
+    assert rows[0]["times_used"] == 4
+    assert rows[1]["content"] == {"name": "string"}
+    assert rows[1]["times_used"] == 2
+    assert set(rows[0].keys()) == {"id", "content", "recently_used", "times_used"}
+
+
 @pytest.fixture
 def fragments_fixture(user_path):
     log_path = str(user_path / "logs_fragments.db")

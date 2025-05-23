@@ -1638,7 +1638,8 @@ def logs_list(
                 to_output.extend(new_items)
             except ValueError:
                 pass
-        click.echo(output_rows_as_json(to_output, not data_array))
+        for line in output_rows_as_json(to_output, nl=not data_array, compact=True):
+            click.echo(line)
         return
 
     # Tool usage information
@@ -2194,7 +2195,9 @@ def schemas():
     help="Search for schemas matching this string",
 )
 @click.option("--full", is_flag=True, help="Output full schema contents")
-def schemas_list(path, database, queries, full):
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option("nl", "--nl", is_flag=True, help="Output as newline-delimited JSON")
+def schemas_list(path, database, queries, full, json_, nl):
     "List stored schemas"
     if database and not path:
         path = database
@@ -2226,6 +2229,12 @@ def schemas_list(path, database, queries, full):
         where_sql
     )
     rows = db.query(sql, params)
+
+    if json_ or nl:
+        for line in output_rows_as_json(rows, json_cols={"content"}, nl=nl):
+            click.echo(line)
+        return
+
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
         if full:
@@ -3674,3 +3683,28 @@ def _gather_tools(tools, python_tools):
         )
     tool_functions.extend(registered_tools[tool] for tool in tools)
     return tool_functions
+
+
+def _stream_json(iterator, json_cols=None):
+    # We have to iterate two-at-a-time so we can know if we
+    # should output a trailing comma
+    json_cols = json_cols or ()
+    current_iter, next_iter = itertools.tee(iterator, 2)
+    next(next_iter, None)
+    first = True
+    for row, next_row in itertools.zip_longest(current_iter, next_iter):
+        is_last = next_row is None
+        data = row
+        for col in json_cols:
+            row[col] = json.loads(row[col])
+        line = (
+            ("[" if first else " ")
+            + json.dumps(data, default=repr)
+            + ("," if not is_last else "")
+            + ("]" if is_last else "")
+        )
+        yield line
+        first = False
+    if first:
+        # We didn't output any rows, so yield the empty list
+        yield "[]"

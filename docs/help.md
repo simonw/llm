@@ -586,6 +586,8 @@ Options:
   -d, --database FILE  Path to log database
   -q, --query TEXT     Search for schemas matching this string
   --full               Output full schema contents
+  --json               Output as JSON
+  --nl                 Output as newline-delimited JSON
   --help               Show this message and exit.
 ```
 
