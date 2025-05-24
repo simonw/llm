@@ -1071,7 +1071,7 @@ def chat(
         conversation.model = model
 
     # Validate options
-    validated_options = {}
+    validated_options = get_model_options(model.model_id)
     if options:
         try:
             validated_options = dict(
