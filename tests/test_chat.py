@@ -340,7 +340,7 @@ def test_chat_tools(logs_db):
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-def test_chat_fragments(logs_db, tmpdir):
+def test_chat_fragments(tmpdir):
     path1 = str(tmpdir / "frag1.txt")
     path2 = str(tmpdir / "frag2.txt")
     with open(path1, "w") as fp:
