@@ -1,11 +1,10 @@
 from click.testing import CliRunner
+from unittest.mock import ANY
 import json
 import llm.cli
-from unittest.mock import ANY
 import pytest
-import sys
 import sqlite_utils
-import json
+import sys
 import textwrap
 
 
