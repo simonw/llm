@@ -1123,4 +1123,4 @@ Or clear all default options for a model like this:
 ```bash
 llm models options clear gpt-4o
 ```
-
+Default model options are respected by both the `llm prompt` and the `llm chat` commands. They will not be applied when you use LLM as a {ref}`Python library <python-api>`.
