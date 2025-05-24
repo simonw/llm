@@ -112,7 +112,7 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
@@ -121,7 +121,7 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
@@ -130,7 +130,7 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
     )
     assert output == expected
 

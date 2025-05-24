@@ -2106,7 +2106,7 @@ def logs_list(
                     json.loads(row["token_details"]) if row["token_details"] else None,
                 )
                 if token_usage:
-                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
+                    click.echo("## Token usage\n\n{}\n".format(token_usage))
 
 
 @cli.group(
