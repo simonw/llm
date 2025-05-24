@@ -8,7 +8,7 @@ import puremagic
 import re
 import sqlite_utils
 import textwrap
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple, Type
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -543,3 +543,129 @@ _plugin_prefix_re = re.compile(r"^[a-zA-Z0-9_-]+:")
 def has_plugin_prefix(value: str) -> bool:
     "Check if value starts with alphanumeric prefix followed by a colon"
     return bool(_plugin_prefix_re.match(value))
+
+
+def _parse_kwargs(arg_str: str) -> Dict[str, Any]:
+    """Parse key=value pairs where each value is valid JSON."""
+    tokens = []
+    buf = []
+    depth = 0
+    in_string = False
+    string_char = ""
+    escape = False
+
+    for ch in arg_str:
+        if in_string:
+            buf.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == string_char:
+                in_string = False
+        else:
+            if ch in "\"'":
+                in_string = True
+                string_char = ch
+                buf.append(ch)
+            elif ch in "{[(":
+                depth += 1
+                buf.append(ch)
+            elif ch in "}])":
+                depth -= 1
+                buf.append(ch)
+            elif ch == "," and depth == 0:
+                tokens.append("".join(buf).strip())
+                buf = []
+            else:
+                buf.append(ch)
+    if buf:
+        tokens.append("".join(buf).strip())
+
+    kwargs: Dict[str, Any] = {}
+    for token in tokens:
+        if not token:
+            continue
+        if "=" not in token:
+            raise ValueError(f"Invalid keyword spec segment: '{token}'")
+        key, value_str = token.split("=", 1)
+        key = key.strip()
+        value_str = value_str.strip()
+        try:
+            value = json.loads(value_str)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Value for '{key}' is not valid JSON: {value_str}") from e
+        kwargs[key] = value
+    return kwargs
+
+
+def instantiate_from_spec(class_map: Dict[str, Type], spec: str):
+    """
+    Instantiate a class from a specification string with flexible argument formats.
+
+    This function parses a specification string that defines a class name and its
+    constructor arguments, then instantiates the class using the provided class
+    mapping. The specification supports multiple argument formats for flexibility.
+
+    Parameters
+    ----------
+    class_map : Dict[str, Type]
+        A mapping from class names (strings) to their corresponding class objects.
+        Only classes present in this mapping can be instantiated.
+    spec : str
+        A specification string defining the class to instantiate and its arguments.
+
+        Format: "ClassName" or "ClassName(arguments)"
+
+        Supported argument formats:
+        - Empty: ClassName() - calls constructor with no arguments
+        - JSON object: ClassName({"key": "value", "other": 42}) - unpacked as **kwargs
+        - Single JSON value: ClassName("hello") or ClassName([1,2,3]) - passed as single positional argument
+        - Key-value pairs: ClassName(name="test", count=5, items=[1,2]) - parsed as individual kwargs
+          where values must be valid JSON
+
+    Returns
+    -------
+    object
+        An instance of the specified class, constructed with the parsed arguments.
+
+    Raises
+    ------
+    ValueError
+        If the spec string format is invalid, if the class name is not found in
+        class_map, if JSON parsing fails, or if argument parsing encounters errors.
+    """
+    m = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\((.*)\))?\s*$", spec)
+    if not m:
+        raise ValueError(f"Invalid spec string: '{spec}'")
+    class_name, arg_body = m.group(1), (m.group(2) or "").strip()
+    if class_name not in class_map:
+        raise ValueError(f"Unknown class '{class_name}'")
+
+    cls = class_map[class_name]
+
+    # No arguments at all
+    if arg_body == "":
+        return cls()
+
+    # Starts with { -> JSON object to kwargs
+    if arg_body.lstrip().startswith("{"):
+        try:
+            kw = json.loads(arg_body)
+        except json.JSONDecodeError as e:
+            raise ValueError("Argument JSON object is not valid JSON") from e
+        if not isinstance(kw, dict):
+            raise ValueError("Top-level JSON must be an object when using {} form")
+        return cls(**kw)
+
+    # Starts with quote / number / [ / t f n for single positional JSON value
+    if re.match(r'\s*(["\[\d\-]|true|false|null)', arg_body, re.I):
+        try:
+            positional_value = json.loads(arg_body)
+        except json.JSONDecodeError as e:
+            raise ValueError("Positional argument must be valid JSON") from e
+        return cls(positional_value)
+
+    # Otherwise treat as key=value pairs
+    kwargs = _parse_kwargs(arg_body)
+    return cls(**kwargs)
