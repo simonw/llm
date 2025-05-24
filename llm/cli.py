@@ -1193,6 +1193,7 @@ def chat(
                 prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
+
         response = conversation.chain(
             prompt,
             fragments=[str(fragment) for fragment in fragments],
@@ -1203,6 +1204,7 @@ def chat(
             system=system,
             **kwargs,
         )
+
         # System prompt only sent for the first message:
         system = None
         system_fragments = []
