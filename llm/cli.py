@@ -3036,9 +3036,7 @@ def embed_multi(
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-@click.option(
-    "--prefix", help="Just IDs with this prefix", default=""
-)
+@click.option("--prefix", help="Just IDs with this prefix", default="")
 def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
     Return top N similar IDs from a collection using cosine similarity.
