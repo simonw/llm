@@ -259,6 +259,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         "metadata": None,
     }
 
+
 @pytest.mark.parametrize(
     "prefix,expected_result",
     (
@@ -282,11 +283,18 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         ),
     ),
 )
-def test_similar_by_content_prefixed(user_path_with_embeddings, prefix, expected_result):
+def test_similar_by_content_prefixed(
+    user_path_with_embeddings, prefix, expected_result
+):
     runner = CliRunner()
-    result = runner.invoke(cli, ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"], catch_exceptions=False)
+    result = runner.invoke(
+        cli,
+        ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"],
+        catch_exceptions=False,
+    )
     assert result.exit_code == 0
     assert json.loads(result.output) == expected_result
+
 
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))

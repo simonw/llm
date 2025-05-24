@@ -2213,7 +2213,9 @@ def schemas_list(path, database, queries, full):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(where_sql)
+    """.format(
+        where_sql
+    )
     rows = db.query(sql, params)
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
@@ -2504,7 +2506,9 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(where=where)
+    """.format(
+        where=where
+    )
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
