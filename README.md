@@ -88,6 +88,9 @@ Each model file will be downloaded once the first time you use it. Try Mistral o
 ```bash
 llm -m mistral-7b-instruct-v0 'difference between a pelican and a walrus'
 ```
+
+## Chat mode
+
 You can also start a chat session with the model using the `llm chat` command:
 ```bash
 llm chat -m mistral-7b-instruct-v0
