@@ -163,6 +163,39 @@ def resolve_fragments(
     return resolved
 
 
+def process_fragments_in_chat(
+    db: sqlite_utils.Database, prompt: str
+) -> tuple[str, list[Fragment], list[Attachment]]:
+    """
+    Process any !fragment commands in a chat prompt and return the modified prompt plus resolved fragments and attachments.
+    """
+    prompt_lines = []
+    fragments = []
+    attachments = []
+    for line in prompt.splitlines():
+        if line.startswith("!fragment "):
+            try:
+                fragment_strs = line.strip().removeprefix("!fragment ").split()
+                fragments_and_attachments = resolve_fragments(
+                    db, fragments=fragment_strs, allow_attachments=True
+                )
+                fragments += [
+                    fragment
+                    for fragment in fragments_and_attachments
+                    if isinstance(fragment, Fragment)
+                ]
+                attachments += [
+                    attachment
+                    for attachment in fragments_and_attachments
+                    if isinstance(attachment, Attachment)
+                ]
+            except FragmentNotFound as ex:
+                raise click.ClickException(str(ex))
+        else:
+            prompt_lines.append(line)
+    return "\n".join(prompt_lines), fragments, attachments
+
+
 class AttachmentError(Exception):
     """Exception raised for errors in attachment resolution."""
 
@@ -888,6 +921,20 @@ def prompt(
     "--conversation",
     help="Continue the conversation with the given ID.",
 )
+@click.option(
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+)
+@click.option(
+    "system_fragments",
+    "--sf",
+    "--system-fragment",
+    multiple=True,
+    help="Fragment to add to system prompt",
+)
 @click.option("-t", "--template", help="Template to use")
 @click.option(
     "-p",
@@ -953,6 +1000,8 @@ def chat(
     model_id,
     _continue,
     conversation_id,
+    fragments,
+    system_fragments,
     template,
     param,
     options,
@@ -1054,15 +1103,48 @@ def chat(
     if key and isinstance(model, KeyModel):
         kwargs["key"] = key
 
+    try:
+        fragments_and_attachments = resolve_fragments(
+            db, fragments, allow_attachments=True
+        )
+        argument_fragments = [
+            fragment
+            for fragment in fragments_and_attachments
+            if isinstance(fragment, Fragment)
+        ]
+        argument_attachments = [
+            attachment
+            for attachment in fragments_and_attachments
+            if isinstance(attachment, Attachment)
+        ]
+        argument_system_fragments = resolve_fragments(db, system_fragments)
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
     click.echo("Type '!edit' to open your default editor and modify the prompt")
+    click.echo(
+        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+    )
     in_multi = False
+
     accumulated = []
+    accumulated_fragments = []
+    accumulated_attachments = []
     end_token = "!end"
     while True:
         prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        fragments = []
+        attachments = []
+        if argument_fragments:
+            fragments += argument_fragments
+            # fragments from --fragments will get added to the first message only
+            argument_fragments = []
+        if argument_attachments:
+            attachments = argument_attachments
+            argument_attachments = []
         if prompt.strip().startswith("!multi"):
             in_multi = True
             bits = prompt.strip().split()
@@ -1074,17 +1156,28 @@ def chat(
             if edited_prompt is None:
                 click.echo("Editor closed without saving.", err=True)
                 continue
-            prompt = edited_prompt.strip()
-            if not prompt:
+            prompt, fragments, attachments = process_fragments_in_chat(
+                db, edited_prompt.strip()
+            )
+            if not prompt and not fragments and not attachments:
                 continue
-            click.echo(prompt)
+        if prompt.strip().startswith("!fragment "):
+            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+
         if in_multi:
             if prompt.strip() == end_token:
                 prompt = "\n".join(accumulated)
+                fragments = accumulated_fragments
+                attachments = accumulated_attachments
                 in_multi = False
                 accumulated = []
+                accumulated_fragments = []
+                accumulated_attachments = []
             else:
-                accumulated.append(prompt)
+                if prompt:
+                    accumulated.append(prompt)
+                accumulated_fragments += fragments
+                accumulated_attachments += attachments
                 continue
         if template_obj:
             try:
@@ -1100,9 +1193,21 @@ def chat(
                 prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.chain(prompt, system=system, **kwargs)
+
+        response = conversation.chain(
+            prompt,
+            fragments=[str(fragment) for fragment in fragments],
+            system_fragments=[
+                str(system_fragment) for system_fragment in argument_system_fragments
+            ],
+            attachments=attachments,
+            system=system,
+            **kwargs,
+        )
+
         # System prompt only sent for the first message:
         system = None
+        system_fragments = []
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()

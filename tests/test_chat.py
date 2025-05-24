@@ -25,6 +25,7 @@ def test_chat_basic(mock_model, logs_db):
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Hi"
         "\none world"
         "\n> Hi two"
@@ -91,6 +92,7 @@ def test_chat_basic(mock_model, logs_db):
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Continue"
         "\ncontinued"
         "\n> quit"
@@ -140,6 +142,7 @@ def test_chat_system(mock_model, logs_db):
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Hi"
         "\nI am mean"
         "\n> quit"
@@ -303,6 +306,7 @@ def test_chat_tools(logs_db):
         "Type 'exit' or 'quit' to exit\n"
         "Type '!multi' to enter multiple lines, then '!end' to finish\n"
         "Type '!edit' to open your default editor and modify the prompt\n"
+        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments\n"
         '> {"prompt": "Convert hello to uppercase", "tool_calls": [{"name": "upper", '
         '"arguments": {"text": "hello"}}]}\n'
         "{\n"

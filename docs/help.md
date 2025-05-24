@@ -163,24 +163,27 @@ Usage: llm chat [OPTIONS]
   Hold an ongoing chat with a model.
 
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  -d, --database FILE          Path to log database
-  --no-stream                  Do not stream output
-  --key TEXT                   API key to use
-  -T, --tool TEXT              Name of a tool to make available to the model
-  --functions TEXT             Python code block or file path defining functions
-                               to register as tools
-  --td, --tools-debug          Show full details of tool executions
-  --ta, --tools-approve        Manually approve every tool execution
-  --cl, --chain-limit INTEGER  How many chained tool responses to allow, default
-                               5, set 0 for unlimited
-  --help                       Show this message and exit.
+  -s, --system TEXT             System prompt to use
+  -m, --model TEXT              Model to use
+  -c, --continue                Continue the most recent conversation.
+  --cid, --conversation TEXT    Continue the conversation with the given ID.
+  -f, --fragment TEXT           Fragment (alias, URL, hash or file path) to add
+                                to the prompt
+  --sf, --system-fragment TEXT  Fragment to add to system prompt
+  -t, --template TEXT           Template to use
+  -p, --param <TEXT TEXT>...    Parameters for template
+  -o, --option <TEXT TEXT>...   key/value options for the model
+  -d, --database FILE           Path to log database
+  --no-stream                   Do not stream output
+  --key TEXT                    API key to use
+  -T, --tool TEXT               Name of a tool to make available to the model
+  --functions TEXT              Python code block or file path defining
+                                functions to register as tools
+  --td, --tools-debug           Show full details of tool executions
+  --ta, --tools-approve         Manually approve every tool execution
+  --cl, --chain-limit INTEGER   How many chained tool responses to allow,
+                                default 5, set 0 for unlimited
+  --help                        Show this message and exit.
 ```
 
 (help-keys)=
