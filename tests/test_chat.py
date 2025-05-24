@@ -306,6 +306,7 @@ def test_chat_tools(logs_db):
         "Type 'exit' or 'quit' to exit\n"
         "Type '!multi' to enter multiple lines, then '!end' to finish\n"
         "Type '!edit' to open your default editor and modify the prompt\n"
+        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments\n"
         '> {"prompt": "Convert hello to uppercase", "tool_calls": [{"name": "upper", '
         '"arguments": {"text": "hello"}}]}\n'
         "{\n"
