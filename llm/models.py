@@ -525,7 +525,7 @@ class _BaseResponse:
         self._chunks: List[str] = []
         self._done = False
         self._tool_calls: List[ToolCall] = []
-        self.response_json = None
+        self.response_json: Optional[Dict[str, Any]] = None
         self.conversation = conversation
         self.attachments: List[Attachment] = []
         self._start: Optional[float] = None
