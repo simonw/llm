@@ -940,7 +940,7 @@ Options:
   -n, --number INTEGER  Number of results to return
   -p, --plain           Output in plain text format
   -d, --database FILE
-  --prefix TEXT         Filters results to those with this prefix in their ID
+  --prefix TEXT         Just IDs with this prefix
   --help                Show this message and exit.
 ```
 
