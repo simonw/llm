@@ -238,7 +238,11 @@ class Collection:
                 )
 
     def similar_by_vector(
-        self, vector: List[float], number: int = 10, skip_id: Optional[str] = None
+        self,
+        vector: List[float],
+        number: int = 10,
+        skip_id: Optional[str] = None,
+        prefix: Optional[str] = None,
     ) -> List[Entry]:
         """
         Find similar items in the collection by a given vector.
@@ -246,6 +250,8 @@ class Collection:
         Args:
             vector (list): Vector to search by
             number (int, optional): Number of similar items to return
+            skip_id (str, optional): An ID to exclude from the results
+            prefix: (str, optional): Filter results to IDs witih this prefix
 
         Returns:
             list: List of Entry objects
@@ -260,6 +266,10 @@ class Collection:
 
         where_bits = ["collection_id = ?"]
         where_args = [str(self.id)]
+
+        if prefix:
+            where_bits.append("id LIKE ? || '%'")
+            where_args.append(prefix)
 
         if skip_id:
             where_bits.append("id != ?")
@@ -286,13 +296,16 @@ class Collection:
             )
         ]
 
-    def similar_by_id(self, id: str, number: int = 10) -> List[Entry]:
+    def similar_by_id(
+        self, id: str, number: int = 10, prefix: Optional[str] = None
+    ) -> List[Entry]:
         """
         Find similar items in the collection by a given ID.
 
         Args:
             id (str): ID to search by
             number (int, optional): Number of similar items to return
+            prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
@@ -308,21 +321,26 @@ class Collection:
             raise self.DoesNotExist("ID not found")
         embedding = matches[0]["embedding"]
         comparison_vector = llm.decode(embedding)
-        return self.similar_by_vector(comparison_vector, number, skip_id=id)
+        return self.similar_by_vector(
+            comparison_vector, number, skip_id=id, prefix=prefix
+        )
 
-    def similar(self, value: Union[str, bytes], number: int = 10) -> List[Entry]:
+    def similar(
+        self, value: Union[str, bytes], number: int = 10, prefix: Optional[str] = None
+    ) -> List[Entry]:
         """
         Find similar items in the collection by a given value.
 
         Args:
             value (str or bytes): value to search by
             number (int, optional): Number of similar items to return
+            prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
         """
         comparison_vector = self.model().embed(value)
-        return self.similar_by_vector(comparison_vector, number)
+        return self.similar_by_vector(comparison_vector, number, prefix=prefix)
 
     @classmethod
     def exists(cls, db: Database, name: str) -> bool:

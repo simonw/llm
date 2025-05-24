@@ -3238,7 +3238,8 @@ def embed_multi(
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, binary, number, plain, database):
+@click.option("--prefix", help="Just IDs with this prefix", default="")
+def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -3270,7 +3271,7 @@ def similar(collection, id, input, content, binary, number, plain, database):
 
     if id:
         try:
-            results = collection_obj.similar_by_id(id, number)
+            results = collection_obj.similar_by_id(id, number, prefix=prefix)
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
@@ -3286,7 +3287,7 @@ def similar(collection, id, input, content, binary, number, plain, database):
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number)
+        results = collection_obj.similar(content, number, prefix=prefix)
 
     for result in results:
         if plain:
