@@ -172,6 +172,27 @@ Run this command to see a list of available tools from plugins:
 ```bash
 llm tools
 ```
+If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+
+```
+llm -T simple_eval "12345 * 12345" --td
+Tool call: simple_eval({'expression': '12345 * 12345'})
+  152399025
+12345 multiplied by 12345 equals 152,399,025.
+llm -c "that * 6" --td
+Tool call: simple_eval({'expression': '152399025 * 6'})
+  914394150
+152,399,025 multiplied by 6 equals 914,394,150.
+llm chat -c --td
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+> / 123
+Tool call: simple_eval({'expression': '914394150 / 123'})
+  7434098.780487805
+914,394,150 divided by 123 is approximately 7,434,098.78.
+```
 
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
