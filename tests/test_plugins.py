@@ -4,6 +4,7 @@ import importlib
 import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
+import re
 import textwrap
 
 
@@ -315,6 +316,67 @@ def test_register_tools(tmpdir, logs_db):
         tool_row = [row for row in logs_db["tools"].rows][0]
         assert tool_row["name"] == "upper"
         assert tool_row["plugin"] == "ToolsPlugin"
+
+        # Start with a tool, use llm -c to reuse the same tool
+        result5 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-m",
+                "echo",
+                "--tool",
+                "upper",
+                json.dumps(
+                    {"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}
+                ),
+                "--td",
+            ],
+        )
+        assert result5.exit_code == 0
+        assert (
+            runner.invoke(
+                cli.cli,
+                [
+                    "-c",
+                    json.dumps(
+                        {
+                            "tool_calls": [
+                                {"name": "upper", "arguments": {"text": "two"}}
+                            ]
+                        }
+                    ),
+                ],
+            ).exit_code
+            == 0
+        )
+        # Now do it again with llm chat -c
+        assert (
+            runner.invoke(
+                cli.cli,
+                ["chat", "-c"],
+                input=(
+                    json.dumps(
+                        {
+                            "tool_calls": [
+                                {"name": "upper", "arguments": {"text": "three"}}
+                            ]
+                        }
+                    )
+                    + "\nquit\n"
+                ),
+                catch_exceptions=False,
+            ).exit_code
+            == 0
+        )
+        # Should have logged three tool uses in llm logs -c -n 0
+        log_output = runner.invoke(cli.cli, ["logs", "-c", "-n", "10"]).output
+        log_pattern = re.compile(
+            r"""tool_calls.*?"text": "one".*?ONE.*?"""
+            r"""tool_calls.*?"text": "two".*?TWO.*?"""
+            r"""tool_calls.*?"text": "three".*?THREE""",
+            re.DOTALL,
+        )
+        assert log_pattern.search(log_output)
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}

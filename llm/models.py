@@ -579,6 +579,7 @@ class _BaseResponse:
                 # In this case we don't have a reference to the actual Python code
                 # but that's OK, we should not need it for prompts deserialized from DB
                 implementation=None,
+                plugin=tool_row["plugin"],
             )
             for tool_row in db.query(
                 """

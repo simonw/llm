@@ -688,6 +688,9 @@ def prompt(
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
+
     # Figure out which model we are using
     if model_id is None:
         if conversation:
@@ -984,6 +987,9 @@ def chat(
             conversation = load_conversation(conversation_id, database=database)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
+
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
 
     template_obj = None
     if template:
@@ -3690,3 +3696,12 @@ def _gather_tools(tools, python_tools):
         )
     tool_functions.extend(registered_tools[tool] for tool in tools)
     return tool_functions
+
+
+def _get_conversation_tools(conversation, tools):
+    if conversation and not tools and conversation.responses:
+        # Copy plugin tools from first response in conversation
+        initial_tools = conversation.responses[0].prompt.tools
+        if initial_tools:
+            # Only tools from plugins:
+            return [tool.name for tool in initial_tools if tool.plugin]
