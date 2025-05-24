@@ -721,6 +721,9 @@ def prompt(
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
+
     # Figure out which model we are using
     if model_id is None:
         if conversation:
@@ -799,60 +802,17 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
-    extra_tools = []
-    if python_tools:
-        for code_or_path in python_tools:
-            extra_tools = _tools_from_code(code_or_path)
+    tool_functions = _gather_tools(tools, python_tools)
 
-    if tools or python_tools:
+    if tool_functions:
         prompt_method = conversation.chain
         kwargs["chain_limit"] = chain_limit
         if tools_debug:
-
-            def debug_tool_call(_, tool_call, tool_result):
-                click.echo(
-                    click.style(
-                        "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
-                        fg="yellow",
-                        bold=True,
-                    ),
-                    err=True,
-                )
-                click.echo(
-                    click.style(
-                        "  {}".format(tool_result.output),
-                        fg="green",
-                        bold=True,
-                    ),
-                    err=True,
-                )
-
-            kwargs["after_call"] = debug_tool_call
+            kwargs["after_call"] = _debug_tool_call
         if tools_approve:
+            kwargs["before_call"] = _approve_tool_call
+        kwargs["tools"] = tool_functions
 
-            def approve_tool_call(_, tool_call):
-                click.echo(
-                    click.style(
-                        "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
-                        fg="yellow",
-                        bold=True,
-                    ),
-                    err=True,
-                )
-                if not click.confirm("Approve tool call?"):
-                    raise CancelToolCall("User cancelled tool call")
-
-            kwargs["before_call"] = approve_tool_call
-        # Look up all those tools
-        registered_tools = get_tools()
-        bad_tools = [tool for tool in tools if tool not in registered_tools]
-        if bad_tools:
-            raise click.ClickException(
-                "Tool(s) {} not found. Available tools: {}".format(
-                    ", ".join(bad_tools), ", ".join(registered_tools.keys())
-                )
-            )
-        kwargs["tools"] = [registered_tools[tool] for tool in tools] + extra_tools
     try:
         if async_:
 
@@ -999,6 +959,42 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Name of a tool to make available to the model",
+)
+@click.option(
+    "python_tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
+)
+@click.option(
+    "tools_debug",
+    "--td",
+    "--tools-debug",
+    is_flag=True,
+    help="Show full details of tool executions",
+    envvar="LLM_TOOLS_DEBUG",
+)
+@click.option(
+    "tools_approve",
+    "--ta",
+    "--tools-approve",
+    is_flag=True,
+    help="Manually approve every tool execution",
+)
+@click.option(
+    "chain_limit",
+    "--cl",
+    "--chain-limit",
+    type=int,
+    default=5,
+    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+)
 def chat(
     system,
     model_id,
@@ -1012,6 +1008,11 @@ def chat(
     no_stream,
     key,
     database,
+    tools,
+    python_tools,
+    tools_debug,
+    tools_approve,
+    chain_limit,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1035,6 +1036,9 @@ def chat(
             conversation = load_conversation(conversation_id, database=database)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
+
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
 
     template_obj = None
     if template:
@@ -1079,7 +1083,18 @@ def chat(
             raise click.ClickException(render_errors(ex.errors()))
 
     kwargs = {}
-    kwargs.update(validated_options)
+    if validated_options:
+        kwargs["options"] = validated_options
+
+    tool_functions = _gather_tools(tools, python_tools)
+
+    if tool_functions:
+        kwargs["chain_limit"] = chain_limit
+        if tools_debug:
+            kwargs["after_call"] = _debug_tool_call
+        if tools_approve:
+            kwargs["before_call"] = _approve_tool_call
+        kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -1178,7 +1193,7 @@ def chat(
                 prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(
+        response = conversation.chain(
             prompt,
             fragments=[str(fragment) for fragment in fragments],
             system_fragments=[
@@ -1458,6 +1473,19 @@ order by prompt_attachments."order"
     help="Filter for prompts using these fragments",
     multiple=True,
 )
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Filter for prompts with results from these tools",
+)
+@click.option(
+    "any_tools",
+    "--tools",
+    is_flag=True,
+    help="Filter for prompts with results from any tools",
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -1520,6 +1548,8 @@ def logs_list(
     model,
     query,
     fragments,
+    tools,
+    any_tools,
     schema_input,
     schema_multi,
     data,
@@ -1651,7 +1681,48 @@ def logs_list(
             exists_clauses.append(exists_clause)
             sql_params["f{}".format(i)] = fragment_hash
 
-        where_bits.append(" AND ".join(exists_clauses))
+        where_bits.append(" and ".join(exists_clauses))
+
+    if any_tools:
+        # Any response that involved at least one tool result
+        where_bits.append(
+            """
+            exists (
+              select 1
+                from tool_results
+              where
+                tool_results.response_id = responses.id
+            )
+        """
+        )
+    if tools:
+        tools_by_name = get_tools()
+        # Filter responses by tools (must have ALL of the named tools, including plugin)
+        tool_clauses = []
+        for i, tool_name in enumerate(tools):
+            try:
+                plugin_name = tools_by_name[tool_name].plugin
+            except KeyError:
+                raise click.ClickException(f"Unknown tool: {tool_name}")
+
+            tool_clauses.append(
+                f"""
+            exists (
+              select 1
+                from tool_results
+                join tools on tools.id = tool_results.tool_id
+               where tool_results.response_id = responses.id
+                 and tools.name = :tool{i}
+                 and tools.plugin = :plugin{i}
+            )
+            """
+            )
+            sql_params[f"tool{i}"] = tool_name
+            sql_params[f"plugin{i}"] = plugin_name
+
+        # AND means “must have all” — use OR instead if you want “any of”
+        where_bits.append(" and ".join(tool_clauses))
+
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
@@ -1732,7 +1803,8 @@ def logs_list(
                 to_output.extend(new_items)
             except ValueError:
                 pass
-        click.echo(output_rows_as_json(to_output, not data_array))
+        for line in output_rows_as_json(to_output, nl=not data_array, compact=True):
+            click.echo(line)
         return
 
     # Tool usage information
@@ -1977,10 +2049,10 @@ def logs_list(
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
                     click.echo(
-                        "- **{}**: `{}`<br>\n    {}".format(
+                        "- **{}**: `{}`<br>\n{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
-                            tool_result["output"],
+                            textwrap.indent(tool_result["output"], "    "),
                         )
                     )
             attachments = attachments_by_id.get(row["id"])
@@ -2288,7 +2360,9 @@ def schemas():
     help="Search for schemas matching this string",
 )
 @click.option("--full", is_flag=True, help="Output full schema contents")
-def schemas_list(path, database, queries, full):
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option("nl", "--nl", is_flag=True, help="Output as newline-delimited JSON")
+def schemas_list(path, database, queries, full, json_, nl):
     "List stored schemas"
     if database and not path:
         path = database
@@ -2318,6 +2392,12 @@ def schemas_list(path, database, queries, full):
     order by recently_used
     """.format(where_sql)
     rows = db.query(sql, params)
+
+    if json_ or nl:
+        for line in output_rows_as_json(rows, json_cols={"content"}, nl=nl):
+            click.echo(line)
+        return
+
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
         if full:
@@ -2420,6 +2500,7 @@ def tools_list(json_, python_tools):
                     name: {
                         "description": tool.description,
                         "arguments": tool.input_schema,
+                        "plugin": tool.plugin,
                     }
                     for name, tool in tools.items()
                 },
@@ -2431,7 +2512,13 @@ def tools_list(json_, python_tools):
             sig = "()"
             if tool.implementation:
                 sig = str(inspect.signature(tool.implementation))
-            click.echo("{}{}".format(name, sig))
+            click.echo(
+                "{}{}{}".format(
+                    name,
+                    sig,
+                    " (plugin: {})".format(tool.plugin) if tool.plugin else "",
+                )
+            )
             if tool.description:
                 click.echo(textwrap.indent(tool.description, "  "))
 
@@ -2716,9 +2803,16 @@ def fragments_loaders():
 
 @cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
-def plugins_list(all):
+@click.option(
+    "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
+)
+def plugins_list(all, hooks):
     "List installed plugins"
-    click.echo(json.dumps(get_plugins(all), indent=2))
+    plugins = get_plugins(all)
+    hooks = set(hooks)
+    if hooks:
+        plugins = [plugin for plugin in plugins if hooks.intersection(plugin["hooks"])]
+    click.echo(json.dumps(plugins, indent=2))
 
 
 def display_truncated(text):
@@ -2749,7 +2843,12 @@ def display_truncated(text):
     is_flag=True,
     help="Disable the cache",
 )
-def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
+@click.option(
+    "--pre",
+    is_flag=True,
+    help="Include pre-release and development versions",
+)
+def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
@@ -2760,6 +2859,8 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
         args += ["--force-reinstall"]
     if no_cache_dir:
         args += ["--no-cache-dir"]
+    if pre:
+        args += ["--pre"]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
@@ -3701,3 +3802,61 @@ def _tools_from_code(code_or_path: str) -> List[Tool]:
         if callable(value) and not name.startswith("_"):
             tools.append(Tool.function(value))
     return tools
+
+
+def _debug_tool_call(_, tool_call, tool_result):
+    click.echo(
+        click.style(
+            "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
+            fg="yellow",
+            bold=True,
+        ),
+        err=True,
+    )
+    click.echo(
+        click.style(
+            "  {}".format(tool_result.output),
+            fg="green",
+            bold=True,
+        ),
+        err=True,
+    )
+
+
+def _approve_tool_call(_, tool_call):
+    click.echo(
+        click.style(
+            "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
+            fg="yellow",
+            bold=True,
+        ),
+        err=True,
+    )
+    if not click.confirm("Approve tool call?"):
+        raise CancelToolCall("User cancelled tool call")
+
+
+def _gather_tools(tools, python_tools):
+    tool_functions = []
+    if python_tools:
+        for code_or_path in python_tools:
+            tool_functions = _tools_from_code(code_or_path)
+    registered_tools = get_tools()
+    bad_tools = [tool for tool in tools if tool not in registered_tools]
+    if bad_tools:
+        raise click.ClickException(
+            "Tool(s) {} not found. Available tools: {}".format(
+                ", ".join(bad_tools), ", ".join(registered_tools.keys())
+            )
+        )
+    tool_functions.extend(registered_tools[tool] for tool in tools)
+    return tool_functions
+
+
+def _get_conversation_tools(conversation, tools):
+    if conversation and not tools and conversation.responses:
+        # Copy plugin tools from first response in conversation
+        initial_tools = conversation.responses[0].prompt.tools
+        if initial_tools:
+            # Only tools from plugins:
+            return [tool.name for tool in initial_tools if tool.plugin]

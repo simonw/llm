@@ -89,6 +89,19 @@ for chunk in model.chain(
 ```
 This will stream each of the chain of responses in turn as they are generated.
 
+You can access the individual responses that make up the chain using `chain.responses()`. This can be iterated over as the chain executes like this:
+
+```python
+chain = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+for response in chain.responses():
+    print(response.prompt)
+    for chunk in response:
+        print(chunk, end="", flush=True)
+```
+
 (python-api-system-prompts)=
 
 ### System prompts
@@ -351,10 +364,9 @@ model = llm.get_async_model("gpt-4o")
 You can then run a prompt using `await model.prompt(...)`:
 
 ```python
-response = await model.prompt(
+print(await model.prompt(
     "Five surprising names for a pet pelican"
-)
-print(await response.text())
+).text())
 ```
 Or use `async for chunk in ...` to stream the response as it is generated:
 ```python
@@ -365,6 +377,56 @@ async for chunk in model.prompt(
 ```
 This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
 
+(python-api-async-tools)=
+
+### Tool functions can be sync or async
+
+{ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
+
+If an `async def` function is used in a synchronous context LLM will automatically execute it in a thread pool using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
+
+```python
+async def hello(name: str) -> str:
+    "Say hello to name"
+    return "Hello there " + name
+
+model = llm.get_model("gpt-4.1-mini")
+chain_response = model.chain(
+    "Say hello to Percival", tools=[hello]
+)
+print(chain_response.text())
+```
+
+### Tool use for async models
+
+Tool use is also supported for async models, using either synchronous or asynchronous tool functions. Synchronous functions will block the event loop so only use those in asynchronous context if you are certain they are extremely fast.
+
+The `response.execute_tool_calls()` and `chain_response.text()` and `chain_response.responses()` methods must all be awaited when run against asynchronous models:
+
+```python
+import llm
+model = llm.get_async_model("gpt-4.1")
+
+def upper(string):
+    "Converts string to uppercase"
+    return string.upper()
+
+chain = model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper],
+    after_call=print
+)
+print(await chain.text())
+```
+
+To iterate over the chained response output as it arrives use `async for`:
+```python
+async for chunk in model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper]
+):
+    print(chunk, end="", flush=True)
+```
 (python-api-conversations)=
 
 ## Conversations
@@ -401,6 +463,33 @@ response = conversation.prompt(
 ```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+### Conversations using tools
+
+You can pass a list of tool functions to the `tools=[]` argument when you start a new conversation:
+```python
+import llm
+
+def upper(text: str) -> str:
+    "convert text to upper case"
+    return text.upper()
+
+def reverse(text: str) -> str:
+    "reverse text"
+    return text[::-1]
+
+model = llm.get_model("gpt-4.1-mini")
+conversation = model.conversation(tools=[upper, reverse])
+```
+You can then call the `conversation.chain()` method multiple times to have a conversation that uses those tools:
+```python
+print(conversation.chain(
+    "Convert panda to uppercase and reverse it"
+).text())
+print(conversation.chain(
+    "Same with pangolin"
+).text())
+```
 
 (python-api-listing-models)=
 
