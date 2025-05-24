@@ -1,10 +1,11 @@
 import pytest
 from llm.utils import (
-    simplify_usage_dict,
     extract_fenced_code_block,
+    instantiate_from_spec,
     maybe_fenced_code,
-    truncate_string,
     schema_dsl,
+    simplify_usage_dict,
+    truncate_string,
 )
 
 
@@ -391,3 +392,55 @@ def test_backtick_count_adjustment(content: str, backtick_count: int):
 
     assert result.startswith(expected_start)
     assert result.endswith(expected_end)
+
+
+class Files:
+    def __init__(self, dir="."):
+        self.dir = dir
+
+
+class ValueFlag:
+    def __init__(self, value=None, flag=False):
+        self.value = value
+        self.flag = flag
+
+
+@pytest.mark.parametrize(
+    "spec, expected_cls, expected_attrs",
+    [
+        ("Files", Files, {"dir": "."}),
+        ("Files()", Files, {"dir": "."}),
+        ('Files("tmp")', Files, {"dir": "tmp"}),
+        ('Files({"dir": "/tmp"})', Files, {"dir": "/tmp"}),
+        ('Files(dir="/data")', Files, {"dir": "/data"}),
+        (
+            'ValueFlag({"value": 123, "flag": true})',
+            ValueFlag,
+            {"value": 123, "flag": True},
+        ),
+        ("ValueFlag(flag=true)", ValueFlag, {"flag": True}),
+        ("ValueFlag(value=123, flag=false)", ValueFlag, {"value": 123, "flag": False}),
+    ],
+)
+def test_instantiate_valid(spec, expected_cls, expected_attrs):
+    obj = instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+    assert isinstance(obj, expected_cls)
+    for key, val in expected_attrs.items():
+        assert getattr(obj, key) == val
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        'Files({"dir":})',
+        "Files(",
+        "Files(dir=)",
+        'Files({"dir": [})',
+        "Files(.)",
+        "Files(this is invalid)",
+        "ValueFlag(value=123, flag=falseTypo)",
+    ],
+)
+def test_instantiate_invalid(spec):
+    with pytest.raises(ValueError):
+        instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)

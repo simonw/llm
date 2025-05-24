@@ -73,7 +73,7 @@ Explain the difference between fragments and templates to me
 !end
 ```
 
-Additionally, any `!fragment` lines found in a prompt created with `!edit` will also be parsed.
+Any `!fragment` lines found in a prompt created with `!edit` will not be parsed.
 
 (fragments-browsing)=
 ## Browsing fragments
