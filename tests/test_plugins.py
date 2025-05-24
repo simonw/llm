@@ -382,50 +382,34 @@ def test_register_tools(tmpdir, logs_db):
         log_rows = json.loads(
             runner.invoke(cli.cli, ["logs", "-c", "-n", "0", "--json"]).output
         )
-        # Workaround for bug in https://github.com/simonw/llm/issues/1073
+        # Workaround for bug in https://github.com/simonw/llm/issues/1073 and 1079
+        # We use a set and don't check the order, because (esp on Windows) datetime_utc
+        # may not be accurate enough to order them correctly.
         log_rows.sort(key=lambda row: row["datetime_utc"])
-        results = [(log_row["prompt"], log_row["tool_results"]) for log_row in log_rows]
-        assert results == [
-            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', []),
+        results = {
+            (log_row["prompt"], json.dumps(log_row["tool_results"]))
+            for log_row in log_rows
+        }
+        assert results == {
             (
                 "",
-                [
-                    {
-                        "id": 2,
-                        "tool_id": 1,
-                        "name": "upper",
-                        "output": "ONE",
-                        "tool_call_id": None,
-                    }
-                ],
+                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null}]',
             ),
-            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', []),
+            (
+                '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
+                "[]",
+            ),
             (
                 "",
-                [
-                    {
-                        "id": 3,
-                        "tool_id": 1,
-                        "name": "upper",
-                        "output": "TWO",
-                        "tool_call_id": None,
-                    }
-                ],
+                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null}]',
             ),
-            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}', []),
             (
                 "",
-                [
-                    {
-                        "id": 4,
-                        "tool_id": 1,
-                        "name": "upper",
-                        "output": "THREE",
-                        "tool_call_id": None,
-                    }
-                ],
+                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null}]',
             ),
-        ]
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
+        }
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
