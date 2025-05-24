@@ -921,6 +921,12 @@ def test_logs_tools(logs_db):
         "    three\n"
         "\n"
     ) in result2.output
+    # Log one that did NOT use tools, check that `llm logs --tools` ignores it
+    assert runner.invoke(cli, ["-m", "echo", "badger"]).exit_code == 0
+    assert "badger" in runner.invoke(cli, ["logs"]).output
+    logs_tools_output = runner.invoke(cli, ["logs", "--tools"]).output
+    assert "badger" not in logs_tools_output
+    assert "three" in logs_tools_output
 
 
 def test_logs_backup(logs_db):

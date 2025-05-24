@@ -1375,7 +1375,13 @@ order by prompt_attachments."order"
     "-T",
     "--tool",
     multiple=True,
-    help="Filter for prompts using these tools",
+    help="Filter for prompts with results from these tools",
+)
+@click.option(
+    "any_tools",
+    "--tools",
+    is_flag=True,
+    help="Filter for prompts with results from any tools",
 )
 @schema_option
 @click.option(
@@ -1440,6 +1446,7 @@ def logs_list(
     query,
     fragments,
     tools,
+    any_tools,
     schema_input,
     schema_multi,
     data,
@@ -1571,8 +1578,20 @@ def logs_list(
             exists_clauses.append(exists_clause)
             sql_params["f{}".format(i)] = fragment_hash
 
-        where_bits.append(" AND ".join(exists_clauses))
+        where_bits.append(" and ".join(exists_clauses))
 
+    if any_tools:
+        # Any response that involved at least one tool result
+        where_bits.append(
+            """
+            exists (
+              select 1
+                from tool_results
+              where
+                tool_results.response_id = responses.id
+            )
+        """
+        )
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1587,11 +1606,11 @@ def logs_list(
                 f"""
             exists (
               select 1
-                from tool_results tr
-                join tools t on t.id = tr.tool_id
-               where tr.response_id = responses.id
-                 and t.name = :tool{i}
-                 and t.plugin = :plugin{i}
+                from tool_results
+                join tools on tools.id = tool_results.tool_id
+               where tool_results.response_id = responses.id
+                 and tools.name = :tool{i}
+                 and tools.plugin = :plugin{i}
             )
             """
             )
@@ -1599,7 +1618,7 @@ def logs_list(
             sql_params[f"plugin{i}"] = plugin_name
 
         # AND means “must have all” — use OR instead if you want “any of”
-        where_bits.append(" AND ".join(tool_clauses))
+        where_bits.append(" and ".join(tool_clauses))
 
     schema_id = None
     if schema:

@@ -232,6 +232,12 @@ This will match responses that involved a _result_ from that tool. If the tool w
 
 Pass `--tool/-T` multiple times for responses that used all of the specified tools.
 
+Use the `llm logs --tools` flag to see _all_ responses that involved at least one tool result, including from `--functions`:
+
+```bash
+llm logs --tools
+```
+
 (logging-filter-schemas)=
 
 ### Browsing data collected using schemas
