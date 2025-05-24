@@ -305,6 +305,7 @@ def schema_option(fn):
     cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings=dict(help_option_names=['-h', '--help']),
 )
 @click.version_option()
 def cli():
