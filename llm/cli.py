@@ -1370,6 +1370,13 @@ order by prompt_attachments."order"
     help="Filter for prompts using these fragments",
     multiple=True,
 )
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Filter for prompts using these tools",
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -1432,6 +1439,7 @@ def logs_list(
     model,
     query,
     fragments,
+    tools,
     schema_input,
     schema_multi,
     data,
@@ -1564,6 +1572,35 @@ def logs_list(
             sql_params["f{}".format(i)] = fragment_hash
 
         where_bits.append(" AND ".join(exists_clauses))
+
+    if tools:
+        tools_by_name = get_tools()
+        # Filter responses by tools (must have ALL of the named tools, including plugin)
+        tool_clauses = []
+        for i, tool_name in enumerate(tools):
+            try:
+                plugin_name = tools_by_name[tool_name].plugin
+            except KeyError:
+                raise click.ClickException(f"Unknown tool: {tool_name}")
+
+            tool_clauses.append(
+                f"""
+            exists (
+              select 1
+                from tool_results tr
+                join tools t on t.id = tr.tool_id
+               where tr.response_id = responses.id
+                 and t.name = :tool{i}
+                 and t.plugin = :plugin{i}
+            )
+            """
+            )
+            sql_params[f"tool{i}"] = tool_name
+            sql_params[f"plugin{i}"] = plugin_name
+
+        # AND means “must have all” — use OR instead if you want “any of”
+        where_bits.append(" AND ".join(tool_clauses))
+
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]

@@ -203,7 +203,7 @@ llm logs -m chatgpt
 
 (logging-filter-fragments)=
 
-### Filtering by prompts that used a specific fragment
+### Filtering by prompts that used specific fragments
 
 The `-f/--fragment X` option will filter for just responses that were created using the specified {ref}`fragment <usage-fragments>` hash or alias or URL or filename.
 
@@ -217,16 +217,36 @@ You can display just the content for a specific fragment hash ID (or alias) usin
 ```bash
 llm fragments show 993fd38d898d2b59fd2d16c811da5bdac658faa34f0f4d411edde7c17ebb0680
 ```
+If you provide multiple fragments you will get back responses that used _all_ of those fragments.
+
+(logging-filter-tools)=
+
+### Filtering by prompts that used specific tools
+
+You can filter for responses that used tools from specific fragments with the `--tool/-T` option:
+
+```bash
+llm logs -T simple_eval
+```
+This will match responses that involved a _result_ from that tool. If the tool was not executed it will not be included in the filtered responses.
+
+Pass `--tool/-T` multiple times for responses that used all of the specified tools.
 
 (logging-filter-schemas)=
 
 ### Browsing data collected using schemas
 
-The `--schema X` option can be used to view responses that used the specified schema. This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
+The `--schema X` option can be used to view responses that used the specified schema, using any of the {ref}`ways to specify a schema <schemas-specify>`:
+
+```bash
+llm logs --schema 'name, age int, bio'
+```
+
+This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
 
 (logging-datasette)=
 
-### Browsing logs using Datasette
+## Browsing logs using Datasette
 
 You can also use [Datasette](https://datasette.io/) to browse your logs like this:
 
@@ -236,7 +256,7 @@ datasette "$(llm logs path)"
 
 (logging-backup)=
 
-### Backing up your database
+## Backing up your database
 
 You can backup your logs to another file using the `llm logs backup` command:
 

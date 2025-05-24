@@ -312,10 +312,21 @@ def test_register_tools(tmpdir, logs_db):
         )
         assert result4.exit_code == 0
         assert '"output": "HI"' in result4.output
+
         # Now check in the database
         tool_row = [row for row in logs_db["tools"].rows][0]
         assert tool_row["name"] == "upper"
         assert tool_row["plugin"] == "ToolsPlugin"
+
+        # The llm logs command should return that, including with the -T upper option
+        for args in ([], ["-T", "upper"]):
+            logs_result = runner.invoke(cli.cli, ["logs"] + args)
+            assert logs_result.exit_code == 0
+            assert "HI" in logs_result.output
+        # ... but not for -T reverse
+        logs_empty_result = runner.invoke(cli.cli, ["logs", "-T", "count_chars"])
+        assert logs_empty_result.exit_code == 0
+        assert "HI" not in logs_empty_result.output
 
         # Start with a tool, use llm -c to reuse the same tool
         result5 = runner.invoke(
@@ -369,7 +380,7 @@ def test_register_tools(tmpdir, logs_db):
             == 0
         )
         # Should have logged three tool uses in llm logs -c -n 0
-        log_output = runner.invoke(cli.cli, ["logs", "-c", "-n", "10"]).output
+        log_output = runner.invoke(cli.cli, ["logs", "-c", "-n", "11"]).output
         log_pattern = re.compile(
             r"""tool_calls.*?"text": "one".*?ONE.*?"""
             r"""tool_calls.*?"text": "two".*?TWO.*?"""

@@ -342,6 +342,7 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -f, --fragment TEXT         Filter for prompts using these fragments
+  -T, --tool TEXT             Filter for prompts using these tools
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   --data                      Output newline-delimited JSON data for schema
