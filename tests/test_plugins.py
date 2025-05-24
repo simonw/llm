@@ -4,7 +4,6 @@ import importlib
 import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
-import re
 import textwrap
 
 
@@ -379,15 +378,54 @@ def test_register_tools(tmpdir, logs_db):
             ).exit_code
             == 0
         )
-        # Should have logged three tool uses in llm logs -c -n 0
-        log_output = runner.invoke(cli.cli, ["logs", "-c", "-n", "11"]).output
-        log_pattern = re.compile(
-            r"""tool_calls.*?"text": "one".*?ONE.*?"""
-            r"""tool_calls.*?"text": "two".*?TWO.*?"""
-            r"""tool_calls.*?"text": "three".*?THREE""",
-            re.DOTALL,
+        # Should have logged those three tool uses in llm logs -c -n 0
+        log_rows = json.loads(
+            runner.invoke(cli.cli, ["logs", "-c", "-n", "0", "--json"]).output
         )
-        assert log_pattern.search(log_output)
+        # Workaround for bug in https://github.com/simonw/llm/issues/1073
+        log_rows.sort(key=lambda row: row["datetime_utc"])
+        results = [(log_row["prompt"], log_row["tool_results"]) for log_row in log_rows]
+        assert results == [
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 2,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "ONE",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 3,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "TWO",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 4,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "THREE",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+        ]
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
