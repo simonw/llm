@@ -1156,11 +1156,7 @@ def chat(
             if edited_prompt is None:
                 click.echo("Editor closed without saving.", err=True)
                 continue
-            prompt, fragments, attachments = process_fragments_in_chat(
-                db, edited_prompt.strip()
-            )
-            if not prompt and not fragments and not attachments:
-                continue
+            prompt = edited_prompt.strip()
         if prompt.strip().startswith("!fragment "):
             prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
 
