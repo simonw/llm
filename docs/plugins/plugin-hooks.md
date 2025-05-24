@@ -62,6 +62,31 @@ This demonstrates how to register a model with both sync and async versions, and
 
 The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
 
+(plugin-hooks-register-tools)=
+## register_tools(register)
+
+This hook can register one or more tool functions for use with LLM. See {ref}`the tools documentation <tools>` for more details.
+
+This example registers two tools: `upper` and `count_character_in_word`.
+
+```python
+import llm
+
+def upper(text: str) -> str:
+    """Convert text to uppercase."""
+    return text.upper()
+
+def count_char(text: str, character: str) -> int:
+    """Count the number of occurrences of a character in a word."""
+    return text.count(character)
+
+@llm.hookimpl
+def register_tools(register):
+    register(upper)
+    # Here the name= argument is used to specify a different name for the tool:
+    register(count_char, name="count_character_in_word")
+```
+
 (plugin-hooks-register-template-loaders)=
 ## register_template_loaders(register)
 

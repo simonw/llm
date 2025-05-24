@@ -1,6 +1,7 @@
 import click
 import hashlib
 import httpx
+import itertools
 import json
 import pathlib
 import puremagic
@@ -216,35 +217,52 @@ def make_schema_id(schema: dict) -> Tuple[str, str]:
     return schema_id, schema_json
 
 
-def output_rows_as_json(rows, nl=False):
+def output_rows_as_json(rows, nl=False, compact=False, json_cols=()):
     """
     Output rows as JSON - either newline-delimited or an array
 
     Parameters:
-    - rows: List of dictionaries to output
+    - rows: Iterable of dictionaries to output
     - nl: Boolean, if True, use newline-delimited JSON
+    - compact: Boolean, if True uses [{"...": "..."}\n {"...": "..."}] format
+    - json_cols: Iterable of columns that contain JSON
 
-    Returns:
-    - String with formatted JSON output
+    Yields:
+    - Stream of strings to be output
     """
-    if not rows:
-        return "" if nl else "[]"
+    current_iter, next_iter = itertools.tee(rows, 2)
+    next(next_iter, None)
+    first = True
 
-    lines = []
-    end_i = len(rows) - 1
-    for i, row in enumerate(rows):
-        is_first = i == 0
-        is_last = i == end_i
+    for row, next_row in itertools.zip_longest(current_iter, next_iter):
+        is_last = next_row is None
+        for col in json_cols:
+            row[col] = json.loads(row[col])
 
-        line = "{firstchar}{serialized}{maybecomma}{lastchar}".format(
-            firstchar=("[" if is_first else " ") if not nl else "",
-            serialized=json.dumps(row),
-            maybecomma="," if (not nl and not is_last) else "",
-            lastchar="]" if (is_last and not nl) else "",
-        )
-        lines.append(line)
+        if nl:
+            # Newline-delimited JSON: one JSON object per line
+            yield json.dumps(row)
+        elif compact:
+            # Compact array format: [{"...": "..."}\n {"...": "..."}]
+            yield "{firstchar}{serialized}{maybecomma}{lastchar}".format(
+                firstchar="[" if first else " ",
+                serialized=json.dumps(row),
+                maybecomma="," if not is_last else "",
+                lastchar="]" if is_last else "",
+            )
+        else:
+            # Pretty-printed array format with indentation
+            yield "{firstchar}{serialized}{maybecomma}{lastchar}".format(
+                firstchar="[\n" if first else "",
+                serialized=textwrap.indent(json.dumps(row, indent=2), "  "),
+                maybecomma="," if not is_last else "",
+                lastchar="\n]" if is_last else "",
+            )
+        first = False
 
-    return "\n".join(lines)
+    if first and not nl:
+        # We didn't output any rows, so yield the empty list
+        yield "[]"
 
 
 def resolve_schema_input(db, schema_input, load_template):
@@ -457,14 +475,36 @@ def ensure_fragment(db, content):
     values (:hash, :content, datetime('now'), :source)
     on conflict(hash) do nothing
     """
-    hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    hash_id = hashlib.sha256(content.encode("utf-8")).hexdigest()
     source = None
     if isinstance(content, Fragment):
         source = content.source
     with db.conn:
-        db.execute(sql, {"hash": hash, "content": content, "source": source})
+        db.execute(sql, {"hash": hash_id, "content": content, "source": source})
         return list(
-            db.query("select id from fragments where hash = :hash", {"hash": hash})
+            db.query("select id from fragments where hash = :hash", {"hash": hash_id})
+        )[0]["id"]
+
+
+def ensure_tool(db, tool):
+    sql = """
+    insert into tools (hash, name, description, input_schema, plugin)
+    values (:hash, :name, :description, :input_schema, :plugin)
+    on conflict(hash) do nothing
+    """
+    with db.conn:
+        db.execute(
+            sql,
+            {
+                "hash": tool.hash(),
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": json.dumps(tool.input_schema),
+                "plugin": tool.plugin,
+            },
+        )
+        return list(
+            db.query("select id from tools where hash = :hash", {"hash": tool.hash()})
         )[0]["id"]
 
 

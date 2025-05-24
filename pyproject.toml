@@ -1,6 +1,6 @@
 [project]
 name = "llm"
-version = "0.25"
+version = "0.26a0"
 description = "CLI utility and Python library for interacting with Large Language Models from organizations like OpenAI, Anthropic and Gemini plus local models installed on your own machine."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -25,7 +25,7 @@ classifiers = [
 
 dependencies = [
     "click",
-    "condense-json>=0.1.2",
+    "condense-json>=0.1.3",
     "openai>=1.55.3",
     "click-default-group>=1.2.3",
     "sqlite-utils>=3.37",
@@ -53,6 +53,7 @@ llm = "llm.cli:cli"
 [project.optional-dependencies]
 test = [
     "build",
+    "click<8.2.0", # https://github.com/simonw/llm/issues/1024
     "pytest",
     "numpy",
     "pytest-httpx>=0.33.0",
@@ -60,10 +61,13 @@ test = [
     "cogapp",
     "mypy>=1.10.0",
     "black>=25.1.0",
+    "pytest-recording",
     "ruff",
+    "syrupy",
     "types-click",
     "types-PyYAML",
     "types-setuptools",
+    "llm-echo==0.3a3",
 ]
 
 [build-system]

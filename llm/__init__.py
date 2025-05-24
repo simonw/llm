@@ -9,6 +9,7 @@ from .models import (
     AsyncModel,
     AsyncResponse,
     Attachment,
+    CancelToolCall,
     Conversation,
     EmbeddingModel,
     EmbeddingModelWithAliases,
@@ -18,13 +19,15 @@ from .models import (
     Options,
     Prompt,
     Response,
+    Tool,
+    ToolCall,
 )
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
 import click
-from typing import Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable, Union, cast
 import json
 import os
 import pathlib
@@ -35,6 +38,7 @@ __all__ = [
     "AsyncKeyModel",
     "AsyncResponse",
     "Attachment",
+    "CancelToolCall",
     "Collection",
     "Conversation",
     "Fragment",
@@ -50,6 +54,8 @@ __all__ = [
     "Prompt",
     "Response",
     "Template",
+    "Tool",
+    "ToolCall",
     "user_dir",
     "schema_dsl",
 ]
@@ -126,6 +132,50 @@ def get_fragment_loaders() -> Dict[
 ]:
     """Get fragment loaders registered by plugins."""
     return _get_loaders(pm.hook.register_fragment_loaders)
+
+
+def get_tools() -> Dict[str, Tool]:
+    """Get tools registered by plugins."""
+    load_plugins()
+    tools: Dict[str, Tool] = {}
+
+    # Variable to track current plugin name
+    current_plugin_name = None
+
+    def register(
+        tool_or_function: Union[Tool, Callable[..., Any]],
+        name: Optional[str] = None,
+    ) -> None:
+        # If they handed us a bare function, wrap it in a Tool
+        if not isinstance(tool_or_function, Tool):
+            tool_or_function = Tool.function(tool_or_function, name=name)
+
+        tool = cast(Tool, tool_or_function)
+        if current_plugin_name:
+            tool.plugin = current_plugin_name
+
+        prefix = name or tool.name
+        suffix = 0
+        candidate = prefix
+
+        # avoid name collisions
+        while candidate in tools:
+            suffix += 1
+            candidate = f"{prefix}_{suffix}"
+
+        tools[candidate] = tool
+
+    # Call each plugin's register_tools hook individually to track current_plugin_name
+    for plugin in pm.get_plugins():
+        current_plugin_name = pm.get_name(plugin)
+        hook_caller = pm.hook.register_tools
+        plugin_impls = [
+            impl for impl in hook_caller.get_hookimpls() if impl.plugin is plugin
+        ]
+        for impl in plugin_impls:
+            impl.function(register=register)
+
+    return tools
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:

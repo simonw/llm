@@ -508,7 +508,7 @@ llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/arc
 
 ## GitHub repositories
 
-The same trick works for regular GitHub repositories as well: the "Download ZIP" button can be found by clicking the green "Code" button at the top of the repository. The URL which that provide scan then be used to install the plugin that lives in that repository.
+The same trick works for regular GitHub repositories as well: the "Download ZIP" button can be found by clicking the green "Code" button at the top of the repository. The URL which that provides can then be used to install the plugin that lives in that repository.
 
 ## Publishing plugins to PyPI
 

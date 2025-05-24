@@ -1,0 +1,330 @@
+interactions:
+- request:
+    body: '{"messages":[{"role":"user","content":"Can the country of Crumpet have
+      dragons? Answer with only YES or NO"}],"model":"gpt-4o-mini","stream":false,"tools":[{"type":"function","function":{"name":"lookup_population","description":"Returns
+      the current population of the specified fictional country","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}}},{"type":"function","function":{"name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons, False otherwise","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '650'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.78.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.78.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.13.3
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//jFPBjtowEL3nK6w5kyrJ0gI5slXppWzbZbdqyyoyziS4OLZrO1sQ4t+r
+        GEjCLpWaQ2TNm/fmzYy9DwgBnkNKgK2pY5UW4fSbns1n+ee7+eLP9uPmx+N29Zu5L/fT99VCwqBh
+        qNUvZO7MesNUpQU6rk4wM0gdNqrxaDiK390kb2MPVCpH0dBK7cKhCisueZhEyTCMRmE8PrHXijO0
+        kJKfASGE7P2/8Slz3EJKosE5UqG1tERI2yRCwCjRRIBay62j0sGgA5mSDmVjXdZC9ACnlMgYFaIr
+        fPz2vXM3LCpEtlh8Hz98mKuRmd/Su+nD3Imv98+fZr16R+md9oaKWrJ2SD28jacvihECklaeK5Ta
+        1DrTSteCXhEhBKgp6wqlaxqA/RKYqqUzuyWkS7g1daXRLeEAF7RDcO381JuLwaK2VLweGJVSOW/F
+        T+zphBza5QhVaqNW9gUVCi65XWcGqfU990cfnI14C1BfbBe0UZV2mVMb9EUnyVEUugvYgfHoBDrl
+        qOjFo8ngilyWo6Pcb7+9cIyyNeYdtbt4tM656gFBr/XXbq5pH9vnsvwf+Q5gDLXDPNMGc84uO+7S
+        DDbv819p7ZC9YbBonjnDzHE0zTpyLGgtjq8G7M46rLKCyxKNNtw/HSh0Ft1MknGSRJMIgkPwFwAA
+        //8DALof6VxIBAAA
+    headers:
+      CF-RAY:
+      - 93f47072dde6f88d-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 May 2025 19:07:32 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=vfHkbLfwVTTGPkFT0I4U0xn5CHQZYIpOutDV4z7NRlA-1747163252-1.0.1.1-kj_JiiyNxn9AWCWisV6.pYNShKVqqT0Foicji2.ZLNaAkHm5VEwac0QjxVhCiWQs9Xp_wvkeTzrgVxmD8bkzDwTPn96U.81YERXZda3_m18;
+        path=/; expires=Tue, 13-May-25 19:37:32 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=SQgXKMy2qkeOsbwwTl62blvuirTS_TkZSvEOztbYIlI-1747163252293-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '574'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '591'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999981'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_1e7dabaf1f0dba1ec89a134d3bde8476
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages":[{"role":"user","content":"Can the country of Crumpet have
+      dragons? Answer with only YES or NO"},{"role":"assistant","tool_calls":[{"type":"function","id":"call_TTY8UFNo7rNCaOBUNtlRSvMG","function":{"name":"lookup_population","arguments":"{\"country\":
+      \"Crumpet\"}"}}]},{"role":"tool","tool_call_id":"call_TTY8UFNo7rNCaOBUNtlRSvMG","content":"123124"}],"model":"gpt-4o-mini","stream":false,"tools":[{"type":"function","function":{"name":"lookup_population","description":"Returns
+      the current population of the specified fictional country","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}}},{"type":"function","function":{"name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons, False otherwise","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '906'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.78.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.78.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.13.3
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA4xTTYvbMBC9+1eIOcfFH2k+fNyWlEIPLaWkm+5itNLY0UaWVEkOzYb892J7YzvZ
+        FOqDEfPmvXkzIx0DQkBwyAiwLfWsMjK8W5tP39a7es+i1YZvNs9fXxb4Jf7A/R1bwaRh6KdnZP7M
+        esd0ZSR6oVUHM4vUY6Maz6fzeJYm76ctUGmOsqGVxodTHVZCiTCJkmkYzcN48creasHQQUZ+BYQQ
+        cmz/jU/F8Q9kJJqcIxU6R0uErE8iBKyWTQSoc8J5qjxMBpBp5VE11lUt5QjwWsucUSmHwt13HJ2H
+        YVEpc/p7+eMgvq92Lz9n68U9Z2n6UX9e3o/qddIH0xoqasX6IY3wPp5dFSMEFK2wK6jyLd1jzi0t
+        tXJXGoQAtWVdofKNfzg+gNGmlrTRfYAsTtI4mZ7ggnQKbp0fR0OxWNSOyrfTokpp34q343p8RU79
+        ZqQujdVP7ooKhVDCbXOL1LUNj+cenI20FqC+WC0Yqyvjc6932BaN40WnCsP1G6Fn0GtP5SieziY3
+        9HKOnop29/11Y5RtkQ/U4drRmgs9AoJR72/d3NLu+heq/B/5AWAMjUeeG4tcsMuOhzSLzev8V1o/
+        5dYwOLR7wTD3Am2zD44FrWX3ZsAdnMcqL4Qq0Ror2ocDhcmjdJkskiRaRhCcgr8AAAD//wMAmw02
+        QkYEAAA=
+    headers:
+      CF-RAY:
+      - 93f47082ba71d640-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 May 2025 19:07:35 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=LL6YtOWVW4fA687_GIMcuJC7CM2I.uKx1vGaNkjFTgo-1747163255-1.0.1.1-qML6IsLM49e2bg7zp0uGqn3.JTJP5KlFYfb8o3v9LzyLb.cYoFBXn5te83Wxl5kVjDiXU2vH.QTFQu953KNx87LwsMkI2ZxTvH58oZWAawg;
+        path=/; expires=Tue, 13-May-25 19:37:35 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=QOa3sx0F4_nAYKtjmx9ux7qfIsyipGZq94AL_SWd2ac-1747163255176-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '575'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '587'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999976'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_66cc3b2bbe3be82a37d29fba7672d82b
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages":[{"role":"user","content":"Can the country of Crumpet have
+      dragons? Answer with only YES or NO"},{"role":"assistant","tool_calls":[{"type":"function","id":"call_TTY8UFNo7rNCaOBUNtlRSvMG","function":{"name":"lookup_population","arguments":"{\"country\":
+      \"Crumpet\"}"}}]},{"role":"tool","tool_call_id":"call_TTY8UFNo7rNCaOBUNtlRSvMG","content":"123124"},{"role":"assistant","tool_calls":[{"type":"function","id":"call_aq9UyiSFkzX6W8Ydc33DoI9Y","function":{"name":"can_have_dragons","arguments":"{\"population\":
+      123124}"}}]},{"role":"tool","tool_call_id":"call_aq9UyiSFkzX6W8Ydc33DoI9Y","content":"true"}],"model":"gpt-4o-mini","stream":false,"tools":[{"type":"function","function":{"name":"lookup_population","description":"Returns
+      the current population of the specified fictional country","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}}},{"type":"function","function":{"name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons, False otherwise","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1157'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.78.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.78.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.13.3
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//jJJBb9swDIXv/hUCz/HgOGmd5NYW2447bNjQDIWhSLSjThYFiS42FPnv
+        g+w0drcO2EUHfXzUexSfMyHAaNgJUEfJqvM2v/3mP37Z31ebq69xb/zdp+Jw8/Sh2lf8qG9gkRR0
+        eETFL6p3ijpvkQ25EauAkjF1XVbranm9Kq+qAXSk0SZZ6zlfU94ZZ/KyKNd5UeXLzVl9JKMwwk58
+        z4QQ4nk4k0+n8SfsRLF4uekwRtki7C5FQkAgm25AxmgiS8ewmKAix+gG6/fvP89JwKaPMrlzvbUz
+        IJ0jlind4OnhTE4XF5ZaH+gQ/5BCY5yJxzqgjOTSi5HJw0BPmRAPQ9r+VQDwgTrPNdMPHJ5brq/H
+        fjANeaKrM2Niaeei7eKNdrVGlsbG2bhASXVEPUmn2cpeG5qBbBb6bzNv9R6DG9f+T/sJKIWeUdc+
+        oDbqdeCpLGBawX+VXYY8GIaI4ckorNlgSB+hsZG9HRcD4q/I2NWNcS0GH8y4HY2vi9W23JRlsS0g
+        O2W/AQAA//8DAFbEZUIrAwAA
+    headers:
+      CF-RAY:
+      - 93f47096cf15d6e9-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 May 2025 19:07:37 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=EDR.bZeRmrWVNTWef5aAJ2C5NT7yIBHq_6NzNGXNlX0-1747163257-1.0.1.1-YuS4Hj.Ncp4eOrYNT5L7AncdqT5Xn8a2DTxCka1HKKBGKdT8k70yvNTA3wMlQyVPxGD3HSCysY0a1n1zCkNs._TQe9hWOuoIDG9LtD9MBr4;
+        path=/; expires=Tue, 13-May-25 19:37:37 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=3Xqq8l5nvU4mfyEz4.llgkHC3jY.IBLFTJrD76P7UsY-1747163257692-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '222'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '227'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999974'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_d157a5a0f4b64776bc387ccab624e664
+    status:
+      code: 200
+      message: OK
+version: 1

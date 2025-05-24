@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 import click
 import importlib
+import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import textwrap
@@ -143,8 +144,13 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "three:x"], catch_exceptions=False
         )
         assert result.exit_code == 0
-        expected = "prompt:\n" "one:x\n" "two:x\n" "three:x\n"
-        assert expected in result.output
+        assert json.loads(result.output) == {
+            "prompt": "one:x\ntwo:x\nthree:x",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [],
+        }
         # And the llm fragments loaders command:
         result2 = runner.invoke(cli.cli, ["fragments", "loaders"])
         assert result2.exit_code == 0
@@ -187,4 +193,264 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
         {"content": "one:x", "source": "one"},
         {"content": "two:x", "source": "two"},
         {"content": "three:x", "source": "three"},
+    ]
+
+
+def test_register_tools(tmpdir, logs_db):
+    def upper(text: str) -> str:
+        """Convert text to uppercase."""
+        return text.upper()
+
+    def count_character_in_word(text: str, character: str) -> int:
+        """Count the number of occurrences of a character in a word."""
+        return text.count(character)
+
+    class ToolsPlugin:
+        __name__ = "ToolsPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            register(llm.Tool.function(upper))
+            register(count_character_in_word, name="count_chars")
+
+    try:
+        plugins.pm.register(ToolsPlugin(), name="ToolsPlugin")
+        tools = llm.get_tools()
+        assert tools == {
+            "upper": llm.Tool(
+                name="upper",
+                description="Convert text to uppercase.",
+                input_schema={
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                    "type": "object",
+                },
+                implementation=upper,
+                plugin="ToolsPlugin",
+            ),
+            "count_chars": llm.Tool(
+                name="count_chars",
+                description="Count the number of occurrences of a character in a word.",
+                input_schema={
+                    "properties": {
+                        "text": {"type": "string"},
+                        "character": {"type": "string"},
+                    },
+                    "required": ["text", "character"],
+                    "type": "object",
+                },
+                implementation=count_character_in_word,
+                plugin="ToolsPlugin",
+            ),
+        }
+        # Test the CLI command
+        runner = CliRunner()
+        result = runner.invoke(cli.cli, ["tools", "list"])
+        assert result.exit_code == 0
+        assert result.output == (
+            "upper(text: str) -> str (plugin: ToolsPlugin)\n"
+            "  Convert text to uppercase.\n"
+            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n"
+            "  Count the number of occurrences of a character in a word.\n"
+        )
+        # And --json
+        result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
+        assert result2.exit_code == 0
+        assert json.loads(result2.output) == {
+            "upper": {
+                "description": "Convert text to uppercase.",
+                "arguments": {
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                    "type": "object",
+                },
+                "plugin": "ToolsPlugin",
+            },
+            "count_chars": {
+                "description": "Count the number of occurrences of a character in a word.",
+                "arguments": {
+                    "properties": {
+                        "text": {"type": "string"},
+                        "character": {"type": "string"},
+                    },
+                    "required": ["text", "character"],
+                    "type": "object",
+                },
+                "plugin": "ToolsPlugin",
+            },
+        }
+        # And test the --tools option
+        functions_path = str(tmpdir / "functions.py")
+        with open(functions_path, "w") as fp:
+            fp.write("def example(s: str, i: int):\n    return s + '-' + str(i)")
+        result3 = runner.invoke(
+            cli.cli,
+            [
+                "tools",
+                "--functions",
+                "def reverse(s: str): return s[::-1]",
+                "--functions",
+                functions_path,
+            ],
+        )
+        assert result3.exit_code == 0
+        assert "reverse(s: str)" in result3.output
+        assert "example(s: str, i: int)" in result3.output
+        # Now run a prompt using a plugin tool and to check it gets logged correctly
+        result4 = runner.invoke(
+            cli.cli,
+            [
+                "-m",
+                "echo",
+                "--tool",
+                "upper",
+                json.dumps(
+                    {"tool_calls": [{"name": "upper", "arguments": {"text": "hi"}}]}
+                ),
+            ],
+        )
+        assert result4.exit_code == 0
+        assert '"output": "HI"' in result4.output
+
+        # Now check in the database
+        tool_row = [row for row in logs_db["tools"].rows][0]
+        assert tool_row["name"] == "upper"
+        assert tool_row["plugin"] == "ToolsPlugin"
+
+        # The llm logs command should return that, including with the -T upper option
+        for args in ([], ["-T", "upper"]):
+            logs_result = runner.invoke(cli.cli, ["logs"] + args)
+            assert logs_result.exit_code == 0
+            assert "HI" in logs_result.output
+        # ... but not for -T reverse
+        logs_empty_result = runner.invoke(cli.cli, ["logs", "-T", "count_chars"])
+        assert logs_empty_result.exit_code == 0
+        assert "HI" not in logs_empty_result.output
+
+        # Start with a tool, use llm -c to reuse the same tool
+        result5 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-m",
+                "echo",
+                "--tool",
+                "upper",
+                json.dumps(
+                    {"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}
+                ),
+                "--td",
+            ],
+        )
+        assert result5.exit_code == 0
+        assert (
+            runner.invoke(
+                cli.cli,
+                [
+                    "-c",
+                    json.dumps(
+                        {
+                            "tool_calls": [
+                                {"name": "upper", "arguments": {"text": "two"}}
+                            ]
+                        }
+                    ),
+                ],
+            ).exit_code
+            == 0
+        )
+        # Now do it again with llm chat -c
+        assert (
+            runner.invoke(
+                cli.cli,
+                ["chat", "-c"],
+                input=(
+                    json.dumps(
+                        {
+                            "tool_calls": [
+                                {"name": "upper", "arguments": {"text": "three"}}
+                            ]
+                        }
+                    )
+                    + "\nquit\n"
+                ),
+                catch_exceptions=False,
+            ).exit_code
+            == 0
+        )
+        # Should have logged those three tool uses in llm logs -c -n 0
+        log_rows = json.loads(
+            runner.invoke(cli.cli, ["logs", "-c", "-n", "0", "--json"]).output
+        )
+        # Workaround for bug in https://github.com/simonw/llm/issues/1073
+        log_rows.sort(key=lambda row: row["datetime_utc"])
+        results = [(log_row["prompt"], log_row["tool_results"]) for log_row in log_rows]
+        assert results == [
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 2,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "ONE",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 3,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "TWO",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}', []),
+            (
+                "",
+                [
+                    {
+                        "id": 4,
+                        "tool_id": 1,
+                        "name": "upper",
+                        "output": "THREE",
+                        "tool_call_id": None,
+                    }
+                ],
+            ),
+        ]
+    finally:
+        plugins.pm.unregister(name="ToolsPlugin")
+        assert llm.get_tools() == {}
+
+
+def test_plugins_command():
+    runner = CliRunner()
+    result = runner.invoke(cli.cli, ["plugins"])
+    assert result.exit_code == 0
+    expected = [
+        {"name": "EchoModelPlugin", "hooks": ["register_models"]},
+        {
+            "name": "MockModelsPlugin",
+            "hooks": ["register_embedding_models", "register_models"],
+        },
+    ]
+    actual = json.loads(result.output)
+    actual.sort(key=lambda p: p["name"])
+    assert actual == expected
+    # Test the --hook option
+    result2 = runner.invoke(cli.cli, ["plugins", "--hook", "register_embedding_models"])
+    assert result2.exit_code == 0
+    assert json.loads(result2.output) == [
+        {
+            "name": "MockModelsPlugin",
+            "hooks": ["register_embedding_models", "register_models"],
+        },
     ]

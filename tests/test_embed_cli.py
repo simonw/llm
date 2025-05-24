@@ -260,6 +260,42 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
     }
 
 
+@pytest.mark.parametrize(
+    "prefix,expected_result",
+    (
+        (
+            1,
+            {
+                "id": "1",
+                "score": pytest.approx(0.7071067811865475),
+                "content": "hello world",
+                "metadata": None,
+            },
+        ),
+        (
+            2,
+            {
+                "id": "2",
+                "score": pytest.approx(0.8137334712067349),
+                "content": "goodbye world",
+                "metadata": None,
+            },
+        ),
+    ),
+)
+def test_similar_by_content_prefixed(
+    user_path_with_embeddings, prefix, expected_result
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output) == expected_result
+
+
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
