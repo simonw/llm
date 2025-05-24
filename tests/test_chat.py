@@ -175,7 +175,7 @@ def test_chat_system(mock_model, logs_db):
 def test_chat_options(mock_model, logs_db, user_path):
     options_path = user_path / "model_options.json"
     options_path.write_text(json.dumps({"mock": {"max_tokens": "5"}}), "utf-8")
-    
+
     runner = CliRunner()
     mock_model.enqueue(["Default options response"])
     result = runner.invoke(
@@ -226,7 +226,7 @@ def test_chat_options(mock_model, logs_db, user_path):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
-        }
+        },
     ]
 
 
