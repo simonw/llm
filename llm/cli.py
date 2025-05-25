@@ -3810,15 +3810,20 @@ def _tools_from_code(code_or_path: str) -> List[Tool]:
 def _debug_tool_call(_, tool_call, tool_result):
     click.echo(
         click.style(
-            "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
+            "\nTool call: {}({})".format(tool_call.name, tool_call.arguments),
             fg="yellow",
             bold=True,
         ),
         err=True,
     )
+    output = ""
+    try:
+        output = json.dumps(json.loads(tool_result.output), indent=2)
+    except ValueError:
+        output = tool_result.output
     click.echo(
         click.style(
-            "  {}".format(tool_result.output),
+            textwrap.indent(output, "  ") + "\n",
             fg="green",
             bold=True,
         ),

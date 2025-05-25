@@ -205,6 +205,9 @@ def test_register_tools(tmpdir, logs_db):
         """Count the number of occurrences of a character in a word."""
         return text.count(character)
 
+    def output_as_json(text: str):
+        return {"this_is_in_json": {"nested": text}}
+
     class ToolsPlugin:
         __name__ = "ToolsPlugin"
 
@@ -212,6 +215,7 @@ def test_register_tools(tmpdir, logs_db):
         def register_tools(self, register):
             register(llm.Tool.function(upper))
             register(count_character_in_word, name="count_chars")
+            register(output_as_json)
 
     try:
         plugins.pm.register(ToolsPlugin(), name="ToolsPlugin")
@@ -242,6 +246,17 @@ def test_register_tools(tmpdir, logs_db):
                 implementation=count_character_in_word,
                 plugin="ToolsPlugin",
             ),
+            "output_as_json": llm.Tool(
+                name="output_as_json",
+                description=None,
+                input_schema={
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                    "type": "object",
+                },
+                implementation=output_as_json,
+                plugin="ToolsPlugin",
+            ),
         }
         # Test the CLI command
         runner = CliRunner()
@@ -252,6 +267,7 @@ def test_register_tools(tmpdir, logs_db):
             "  Convert text to uppercase.\n"
             "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n"
             "  Count the number of occurrences of a character in a word.\n"
+            "output_as_json(text: str) (plugin: ToolsPlugin)\n"
         )
         # And --json
         result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
@@ -274,6 +290,15 @@ def test_register_tools(tmpdir, logs_db):
                         "character": {"type": "string"},
                     },
                     "required": ["text", "character"],
+                    "type": "object",
+                },
+                "plugin": "ToolsPlugin",
+            },
+            "output_as_json": {
+                "description": None,
+                "arguments": {
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
                     "type": "object",
                 },
                 "plugin": "ToolsPlugin",
@@ -339,7 +364,6 @@ def test_register_tools(tmpdir, logs_db):
                 json.dumps(
                     {"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}
                 ),
-                "--td",
             ],
         )
         assert result5.exit_code == 0
@@ -410,6 +434,34 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
         }
+        # Test the --td option
+        result6 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-m",
+                "echo",
+                "--tool",
+                "output_as_json",
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {"name": "output_as_json", "arguments": {"text": "hi"}}
+                        ]
+                    }
+                ),
+                "--td",
+            ],
+        )
+        assert result6.exit_code == 0
+        assert (
+            "Tool call: output_as_json({'text': 'hi'})\n"
+            "  {\n"
+            '    "this_is_in_json": {\n'
+            '      "nested": "hi"\n'
+            "    }\n"
+            "  }"
+        ) in result6.output
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
