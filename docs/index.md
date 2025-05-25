@@ -12,7 +12,12 @@ A CLI tool and Python library for interacting with **OpenAI**, **Anthropic's Cla
 
 Watch **[Language models on the command-line](https://www.youtube.com/watch?v=QUXQNi6jQ30)** on YouTube for a demo or [read the accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
-With LLM you can {ref}`run prompts from the command-line <usage-executing-prompts>`, {ref}`store the results in SQLite <logging>`, {ref}`generate embeddings <embeddings>` and more.
+With LLM you can:
+- {ref}`Run prompts from the command-line <usage-executing-prompts>`
+- {ref}`Store prompts and responses in SQLite <logging>`
+- {ref}`Generate and store embeddings <embeddings>`
+- {ref}`Extract structured content from text and images <schemas>`
+- ... and much, much more
 
 ## Quick start
 
