@@ -123,5 +123,10 @@ logging
 related-tools
 help
 contributing
+```
+```{toctree}
+---
+maxdepth: 1
+---
 changelog
 ```
