@@ -273,6 +273,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Models that accept API keys](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#models-that-accept-api-keys)
     * [Async models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#async-models)
     * [Supporting schemas](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-schemas)
+    * [Support tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#support-tools)
     * [Attachments for multi-modal models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#attachments-for-multi-modal-models)
     * [Tracking token usage](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tracking-token-usage)
   * [Utility functions for plugins](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html)
