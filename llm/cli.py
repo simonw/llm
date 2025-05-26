@@ -3846,7 +3846,9 @@ def _approve_tool_call(_, tool_call):
         raise CancelToolCall("User cancelled tool call")
 
 
-def _gather_tools(tool_specs: List[str], python_tools: List[str]):
+def _gather_tools(
+    tool_specs: List[str], python_tools: List[str]
+) -> List[Union[Tool, Type[Toolbox]]]:
     tools: List[Union[Tool, Type[Toolbox]]] = []
     if python_tools:
         for code_or_path in python_tools:
