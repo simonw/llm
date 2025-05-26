@@ -2550,8 +2550,10 @@ def tools_list(json_, python_tools):
         for toolbox in toolbox_objects:
             click.echo(toolbox.name + ":\n")
             for method in toolbox.introspect_methods():
-                sig = str(inspect.signature(method["implementation"])).replace(
-                    "(self, ", "("
+                sig = (
+                    str(inspect.signature(method["implementation"]))
+                    .replace("(self, ", "(")
+                    .replace("(self)", "()")
                 )
                 click.echo(
                     "  {}{}\n".format(

@@ -4,6 +4,7 @@ import importlib
 import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
+import pathlib
 import textwrap
 
 
@@ -500,6 +501,13 @@ def test_register_toolbox(tmpdir, logs_db):
             "Return a list of keys"
             return list(self._get_memory().keys())
 
+    class Filesystem(llm.Toolbox):
+        def __init__(self, path: str):
+            self.path = path
+
+        def list_files(self):
+            return [str(item) for item in pathlib.Path(self.path).glob("*")]
+
     # Test the Python API
     model = llm.get_model("echo")
     memory = Memory()
@@ -534,7 +542,29 @@ def test_register_toolbox(tmpdir, logs_db):
     ]
     assert memory._memory == {"hello": "world"}
 
-    # Now register it as a plugin and use it through the CLI
+    # And for the Filesystem with state
+    my_dir = pathlib.Path(tmpdir / "mine")
+    my_dir.mkdir()
+    (my_dir / "doc.txt").write_text("hi", "utf-8")
+    conversation = model.conversation(tools=[Filesystem(my_dir)])
+    accumulated.clear()
+    conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {
+                        "name": "Filesystem_list_files",
+                    }
+                ]
+            }
+        ),
+        after_call=after_call,
+    ).text()
+    assert accumulated == [
+        ("Filesystem_list_files", {}, json.dumps([str(my_dir / "doc.txt")]))
+    ]
+
+    # Now register them with a plugin and use it through the CLI
 
     class ToolboxPlugin:
         __name__ = "ToolboxPlugin"
@@ -542,6 +572,7 @@ def test_register_toolbox(tmpdir, logs_db):
         @hookimpl
         def register_tools(self, register):
             register(Memory)
+            register(Filesystem)
 
     try:
         plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
@@ -597,9 +628,20 @@ def test_register_toolbox(tmpdir, logs_db):
                             },
                         },
                     ],
-                }
+                },
+                {
+                    "name": "Filesystem",
+                    "tools": [
+                        {
+                            "name": "list_files",
+                            "description": None,
+                            "arguments": {"properties": {}, "type": "object"},
+                        }
+                    ],
+                },
             ],
         }
+
         # llm tools (no JSON)
         result = runner.invoke(cli.cli, ["tools"])
         assert result.exit_code == 0
@@ -609,10 +651,12 @@ def test_register_toolbox(tmpdir, logs_db):
             "    Append something as a key\n\n"
             "  get(key: str)\n\n"
             "    Get something from a key\n\n"
-            "  keys(self)\n\n"
+            "  keys()\n\n"
             "    Return a list of keys\n\n"
             "  set(key: str, value: str)\n\n"
             "    Set something as a key\n\n"
+            "Filesystem:\n\n"
+            "  list_files()\n\n"
         )
 
         # Test the CLI running a toolbox prompt
