@@ -275,6 +275,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Attachments for multi-modal models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#attachments-for-multi-modal-models)
     * [Tracking token usage](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tracking-token-usage)
   * [Utility functions for plugins](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html)
+    * [llm.get_key()](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html#llm-get-key)
     * [llm.user_dir()](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html#llm-user-dir)
     * [llm.ModelError](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html#llm-modelerror)
     * [Response.fake()](https://llm.datasette.io/en/stable/plugins/plugin-utilities.html#response-fake)

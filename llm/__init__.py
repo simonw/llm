@@ -333,15 +333,28 @@ def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
 
 
 def get_key(
-    explicit_key: Optional[str], key_alias: str, env_var: Optional[str] = None
+    explicit_key: Optional[str] = None,
+    key_alias: Optional[str] = None,
+    env_var: Optional[str] = None,
+    *,
+    alias: Optional[str] = None,
+    env: Optional[str] = None,
+    input: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Return an API key based on a hierarchy of potential sources.
+    Return an API key based on a hierarchy of potential sources. You should use the keyword arguments,
+    the positional arguments are here purely for backwards-compatibility with older code.
 
-    :param provided_key: A key provided by the user. This may be the key, or an alias of a key in keys.json.
-    :param key_alias: The alias used to retrieve the key from the keys.json file.
-    :param env_var: Name of the environment variable to check for the key.
+    :param input: Input provided by the user. This may be the key, or an alias of a key in keys.json.
+    :param alias: The alias used to retrieve the key from the keys.json file.
+    :param env: Name of the environment variable to check for the key as a final fallback.
     """
+    if alias:
+        key_alias = alias
+    if env:
+        env_var = env
+    if input:
+        explicit_key = input
     stored_keys = load_keys()
     # If user specified an alias, use the key stored for that alias
     if explicit_key in stored_keys:

@@ -1,3 +1,4 @@
+import json
 import pytest
 from llm.utils import (
     extract_fenced_code_block,
@@ -7,6 +8,7 @@ from llm.utils import (
     simplify_usage_dict,
     truncate_string,
 )
+from llm import get_key
 
 
 @pytest.mark.parametrize(
@@ -444,3 +446,17 @@ def test_instantiate_valid(spec, expected_cls, expected_attrs):
 def test_instantiate_invalid(spec):
     with pytest.raises(ValueError):
         instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+
+
+def test_get_key(user_path, monkeypatch):
+    monkeypatch.setenv("ENV", "from-env")
+    (user_path / "keys.json").write_text(json.dumps({"testkey": "TEST"}), "utf-8")
+    assert get_key(alias="testkey") == "TEST"
+    assert get_key(input="testkey") == "TEST"
+    assert get_key(alias="missing", env="ENV") == "from-env"
+    assert get_key(alias="missing") is None
+    # found key should over-ride env
+    assert get_key(input="testkey", env="ENV") == "TEST"
+    # explicit key should over-ride alias
+    assert get_key(input="explicit", alias="testkey") == "explicit"
+    assert get_key(input="explicit", alias="testkey", env="ENV") == "explicit"
