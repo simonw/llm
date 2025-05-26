@@ -540,7 +540,7 @@ def test_register_toolbox(tmpdir, logs_db):
     try:
         plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
         tools = llm.get_tools()
-        # TODO: assert Memory is the list
+        assert tools["Memory"] is Memory
 
         # Test the CLI command
         runner = CliRunner()
