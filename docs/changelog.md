@@ -1,5 +1,46 @@
 # Changelog
 
+(v0_26_a1)=
+## 0.26a1 (2025-05-25)
+
+Hopefully the last alpha before a stable release that includes tool support.
+
+### Features
+
+*   **Plugin-provided tools can now be grouped into "Toolboxes".**
+    *   Toolboxes (`llm.Toolbox` classes) allow plugins to expose multiple related tools that share state or configuration, enhancing modularity and reusability (e.g., a `Memory` tool or `Filesystem` tool). ([#1059](https://github.com/simonw/llm/issues/1059), [#1086](https://github.com/simonw/llm/issues/1086))
+*   **Tool support for `llm chat`.**
+    *   The `llm chat` command now accepts `--tool` and `--functions` arguments, allowing interactive chat sessions to use tools. ([#1004](https://github.com/simonw/llm/issues/1004), [#1062](https://github.com/simonw/llm/issues/1062))
+*   **Tools can now execute asynchronously.**
+    *   Models that implement `AsyncModel` can now run tools, including tool functions defined as `async def`. This enables non-blocking tool calls for potentially long-running operations. ([#1063](https://github.com/simonw/llm/issues/1063))
+*   **`llm chat` now supports adding fragments during a session.**
+    *   Use the new `!fragment <id>` command while chatting to insert content from a fragment. Initial fragments can also be passed to `llm chat` using `-f` or `--sf`. Thanks, [Dan Turkel](https://github.com/daturkel). ([#1044](https://github.com/simonw/llm/issues/1044), [#1048](https://github.com/simonw/llm/issues/1048))
+*   **Filter `llm logs` by tools.**
+    *   New `--tool <name>` option to filter logs to show only responses that involved a specific tool (e.g., `--tool simple_eval`).
+    *   The `--tools` flag shows all responses that used any tool. ([#1013](https://github.com/simonw/llm/issues/1013), [#1072](https://github.com/simonw/llm/issues/1072))
+*   **`llm schemas list` can output JSON.**
+    *   Added `--json` and `--nl` (newline-delimited JSON) options to `llm schemas list` for programmatic access to saved schema definitions. ([#1070](https://github.com/simonw/llm/issues/1070))
+*   **Filter `llm similar` results by ID prefix.**
+    *   The new `--prefix` option for `llm similar` allows searching for similar items only within IDs that start with a specified string (e.g., `llm similar my-collection --prefix 'docs/'`). Thanks, [Dan Turkel](https://github.com/daturkel). ([#1052](https://github.com/simonw/llm/issues/1052))
+*   **Control chained tool execution limit.**
+    *   New `--chain-limit <N>` (or `--cl`) option for `llm prompt` and `llm chat` to specify the maximum number of consecutive tool calls allowed for a single prompt. Defaults to 5; set to 0 for unlimited. ([#1025](https://github.com/simonw/llm/issues/1025))
+*   **`llm plugins --hook <NAME>` option.**
+    *   Filter the list of installed plugins to only show those that implement a specific plugin hook. ([#1047](https://github.com/simonw/llm/issues/1047))
+* `llm tools list` now shows toolboxes and their methods. ([#1013](https://github.com/simonw/llm/issues/1013))
+* `llm prompt` and `llm chat` now automatically re-enable plugin-provided tools when continuing a conversation (`-c` or `--cid`). ([#1020](https://github.com/simonw/llm/issues/1020))
+* The `--tools-debug` option now pretty-prints JSON tool results for improved readability. ([#1083](https://github.com/simonw/llm/issues/1083))
+* New `LLM_TOOLS_DEBUG` environment variable to permanently enable `--tools-debug`. ([#1045](https://github.com/simonw/llm/issues/1045))
+* `llm chat` sessions now correctly respect default model options configured with `llm models set-options`. Thanks, [André Arko](https://github.com/indirect). ([#985](https://github.com/simonw/llm/issues/985))
+* New `--pre` option for `llm install` to allow installing pre-release packages. ([#1060](https://github.com/simonw/llm/issues/1060))
+* OpenAI models (`gpt-4o`, `gpt-4o-mini`) now explicitly declare support for tools and vision. ([#1037](https://github.com/simonw/llm/issues/1037))
+* The `supports_tools` parameter is now supported in `extra-openai-models.yaml`. Thanks, [Mahesh Hegde ](https://github.com/mahesh-hegde). ([#1068](https://github.com/simonw/llm/issues/1068))
+
+### Bug fixes
+
+*   Fixed a bug where the `name` parameter in `register(function, name="name")` was ignored for tool plugins. ([#1032](https://github.com/simonw/llm/issues/1032))
+*   Ensure `pathlib.Path` objects are cast to `str` before passing to `click.edit` in `llm templates edit`. Thanks, [Abizer Lokhandwala](https://github.com/abizer). ([#1031](https://github.com/simonw/llm/issues/1031))
+
+
 (v0_26_a0)=
 ## 0.26a0 (2025-05-13)
 
