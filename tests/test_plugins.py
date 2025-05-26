@@ -505,7 +505,8 @@ def test_register_toolbox(tmpdir, logs_db):
         def __init__(self, path: str):
             self.path = path
 
-        def list_files(self):
+        async def list_files(self):
+            # async here just to confirm that works
             return [str(item) for item in pathlib.Path(self.path).glob("*")]
 
     # Test the Python API
