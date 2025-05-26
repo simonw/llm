@@ -138,6 +138,17 @@ Adding {ref}`tools support <tools>` involves several steps:
 
 This [commit to llm-gemini](https://github.com/simonw/llm-gemini/commit/a7f1096cfbb733018eb41c29028a8cc6160be298) implementing tools helps demonstrate what this looks like for a real plugin.
 
+Here are the relevant dataclasses:
+
+```{eval-rst}
+.. autoclass:: llm.Tool
+
+.. autoclass:: llm.ToolCall
+
+.. autoclass:: llm.ToolResult
+```
+
+
 (advanced-model-plugins-attachments)=
 
 ## Attachments for multi-modal models
