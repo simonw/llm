@@ -180,7 +180,23 @@ class Tool:
         )
 
 
-ToolDef = Union[Tool, Callable[..., Any]]
+class Toolbox:
+    name: Optional[str] = None
+
+    def _method_tools(self):
+        "Returns a list of llm.Tool() for each method"
+        # Loop through the methods on this class that do not start with _
+        for method_name in dir(self):
+            if not method_name.startswith("_"):
+                method = getattr(self, method_name)
+                if callable(method) and inspect.ismethod(method):
+                    yield Tool.function(
+                        method,
+                        name="{}_{}".format(self.__class__.__name__, method_name),
+                    )
+
+
+ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
 
 
 @dataclass
@@ -263,6 +279,8 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     for tool in tools:
         if isinstance(tool, Tool):
             wrapped_tools.append(tool)
+        elif isinstance(tool, Toolbox):
+            wrapped_tools.extend(tool._method_tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:

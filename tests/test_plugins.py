@@ -333,6 +333,7 @@ def test_register_tools(tmpdir, logs_db):
                     {"tool_calls": [{"name": "upper", "arguments": {"text": "hi"}}]}
                 ),
             ],
+            catch_exceptions=False,
         )
         assert result4.exit_code == 0
         assert '"output": "HI"' in result4.output

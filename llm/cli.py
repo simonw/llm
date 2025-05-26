@@ -17,6 +17,7 @@ from llm import (
     Response,
     Template,
     Tool,
+    Toolbox,
     UnknownModelError,
     KeyModel,
     encode,
@@ -48,6 +49,7 @@ from .utils import (
     extract_fenced_code_block,
     find_unused_key,
     has_plugin_prefix,
+    instantiate_from_spec,
     make_schema_id,
     maybe_fenced_code,
     mimetype_from_path,
@@ -73,7 +75,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Any
+from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Type, Any
 import warnings
 import yaml
 
@@ -802,16 +804,16 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
-    tool_functions = _gather_tools(tools, python_tools)
+    tool_implementations = _gather_tools(tools, python_tools)
 
-    if tool_functions:
+    if tool_implementations:
         prompt_method = conversation.chain
         kwargs["chain_limit"] = chain_limit
         if tools_debug:
             kwargs["after_call"] = _debug_tool_call
         if tools_approve:
             kwargs["before_call"] = _approve_tool_call
-        kwargs["tools"] = tool_functions
+        kwargs["tools"] = tool_implementations
 
     try:
         if async_:
@@ -3844,21 +3846,34 @@ def _approve_tool_call(_, tool_call):
         raise CancelToolCall("User cancelled tool call")
 
 
-def _gather_tools(tools, python_tools):
-    tool_functions = []
+def _gather_tools(tool_specs: List[str], python_tools: List[str]):
+    tools: List[Union[Tool, Type[Toolbox]]] = []
     if python_tools:
         for code_or_path in python_tools:
-            tool_functions = _tools_from_code(code_or_path)
+            tools.extend(_tools_from_code(code_or_path))
     registered_tools = get_tools()
-    bad_tools = [tool for tool in tools if tool not in registered_tools]
+    registered_classes = dict(
+        (key, value)
+        for key, value in registered_tools.items()
+        if inspect.isclass(value)
+    )
+    bad_tools = [
+        tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
+    ]
     if bad_tools:
         raise click.ClickException(
             "Tool(s) {} not found. Available tools: {}".format(
                 ", ".join(bad_tools), ", ".join(registered_tools.keys())
             )
         )
-    tool_functions.extend(registered_tools[tool] for tool in tools)
-    return tool_functions
+    for tool_spec in tool_specs:
+        if not tool_spec[0].isupper():
+            # It's a function
+            tools.append(registered_tools[tool_spec])
+        else:
+            # It's a class
+            tools.append(instantiate_from_spec(registered_classes, tool_spec))
+    return tools
 
 
 def _get_conversation_tools(conversation, tools):
