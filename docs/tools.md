@@ -19,10 +19,11 @@ A tool is effectively a function that the model can request to be executed. Here
 LLM comes with a default tool installed, called `llm_version`. You can try that out like this:
 
 ```bash
-llm -T llm_version "What version of LLM is this?" --td
+llm --tool llm_version "What version of LLM is this?" --td
 ```
-The output should look like this:
+You can also use `-T llm_version` as a shortcut for `--tool llm_version`.
 
+The output should look like this:
 ```
 Tool call: llm_version({})
   0.26a0
