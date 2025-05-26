@@ -377,7 +377,6 @@ class Conversation(_BaseConversation):
         chain_limit: Optional[int] = None,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
-        details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "ChainResponse":
@@ -399,7 +398,6 @@ class Conversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            details=details,
             before_call=before_call,
             after_call=after_call,
             chain_limit=chain_limit,
@@ -442,7 +440,6 @@ class AsyncConversation(_BaseConversation):
         after_call: Optional[
             Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
         ] = None,
-        details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
@@ -464,7 +461,6 @@ class AsyncConversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            details=details,
             before_call=before_call,
             after_call=after_call,
             chain_limit=chain_limit,
@@ -1314,7 +1310,6 @@ class _BaseChainResponse:
         stream: bool,
         conversation: _BaseConversation,
         key: Optional[str] = None,
-        details: bool = False,
         chain_limit: Optional[int] = 10,
         before_call: Optional[
             Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
@@ -1327,7 +1322,6 @@ class _BaseChainResponse:
         self.model = model
         self.stream = stream
         self._key = key
-        self._details = details
         self._responses: List[Any] = []
         self.conversation = conversation
         self.chain_limit = chain_limit
@@ -1579,7 +1573,6 @@ class _Model(_BaseModel):
         tool_results: Optional[List[ToolResult]] = None,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
-        details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> ChainResponse:
@@ -1595,7 +1588,6 @@ class _Model(_BaseModel):
             tool_results=tool_results,
             before_call=before_call,
             after_call=after_call,
-            details=details,
             key=key,
             options=options,
         )
@@ -1682,7 +1674,6 @@ class _AsyncModel(_BaseModel):
         after_call: Optional[
             Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
         ] = None,
-        details: bool = False,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> AsyncChainResponse:
@@ -1698,7 +1689,6 @@ class _AsyncModel(_BaseModel):
             tool_results=tool_results,
             before_call=before_call,
             after_call=after_call,
-            details=details,
             key=key,
             options=options,
         )
