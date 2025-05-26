@@ -468,6 +468,115 @@ def test_register_tools(tmpdir, logs_db):
         assert llm.get_tools() == {}
 
 
+def test_register_toolbox(tmpdir, logs_db):
+    class Memory(llm.Toolbox):
+        _memory = None
+
+        def _get_memory(self):
+            if self._memory is None:
+                self._memory = {}
+            return self._memory
+
+        def set(self, key: str, value: str):
+            "Set something as a key"
+            self._get_memory()[key] = value
+
+        def get(self, key: str):
+            "Get something from a key"
+            return self._get_memory().get(key) or ""
+
+        def append(self, key: str, value: str):
+            "Append something as a key"
+            memory = self._get_memory()
+            memory[key] = (memory.get(key) or "") + "\n" + value
+
+        def keys(self):
+            "Return a list of keys"
+            return list(self._get_memory().keys())
+
+    # Test the Python API
+    model = llm.get_model("echo")
+    memory = Memory()
+    conversation = model.conversation(tools=[memory])
+    accumulated = []
+
+    def after_call(tool, tool_call, tool_result):
+        accumulated.append((tool.name, tool_call.arguments, tool_result.output))
+
+    conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {
+                        "name": "Memory_set",
+                        "arguments": {"key": "hello", "value": "world"},
+                    }
+                ]
+            }
+        ),
+        after_call=after_call,
+    ).text()
+    conversation.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "Memory_get", "arguments": {"key": "hello"}}]}
+        ),
+        after_call=after_call,
+    ).text()
+    assert accumulated == [
+        ("Memory_set", {"key": "hello", "value": "world"}, "null"),
+        ("Memory_get", {"key": "hello"}, "world"),
+    ]
+    assert memory._memory == {"hello": "world"}
+
+    # Now register it as a plugin and use it through the CLI
+
+    class ToolboxPlugin:
+        __name__ = "ToolboxPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            register(Memory)
+
+    try:
+        plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
+        tools = llm.get_tools()
+        # TODO: assert Memory is the list
+
+        # Test the CLI command
+        runner = CliRunner()
+        result = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-T",
+                "Memory",
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {
+                                "name": "Memory_set",
+                                "arguments": {"key": "hi", "value": "two"},
+                            },
+                            {"name": "Memory_get", "arguments": {"key": "hi"}},
+                        ]
+                    }
+                ),
+                "-m",
+                "echo",
+            ],
+        )
+        assert result.exit_code == 0
+        tool_results = json.loads(
+            "[" + result.output.split('"tool_results": [')[1].split("]")[0] + "]"
+        )
+        assert tool_results == [
+            {"name": "Memory_set", "output": "null", "tool_call_id": None},
+            {"name": "Memory_get", "output": "two", "tool_call_id": None},
+        ]
+    finally:
+        plugins.pm.unregister(name="ToolboxPlugin")
+
+
 def test_plugins_command():
     runner = CliRunner()
     result = runner.invoke(cli.cli, ["plugins"])
