@@ -45,63 +45,6 @@ If you have set a `OPENAI_API_KEY` environment variable you can omit the `model.
 
 Calling `llm.get_model()` with an invalid model ID will raise a `llm.UnknownModelError` exception.
 
-(python-api-tools)=
-
-### Tools
-
-{ref}`Tools <tools>` are functions that can be executed by the model as part of a chain of responses.
-
-You can define tools in Python code - with a docstring to describe what they do - and then pass them to the `model.prompt()` method using the `tools=` keyword argument. If the model decides to request a tool call the `response.tool_calls()` method show what the model wants to execute:
-
-```python
-import llm
-
-def upper(text: str) -> str:
-    """Convert text to uppercase."""
-    return text.upper()
-
-model = llm.get_model("gpt-4.1-mini")
-response = model.prompt("Convert panda to upper", tools=[upper])
-tool_calls = response.tool_calls()
-# [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
-```
-You can call `response.execute_tool_calls()` to execute those calls and get back the results:
-```python
-tool_results = response.execute_tool_calls()
-# [ToolResult(name='upper', output='PANDA', tool_call_id='...')]
-```
-To pass the results of the tool calls back to the model you need to use a utility method called `model.chain()`:
-```python
-chain_response = model.chain(
-    "Convert panda to upper",
-    tools=[upper],
-)
-print(chain_response.text())
-# The word "panda" converted to uppercase is "PANDA".
-```
-You can also loop through the `model.chain()` response to get a stream of tokens, like this:
-```python
-for chunk in model.chain(
-    "Convert panda to upper",
-    tools=[upper],
-):
-    print(chunk, end="", flush=True)
-```
-This will stream each of the chain of responses in turn as they are generated.
-
-You can access the individual responses that make up the chain using `chain.responses()`. This can be iterated over as the chain executes like this:
-
-```python
-chain = model.chain(
-    "Convert panda to upper",
-    tools=[upper],
-)
-for response in chain.responses():
-    print(response.prompt)
-    for chunk in response:
-        print(chunk, end="", flush=True)
-```
-
 (python-api-system-prompts)=
 
 ### System prompts
@@ -147,6 +90,123 @@ if "image/jpeg" in model.attachment_types:
     # Use a JPEG attachment here
     ...
 ```
+
+(python-api-tools)=
+
+### Tools
+
+{ref}`Tools <tools>` are functions that can be executed by the model as part of a chain of responses.
+
+You can define tools in Python code - with a docstring to describe what they do - and then pass them to the `model.prompt()` method using the `tools=` keyword argument. If the model decides to request a tool call the `response.tool_calls()` method show what the model wants to execute:
+
+```python
+import llm
+
+def upper(text: str) -> str:
+    """Convert text to uppercase."""
+    return text.upper()
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.prompt("Convert panda to upper", tools=[upper])
+tool_calls = response.tool_calls()
+# [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
+```
+You can call `response.execute_tool_calls()` to execute those calls and get back the results:
+```python
+tool_results = response.execute_tool_calls()
+# [ToolResult(name='upper', output='PANDA', tool_call_id='...')]
+```
+You can use the `model.chain()` to pass the results of tool calls back to the model automatically as subsequent prompts:
+```python
+chain_response = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+print(chain_response.text())
+# The word "panda" converted to uppercase is "PANDA".
+```
+You can also loop through the `model.chain()` response to get a stream of tokens, like this:
+```python
+for chunk in model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+):
+    print(chunk, end="", flush=True)
+```
+This will stream each of the chain of responses in turn as they are generated.
+
+You can access the individual responses that make up the chain using `chain.responses()`. This can be iterated over as the chain executes like this:
+
+```python
+chain = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+for response in chain.responses():
+    print(response.prompt)
+    for chunk in response:
+        print(chunk, end="", flush=True)
+```
+
+(python-api-toolbox)=
+
+#### Toolbox classes
+
+Functions are useful for simple tools, but some tools may have more advanced needs. You can also define tools as a class (known as a "toolbox"), which provides the following advantages:
+
+- Toolbox tools can bundle multiple tools together
+- Toolbox tools can be configured, e.g. to give filesystem tools access to a specific directory
+- Toolbox instances can persist shared state in between tool invocations
+
+Toolboxes are classes that extend `llm.Toolbox`. Any methods that do not begin with an underscore will be exposed as tool functions.
+
+This example sets up key/value memory storage that can be used by the model:
+```python
+import llm
+
+class Memory(llm.Toolbox):
+    _memory = None
+
+    def _get_memory(self):
+        if self._memory is None:
+            self._memory = {}
+        return self._memory
+
+    def set(self, key: str, value: str):
+        "Set something as a key"
+        self._get_memory()[key] = value
+
+    def get(self, key: str):
+        "Get something from a key"
+        return self._get_memory().get(key) or ""
+
+    def append(self, key: str, value: str):
+        "Append something as a key"
+        memory = self._get_memory()
+        memory[key] = (memory.get(key) or "") + "\n" + value
+
+    def keys(self):
+        "Return a list of keys"
+        return list(self._get_memory().keys())
+```
+You can then use that from Python like this:
+```python
+model = llm.get_model("gpt-4.1-mini")
+memory = Memory()
+
+conversation = model.conversation(tools=[memory])
+print(conversation.chain("Set name to Simon", after_call=print).text())
+
+print(memory._memory)
+# Should show {'name': 'Simon'}
+
+print(conversation.chain("Set name to Penguin", after_call=print).text())
+# Now it should be {'name': 'Penguin'}
+
+print(conversation.chain("Print current name", after_call=print).text())
+```
+
+See the {ref}`register_tools() plugin hook documentation <plugin-hooks-register-tools>` for an example of this tool in action as a CLI plugin.
 
 (python-api-schemas)=
 
@@ -396,6 +456,7 @@ chain_response = model.chain(
 )
 print(chain_response.text())
 ```
+This also works for `async def` methods of `llm.Toolbox` subclasses.
 
 ### Tool use for async models
 

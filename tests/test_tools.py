@@ -173,6 +173,21 @@ async def test_async_tools_run_tools_in_parallel():
     assert delta_ns < (100_000_000 * 0.2)
 
 
+@pytest.mark.asyncio
+async def test_async_toolbox():
+    class Tools(llm.Toolbox):
+        async def go(self):
+            return "This was async"
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "Tools_go"}]}),
+        tools=[Tools()],
+    )
+    output = await chain_response.text()
+    assert '"output": "This was async"' in output
+
+
 @pytest.mark.vcr
 def test_conversation_with_tools(vcr):
     import llm

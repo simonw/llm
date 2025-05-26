@@ -87,42 +87,15 @@ def register_tools(register):
     register(count_char, name="count_character_in_word")
 ```
 
-Functions are useful for simple tools, but some tools may have more advanced needs. You can also define tools as a class (known as a "toolbox"), which provides the following advantages:
+Tools can also be implemented as classes, as described in {ref}`Toolbox classes <python-api-toolbox>` in the Python API documentation.
 
-- Toolbox tools can bundle multiple tools together
-- Toolbox tools can be configured, e.g. to give filesystem tools access to a specific directory
-- Toolbox instances can persist shared state in between tool invocations
+You can register classes like the `Memory` example from there by passing the class (_not_ an instance of the class) to `register()`:
 
-Toolboxes are classes that extend `llm.Toolbox`. Any methods that do not begin with an underscore will be exposed as tool functions.
-
-This example sets up key/value memory storage that can be used by the model:
 ```python
 import llm
 
 class Memory(llm.Toolbox):
-    _memory = None
-
-    def _get_memory(self):
-        if self._memory is None:
-            self._memory = {}
-        return self._memory
-
-    def set(self, key: str, value: str):
-        "Set something as a key"
-        self._get_memory()[key] = value
-
-    def get(self, key: str):
-        "Get something from a key"
-        return self._get_memory().get(key) or ""
-
-    def append(self, key: str, value: str):
-        "Append something as a key"
-        memory = self._get_memory()
-        memory[key] = (memory.get(key) or "") + "\n" + value
-
-    def keys(self):
-        "Return a list of keys"
-        return list(self._get_memory().keys())
+    ...
 
 @llm.hookimpl
 def register_tools(register):
