@@ -689,6 +689,35 @@ def test_register_toolbox(tmpdir, logs_db):
             {"name": "Memory_set", "output": "null", "tool_call_id": None},
             {"name": "Memory_get", "output": "two", "tool_call_id": None},
         ]
+
+        # Test the CLI running a configured toolbox prompt
+        my_dir2 = pathlib.Path(tmpdir / "mine2")
+        my_dir2.mkdir()
+        other_path = my_dir2 / "other.txt"
+        other_path.write_text("hi", "utf-8")
+        result4 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-T",
+                'Filesystem("{}")'.format(my_dir2),
+                json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
+                "-m",
+                "echo",
+            ],
+        )
+        assert result4.exit_code == 0
+        tool_results = json.loads(
+            "[" + result4.output.split('"tool_results": [')[1].rsplit("]", 1)[0] + "]"
+        )
+        assert tool_results == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(other_path)]),
+                "tool_call_id": None,
+            }
+        ]
+
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
 
