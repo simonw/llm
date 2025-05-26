@@ -183,6 +183,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Extra HTTP headers](https://llm.datasette.io/en/stable/other-models.html#extra-http-headers)
 * [Tools](https://llm.datasette.io/en/stable/tools.html)
   * [How tools work](https://llm.datasette.io/en/stable/tools.html#how-tools-work)
+  * [Trying out tools](https://llm.datasette.io/en/stable/tools.html#trying-out-tools)
   * [LLM’s implementation of tools](https://llm.datasette.io/en/stable/tools.html#llm-s-implementation-of-tools)
   * [Tips for implementing tools](https://llm.datasette.io/en/stable/tools.html#tips-for-implementing-tools)
 * [Schemas](https://llm.datasette.io/en/stable/schemas.html)

@@ -14,6 +14,23 @@ A tool is effectively a function that the model can request to be executed. Here
 4. LLM prompts the model a second time, this time including the output of the tool execution.
 5. The model can then use that output to generate its next response.
 
+## Trying out tools
+
+LLM comes with a default tool installed, called `llm_version`. You can try that out like this:
+
+```bash
+llm -T llm_version "What version of LLM is this?" --td
+```
+The output should look like this:
+
+```
+Tool call: llm_version({})
+  0.26a0
+
+The installed version of the LLM is 0.26a0.
+```
+Further tools can be installed using plugins, or you can use the `llm --functions` option to pass tools implemented as PYthon functions directly, as {ref}`described here <usage-tools>`.
+
 ## LLM's implementation of tools
 
 In LLM every tool is a defined as a Python function. The function can take any number of arguments and can return a string or an object that can be converted to a string.
@@ -31,3 +48,4 @@ Consult the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>` do
 If your plugin needs access to API secrets I recommend storing those using `llm keys set api-name` and then reading them using the {ref}`plugin-utilities-get-key` utility function. This avoids secrets being logged to the database as part of tool calls.
 
 <!-- Uncomment when this is true: The [llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) plugin is a good example of this pattern in action. -->
+

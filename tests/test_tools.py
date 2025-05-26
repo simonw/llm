@@ -1,6 +1,9 @@
 import asyncio
+from click.testing import CliRunner
+from importlib.metadata import version
 import json
 import llm
+from llm import cli
 from llm.migrations import migrate
 import os
 import pytest
@@ -217,3 +220,19 @@ def test_conversation_with_tools(vcr):
         )
     ).text()
     assert "841881498" in output2
+
+
+def test_default_tool_llm_version():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"output": "{}"'.format(version("llm")) in result.output
