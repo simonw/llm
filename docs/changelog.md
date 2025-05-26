@@ -8,11 +8,11 @@ Hopefully the last alpha before a stable release that includes tool support.
 ### Features
 
 *   **Plugin-provided tools can now be grouped into "Toolboxes".**
-    *   Toolboxes (`llm.Toolbox` classes) allow plugins to expose multiple related tools that share state or configuration, enhancing modularity and reusability (e.g., a `Memory` tool or `Filesystem` tool). ([#1059](https://github.com/simonw/llm/issues/1059), [#1086](https://github.com/simonw/llm/issues/1086))
+    *   Toolboxes (`llm.Toolbox` classes) allow plugins to expose multiple related tools that share state or configuration (e.g., a `Memory` tool or `Filesystem` tool). ([#1059](https://github.com/simonw/llm/issues/1059), [#1086](https://github.com/simonw/llm/issues/1086))
 *   **Tool support for `llm chat`.**
     *   The `llm chat` command now accepts `--tool` and `--functions` arguments, allowing interactive chat sessions to use tools. ([#1004](https://github.com/simonw/llm/issues/1004), [#1062](https://github.com/simonw/llm/issues/1062))
 *   **Tools can now execute asynchronously.**
-    *   Models that implement `AsyncModel` can now run tools, including tool functions defined as `async def`. This enables non-blocking tool calls for potentially long-running operations. ([#1063](https://github.com/simonw/llm/issues/1063))
+    *   Models that implement `AsyncModel` can now run tools, including tool functions defined as `async def`. ([#1063](https://github.com/simonw/llm/issues/1063))
 *   **`llm chat` now supports adding fragments during a session.**
     *   Use the new `!fragment <id>` command while chatting to insert content from a fragment. Initial fragments can also be passed to `llm chat` using `-f` or `--sf`. Thanks, [Dan Turkel](https://github.com/daturkel). ([#1044](https://github.com/simonw/llm/issues/1044), [#1048](https://github.com/simonw/llm/issues/1048))
 *   **Filter `llm logs` by tools.**
