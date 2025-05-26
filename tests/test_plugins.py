@@ -700,7 +700,7 @@ def test_register_toolbox(tmpdir, logs_db):
             [
                 "prompt",
                 "-T",
-                'Filesystem("{}")'.format(my_dir2),
+                "Filesystem({})".format(json.dumps(str(my_dir2))),
                 json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
                 "-m",
                 "echo",
