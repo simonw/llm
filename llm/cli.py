@@ -2490,39 +2490,79 @@ def tools():
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
-    tools = get_tools()
+    tools: Dict[str, Union[Tool, Type[Toolbox]]] = get_tools()
     if python_tools:
         for code_or_path in python_tools:
             for tool in _tools_from_code(code_or_path):
                 tools[tool.name] = tool
+
+    output_tools = []
+    output_toolboxes = []
+    tool_objects = []
+    toolbox_objects = []
+    for name, tool in tools.items():
+        if isinstance(tool, Tool):
+            tool_objects.append(tool)
+            output_tools.append(
+                {
+                    "name": name,
+                    "description": tool.description,
+                    "arguments": tool.input_schema,
+                    "plugin": tool.plugin,
+                }
+            )
+        else:
+            toolbox_objects.append(tool)
+            output_toolboxes.append(
+                {
+                    "name": name,
+                    "tools": [
+                        {
+                            "name": method["name"],
+                            "description": method["description"],
+                            "arguments": method["arguments"],
+                        }
+                        for method in tool.introspect_methods()
+                    ],
+                }
+            )
     if json_:
         click.echo(
             json.dumps(
-                {
-                    name: {
-                        "description": tool.description,
-                        "arguments": tool.input_schema,
-                        "plugin": tool.plugin,
-                    }
-                    for name, tool in tools.items()
-                },
+                {"tools": output_tools, "toolboxes": output_toolboxes},
                 indent=2,
             )
         )
     else:
-        for name, tool in tools.items():
+        for tool in tool_objects:
             sig = "()"
             if tool.implementation:
                 sig = str(inspect.signature(tool.implementation))
             click.echo(
-                "{}{}{}".format(
-                    name,
+                "{}{}{}\n".format(
+                    tool.name,
                     sig,
                     " (plugin: {})".format(tool.plugin) if tool.plugin else "",
                 )
             )
             if tool.description:
-                click.echo(textwrap.indent(tool.description, "  "))
+                click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
+        for toolbox in toolbox_objects:
+            click.echo(toolbox.name + ":\n")
+            for method in toolbox.introspect_methods():
+                sig = str(inspect.signature(method["implementation"])).replace(
+                    "(self, ", "("
+                )
+                click.echo(
+                    "  {}{}\n".format(
+                        method["name"],
+                        sig,
+                    )
+                )
+                if method["description"]:
+                    click.echo(
+                        textwrap.indent(method["description"].strip(), "    ") + "\n"
+                    )
 
 
 @cli.group(

@@ -263,46 +263,52 @@ def test_register_tools(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools", "list"])
         assert result.exit_code == 0
         assert result.output == (
-            "upper(text: str) -> str (plugin: ToolsPlugin)\n"
-            "  Convert text to uppercase.\n"
-            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n"
-            "  Count the number of occurrences of a character in a word.\n"
-            "output_as_json(text: str) (plugin: ToolsPlugin)\n"
+            "upper(text: str) -> str (plugin: ToolsPlugin)\n\n"
+            "  Convert text to uppercase.\n\n"
+            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n\n"
+            "  Count the number of occurrences of a character in a word.\n\n"
+            "output_as_json(text: str) (plugin: ToolsPlugin)\n\n"
         )
         # And --json
         result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
         assert result2.exit_code == 0
         assert json.loads(result2.output) == {
-            "upper": {
-                "description": "Convert text to uppercase.",
-                "arguments": {
-                    "properties": {"text": {"type": "string"}},
-                    "required": ["text"],
-                    "type": "object",
-                },
-                "plugin": "ToolsPlugin",
-            },
-            "count_chars": {
-                "description": "Count the number of occurrences of a character in a word.",
-                "arguments": {
-                    "properties": {
-                        "text": {"type": "string"},
-                        "character": {"type": "string"},
+            "tools": [
+                {
+                    "name": "upper",
+                    "description": "Convert text to uppercase.",
+                    "arguments": {
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                        "type": "object",
                     },
-                    "required": ["text", "character"],
-                    "type": "object",
+                    "plugin": "ToolsPlugin",
                 },
-                "plugin": "ToolsPlugin",
-            },
-            "output_as_json": {
-                "description": None,
-                "arguments": {
-                    "properties": {"text": {"type": "string"}},
-                    "required": ["text"],
-                    "type": "object",
+                {
+                    "name": "count_chars",
+                    "description": "Count the number of occurrences of a character in a word.",
+                    "arguments": {
+                        "properties": {
+                            "text": {"type": "string"},
+                            "character": {"type": "string"},
+                        },
+                        "required": ["text", "character"],
+                        "type": "object",
+                    },
+                    "plugin": "ToolsPlugin",
                 },
-                "plugin": "ToolsPlugin",
-            },
+                {
+                    "name": "output_as_json",
+                    "description": None,
+                    "arguments": {
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                        "type": "object",
+                    },
+                    "plugin": "ToolsPlugin",
+                },
+            ],
+            "toolboxes": [],
         }
         # And test the --tools option
         functions_path = str(tmpdir / "functions.py")
@@ -542,9 +548,75 @@ def test_register_toolbox(tmpdir, logs_db):
         tools = llm.get_tools()
         assert tools["Memory"] is Memory
 
-        # Test the CLI command
         runner = CliRunner()
-        result = runner.invoke(
+        # llm tools --json
+        result = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "tools": [],
+            "toolboxes": [
+                {
+                    "name": "Memory",
+                    "tools": [
+                        {
+                            "name": "append",
+                            "description": "Append something as a key",
+                            "arguments": {
+                                "properties": {
+                                    "key": {"type": "string"},
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["key", "value"],
+                                "type": "object",
+                            },
+                        },
+                        {
+                            "name": "get",
+                            "description": "Get something from a key",
+                            "arguments": {
+                                "properties": {"key": {"type": "string"}},
+                                "required": ["key"],
+                                "type": "object",
+                            },
+                        },
+                        {
+                            "name": "keys",
+                            "description": "Return a list of keys",
+                            "arguments": {"properties": {}, "type": "object"},
+                        },
+                        {
+                            "name": "set",
+                            "description": "Set something as a key",
+                            "arguments": {
+                                "properties": {
+                                    "key": {"type": "string"},
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["key", "value"],
+                                "type": "object",
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        # llm tools (no JSON)
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert result.output == (
+            "Memory:\n\n"
+            "  append(key: str, value: str)\n\n"
+            "    Append something as a key\n\n"
+            "  get(key: str)\n\n"
+            "    Get something from a key\n\n"
+            "  keys(self)\n\n"
+            "    Return a list of keys\n\n"
+            "  set(key: str, value: str)\n\n"
+            "    Set something as a key\n\n"
+        )
+
+        # Test the CLI running a toolbox prompt
+        result3 = runner.invoke(
             cli.cli,
             [
                 "prompt",
@@ -565,9 +637,9 @@ def test_register_toolbox(tmpdir, logs_db):
                 "echo",
             ],
         )
-        assert result.exit_code == 0
+        assert result3.exit_code == 0
         tool_results = json.loads(
-            "[" + result.output.split('"tool_results": [')[1].split("]")[0] + "]"
+            "[" + result3.output.split('"tool_results": [')[1].split("]")[0] + "]"
         )
         assert tool_results == [
             {"name": "Memory_set", "output": "null", "tool_call_id": None},

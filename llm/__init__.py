@@ -138,7 +138,7 @@ def get_fragment_loaders() -> Dict[
 
 
 def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
-    """Get tools registered by plugins."""
+    """Return all tools (llm.Tool and llm.Toolbox) registered by plugins."""
     load_plugins()
     tools: Dict[str, Union[Tool, Type[Toolbox]]] = {}
 
