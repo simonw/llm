@@ -118,18 +118,7 @@ class Tool:
 
     def __post_init__(self):
         # Convert Pydantic model to JSON schema if needed
-        self.input_schema = self._ensure_dict_schema(self.input_schema)
-
-    def _ensure_dict_schema(self, schema):
-        """Convert a Pydantic model to a JSON schema dict if needed."""
-        if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
-            schema_dict = schema.model_json_schema()
-            # Strip annoying "title" fields which are just the "name" in title case
-            schema_dict.pop("title", None)
-            for value in schema_dict.get("properties", {}).values():
-                value.pop("title", None)
-            return schema_dict
-        return schema
+        self.input_schema = _ensure_dict_schema(self.input_schema)
 
     def hash(self):
         """Hash for tool based on its name, description and input schema (preserving key order)"""
@@ -151,36 +140,87 @@ class Tool:
          - Building a Pydantic model for inputs by inspecting the function signature
          - Building a Pydantic model for the return value by using the function's return annotation
         """
-        signature = inspect.signature(function)
-        type_hints = get_type_hints(function)
-
         if not name and function.__name__ == "<lambda>":
             raise ValueError(
                 "Cannot create a Tool from a lambda function without providing name="
             )
 
-        fields = {}
-        for param_name, param in signature.parameters.items():
-            # Determine the type annotation (default to string if missing)
-            annotated_type = type_hints.get(param_name, str)
-
-            # Handle default value if present; if there's no default, use '...'
-            if param.default is inspect.Parameter.empty:
-                fields[param_name] = (annotated_type, ...)
-            else:
-                fields[param_name] = (annotated_type, param.default)
-
-        input_schema = create_model(f"{function.__name__}InputSchema", **fields)
-
         return cls(
             name=name or function.__name__,
             description=function.__doc__ or None,
-            input_schema=input_schema,
+            input_schema=_get_arguments_input_schema(function, name),
             implementation=function,
         )
 
 
-ToolDef = Union[Tool, Callable[..., Any]]
+def _get_arguments_input_schema(function, name):
+    signature = inspect.signature(function)
+    type_hints = get_type_hints(function)
+    fields = {}
+    for param_name, param in signature.parameters.items():
+        if param_name == "self":
+            continue
+        # Determine the type annotation (default to string if missing)
+        annotated_type = type_hints.get(param_name, str)
+
+        # Handle default value if present; if there's no default, use '...'
+        if param.default is inspect.Parameter.empty:
+            fields[param_name] = (annotated_type, ...)
+        else:
+            fields[param_name] = (annotated_type, param.default)
+
+    return create_model(f"{name}InputSchema", **fields)
+
+
+class Toolbox:
+    _blocked = ("method_tools", "introspect_methods", "methods")
+    name: Optional[str] = None
+
+    @classmethod
+    def methods(cls):
+        gathered = []
+        for name in dir(cls):
+            if name.startswith("_"):
+                continue
+            if name in cls._blocked:
+                continue
+            method = getattr(cls, name)
+            if callable(method):
+                gathered.append(method)
+        return gathered
+
+    def method_tools(self):
+        "Returns a list of llm.Tool() for each method"
+        for method_name in dir(self):
+            if method_name.startswith("_") or method_name in self._blocked:
+                continue
+            method = getattr(self, method_name)
+            # The attribute must be a bound method, i.e. inspect.ismethod()
+            if callable(method) and inspect.ismethod(method):
+                yield Tool.function(
+                    method,
+                    name="{}_{}".format(self.__class__.__name__, method_name),
+                )
+
+    @classmethod
+    def introspect_methods(cls):
+        methods = []
+        for method in cls.methods():
+            arguments = _get_arguments_input_schema(method, method.__name__)
+            methods.append(
+                {
+                    "name": method.__name__,
+                    "description": (
+                        method.__doc__.strip() if method.__doc__ is not None else None
+                    ),
+                    "arguments": _ensure_dict_schema(arguments),
+                    "implementation": method,
+                }
+            )
+        return methods
+
+
+ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
 
 
 @dataclass
@@ -263,6 +303,8 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     for tool in tools:
         if isinstance(tool, Tool):
             wrapped_tools.append(tool)
+        elif isinstance(tool, Toolbox):
+            wrapped_tools.extend(tool.method_tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:
@@ -1788,3 +1830,27 @@ def _conversation_name(text):
     if len(text) <= CONVERSATION_NAME_LENGTH:
         return text
     return text[: CONVERSATION_NAME_LENGTH - 1] + "…"
+
+
+def _ensure_dict_schema(schema):
+    """Convert a Pydantic model to a JSON schema dict if needed."""
+    if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
+        schema_dict = schema.model_json_schema()
+        _remove_titles_recursively(schema_dict)
+        return schema_dict
+    return schema
+
+
+def _remove_titles_recursively(obj):
+    """Recursively remove all 'title' fields from a nested dictionary."""
+    if isinstance(obj, dict):
+        # Remove title if present
+        obj.pop("title", None)
+
+        # Recursively process all values
+        for value in obj.values():
+            _remove_titles_recursively(value)
+    elif isinstance(obj, list):
+        # Process each item in lists
+        for item in obj:
+            _remove_titles_recursively(item)

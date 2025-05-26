@@ -4,6 +4,7 @@ import importlib
 import json
 import llm
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
+import pathlib
 import textwrap
 
 
@@ -263,46 +264,52 @@ def test_register_tools(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools", "list"])
         assert result.exit_code == 0
         assert result.output == (
-            "upper(text: str) -> str (plugin: ToolsPlugin)\n"
-            "  Convert text to uppercase.\n"
-            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n"
-            "  Count the number of occurrences of a character in a word.\n"
-            "output_as_json(text: str) (plugin: ToolsPlugin)\n"
+            "upper(text: str) -> str (plugin: ToolsPlugin)\n\n"
+            "  Convert text to uppercase.\n\n"
+            "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n\n"
+            "  Count the number of occurrences of a character in a word.\n\n"
+            "output_as_json(text: str) (plugin: ToolsPlugin)\n\n"
         )
         # And --json
         result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
         assert result2.exit_code == 0
         assert json.loads(result2.output) == {
-            "upper": {
-                "description": "Convert text to uppercase.",
-                "arguments": {
-                    "properties": {"text": {"type": "string"}},
-                    "required": ["text"],
-                    "type": "object",
-                },
-                "plugin": "ToolsPlugin",
-            },
-            "count_chars": {
-                "description": "Count the number of occurrences of a character in a word.",
-                "arguments": {
-                    "properties": {
-                        "text": {"type": "string"},
-                        "character": {"type": "string"},
+            "tools": [
+                {
+                    "name": "upper",
+                    "description": "Convert text to uppercase.",
+                    "arguments": {
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                        "type": "object",
                     },
-                    "required": ["text", "character"],
-                    "type": "object",
+                    "plugin": "ToolsPlugin",
                 },
-                "plugin": "ToolsPlugin",
-            },
-            "output_as_json": {
-                "description": None,
-                "arguments": {
-                    "properties": {"text": {"type": "string"}},
-                    "required": ["text"],
-                    "type": "object",
+                {
+                    "name": "count_chars",
+                    "description": "Count the number of occurrences of a character in a word.",
+                    "arguments": {
+                        "properties": {
+                            "text": {"type": "string"},
+                            "character": {"type": "string"},
+                        },
+                        "required": ["text", "character"],
+                        "type": "object",
+                    },
+                    "plugin": "ToolsPlugin",
                 },
-                "plugin": "ToolsPlugin",
-            },
+                {
+                    "name": "output_as_json",
+                    "description": None,
+                    "arguments": {
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                        "type": "object",
+                    },
+                    "plugin": "ToolsPlugin",
+                },
+            ],
+            "toolboxes": [],
         }
         # And test the --tools option
         functions_path = str(tmpdir / "functions.py")
@@ -333,6 +340,7 @@ def test_register_tools(tmpdir, logs_db):
                     {"tool_calls": [{"name": "upper", "arguments": {"text": "hi"}}]}
                 ),
             ],
+            catch_exceptions=False,
         )
         assert result4.exit_code == 0
         assert '"output": "HI"' in result4.output
@@ -465,6 +473,253 @@ def test_register_tools(tmpdir, logs_db):
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
         assert llm.get_tools() == {}
+
+
+def test_register_toolbox(tmpdir, logs_db):
+    class Memory(llm.Toolbox):
+        _memory = None
+
+        def _get_memory(self):
+            if self._memory is None:
+                self._memory = {}
+            return self._memory
+
+        def set(self, key: str, value: str):
+            "Set something as a key"
+            self._get_memory()[key] = value
+
+        def get(self, key: str):
+            "Get something from a key"
+            return self._get_memory().get(key) or ""
+
+        def append(self, key: str, value: str):
+            "Append something as a key"
+            memory = self._get_memory()
+            memory[key] = (memory.get(key) or "") + "\n" + value
+
+        def keys(self):
+            "Return a list of keys"
+            return list(self._get_memory().keys())
+
+    class Filesystem(llm.Toolbox):
+        def __init__(self, path: str):
+            self.path = path
+
+        def list_files(self):
+            return [str(item) for item in pathlib.Path(self.path).glob("*")]
+
+    # Test the Python API
+    model = llm.get_model("echo")
+    memory = Memory()
+    conversation = model.conversation(tools=[memory])
+    accumulated = []
+
+    def after_call(tool, tool_call, tool_result):
+        accumulated.append((tool.name, tool_call.arguments, tool_result.output))
+
+    conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {
+                        "name": "Memory_set",
+                        "arguments": {"key": "hello", "value": "world"},
+                    }
+                ]
+            }
+        ),
+        after_call=after_call,
+    ).text()
+    conversation.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "Memory_get", "arguments": {"key": "hello"}}]}
+        ),
+        after_call=after_call,
+    ).text()
+    assert accumulated == [
+        ("Memory_set", {"key": "hello", "value": "world"}, "null"),
+        ("Memory_get", {"key": "hello"}, "world"),
+    ]
+    assert memory._memory == {"hello": "world"}
+
+    # And for the Filesystem with state
+    my_dir = pathlib.Path(tmpdir / "mine")
+    my_dir.mkdir()
+    (my_dir / "doc.txt").write_text("hi", "utf-8")
+    conversation = model.conversation(tools=[Filesystem(my_dir)])
+    accumulated.clear()
+    conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {
+                        "name": "Filesystem_list_files",
+                    }
+                ]
+            }
+        ),
+        after_call=after_call,
+    ).text()
+    assert accumulated == [
+        ("Filesystem_list_files", {}, json.dumps([str(my_dir / "doc.txt")]))
+    ]
+
+    # Now register them with a plugin and use it through the CLI
+
+    class ToolboxPlugin:
+        __name__ = "ToolboxPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            register(Memory)
+            register(Filesystem)
+
+    try:
+        plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
+        tools = llm.get_tools()
+        assert tools["Memory"] is Memory
+
+        runner = CliRunner()
+        # llm tools --json
+        result = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "tools": [],
+            "toolboxes": [
+                {
+                    "name": "Memory",
+                    "tools": [
+                        {
+                            "name": "append",
+                            "description": "Append something as a key",
+                            "arguments": {
+                                "properties": {
+                                    "key": {"type": "string"},
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["key", "value"],
+                                "type": "object",
+                            },
+                        },
+                        {
+                            "name": "get",
+                            "description": "Get something from a key",
+                            "arguments": {
+                                "properties": {"key": {"type": "string"}},
+                                "required": ["key"],
+                                "type": "object",
+                            },
+                        },
+                        {
+                            "name": "keys",
+                            "description": "Return a list of keys",
+                            "arguments": {"properties": {}, "type": "object"},
+                        },
+                        {
+                            "name": "set",
+                            "description": "Set something as a key",
+                            "arguments": {
+                                "properties": {
+                                    "key": {"type": "string"},
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["key", "value"],
+                                "type": "object",
+                            },
+                        },
+                    ],
+                },
+                {
+                    "name": "Filesystem",
+                    "tools": [
+                        {
+                            "name": "list_files",
+                            "description": None,
+                            "arguments": {"properties": {}, "type": "object"},
+                        }
+                    ],
+                },
+            ],
+        }
+
+        # llm tools (no JSON)
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert result.output == (
+            "Memory:\n\n"
+            "  append(key: str, value: str)\n\n"
+            "    Append something as a key\n\n"
+            "  get(key: str)\n\n"
+            "    Get something from a key\n\n"
+            "  keys()\n\n"
+            "    Return a list of keys\n\n"
+            "  set(key: str, value: str)\n\n"
+            "    Set something as a key\n\n"
+            "Filesystem:\n\n"
+            "  list_files()\n\n"
+        )
+
+        # Test the CLI running a toolbox prompt
+        result3 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-T",
+                "Memory",
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {
+                                "name": "Memory_set",
+                                "arguments": {"key": "hi", "value": "two"},
+                            },
+                            {"name": "Memory_get", "arguments": {"key": "hi"}},
+                        ]
+                    }
+                ),
+                "-m",
+                "echo",
+            ],
+        )
+        assert result3.exit_code == 0
+        tool_results = json.loads(
+            "[" + result3.output.split('"tool_results": [')[1].split("]")[0] + "]"
+        )
+        assert tool_results == [
+            {"name": "Memory_set", "output": "null", "tool_call_id": None},
+            {"name": "Memory_get", "output": "two", "tool_call_id": None},
+        ]
+
+        # Test the CLI running a configured toolbox prompt
+        my_dir2 = pathlib.Path(tmpdir / "mine2")
+        my_dir2.mkdir()
+        other_path = my_dir2 / "other.txt"
+        other_path.write_text("hi", "utf-8")
+        result4 = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-T",
+                "Filesystem({})".format(json.dumps(str(my_dir2))),
+                json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
+                "-m",
+                "echo",
+            ],
+        )
+        assert result4.exit_code == 0
+        tool_results = json.loads(
+            "[" + result4.output.split('"tool_results": [')[1].rsplit("]", 1)[0] + "]"
+        )
+        assert tool_results == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(other_path)]),
+                "tool_call_id": None,
+            }
+        ]
+
+    finally:
+        plugins.pm.unregister(name="ToolboxPlugin")
 
 
 def test_plugins_command():
