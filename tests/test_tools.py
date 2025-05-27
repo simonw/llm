@@ -5,6 +5,7 @@ import json
 import llm
 from llm import cli
 from llm.migrations import migrate
+from llm.tools import llm_time
 import os
 import pytest
 import sqlite_utils
@@ -236,3 +237,30 @@ def test_default_tool_llm_version():
     )
     assert result.exit_code == 0
     assert '"output": "{}"'.format(version("llm")) in result.output
+
+
+def test_default_tool_llm_time():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_time",
+            json.dumps({"tool_calls": [{"name": "llm_time"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "timezone_offset" in result.output
+
+    # Test it by calling it directly
+    info = llm_time()
+    assert set(info.keys()) == {
+        "timezone_offset",
+        "utc_time_iso",
+        "local_time",
+        "local_timezone",
+        "utc_time",
+        "is_dst",
+    }

@@ -74,6 +74,21 @@ The Python API can accept functions directly. The command-line interface has two
 
 You can use tools {ref}`with the LLM command-line tool <usage-tools>` or {ref}`with the Python API <python-api-tools>`.
 
+(tools-default)=
+
+## Default tools
+
+LLM includes some default tools for you to try out:
+
+- `llm_version()` returns the current version of LLM
+- `llm_time()` returns the current local and UTC time
+
+Try them like this:
+
+```bash
+llm -T llm_version -T llm_time 'Give me the current time and LLM version' --td
+```
+
 (tools-tips)=
 
 ## Tips for implementing tools

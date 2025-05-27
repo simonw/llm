@@ -3,7 +3,7 @@ import click
 import importlib
 import json
 import llm
-from llm.default_plugins.default_tools import llm_version
+from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import textwrap
@@ -266,7 +266,15 @@ def test_register_tools(tmpdir, logs_db):
                 implementation=output_as_json,
                 plugin="ToolsPlugin",
             ),
+            "llm_time": llm.Tool(
+                name="llm_time",
+                description="Returns the current time, as local time and UTC",
+                input_schema={"properties": {}, "type": "object"},
+                implementation=llm_time,
+                plugin="llm.default_plugins.default_tools",
+            ),
         }
+
         # Test the CLI command
         runner = CliRunner()
         result = runner.invoke(cli.cli, ["tools", "list"])
@@ -274,6 +282,8 @@ def test_register_tools(tmpdir, logs_db):
         assert result.output == (
             "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n\n"
             "  Count the number of occurrences of a character in a word.\n\n"
+            "llm_time() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "  Returns the current time, as local time and UTC\n\n"
             "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
             "  Return the installed version of llm\n\n"
             "output_as_json(text: str) (plugin: ToolsPlugin)\n\n"
@@ -297,6 +307,15 @@ def test_register_tools(tmpdir, logs_db):
                         "type": "object",
                     },
                     "plugin": "ToolsPlugin",
+                },
+                {
+                    "arguments": {
+                        "properties": {},
+                        "type": "object",
+                    },
+                    "description": "Returns the current time, as local time and UTC",
+                    "name": "llm_time",
+                    "plugin": "llm.default_plugins.default_tools",
                 },
                 {
                     "name": "llm_version",
@@ -601,11 +620,20 @@ def test_register_toolbox(tmpdir, logs_db):
         assert json.loads(result.output) == {
             "tools": [
                 {
+                    "description": "Returns the current time, as local time and UTC",
+                    "name": "llm_time",
+                    "plugin": "llm.default_plugins.default_tools",
+                    "arguments": {
+                        "properties": {},
+                        "type": "object",
+                    },
+                },
+                {
                     "name": "llm_version",
                     "description": "Return the installed version of llm",
                     "arguments": {"properties": {}, "type": "object"},
                     "plugin": "llm.default_plugins.default_tools",
-                }
+                },
             ],
             "toolboxes": [
                 {
@@ -668,6 +696,8 @@ def test_register_toolbox(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools"])
         assert result.exit_code == 0
         assert result.output == (
+            "llm_time() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "  Returns the current time, as local time and UTC\n\n"
             "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
             "  Return the installed version of llm\n\n"
             "Filesystem:\n\n"
