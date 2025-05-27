@@ -264,3 +264,17 @@ def test_default_tool_llm_time():
         "utc_time",
         "is_dst",
     }
+
+
+def test_incorrect_tool_usage():
+    model = llm.get_model("echo")
+
+    def simple(name: str):
+        return name
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "bad_tool"}]}),
+        tools=[simple],
+    )
+    output = chain_response.text()
+    assert 'Error: tool \\"bad_tool\\" does not exist' in output

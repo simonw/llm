@@ -930,10 +930,16 @@ class Response(_BaseResponse):
         for tool_call in self.tool_calls():
             tool = tools_by_name.get(tool_call.name)
             if tool is None:
-                raise CancelToolCall("Unknown tool: {}".format(tool_call.name))
+                tool_results.append(
+                    ToolResult(
+                        name=tool_call.name,
+                        output='Error: tool "{}" does not exist'.format(tool_call.name),
+                        tool_call_id=tool_call.tool_call_id,
+                    )
+                )
+                continue
 
             if before_call:
-                # This may raise CancelToolCall:
                 cb_result = before_call(tool, tool_call)
                 if inspect.isawaitable(cb_result):
                     raise TypeError(
@@ -942,7 +948,7 @@ class Response(_BaseResponse):
                     )
 
             if not tool.implementation:
-                raise CancelToolCall(
+                raise ValueError(
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
 
