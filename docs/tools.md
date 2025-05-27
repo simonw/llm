@@ -4,6 +4,10 @@
 
 Many Large Language Models have been trained to execute tools as part of responding to a prompt. LLM supports tool usage with both the command-line interface and the Python API.
 
+Exposing tools to LLMs **carries risks**! Be sure to read the {ref}`warning below <tools-warning>`.
+
+(tools-how-they-work)=
+
 ## How tools work
 
 A tool is effectively a function that the model can request to be executed. Here's how that works:
@@ -13,6 +17,30 @@ A tool is effectively a function that the model can request to be executed. Here
 3. The code that calls the model - in this case LLM itself - then executes the specified tool with the provided arguments.
 4. LLM prompts the model a second time, this time including the output of the tool execution.
 5. The model can then use that output to generate its next response.
+
+This sequence can run several times in a loop, allowing the LLM to access data, act on that data and then pass that data off to other tools for further processing.
+
+:::{admonition} Tools can be dangerous
+:class: danger
+
+(tools-warning)=
+
+## Warning: Tools can be dangerous
+
+Applications built on top of LLMs suffer from a class of attacks called [prompt injection](https://simonwillison.net/tags/prompt-injection/) attacks. These occur when a malicious third party injects content into the LLM which causes it to take tool-based actions that act against the interests of the user of that application.
+
+Be very careful about which tools you enable when you potentially might be exposed to untrusted sources of content - web pages, GitHub issues posted by other people, email and messages that have been sent to you that could come from an attacker.
+
+Watch out for the **lethal trifecta** of prompt injection exfiltration attacks. If your tool-enabled LLM has the following:
+
+- access to private data
+- exposure to malicious instructions
+- the ability to exfiltrate information
+
+Anyone who can feed malicious instructions into your LLM - by leaving them on a web page it visits, or sending an email to an inbox that it monitors - could be able to trick your LLM into using other tools to access your private information and then exfiltrate (pass out) that data to somewhere the attacker can see it.
+:::
+
+(tools-trying-out)=
 
 ## Trying out tools
 
@@ -32,6 +60,8 @@ The installed version of the LLM is 0.26a0.
 ```
 Further tools can be installed using plugins, or you can use the `llm --functions` option to pass tools implemented as PYthon functions directly, as {ref}`described here <usage-tools>`.
 
+(tools-implementation)=
+
 ## LLM's implementation of tools
 
 In LLM every tool is a defined as a Python function. The function can take any number of arguments and can return a string or an object that can be converted to a string.
@@ -42,6 +72,8 @@ The Python API can accept functions directly. The command-line interface has two
 
 You can use tools {ref}`with the LLM command-line tool <usage-tools>` or {ref}`with the Python API <python-api-tools>`.
 
+(tools-tips)=
+
 ## Tips for implementing tools
 
 Consult the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>` documentation for examples of how to implement tools in plugins.
@@ -49,4 +81,3 @@ Consult the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>` do
 If your plugin needs access to API secrets I recommend storing those using `llm keys set api-name` and then reading them using the {ref}`plugin-utilities-get-key` utility function. This avoids secrets being logged to the database as part of tool calls.
 
 <!-- Uncomment when this is true: The [llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) plugin is a good example of this pattern in action. -->
-
