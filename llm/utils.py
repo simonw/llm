@@ -683,7 +683,7 @@ TIMESTAMP_LEN = 6
 RANDOMNESS_LEN = 10
 
 _lock: Final = threading.Lock()
-_last: bytes | None = None  # 16-byte last produced ULID
+_last: Optional[bytes] = None  # 16-byte last produced ULID
 
 
 def monotonic_ulid() -> ULID:
