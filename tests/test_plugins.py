@@ -759,7 +759,7 @@ def test_register_toolbox(tmpdir, logs_db):
                 distinct json_object(
                     'name', tr.name,
                     'output', tr.output,
-                    'instance', case 
+                    'instance', case
                         when ti.id is not null then json_object(
                             'name', ti.name,
                             'plugin', ti.plugin,
@@ -811,23 +811,23 @@ def test_register_toolbox(tmpdir, logs_db):
             },
             {
                 "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
                 "tool_calls": [],
                 "tool_results": [
                     {
                         "name": "Filesystem_list_files",
-                        "output": '["/private/var/folders/x6/31xf1vxj0nn9mxqq8z0mmcfw0000gn/T/pytest-of-simon/pytest-453/test_register_toolbox0/mine2/other.txt"]',
+                        "output": json.dumps([str(other_path)]),
                         "instance": {
                             "name": "Filesystem",
                             "plugin": "ToolboxPlugin",
-                            "arguments": '{"path": "/private/var/folders/x6/31xf1vxj0nn9mxqq8z0mmcfw0000gn/T/pytest-of-simon/pytest-453/test_register_toolbox0/mine2"}',
+                            "arguments": json.dumps({"path": str(my_dir2)}),
                         },
                     }
                 ],
-            },
-            {
-                "model": "echo",
-                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
-                "tool_results": [],
             },
         ]
 
