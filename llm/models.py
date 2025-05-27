@@ -183,18 +183,16 @@ class Toolbox:
         original_init = cls.__init__
 
         def wrapped_init(self, *args, **kwargs):
-            # Get the signature of the original __init__
             sig = inspect.signature(original_init)
-
-            # Bind the arguments to get a mapping of parameter names to values
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
 
-            # Create config dict, excluding 'self'
             self._config = {
-                param: value
-                for param, value in bound.arguments.items()
-                if param != "self"
+                name: value
+                for name, value in bound.arguments.items()
+                if name != "self"
+                and sig.parameters[name].kind
+                not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
 
             original_init(self, *args, **kwargs)
