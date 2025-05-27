@@ -272,9 +272,91 @@ def test_incorrect_tool_usage():
     def simple(name: str):
         return name
 
+    captured_before_call = []
+    captured_after_call = []
+
+    def before_call(*args):
+        captured_before_call.append(args)
+
+    def after_call(*args):
+        captured_after_call.append(args)
+
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "bad_tool"}]}),
         tools=[simple],
+        before_call=before_call,
+        after_call=after_call,
     )
     output = chain_response.text()
     assert 'Error: tool \\"bad_tool\\" does not exist' in output
+    assert captured_before_call == [
+        (None, llm.ToolCall(name="bad_tool", arguments={}, tool_call_id=None))
+    ]
+    # This comparison is harder because of the KeyError exception:
+    assert len(captured_after_call) == 1
+    assert captured_after_call[0][0] is None
+    assert captured_after_call[0][1] == llm.ToolCall(
+        name="bad_tool", arguments={}, tool_call_id=None
+    )
+    assert isinstance(captured_after_call[0][2], llm.ToolResult)
+    assert captured_after_call[0][2].name == "bad_tool"
+    assert captured_after_call[0][2].output == 'Error: tool "bad_tool" does not exist'
+    assert captured_after_call[0][2].tool_call_id is None
+    assert isinstance(captured_after_call[0][2].exception, KeyError)
+
+
+@pytest.mark.asyncio
+async def test_incorrect_tool_usage_asyncio():
+    def sync_function():
+        return "sync"
+
+    async def async_function():
+        return "async"
+
+    model = llm.get_async_model("echo")
+    captured_before_call = []
+    captured_after_call = []
+
+    def before_call(*args):
+        captured_before_call.append(args)
+
+    def after_call(*args):
+        captured_after_call.append(args)
+
+    chain_response = model.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "sync_function"},
+                    {"name": "async_function"},
+                    {"name": "bad_tool"},
+                ]
+            }
+        ),
+        tools=[sync_function, async_function],
+        before_call=before_call,
+        after_call=after_call,
+    )
+    output = await chain_response.text()
+    assert captured_before_call == [
+        (
+            llm.Tool(
+                name="sync_function",
+                description=None,
+                input_schema={"properties": {}, "type": "object"},
+                implementation=sync_function,
+                plugin=None,
+            ),
+            llm.ToolCall(name="sync_function", arguments={}, tool_call_id=None),
+        ),
+        (
+            llm.Tool(
+                name="async_function",
+                description=None,
+                input_schema={"properties": {}, "type": "object"},
+                implementation=async_function,
+                plugin=None,
+            ),
+            llm.ToolCall(name="async_function", arguments={}, tool_call_id=None),
+        ),
+    ]

@@ -2049,9 +2049,13 @@ def logs_list(
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}".format(
+                        "- **{}**:{}<br>\n{}".format(
                             tool_result["name"],
-                            tool_result["tool_call_id"],
+                            (
+                                " `{}`".format(tool_result["tool_call_id"])
+                                if tool_result["tool_call_id"]
+                                else ""
+                            ),
                             textwrap.indent(tool_result["output"], "    "),
                         )
                     )

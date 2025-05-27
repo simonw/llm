@@ -940,42 +940,41 @@ class Response(_BaseResponse):
 
             if tool is None:
                 msg = 'tool "{}" does not exist'.format(tool_call.name)
-                tool_results.append(
-                    ToolResult(
-                        name=tool_call.name,
-                        output="Error: " + msg,
-                        tool_call_id=tool_call.tool_call_id,
-                        exception=KeyError(msg),
+                tool_result_obj = ToolResult(
+                    name=tool_call.name,
+                    output="Error: " + msg,
+                    tool_call_id=tool_call.tool_call_id,
+                    exception=KeyError(msg),
+                )
+            else:
+                if not tool.implementation:
+                    raise ValueError(
+                        "No implementation available for tool: {}".format(
+                            tool_call.name
+                        )
                     )
+
+                exception = None
+
+                try:
+                    if asyncio.iscoroutinefunction(tool.implementation):
+                        result = asyncio.run(tool.implementation(**tool_call.arguments))
+                    else:
+                        result = tool.implementation(**tool_call.arguments)
+
+                    if not isinstance(result, str):
+                        result = json.dumps(result, default=repr)
+                except Exception as ex:
+                    result = f"Error: {ex}"
+                    exception = ex
+
+                tool_result_obj = ToolResult(
+                    name=tool_call.name,
+                    output=result,
+                    tool_call_id=tool_call.tool_call_id,
+                    instance=_get_instance(tool.implementation),
+                    exception=exception,
                 )
-                continue
-
-            if not tool.implementation:
-                raise ValueError(
-                    "No implementation available for tool: {}".format(tool_call.name)
-                )
-
-            exception = None
-
-            try:
-                if asyncio.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(tool.implementation(**tool_call.arguments))
-                else:
-                    result = tool.implementation(**tool_call.arguments)
-
-                if not isinstance(result, str):
-                    result = json.dumps(result, default=repr)
-            except Exception as ex:
-                result = f"Error: {ex}"
-                exception = ex
-
-            tool_result_obj = ToolResult(
-                name=tool_call.name,
-                output=result,
-                tool_call_id=tool_call.tool_call_id,
-                instance=_get_instance(tool.implementation),
-                exception=exception,
-            )
 
             if after_call:
                 cb_result = after_call(tool, tool_call, tool_result_obj)
@@ -1104,15 +1103,59 @@ class AsyncResponse(_BaseResponse):
         for idx, tc in enumerate(tool_calls_list):
             tool = tools_by_name.get(tc.name)
             if tool is None:
-                raise CancelToolCall(f"Unknown tool: {tc.name}")
-            if not tool.implementation:
-                raise CancelToolCall(f"No implementation for tool: {tc.name}")
+                msg = 'tool "{}" does not exist'.format(tc.name)
+                tr = ToolResult(
+                    name=tr.name,
+                    output="Error: " + msg,
+                    tool_call_id=tc.tool_call_id,
+                    exception=KeyError(msg),
+                )
+            else:
+                if not tool.implementation:
+                    raise CancelToolCall(f"No implementation for tool: {tc.name}")
 
-            # If it's an async implementation, wrap it
-            if inspect.iscoroutinefunction(tool.implementation):
+                # If it's an async implementation, wrap it
+                if inspect.iscoroutinefunction(tool.implementation):
 
-                async def run_async(tc=tc, tool=tool, idx=idx):
-                    # before_call inside the task
+                    async def run_async(tc=tc, tool=tool, idx=idx):
+                        # before_call inside the task
+                        if before_call:
+                            cb = before_call(tool, tc)
+                            if inspect.isawaitable(cb):
+                                await cb
+
+                        exception = None
+                        try:
+                            result = await tool.implementation(**tc.arguments)
+                            output = (
+                                result
+                                if isinstance(result, str)
+                                else json.dumps(result, default=repr)
+                            )
+                        except Exception as ex:
+                            output = f"Error: {ex}"
+                            exception = ex
+
+                        tr = ToolResult(
+                            name=tc.name,
+                            output=output,
+                            tool_call_id=tc.tool_call_id,
+                            instance=_get_instance(tool.implementation),
+                            exception=exception,
+                        )
+
+                        # after_call inside the task
+                        if after_call:
+                            cb2 = after_call(tool, tc, tr)
+                            if inspect.isawaitable(cb2):
+                                await cb2
+
+                        return idx, tr
+
+                    async_tasks.append(asyncio.create_task(run_async()))
+
+                else:
+                    # Sync implementation: do hooks and call inline
                     if before_call:
                         cb = before_call(tool, tc)
                         if inspect.isawaitable(cb):
@@ -1120,11 +1163,13 @@ class AsyncResponse(_BaseResponse):
 
                     exception = None
                     try:
-                        result = await tool.implementation(**tc.arguments)
+                        res = tool.implementation(**tc.arguments)
+                        if inspect.isawaitable(res):
+                            res = await res
                         output = (
-                            result
-                            if isinstance(result, str)
-                            else json.dumps(result, default=repr)
+                            res
+                            if isinstance(res, str)
+                            else json.dumps(res, default=repr)
                         )
                     except Exception as ex:
                         output = f"Error: {ex}"
@@ -1138,49 +1183,12 @@ class AsyncResponse(_BaseResponse):
                         exception=exception,
                     )
 
-                    # after_call inside the task
-                    if after_call:
-                        cb2 = after_call(tool, tc, tr)
-                        if inspect.isawaitable(cb2):
-                            await cb2
+            if after_call:
+                cb2 = after_call(tool, tc, tr)
+                if inspect.isawaitable(cb2):
+                    await cb2
 
-                    return idx, tr
-
-                async_tasks.append(asyncio.create_task(run_async()))
-
-            else:
-                # Sync implementation: do hooks and call inline
-                if before_call:
-                    cb = before_call(tool, tc)
-                    if inspect.isawaitable(cb):
-                        await cb
-
-                exception = None
-                try:
-                    res = tool.implementation(**tc.arguments)
-                    if inspect.isawaitable(res):
-                        res = await res
-                    output = (
-                        res if isinstance(res, str) else json.dumps(res, default=repr)
-                    )
-                except Exception as ex:
-                    output = f"Error: {ex}"
-                    exception = ex
-
-                tr = ToolResult(
-                    name=tc.name,
-                    output=output,
-                    tool_call_id=tc.tool_call_id,
-                    instance=_get_instance(tool.implementation),
-                    exception=exception,
-                )
-
-                if after_call:
-                    cb2 = after_call(tool, tc, tr)
-                    if inspect.isawaitable(cb2):
-                        await cb2
-
-                indexed_results.append((idx, tr))
+            indexed_results.append((idx, tr))
 
         # Await all async tasks in parallel
         if async_tasks:
