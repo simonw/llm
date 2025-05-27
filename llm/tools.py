@@ -8,7 +8,7 @@ def llm_version() -> str:
     return version("llm")
 
 
-def llm_time() -> str:
+def llm_time() -> dict:
     "Returns the current time, as local time and UTC"
     # Get current times
     utc_time = datetime.now(timezone.utc)
