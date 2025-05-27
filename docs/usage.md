@@ -193,6 +193,20 @@ Tool call: simple_eval({'expression': '914394150 / 123'})
   7434098.780487805
 914,394,150 divided by 123 is approximately 7,434,098.78.
 ```
+Some tools are bundled in a configurable collection of tools called a **toolbox**. This means a single `--tool` option can load multiple related tools.
+
+[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) is one example. Using a toolbox looks like this:
+
+```bash
+llm install llm-tools-datasette
+llm -T 'Datasette("https://datasette.io/content")' "Show tables" --td
+```
+Toolboxes always start with a capital letter. They can be configured by passing a tool specification, which should fit the following patterns:
+
+- Empty: `ToolboxName` or `ToolboxName()` - has no configuration arguments
+- JSON object: `ToolboxName({"key": "value", "other": 42})`
+- Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
+- Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
 
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
