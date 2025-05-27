@@ -208,6 +208,18 @@ Toolboxes always start with a capital letter. They can be configured by passing 
 - Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
 - Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
 
+Toolboxes are not currently supported with the `llm -c` option, but they work well with `llm chat`. Try chatting with the Datasette content database like this:
+
+```bash
+llm chat -T 'Datasette("https://datasette.io/content")' --td
+```
+```
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+...
+> show tables
+```
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
