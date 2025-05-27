@@ -3,6 +3,7 @@ import click
 import importlib
 import json
 import llm
+from llm.default_plugins.default_tools import llm_version
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import textwrap
@@ -247,6 +248,13 @@ def test_register_tools(tmpdir, logs_db):
                 implementation=count_character_in_word,
                 plugin="ToolsPlugin",
             ),
+            "llm_version": llm.Tool(
+                name="llm_version",
+                description="Return the installed version of llm",
+                input_schema={"properties": {}, "type": "object"},
+                implementation=llm_version,
+                plugin="llm.default_plugins.default_tools",
+            ),
             "output_as_json": llm.Tool(
                 name="output_as_json",
                 description=None,
@@ -264,27 +272,19 @@ def test_register_tools(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools", "list"])
         assert result.exit_code == 0
         assert result.output == (
-            "upper(text: str) -> str (plugin: ToolsPlugin)\n\n"
-            "  Convert text to uppercase.\n\n"
             "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n\n"
             "  Count the number of occurrences of a character in a word.\n\n"
+            "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "  Return the installed version of llm\n\n"
             "output_as_json(text: str) (plugin: ToolsPlugin)\n\n"
+            "upper(text: str) -> str (plugin: ToolsPlugin)\n\n"
+            "  Convert text to uppercase.\n\n"
         )
         # And --json
         result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
         assert result2.exit_code == 0
         assert json.loads(result2.output) == {
             "tools": [
-                {
-                    "name": "upper",
-                    "description": "Convert text to uppercase.",
-                    "arguments": {
-                        "properties": {"text": {"type": "string"}},
-                        "required": ["text"],
-                        "type": "object",
-                    },
-                    "plugin": "ToolsPlugin",
-                },
                 {
                     "name": "count_chars",
                     "description": "Count the number of occurrences of a character in a word.",
@@ -299,8 +299,24 @@ def test_register_tools(tmpdir, logs_db):
                     "plugin": "ToolsPlugin",
                 },
                 {
+                    "name": "llm_version",
+                    "description": "Return the installed version of llm",
+                    "arguments": {"properties": {}, "type": "object"},
+                    "plugin": "llm.default_plugins.default_tools",
+                },
+                {
                     "name": "output_as_json",
                     "description": None,
+                    "arguments": {
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                        "type": "object",
+                    },
+                    "plugin": "ToolsPlugin",
+                },
+                {
+                    "name": "upper",
+                    "description": "Convert text to uppercase.",
                     "arguments": {
                         "properties": {"text": {"type": "string"}},
                         "required": ["text"],
@@ -311,6 +327,7 @@ def test_register_tools(tmpdir, logs_db):
             ],
             "toolboxes": [],
         }
+
         # And test the --tools option
         functions_path = str(tmpdir / "functions.py")
         with open(functions_path, "w") as fp:
@@ -472,7 +489,6 @@ def test_register_tools(tmpdir, logs_db):
         ) in result6.output
     finally:
         plugins.pm.unregister(name="ToolsPlugin")
-        assert llm.get_tools() == {}
 
 
 def test_register_toolbox(tmpdir, logs_db):
@@ -585,8 +601,25 @@ def test_register_toolbox(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools", "--json"])
         assert result.exit_code == 0
         assert json.loads(result.output) == {
-            "tools": [],
+            "tools": [
+                {
+                    "name": "llm_version",
+                    "description": "Return the installed version of llm",
+                    "arguments": {"properties": {}, "type": "object"},
+                    "plugin": "llm.default_plugins.default_tools",
+                }
+            ],
             "toolboxes": [
+                {
+                    "name": "Filesystem",
+                    "tools": [
+                        {
+                            "name": "list_files",
+                            "description": None,
+                            "arguments": {"properties": {}, "type": "object"},
+                        }
+                    ],
+                },
                 {
                     "name": "Memory",
                     "tools": [
@@ -630,16 +663,6 @@ def test_register_toolbox(tmpdir, logs_db):
                         },
                     ],
                 },
-                {
-                    "name": "Filesystem",
-                    "tools": [
-                        {
-                            "name": "list_files",
-                            "description": None,
-                            "arguments": {"properties": {}, "type": "object"},
-                        }
-                    ],
-                },
             ],
         }
 
@@ -647,6 +670,10 @@ def test_register_toolbox(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools"])
         assert result.exit_code == 0
         assert result.output == (
+            "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "  Return the installed version of llm\n\n"
+            "Filesystem:\n\n"
+            "  list_files()\n\n"
             "Memory:\n\n"
             "  append(key: str, value: str)\n\n"
             "    Append something as a key\n\n"
@@ -656,8 +683,6 @@ def test_register_toolbox(tmpdir, logs_db):
             "    Return a list of keys\n\n"
             "  set(key: str, value: str)\n\n"
             "    Set something as a key\n\n"
-            "Filesystem:\n\n"
-            "  list_files()\n\n"
         )
 
         # Test the CLI running a toolbox prompt

@@ -2500,7 +2500,7 @@ def tools_list(json_, python_tools):
     output_toolboxes = []
     tool_objects = []
     toolbox_objects = []
-    for name, tool in tools.items():
+    for name, tool in sorted(tools.items()):
         if isinstance(tool, Tool):
             tool_objects.append(tool)
             output_tools.append(
