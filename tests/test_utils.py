@@ -7,6 +7,7 @@ from llm.utils import (
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
+    monotonic_ulid,
 )
 from llm import get_key
 
@@ -460,3 +461,8 @@ def test_get_key(user_path, monkeypatch):
     # explicit key should over-ride alias
     assert get_key(input="explicit", alias="testkey") == "explicit"
     assert get_key(input="explicit", alias="testkey", env="ENV") == "explicit"
+
+
+def test_monotonic_ulids():
+    ulids = [monotonic_ulid() for i in range(1000)]
+    assert ulids == sorted(ulids)
