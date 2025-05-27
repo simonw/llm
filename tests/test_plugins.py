@@ -487,40 +487,51 @@ def test_register_tools(tmpdir, logs_db):
         plugins.pm.unregister(name="ToolsPlugin")
 
 
+class Memory(llm.Toolbox):
+    _memory = None
+
+    def _get_memory(self):
+        if self._memory is None:
+            self._memory = {}
+        return self._memory
+
+    def set(self, key: str, value: str):
+        "Set something as a key"
+        self._get_memory()[key] = value
+
+    def get(self, key: str):
+        "Get something from a key"
+        return self._get_memory().get(key) or ""
+
+    def append(self, key: str, value: str):
+        "Append something as a key"
+        memory = self._get_memory()
+        memory[key] = (memory.get(key) or "") + "\n" + value
+
+    def keys(self):
+        "Return a list of keys"
+        return list(self._get_memory().keys())
+
+
+class Filesystem(llm.Toolbox):
+    def __init__(self, path: str):
+        self.path = path
+
+    async def list_files(self):
+        # async here just to confirm that works
+        return [str(item) for item in pathlib.Path(self.path).glob("*")]
+
+
+class ToolboxPlugin:
+    __name__ = "ToolboxPlugin"
+
+    @hookimpl
+    def register_tools(self, register):
+        register(Memory)
+        register(Filesystem)
+
+
 def test_register_toolbox(tmpdir, logs_db):
-    class Memory(llm.Toolbox):
-        _memory = None
-
-        def _get_memory(self):
-            if self._memory is None:
-                self._memory = {}
-            return self._memory
-
-        def set(self, key: str, value: str):
-            "Set something as a key"
-            self._get_memory()[key] = value
-
-        def get(self, key: str):
-            "Get something from a key"
-            return self._get_memory().get(key) or ""
-
-        def append(self, key: str, value: str):
-            "Append something as a key"
-            memory = self._get_memory()
-            memory[key] = (memory.get(key) or "") + "\n" + value
-
-        def keys(self):
-            "Return a list of keys"
-            return list(self._get_memory().keys())
-
-    class Filesystem(llm.Toolbox):
-        def __init__(self, path: str):
-            self.path = path
-
-        async def list_files(self):
-            # async here just to confirm that works
-            return [str(item) for item in pathlib.Path(self.path).glob("*")]
-
     # Test the Python API
     model = llm.get_model("echo")
     memory = Memory()
@@ -578,15 +589,6 @@ def test_register_toolbox(tmpdir, logs_db):
     ]
 
     # Now register them with a plugin and use it through the CLI
-
-    class ToolboxPlugin:
-        __name__ = "ToolboxPlugin"
-
-        @hookimpl
-        def register_tools(self, register):
-            register(Memory)
-            register(Filesystem)
-
     try:
         plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
         tools = llm.get_tools()
@@ -739,9 +741,169 @@ def test_register_toolbox(tmpdir, logs_db):
                 "tool_call_id": None,
             }
         ]
+        # Test the logging worked
+        rows = list(logs_db.query(TOOL_RESULTS_SQL))
+        # JSON decode things in rows
+        for row in rows:
+            row["tool_calls"] = json.loads(row["tool_calls"])
+            row["tool_results"] = json.loads(row["tool_results"])
+        assert rows == [
+            {
+                "model": "echo",
+                "tool_calls": [
+                    {
+                        "name": "Memory_set",
+                        "arguments": '{"key": "hi", "value": "two"}',
+                    },
+                    {"name": "Memory_get", "arguments": '{"key": "hi"}'},
+                ],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Memory_set",
+                        "output": "null",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": "{}",
+                        },
+                    },
+                    {
+                        "name": "Memory_get",
+                        "output": "two",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": "{}",
+                        },
+                    },
+                ],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Filesystem_list_files",
+                        "output": json.dumps([str(other_path)]),
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": json.dumps({"path": str(my_dir2)}),
+                        },
+                    }
+                ],
+            },
+        ]
 
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
+
+
+def test_toolbox_logging_async(logs_db, tmpdir):
+    path = pathlib.Path(tmpdir / "path")
+    path.mkdir()
+    runner = CliRunner()
+    try:
+        plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
+
+        # Run Memory and Filesystem tests --async
+        result = runner.invoke(
+            cli.cli,
+            [
+                "prompt",
+                "--async",
+                "-T",
+                "Memory",
+                "--tool",
+                "Filesystem({})".format(json.dumps(str(path))),
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {
+                                "name": "Memory_set",
+                                "arguments": {"key": "hi", "value": "two"},
+                            },
+                            {"name": "Memory_get", "arguments": {"key": "hi"}},
+                            {"name": "Filesystem_list_files"},
+                        ]
+                    }
+                ),
+                "-m",
+                "echo",
+            ],
+        )
+        assert result.exit_code == 0
+        tool_results = json.loads(
+            "[" + result.output.split('"tool_results": [')[1].rsplit("]", 1)[0] + "]"
+        )
+        assert tool_results == [
+            {"name": "Memory_set", "output": "null", "tool_call_id": None},
+            {"name": "Memory_get", "output": "two", "tool_call_id": None},
+            {"name": "Filesystem_list_files", "output": "[]", "tool_call_id": None},
+        ]
+    finally:
+        plugins.pm.unregister(name="ToolboxPlugin")
+
+    # Check the database
+    rows = list(logs_db.query(TOOL_RESULTS_SQL))
+    # JSON decode things in rows
+    for row in rows:
+        row["tool_calls"] = json.loads(row["tool_calls"])
+        row["tool_results"] = json.loads(row["tool_results"])
+    assert rows == [
+        {
+            "model": "echo",
+            "tool_calls": [
+                {"name": "Memory_set", "arguments": '{"key": "hi", "value": "two"}'},
+                {"name": "Memory_get", "arguments": '{"key": "hi"}'},
+                {"name": "Filesystem_list_files", "arguments": "{}"},
+            ],
+            "tool_results": [],
+        },
+        {
+            "model": "echo",
+            "tool_calls": [],
+            "tool_results": [
+                {
+                    "name": "Memory_set",
+                    "output": "null",
+                    "instance": {
+                        "name": "Filesystem",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": "{}",
+                    },
+                },
+                {
+                    "name": "Memory_get",
+                    "output": "two",
+                    "instance": {
+                        "name": "Filesystem",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": "{}",
+                    },
+                },
+                {
+                    "name": "Filesystem_list_files",
+                    "output": "[]",
+                    "instance": {
+                        "name": "Filesystem",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": json.dumps({"path": str(path)}),
+                    },
+                },
+            ],
+        },
+    ]
 
 
 def test_plugins_command():
@@ -767,3 +929,59 @@ def test_plugins_command():
             "hooks": ["register_embedding_models", "register_models"],
         },
     ]
+
+
+TOOL_RESULTS_SQL = """
+-- First, create ordered subqueries for tool_calls and tool_results
+with ordered_tool_calls as (
+    select
+        tc.response_id,
+        json_group_array(
+            json_object(
+                'name', tc.name,
+                'arguments', tc.arguments
+            )
+        ) as tool_calls_json
+    from (
+        select * from tool_calls order by id
+    ) tc
+    where tc.id is not null
+    group by tc.response_id
+),
+ordered_tool_results as (
+    select
+        tr.response_id,
+        json_group_array(
+            json_object(
+                'name', tr.name,
+                'output', tr.output,
+                'instance', case
+                    when ti.id is not null then json_object(
+                        'name', ti.name,
+                        'plugin', ti.plugin,
+                        'arguments', ti.arguments
+                    )
+                    else null
+                end
+            )
+        ) as tool_results_json
+    from (
+        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
+               ti.plugin, ti.arguments as ti_arguments
+        from tool_results tr
+        left join tool_instances ti on tr.instance_id = ti.id
+        order by tr.id
+    ) tr
+    left join tool_instances ti on tr.instance_id = ti.id
+    where tr.id is not null
+    group by tr.response_id
+)
+select
+    r.model,
+    coalesce(otc.tool_calls_json, '[]') as tool_calls,
+    coalesce(otr.tool_results_json, '[]') as tool_results
+from responses r
+left join ordered_tool_calls otc on r.id = otc.response_id
+left join ordered_tool_results otr on r.id = otr.response_id
+group by r.id, r.model
+order by r.id"""

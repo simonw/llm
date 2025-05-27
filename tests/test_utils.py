@@ -9,7 +9,7 @@ from llm.utils import (
     truncate_string,
     monotonic_ulid,
 )
-from llm import get_key
+from llm import get_key, Toolbox
 
 
 @pytest.mark.parametrize(
@@ -466,3 +466,53 @@ def test_get_key(user_path, monkeypatch):
 def test_monotonic_ulids():
     ulids = [monotonic_ulid() for i in range(1000)]
     assert ulids == sorted(ulids)
+
+
+def test_toolbox_config_capture():
+    """Test that Toolbox captures __init__ parameters in _config"""
+
+    # Single positional arg
+    class Tool1(Toolbox):
+        def __init__(self, value):
+            pass
+
+    assert Tool1(42)._config == {"value": 42}
+
+    # Multiple positional args
+    class Tool2(Toolbox):
+        def __init__(self, a, b, c):
+            pass
+
+    assert Tool2(1, 2, 3)._config == {"a": 1, "b": 2, "c": 3}
+
+    # Keyword args with defaults
+    class Tool3(Toolbox):
+        def __init__(self, name="default", count=10):
+            pass
+
+    assert Tool3()._config == {"name": "default", "count": 10}
+    assert Tool3(name="custom", count=20)._config == {"name": "custom", "count": 20}
+
+    # Mixed args
+    class Tool4(Toolbox):
+        def __init__(self, required, optional="default"):
+            pass
+
+    assert Tool4("hello")._config == {"required": "hello", "optional": "default"}
+    assert Tool4("world", optional="custom")._config == {
+        "required": "world",
+        "optional": "custom",
+    }
+
+    # Var args excluded
+    class Tool5(Toolbox):
+        def __init__(self, regular, *args, **kwargs):
+            pass
+
+    assert Tool5("test", 1, 2, extra="value")._config == {"regular": "test"}
+
+    # No init
+    class Tool6(Toolbox):
+        pass
+
+    assert Tool6()._config == {}

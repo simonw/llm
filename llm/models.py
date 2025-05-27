@@ -175,6 +175,29 @@ def _get_arguments_input_schema(function, name):
 class Toolbox:
     _blocked = ("method_tools", "introspect_methods", "methods")
     name: Optional[str] = None
+    instance_id: Optional[int] = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        original_init = cls.__init__
+
+        def wrapped_init(self, *args, **kwargs):
+            sig = inspect.signature(original_init)
+            bound = sig.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+
+            self._config = {
+                name: value
+                for name, value in bound.arguments.items()
+                if name != "self"
+                and sig.parameters[name].kind
+                not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            }
+
+            original_init(self, *args, **kwargs)
+
+        cls.__init__ = wrapped_init
 
     @classmethod
     def methods(cls):
@@ -197,10 +220,12 @@ class Toolbox:
             method = getattr(self, method_name)
             # The attribute must be a bound method, i.e. inspect.ismethod()
             if callable(method) and inspect.ismethod(method):
-                yield Tool.function(
+                tool = Tool.function(
                     method,
                     name="{}_{}".format(self.__class__.__name__, method_name),
                 )
+                tool.plugin = getattr(self, "plugin", None)
+                yield tool
 
     @classmethod
     def introspect_methods(cls):
@@ -235,6 +260,7 @@ class ToolResult:
     name: str
     output: str
     tool_call_id: Optional[str] = None
+    instance: Optional[Toolbox] = None
 
 
 class CancelToolCall(Exception):
@@ -834,6 +860,21 @@ class _BaseResponse:
                 }
             )
         for tool_result in self.prompt.tool_results:
+            instance_id = None
+            if tool_result.instance:
+                if not tool_result.instance.instance_id:
+                    tool_result.instance.instance_id = (
+                        db["tool_instances"]
+                        .insert(
+                            {
+                                "plugin": tool.plugin,
+                                "name": tool.name.split("_")[0],
+                                "arguments": json.dumps(tool_result.instance._config),
+                            }
+                        )
+                        .last_pk
+                    )
+                instance_id = tool_result.instance.instance_id
             db["tool_results"].insert(
                 {
                     "response_id": response_id,
@@ -841,6 +882,7 @@ class _BaseResponse:
                     "name": tool_result.name,
                     "output": tool_result.output,
                     "tool_call_id": tool_result.tool_call_id,
+                    "instance_id": instance_id,
                 }
             )
 
@@ -919,6 +961,7 @@ class Response(_BaseResponse):
                 name=tool_call.name,
                 output=result,
                 tool_call_id=tool_call.tool_call_id,
+                instance=_get_instance(tool.implementation),
             )
 
             if after_call:
@@ -1078,6 +1121,7 @@ class AsyncResponse(_BaseResponse):
                         name=tc.name,
                         output=output,
                         tool_call_id=tc.tool_call_id,
+                        instance=_get_instance(tool.implementation),
                     )
 
                     # after_call inside the task
@@ -1111,6 +1155,7 @@ class AsyncResponse(_BaseResponse):
                     name=tc.name,
                     output=output,
                     tool_call_id=tc.tool_call_id,
+                    instance=_get_instance(tool.implementation),
                 )
 
                 if after_call:
@@ -1844,3 +1889,9 @@ def _remove_titles_recursively(obj):
         # Process each item in lists
         for item in obj:
             _remove_titles_recursively(item)
+
+
+def _get_instance(implementation):
+    if hasattr(implementation, "__self__"):
+        return implementation.__self__
+    return None

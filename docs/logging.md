@@ -397,13 +397,14 @@ CREATE TABLE [tool_calls] (
   [arguments] TEXT,
   [tool_call_id] TEXT
 );
-CREATE TABLE [tool_results] (
+CREATE TABLE "tool_results" (
   [id] INTEGER PRIMARY KEY,
   [response_id] TEXT REFERENCES [responses]([id]),
   [tool_id] INTEGER REFERENCES [tools]([id]),
   [name] TEXT,
   [output] TEXT,
-  [tool_call_id] TEXT
+  [tool_call_id] TEXT,
+  [instance_id] INTEGER REFERENCES [tool_instances]([id])
 );
 ```
 <!-- [[[end]]] -->
