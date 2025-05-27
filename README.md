@@ -186,6 +186,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Trying out tools](https://llm.datasette.io/en/stable/tools.html#trying-out-tools)
   * [LLM’s implementation of tools](https://llm.datasette.io/en/stable/tools.html#llm-s-implementation-of-tools)
   * [Tips for implementing tools](https://llm.datasette.io/en/stable/tools.html#tips-for-implementing-tools)
+  * [Warning: tools are at risk from malicious attacks](https://llm.datasette.io/en/stable/tools.html#warning-tools-are-at-risk-from-malicious-attacks)
 * [Schemas](https://llm.datasette.io/en/stable/schemas.html)
   * [Schemas tutorial](https://llm.datasette.io/en/stable/schemas.html#schemas-tutorial)
     * [Getting started with dogs](https://llm.datasette.io/en/stable/schemas.html#getting-started-with-dogs)
