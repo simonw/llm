@@ -226,7 +226,7 @@ class Toolbox:
                     method,
                     name="{}_{}".format(self.__class__.__name__, method_name),
                 )
-                tool.plugin = self.plugin
+                tool.plugin = getattr(self, "plugin", None)
                 yield tool
 
     @classmethod
