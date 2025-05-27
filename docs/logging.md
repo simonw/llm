@@ -295,7 +295,7 @@ cog.out("```sql\n")
 for table in (
     "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
     "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
-    "tool_responses", "tool_calls", "tool_results"
+    "tool_responses", "tool_calls", "tool_results", "tool_instances"
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -405,6 +405,12 @@ CREATE TABLE "tool_results" (
   [output] TEXT,
   [tool_call_id] TEXT,
   [instance_id] INTEGER REFERENCES [tool_instances]([id])
+);
+CREATE TABLE [tool_instances] (
+  [id] INTEGER PRIMARY KEY,
+  [plugin] TEXT,
+  [name] TEXT,
+  [arguments] TEXT
 );
 ```
 <!-- [[[end]]] -->
