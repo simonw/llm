@@ -862,19 +862,24 @@ class _BaseResponse:
         for tool_result in self.prompt.tool_results:
             instance_id = None
             if tool_result.instance:
-                if not tool_result.instance.instance_id:
-                    tool_result.instance.instance_id = (
-                        db["tool_instances"]
-                        .insert(
-                            {
-                                "plugin": tool.plugin,
-                                "name": tool.name.split("_")[0],
-                                "arguments": json.dumps(tool_result.instance._config),
-                            }
+                try:
+                    if not tool_result.instance.instance_id:
+                        tool_result.instance.instance_id = (
+                            db["tool_instances"]
+                            .insert(
+                                {
+                                    "plugin": tool.plugin,
+                                    "name": tool.name.split("_")[0],
+                                    "arguments": json.dumps(
+                                        tool_result.instance._config
+                                    ),
+                                }
+                            )
+                            .last_pk
                         )
-                        .last_pk
-                    )
-                instance_id = tool_result.instance.instance_id
+                    instance_id = tool_result.instance.instance_id
+                except AttributeError:
+                    pass
             db["tool_results"].insert(
                 {
                     "response_id": response_id,

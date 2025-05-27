@@ -239,6 +239,24 @@ def test_default_tool_llm_version():
     assert '"output": "{}"'.format(version("llm")) in result.output
 
 
+def test_functions_tool_locals():
+    # https://github.com/simonw/llm/issues/1107
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            "my_locals = locals",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "locals"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+
+
 def test_default_tool_llm_time():
     runner = CliRunner()
     result = runner.invoke(
