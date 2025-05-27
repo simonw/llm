@@ -9,6 +9,13 @@ import re
 import sqlite_utils
 import textwrap
 from typing import Any, List, Dict, Optional, Tuple, Type
+import os
+import threading
+import time
+from typing import Final
+
+from ulid import ULID
+
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -669,3 +676,61 @@ def instantiate_from_spec(class_map: Dict[str, Type], spec: str):
     # Otherwise treat as key=value pairs
     kwargs = _parse_kwargs(arg_body)
     return cls(**kwargs)
+
+
+NANOSECS_IN_MILLISECS = 1000000
+TIMESTAMP_LEN = 6
+RANDOMNESS_LEN = 10
+
+_lock: Final = threading.Lock()
+_last: bytes | None = None  # 16-byte last produced ULID
+
+
+def monotonic_ulid() -> ULID:
+    """
+    Return a ULID instance that is guaranteed to be *strictly larger* than every
+    other ULID returned by this function inside the same process.
+
+    It works the same way the reference JavaScript `monotonicFactory` does:
+    * If the current call happens in the same millisecond as the previous
+        one, the 80-bit randomness part is incremented by exactly one.
+    * As soon as the system clock moves forward, a brand-new ULID with
+        cryptographically secure randomness is generated.
+    * If more than 2**80 ULIDs are requested within a single millisecond
+        an `OverflowError` is raised (practically impossible).
+    """
+    global _last
+
+    now_ms = time.time_ns() // NANOSECS_IN_MILLISECS
+
+    with _lock:
+        # First call
+        if _last is None:
+            _last = _fresh(now_ms)
+            return ULID(_last)
+
+        # Decode timestamp from the last ULID we handed out
+        last_ms = int.from_bytes(_last[:TIMESTAMP_LEN], "big")
+
+        # If the millisecond is the same, increment the randomness
+        if now_ms == last_ms:
+            rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
+            if rand_int >= 1 << (RANDOMNESS_LEN * 8):
+                raise OverflowError(
+                    "Randomness overflow: > 2**80 ULIDs requested "
+                    "in one millisecond!"
+                )
+            randomness = rand_int.to_bytes(RANDOMNESS_LEN, "big")
+            _last = _last[:TIMESTAMP_LEN] + randomness
+            return ULID(_last)
+
+        # New millisecond, start fresh
+        _last = _fresh(now_ms)
+        return ULID(_last)
+
+
+def _fresh(ms: int) -> bytes:
+    """Build a brand-new 16-byte ULID for the given millisecond."""
+    timestamp = int.to_bytes(ms, TIMESTAMP_LEN, "big")
+    randomness = os.urandom(RANDOMNESS_LEN)
+    return timestamp + randomness

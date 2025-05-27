@@ -31,12 +31,12 @@ from .utils import (
     mimetype_from_path,
     mimetype_from_string,
     token_usage_string,
+    monotonic_ulid,
 )
 from abc import ABC, abstractmethod
 import inspect
 import json
 from pydantic import BaseModel, ConfigDict, create_model
-from ulid import ULID
 
 CONVERSATION_NAME_LENGTH = 32
 
@@ -343,7 +343,7 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
 @dataclass
 class _BaseConversation:
     model: "_BaseModel"
-    id: str = field(default_factory=lambda: str(ULID()).lower())
+    id: str = field(default_factory=lambda: str(monotonic_ulid()).lower())
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[Tool]] = None
@@ -582,7 +582,7 @@ class _BaseResponse:
         conversation: Optional[_BaseConversation] = None,
         key: Optional[str] = None,
     ):
-        self.id = str(ULID()).lower()
+        self.id = str(monotonic_ulid()).lower()
         self.prompt = prompt
         self._prompt_json = None
         self.model = model

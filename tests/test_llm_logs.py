@@ -1,8 +1,8 @@
 from click.testing import CliRunner
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.utils import monotonic_ulid
 from llm import Fragment
-from ulid import ULID
 import datetime
 import json
 import pathlib
@@ -12,6 +12,7 @@ import sqlite_utils
 import sys
 import textwrap
 import time
+from ulid import ULID
 import yaml
 
 
@@ -27,7 +28,7 @@ def log_path(user_path):
     start = datetime.datetime.now(datetime.timezone.utc)
     db["responses"].insert_all(
         {
-            "id": str(ULID()).lower(),
+            "id": str(monotonic_ulid()).lower(),
             "system": "system",
             "prompt": "prompt",
             "response": 'response\n```python\nprint("hello word")\n```',
@@ -269,7 +270,7 @@ def test_logs_filtered(user_path, model, path_option):
     migrate(db)
     db["responses"].insert_all(
         {
-            "id": str(ULID()).lower(),
+            "id": str(monotonic_ulid()).lower(),
             "system": "system",
             "prompt": "prompt",
             "response": "response",
