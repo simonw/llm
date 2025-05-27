@@ -431,18 +431,20 @@ def test_register_tools(tmpdir, logs_db):
         log_rows = json.loads(
             runner.invoke(cli.cli, ["logs", "-c", "-n", "0", "--json"]).output
         )
-        # Workaround for bug in https://github.com/simonw/llm/issues/1073 and 1079
-        # We use a set and don't check the order, because (esp on Windows) datetime_utc
-        # may not be accurate enough to order them correctly.
-        log_rows.sort(key=lambda row: row["datetime_utc"])
-        results = {
+        results = tuple(
             (log_row["prompt"], json.dumps(log_row["tool_results"]))
             for log_row in log_rows
-        }
-        assert results == {
+        )
+        assert results == (
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null}]',
+                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null}]',
+            ),
+            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
+            (
+                "",
+                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -450,15 +452,9 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null}]',
+                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null}]',
             ),
-            (
-                "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null}]',
-            ),
-            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
-            ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
-        }
+        )
         # Test the --td option
         result6 = runner.invoke(
             cli.cli,
