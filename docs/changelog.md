@@ -1,5 +1,21 @@
 # Changelog
 
+(v0_26)=
+## 0.26 (2025-05-27)
+
+**Tool support** is finally here! This release adds support exposing {ref}`tools <tools>` to LLMs, previously described in the release notes for {ref}`0.26a0 <v0_26_a0>` and {ref}`0.26a1 <v0_26_a1>`.
+
+Read **[Large Language Models can run tools in your terminal with LLM 0.26](https://simonwillison.net/2025/May/27/llm-tools/)** for a detailed overview of the new features.
+
+Also in this release:
+
+- Two new {ref}`default tools <tools-default>`: `llm_version()` and `llm_time()`. [#1096](https://github.com/simonw/llm/issues/1096), [#1103](https://github.com/simonw/llm/issues/1103)
+- Documentation on {ref}`how to add tool supports to a model plugin <advanced-model-plugins-tools>`. [#1000](https://github.com/simonw/llm/issues/1000)
+- Added a {ref}`prominent warning <tools-warning>` about the risk of prompt injection when using tools. [#1097](https://github.com/simonw/llm/issues/1097)
+- Switched to using monotonic ULIDs for the response IDs in the logs, fixing some intermittent test failures. [#1099](https://github.com/simonw/llm/issues/1099)
+- New `tool_instances` table records details of Toolbox instances created while executing a prompt. [#1089](https://github.com/simonw/llm/issues/1089)
+- `llm.get_key()` is now a {ref}`documented utility function <plugin-utilities-get-key>`. [#1094](https://github.com/simonw/llm/issues/1094)
+
 (v0_26_a1)=
 ## 0.26a1 (2025-05-25)
 
