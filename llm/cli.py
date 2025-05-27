@@ -3905,11 +3905,26 @@ def _gather_tools(
         tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
     ]
     if bad_tools:
-        raise click.ClickException(
-            "Tool(s) {} not found. Available tools: {}".format(
-                ", ".join(bad_tools), ", ".join(registered_tools.keys())
+        # Are any of them toolbox tools?
+        bad_tool_classes = list(
+            set(
+                bad_tool.split("_")[0]
+                for bad_tool in bad_tools
+                if bad_tool[0].isupper()
             )
         )
+        if bad_tool_classes:
+            raise click.ClickException(
+                "Toolbox tools ({}) are not yet supported with llm -c".format(
+                    ", ".join(bad_tool_classes)
+                )
+            )
+        else:
+            raise click.ClickException(
+                "Tool(s) {} not found. Available tools: {}".format(
+                    ", ".join(bad_tools), ", ".join(registered_tools.keys())
+                )
+            )
     for tool_spec in tool_specs:
         if not tool_spec[0].isupper():
             # It's a function

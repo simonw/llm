@@ -741,6 +741,18 @@ def test_register_toolbox(tmpdir, logs_db):
                 "tool_call_id": None,
             }
         ]
+
+        # Should show an error if you attempt to llm -c with configured toolboxes
+        result5 = runner.invoke(
+            cli.cli,
+            ["-c", "list them again"],
+        )
+        assert result5.exit_code == 1
+        assert (
+            result5.output
+            == "Error: Toolbox tools (Filesystem) are not yet supported with llm -c\n"
+        )
+
         # Test the logging worked
         rows = list(logs_db.query(TOOL_RESULTS_SQL))
         # JSON decode things in rows
