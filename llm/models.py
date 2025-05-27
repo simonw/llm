@@ -863,7 +863,7 @@ class _BaseResponse:
             instance_id = None
             if tool_result.instance:
                 if not tool_result.instance.instance_id:
-                    instance_id = tool_result.instance.instance_id = (
+                    tool_result.instance.instance_id = (
                         db["tool_instances"]
                         .insert(
                             {
@@ -874,6 +874,7 @@ class _BaseResponse:
                         )
                         .last_pk
                     )
+                instance_id = tool_result.instance.instance_id
             db["tool_results"].insert(
                 {
                     "response_id": response_id,

@@ -743,34 +743,34 @@ def test_register_toolbox(tmpdir, logs_db):
         rows = list(
             logs_db.query(
                 """
-        select 
-            r.model,
-            json_group_array(
-                json_object(
-                    'name', tc.name,
-                    'arguments', tc.arguments
-                ) order by tc.id
-            ) filter (where tc.id is not null) as tool_calls,
-            json_group_array(
-                distinct json_object(
-                    'name', tr.name,
-                    'output', tr.output,
-                    'instance', case
-                        when ti.id is not null then json_object(
-                            'name', ti.name,
-                            'plugin', ti.plugin,
-                            'arguments', ti.arguments
-                        )
-                        else null
-                    end
-                ) order by tr.id
-            ) filter (where tr.id is not null) as tool_results
-        from responses r
-        left join tool_calls tc on r.id = tc.response_id
-        left join tool_results tr on r.id = tr.response_id
-        left join tool_instances ti on tr.instance_id = ti.id
-        group by r.id, r.model
-        order by r.id"""
+            select
+                r.model,
+                json_group_array(
+                    json_object(
+                        'name', tc.name,
+                        'arguments', tc.arguments
+                    ) order by tc.id
+                ) filter (where tc.id is not null) as tool_calls,
+                json_group_array(
+                    distinct json_object(
+                        'name', tr.name,
+                        'output', tr.output,
+                        'instance', case
+                            when ti.id is not null then json_object(
+                                'name', ti.name,
+                                'plugin', ti.plugin,
+                                'arguments', ti.arguments
+                            )
+                            else null
+                        end
+                    ) order by tr.id
+                ) filter (where tr.id is not null) as tool_results
+            from responses r
+            left join tool_calls tc on r.id = tc.response_id
+            left join tool_results tr on r.id = tr.response_id
+            left join tool_instances ti on tr.instance_id = ti.id
+            group by r.id, r.model
+            order by r.id"""
             )
         )
         # JSON decode things in rows
@@ -799,10 +799,18 @@ def test_register_toolbox(tmpdir, logs_db):
                         "instance": {
                             "name": "Memory",
                             "plugin": "ToolboxPlugin",
-                            "arguments": '{"args": [], "kwargs": {}}',
+                            "arguments": "{}",
                         },
                     },
-                    {"name": "Memory_get", "output": "two", "instance": None},
+                    {
+                        "name": "Memory_get",
+                        "output": "two",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": "{}",
+                        },
+                    },
                 ],
             },
             {
