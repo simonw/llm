@@ -743,6 +743,93 @@ def test_register_toolbox(tmpdir, logs_db):
                 "tool_call_id": None,
             }
         ]
+        # Test the logging worked
+        rows = list(
+            logs_db.query(
+                """
+        select 
+            r.model,
+            json_group_array(
+                json_object(
+                    'name', tc.name,
+                    'arguments', tc.arguments
+                ) order by tc.id
+            ) filter (where tc.id is not null) as tool_calls,
+            json_group_array(
+                distinct json_object(
+                    'name', tr.name,
+                    'output', tr.output,
+                    'instance', case 
+                        when ti.id is not null then json_object(
+                            'name', ti.name,
+                            'plugin', ti.plugin,
+                            'arguments', ti.arguments
+                        )
+                        else null
+                    end
+                ) order by tr.id
+            ) filter (where tr.id is not null) as tool_results
+        from responses r
+        left join tool_calls tc on r.id = tc.response_id
+        left join tool_results tr on r.id = tr.response_id
+        left join tool_instances ti on tr.instance_id = ti.id
+        group by r.id, r.model
+        order by r.id"""
+            )
+        )
+        # JSON decode things in rows
+        for row in rows:
+            row["tool_calls"] = json.loads(row["tool_calls"])
+            row["tool_results"] = json.loads(row["tool_results"])
+        assert rows == [
+            {
+                "model": "echo",
+                "tool_calls": [
+                    {
+                        "name": "Memory_set",
+                        "arguments": '{"key": "hi", "value": "two"}',
+                    },
+                    {"name": "Memory_get", "arguments": '{"key": "hi"}'},
+                ],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Memory_set",
+                        "output": "null",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": '{"args": [], "kwargs": {}}',
+                        },
+                    },
+                    {"name": "Memory_get", "output": "two", "instance": None},
+                ],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Filesystem_list_files",
+                        "output": '["/private/var/folders/x6/31xf1vxj0nn9mxqq8z0mmcfw0000gn/T/pytest-of-simon/pytest-453/test_register_toolbox0/mine2/other.txt"]',
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": '{"path": "/private/var/folders/x6/31xf1vxj0nn9mxqq8z0mmcfw0000gn/T/pytest-of-simon/pytest-453/test_register_toolbox0/mine2"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+        ]
 
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
