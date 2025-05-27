@@ -932,31 +932,56 @@ def test_plugins_command():
 
 
 TOOL_RESULTS_SQL = """
+-- First, create ordered subqueries for tool_calls and tool_results
+with ordered_tool_calls as (
+    select
+        tc.response_id,
+        json_group_array(
+            json_object(
+                'name', tc.name,
+                'arguments', tc.arguments
+            )
+        ) as tool_calls_json
+    from (
+        select * from tool_calls order by id
+    ) tc
+    where tc.id is not null
+    group by tc.response_id
+),
+ordered_tool_results as (
+    select
+        tr.response_id,
+        json_group_array(
+            json_object(
+                'name', tr.name,
+                'output', tr.output,
+                'instance', case
+                    when ti.id is not null then json_object(
+                        'name', ti.name,
+                        'plugin', ti.plugin,
+                        'arguments', ti.arguments
+                    )
+                    else null
+                end
+            )
+        ) as tool_results_json
+    from (
+        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
+               ti.plugin, ti.arguments as ti_arguments
+        from tool_results tr
+        left join tool_instances ti on tr.instance_id = ti.id
+        order by tr.id
+    ) tr
+    left join tool_instances ti on tr.instance_id = ti.id
+    where tr.id is not null
+    group by tr.response_id
+)
 select
     r.model,
-    json_group_array(
-        json_object(
-            'name', tc.name,
-            'arguments', tc.arguments
-        ) order by tc.id
-    ) filter (where tc.id is not null) as tool_calls,
-    json_group_array(
-        distinct json_object(
-            'name', tr.name,
-            'output', tr.output,
-            'instance', case
-                when ti.id is not null then json_object(
-                    'name', ti.name,
-                    'plugin', ti.plugin,
-                    'arguments', ti.arguments
-                )
-                else null
-            end
-        ) order by tr.id
-    ) filter (where tr.id is not null) as tool_results
+    coalesce(otc.tool_calls_json, '[]') as tool_calls,
+    coalesce(otr.tool_results_json, '[]') as tool_results
 from responses r
-left join tool_calls tc on r.id = tc.response_id
-left join tool_results tr on r.id = tr.response_id
-left join tool_instances ti on tr.instance_id = ti.id
+left join ordered_tool_calls otc on r.id = otc.response_id
+left join ordered_tool_results otr on r.id = otr.response_id
 group by r.id, r.model
 order by r.id"""
