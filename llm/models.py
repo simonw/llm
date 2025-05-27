@@ -261,6 +261,14 @@ class ToolResult:
     output: str
     tool_call_id: Optional[str] = None
     instance: Optional[Toolbox] = None
+    exception: Optional[Exception] = None
+
+
+# type hints for before_call: and after_call:
+BeforeCallDef = Callable[[Optional[Tool], ToolCall], Union[None, Awaitable[None]]]
+AfterCallDef = Callable[
+    [Optional[Tool], ToolCall, ToolResult], Union[None, Awaitable[None]]
+]
 
 
 class CancelToolCall(Exception):
@@ -401,8 +409,8 @@ class Conversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "ChainResponse":
@@ -460,12 +468,8 @@ class AsyncConversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
@@ -918,26 +922,13 @@ class Response(_BaseResponse):
     def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
         for tool_call in self.tool_calls():
             tool = tools_by_name.get(tool_call.name)
-            if tool is None:
-                tool_results.append(
-                    ToolResult(
-                        name=tool_call.name,
-                        output='Error: tool "{}" does not exist'.format(tool_call.name),
-                        tool_call_id=tool_call.tool_call_id,
-                    )
-                )
-                continue
 
             if before_call:
                 cb_result = before_call(tool, tool_call)
@@ -947,10 +938,24 @@ class Response(_BaseResponse):
                         "Please use an async chain/response or a synchronous callback."
                     )
 
+            if tool is None:
+                msg = 'tool "{}" does not exist'.format(tool_call.name)
+                tool_results.append(
+                    ToolResult(
+                        name=tool_call.name,
+                        output="Error: " + msg,
+                        tool_call_id=tool_call.tool_call_id,
+                        exception=KeyError(msg),
+                    )
+                )
+                continue
+
             if not tool.implementation:
                 raise ValueError(
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
+
+            exception = None
 
             try:
                 if asyncio.iscoroutinefunction(tool.implementation):
@@ -962,12 +967,14 @@ class Response(_BaseResponse):
                     result = json.dumps(result, default=repr)
             except Exception as ex:
                 result = f"Error: {ex}"
+                exception = ex
 
             tool_result_obj = ToolResult(
                 name=tool_call.name,
                 output=result,
                 tool_call_id=tool_call.tool_call_id,
                 instance=_get_instance(tool.implementation),
+                exception=exception,
             )
 
             if after_call:
@@ -1083,9 +1090,7 @@ class AsyncResponse(_BaseResponse):
     async def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallDef] = None,
         after_call: Optional[
             Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
         ] = None,
@@ -1113,6 +1118,7 @@ class AsyncResponse(_BaseResponse):
                         if inspect.isawaitable(cb):
                             await cb
 
+                    exception = None
                     try:
                         result = await tool.implementation(**tc.arguments)
                         output = (
@@ -1122,12 +1128,14 @@ class AsyncResponse(_BaseResponse):
                         )
                     except Exception as ex:
                         output = f"Error: {ex}"
+                        exception = ex
 
                     tr = ToolResult(
                         name=tc.name,
                         output=output,
                         tool_call_id=tc.tool_call_id,
                         instance=_get_instance(tool.implementation),
+                        exception=exception,
                     )
 
                     # after_call inside the task
@@ -1147,6 +1155,7 @@ class AsyncResponse(_BaseResponse):
                     if inspect.isawaitable(cb):
                         await cb
 
+                exception = None
                 try:
                     res = tool.implementation(**tc.arguments)
                     if inspect.isawaitable(res):
@@ -1156,12 +1165,14 @@ class AsyncResponse(_BaseResponse):
                     )
                 except Exception as ex:
                     output = f"Error: {ex}"
+                    exception = ex
 
                 tr = ToolResult(
                     name=tc.name,
                     output=output,
                     tool_call_id=tc.tool_call_id,
                     instance=_get_instance(tool.implementation),
+                    exception=exception,
                 )
 
                 if after_call:
@@ -1362,12 +1373,8 @@ class _BaseChainResponse:
         conversation: _BaseConversation,
         key: Optional[str] = None,
         chain_limit: Optional[int] = 10,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
     ):
         self.prompt = prompt
         self.model = model
@@ -1622,8 +1629,8 @@ class _Model(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> ChainResponse:
@@ -1719,12 +1726,8 @@ class _AsyncModel(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallDef] = None,
+        after_call: Optional[AfterCallDef] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> AsyncChainResponse:
