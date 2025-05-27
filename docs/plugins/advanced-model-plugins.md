@@ -125,7 +125,7 @@ Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic]
 
 (advanced-model-plugins-tools)=
 
-## Support tools
+## Supporting tools
 
 Adding {ref}`tools support <tools>` involves several steps:
 
