@@ -282,7 +282,7 @@ def test_register_tools(tmpdir, logs_db):
         assert result.output == (
             "count_chars(text: str, character: str) -> int (plugin: ToolsPlugin)\n\n"
             "  Count the number of occurrences of a character in a word.\n\n"
-            "llm_time() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "llm_time() -> dict (plugin: llm.default_plugins.default_tools)\n\n"
             "  Returns the current time, as local time and UTC\n\n"
             "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
             "  Return the installed version of llm\n\n"
@@ -696,7 +696,7 @@ def test_register_toolbox(tmpdir, logs_db):
         result = runner.invoke(cli.cli, ["tools"])
         assert result.exit_code == 0
         assert result.output == (
-            "llm_time() -> str (plugin: llm.default_plugins.default_tools)\n\n"
+            "llm_time() -> dict (plugin: llm.default_plugins.default_tools)\n\n"
             "  Returns the current time, as local time and UTC\n\n"
             "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
             "  Return the installed version of llm\n\n"
