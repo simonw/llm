@@ -21,6 +21,7 @@ from .models import (
     Response,
     Tool,
     Toolbox,
+    BaseToolbox,
     ToolCall,
     ToolResult,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "Template",
     "Tool",
     "Toolbox",
+    "BaseToolbox",
     "ToolCall",
     "ToolResult",
     "user_dir",
@@ -139,22 +141,22 @@ def get_fragment_loaders() -> Dict[
     return _get_loaders(pm.hook.register_fragment_loaders)
 
 
-def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
+def get_tools() -> Dict[str, Union[Tool, Type[BaseToolbox]]]:
     """Return all tools (llm.Tool and llm.Toolbox) registered by plugins."""
     load_plugins()
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = {}
+    tools: Dict[str, Union[Tool, Type[BaseToolbox]]] = {}
 
     # Variable to track current plugin name
     current_plugin_name = None
 
     def register(
-        tool_or_function: Union[Tool, Type[Toolbox], Callable[..., Any]],
+        tool_or_function: Union[Tool, Type[BaseToolbox], Callable[..., Any]],
         name: Optional[str] = None,
     ) -> None:
-        tool: Union[Tool, Type[Toolbox], None] = None
+        tool: Union[Tool, Type[BaseToolbox], None] = None
 
         # If it's a Toolbox class, set the plugin field on it
-        if inspect.isclass(tool_or_function) and issubclass(tool_or_function, Toolbox):
+        if inspect.isclass(tool_or_function) and issubclass(tool_or_function, BaseToolbox):
             tool = tool_or_function
             if current_plugin_name:
                 tool.plugin = current_plugin_name
@@ -177,7 +179,7 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
         # Get the name for the tool/toolbox
         if tool:
             # For Toolbox classes, use their name attribute or class name
-            if inspect.isclass(tool) and issubclass(tool, Toolbox):
+            if inspect.isclass(tool) and issubclass(tool, BaseToolbox):
                 prefix = name or getattr(tool, "name", tool.__name__) or ""
             else:
                 prefix = name or tool.name or ""

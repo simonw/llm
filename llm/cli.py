@@ -18,6 +18,7 @@ from llm import (
     Template,
     Tool,
     Toolbox,
+    BaseToolbox,
     UnknownModelError,
     KeyModel,
     encode,
@@ -2500,7 +2501,7 @@ def tools():
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = get_tools()
+    tools: Dict[str, Union[Tool, Type[BaseToolbox]]] = get_tools()
     if python_tools:
         for code_or_path in python_tools:
             for tool in _tools_from_code(code_or_path):
@@ -3900,8 +3901,8 @@ def _approve_tool_call(_, tool_call):
 
 def _gather_tools(
     tool_specs: List[str], python_tools: List[str]
-) -> List[Union[Tool, Type[Toolbox]]]:
-    tools: List[Union[Tool, Type[Toolbox]]] = []
+) -> List[Union[Tool, Type[BaseToolbox]]]:
+    tools: List[Union[Tool, Type[BaseToolbox]]] = []
     if python_tools:
         for code_or_path in python_tools:
             tools.extend(_tools_from_code(code_or_path))

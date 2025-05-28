@@ -16,6 +16,7 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Generator,
     Iterable,
     Iterator,
     List,
@@ -172,8 +173,7 @@ def _get_arguments_input_schema(function, name):
     return create_model(f"{name}InputSchema", **fields)
 
 
-class Toolbox:
-    _blocked = ("method_tools", "introspect_methods", "methods")
+class BaseToolbox:
     name: Optional[str] = None
     instance_id: Optional[int] = None
 
@@ -198,6 +198,18 @@ class Toolbox:
             original_init(self, *args, **kwargs)
 
         cls.__init__ = wrapped_init
+
+    @abstractmethod
+    def method_tools(self) -> Generator[Tool, None, None]:
+        pass
+
+class Toolbox(BaseToolbox):
+    _blocked = ("method_tools", "introspect_methods", "methods")
+    name: Optional[str] = None
+    instance_id: Optional[int] = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
 
     @classmethod
     def methods(cls):
@@ -245,7 +257,7 @@ class Toolbox:
         return methods
 
 
-ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
+ToolDef = Union[Tool, BaseToolbox, Callable[..., Any]]
 
 
 @dataclass
@@ -260,7 +272,7 @@ class ToolResult:
     name: str
     output: str
     tool_call_id: Optional[str] = None
-    instance: Optional[Toolbox] = None
+    instance: Optional[BaseToolbox] = None
 
 
 class CancelToolCall(Exception):
@@ -329,7 +341,7 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     for tool in tools:
         if isinstance(tool, Tool):
             wrapped_tools.append(tool)
-        elif isinstance(tool, Toolbox):
+        elif isinstance(tool, BaseToolbox):
             wrapped_tools.extend(tool.method_tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
