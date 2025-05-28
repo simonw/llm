@@ -2515,6 +2515,7 @@ def tools_list(json_, python_tools):
     output_toolboxes = []
     tool_objects = []
     toolbox_objects = []
+    base_toolbox_objects = []
     for name, tool in sorted(tools.items()):
         if isinstance(tool, Tool):
             tool_objects.append(tool)
@@ -2543,6 +2544,7 @@ def tools_list(json_, python_tools):
             )
         elif issubclass(tool, BaseToolbox):
             instance = tool()
+            base_toolbox_objects.append(instance)
             output_toolboxes.append(
                 {
                     "name": name,
@@ -2598,6 +2600,14 @@ def tools_list(json_, python_tools):
                     click.echo(
                         textwrap.indent(method["description"].strip(), "    ") + "\n"
                     )
+        for base_toolbox in base_toolbox_objects:
+            click.echo(base_toolbox.name + ":\n")
+            for tool in base_toolbox.method_tools():
+                click.echo(tool.name + ":\n")
+                if tool.description:
+                    click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
+                if tool.plugin:
+                    click.echo(f"  plugin: {tool.plugin}\n")
 
 
 @cli.group(
