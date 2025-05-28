@@ -2542,7 +2542,6 @@ def tools_list(json_, python_tools):
                 }
             )
         elif issubclass(tool, BaseToolbox):
-            toolbox_objects.append(tool)
             output_toolboxes.append(
                 {
                     "name": name,
