@@ -291,3 +291,20 @@ If those APIs return the _real_ model ID that was used, your plugin can record t
 response.set_resolved_model(resolved_model_id)
 ```
 This string will be recorded in the database and shown in the output of `llm logs` and `llm logs --json`.
+
+(tutorial-model-plugin-raise-errors)=
+
+## LLM_RAISE_ERRORS
+
+While working on a plugin it can be useful to request that errors are raised instead of being caught and logged, so you can access them from the Python debugger.
+
+Set the `LLM_RAISE_ERRORS` environment variable to enable this behavior, then run `llm` like this:
+
+```bash
+LLM_RAISE_ERRORS=1 python -i -m llm ...
+```
+The `-i` option means Python will drop into an interactive shell if an error occurs. You can then open a debugger at the most recent error using:
+
+```python
+import pdb; pdb.pm()
+```
