@@ -946,10 +946,14 @@ def test_logs_backup(logs_db):
         assert expected_path.exists()
 
 
-def test_logs_resolved_model(logs_db, mock_model):
+@pytest.mark.parametrize("async_", (False, True))
+def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     mock_model.resolved_model_name = "resolved-mock"
+    async_mock_model.resolved_model_name = "resolved-mock"
     runner = CliRunner()
-    result = runner.invoke(cli, ["-m", "mock", "simple prompt"])
+    result = runner.invoke(
+        cli, ["-m", "mock", "simple prompt"] + (["--async"] if async_ else [])
+    )
     assert result.exit_code == 0
     # Should have logged the resolved model name
     assert logs_db["responses"].count

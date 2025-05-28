@@ -1325,6 +1325,7 @@ class AsyncResponse(_BaseResponse):
         response.response_json = self.response_json
         response._tool_calls = list(self._tool_calls)
         response.attachments = list(self.attachments)
+        response.resolved_model = self.resolved_model
         return response
 
     @classmethod

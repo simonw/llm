@@ -109,6 +109,7 @@ class AsyncMockModel(llm.AsyncModel):
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -129,6 +130,8 @@ class AsyncMockModel(llm.AsyncModel):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class EmbedDemo(llm.EmbeddingModel):
