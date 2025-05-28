@@ -2481,6 +2481,10 @@ def schemas_dsl_debug(input, multi):
     schema = schema_dsl(input, multi)
     click.echo(json.dumps(schema, indent=2))
 
+def describe_type(obj: object) -> str:
+    if isinstance(obj, type):
+        return f"{obj.__module__}.{obj.__qualname__} (class)"
+    return f"{type(obj).__module__}.{type(obj).__qualname__} (instance)"
 
 @cli.group(
     cls=DefaultGroup,
@@ -2522,7 +2526,7 @@ def tools_list(json_, python_tools):
                     "plugin": tool.plugin,
                 }
             )
-        else:
+        elif issubclass(tool, Toolbox):
             toolbox_objects.append(tool)
             output_toolboxes.append(
                 {
@@ -2537,6 +2541,22 @@ def tools_list(json_, python_tools):
                     ],
                 }
             )
+        elif issubclass(tool, BaseToolbox):
+            toolbox_objects.append(tool)
+            output_toolboxes.append(
+                {
+                    "name": name,
+                    "tools": [
+                        {
+                            "name": "runtime",
+                            "description": "runtime",
+                            "arguments": "runtime"
+                        }
+                    ],
+                }
+            )
+        else:
+            print("WTFWTFWWTF")
     if json_:
         click.echo(
             json.dumps(

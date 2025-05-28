@@ -176,7 +176,6 @@ def _get_arguments_input_schema(function, name):
 class BaseToolbox:
     name: Optional[str] = None
     instance_id: Optional[int] = None
-
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
