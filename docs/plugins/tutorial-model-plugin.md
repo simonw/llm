@@ -6,6 +6,8 @@ This tutorial will walk you through developing a new plugin for LLM that adds su
 
 We will be developing a plugin that implements a simple [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) to generate words based on an input string. Markov chains are not technically large language models, but they provide a useful exercise for demonstrating how the LLM tool can be extended through plugins.
 
+(tutorial-model-plugin-initial)=
+
 ## The initial structure of the plugin
 
 First create a new directory with the name of your plugin - it should be called something like `llm-markov`.
@@ -51,6 +53,8 @@ This is the simplest possible configuration. It defines a plugin name and provid
 If you are comfortable with Python virtual environments you can create one now for your project, activate it and run `pip install llm` before the next step.
 
 If you aren't familiar with virtual environments, don't worry: you can develop plugins without them. You'll need to have LLM installed using Homebrew or `pipx` or one of the [other installation options](https://llm.datasette.io/en/latest/setup.html#installation).
+
+(tutorial-model-plugin-installing)=
 
 ## Installing your plugin to try it out
 
@@ -101,6 +105,8 @@ hello world
 ```
 Next, we'll make it execute and return the results of a Markov chain.
 
+(tutorial-model-plugin-building)=
+
 ## Building the Markov chain
 
 Markov chains can be thought of as the simplest possible example of a generative language model. They work by building an index of words that have been seen following other words.
@@ -132,6 +138,9 @@ We can try that out by pasting it into the interactive Python interpreter and ru
 >>> transitions
 {'the': ['cat', 'mat'], 'cat': ['sat'], 'sat': ['on'], 'on': ['the']}
 ```
+
+(tutorial-model-plugin-executing)=
+
 ## Executing the Markov chain
 
 To execute the model, we start with a word. We look at the options for words that might come next and pick one of those at random. Then we repeat that process until we have produced the desired number of output words.
@@ -170,6 +179,9 @@ Or you can generate a full string sentence with it like this:
 ```python
 sentence = " ".join(generate(transitions, 20))
 ```
+
+(tutorial-model-plugin-register)=
+
 ## Adding that to the plugin
 
 Our `execute()` method from earlier currently returns the list `["hello world"]`.
@@ -221,6 +233,8 @@ llm -m markov "the cat sat on the mat"
 the mat the cat sat on the cat sat on the mat cat sat on the mat cat sat on
 ```
 
+ (tutorial-model-plugin-execute)=
+
 ## Understanding execute()
 
 The full signature of the `execute()` method is:
@@ -234,6 +248,8 @@ The `prompt` argument is a `Prompt` object that contains the text that the user 
 `response` is the `Response` object that is being created by the model. This is provided so you can write additional information to `response.response_json`, which may be logged to the database.
 
 `conversation` is the `Conversation` that the prompt is a part of - or `None` if no conversation was provided. Some models may use `conversation.responses` to access previous prompts and responses in the conversation and use them to construct a call to the LLM that includes previous context.
+
+(tutorial-model-plugin-logging)=
 
 ## Prompts and responses are logged to the database
 
@@ -312,6 +328,8 @@ llm logs -n 1
 ]
 ```
 In this particular case this isn't a great idea here though: the `transitions` table is duplicate information, since it can be reproduced from the input data - and it can get really large for longer prompts.
+
+(tutorial-model-plugin-options)=
 
 ## Adding options
 
@@ -455,6 +473,8 @@ llm logs -n 1
 ]
 ```
 
+(tutorial-model-plugin-distributing)=
+
 ## Distributing your plugin
 
 There are many different options for distributing your new plugin so other people can try it out.
@@ -462,6 +482,8 @@ There are many different options for distributing your new plugin so other peopl
 You can create a downloadable wheel or `.zip` or `.tar.gz` files, or share the plugin through GitHub Gists or repositories.
 
 You can also publish your plugin to PyPI, the Python Package Index.
+
+(tutorial-model-plugin-wheels)=
 
 ### Wheels and sdist packages
 
@@ -489,6 +511,8 @@ You can run the following command at any time to uninstall your plugin, which is
 llm uninstall llm-markov -y
 ```
 
+(tutorial-model-plugin-gists)=
+
 ### GitHub Gists
 
 A neat quick option for distributing a simple plugin is to host it in a GitHub Gist. These are available for free with a GitHub account, and can be public or private. Gists can contain multiple files but don't support directory structures - which is OK, because our plugin is just two files, `pyproject.toml` and `llm_markov.py`.
@@ -506,9 +530,13 @@ The plugin can be installed using the `llm install` command like this:
 llm install 'https://gist.github.com/simonw/6e56d48dc2599bffba963cef0db27b6d/archive/cc50c854414cb4deab3e3ab17e7e1e07d45cba0c.zip'
 ```
 
+(tutorial-model-plugin-github)=
+
 ## GitHub repositories
 
 The same trick works for regular GitHub repositories as well: the "Download ZIP" button can be found by clicking the green "Code" button at the top of the repository. The URL which that provides can then be used to install the plugin that lives in that repository.
+
+(tutorial-model-plugin-pypi)=
 
 ## Publishing plugins to PyPI
 
@@ -520,6 +548,8 @@ python -m pip install twine
 python -m twine upload dist/*
 ```
 You will need an account on PyPI, then you can enter your username and password - or create a token in the PyPI settings and use `__token__` as the username and the token as the password.
+
+(tutorial-model-plugin-metadata)=
 
 ## Adding metadata
 
@@ -560,6 +590,8 @@ It adds `llm` as a dependency, ensuring it will be installed if someone tries to
 It adds some links to useful pages (you can drop the `project.urls` section if those links are not useful for your project).
 
 You should drop a `LICENSE` file into the GitHub repository for your package as well. I like to use the Apache 2 license [like this](https://github.com/simonw/llm/blob/main/LICENSE).
+
+(tutorial-model-plugin-breaks)=
 
 ## What to do if it breaks
 
