@@ -65,7 +65,7 @@ The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use th
 (plugin-hooks-register-embedding-models)=
 ## register_embedding_models(register)
 
-This hook can be used to register one or more additional embedding models.
+This hook can be used to register one or more additional embedding models, as described in {ref}`embeddings-writing-plugins`.
 
 ```python
 import llm
