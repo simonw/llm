@@ -2605,7 +2605,7 @@ def tools_list(json_, python_tools):
             for tool in base_toolbox.method_tools():
                 click.echo("{}{}\n".format(tool.name, " (plugin: {})".format(tool.plugin) if tool.plugin else ""))
                 if tool.description:
-                    click.echo(textwrap.indent(tool.description.strip(), "  "))
+                    click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
 
 
 @cli.group(
