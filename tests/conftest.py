@@ -2,6 +2,7 @@ import pytest
 import sqlite_utils
 import json
 import llm
+import llm_echo
 from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
@@ -80,31 +81,6 @@ class MockModel(llm.Model):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
-
-
-class EchoModel(llm.Model):
-    model_id = "echo"
-    can_stream = True
-    attachment_types = {"image/png"}
-
-    class Options(llm.Options):
-        example_int: Optional[int] = Field(
-            description="Example integer option", default=None
-        )
-
-    def execute(self, prompt, stream, response, conversation):
-        yield "system:\n{}\n\n".format(prompt.system or "")
-        yield "prompt:\n{}".format(prompt.prompt or "")
-        # Only show non-null options
-        non_null_options = {
-            k: v for k, v in prompt.options.model_dump().items() if v is not None
-        }
-        if non_null_options:
-            yield "\n\noptions: {}".format(json.dumps(non_null_options))
-        if prompt.attachments:
-            yield "\n\nattachments:\n"
-            for attachment in prompt.attachments:
-                yield f"  - {attachment.url}\n"
 
 
 class MockKeyModel(llm.KeyModel):
@@ -239,7 +215,7 @@ def register_echo_model():
 
         @llm.hookimpl
         def register_models(self, register):
-            register(EchoModel())
+            register(llm_echo.Echo(), llm_echo.EchoAsync())
 
     pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
     try:
@@ -489,3 +465,16 @@ def collection():
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"filter_headers": ["Authorization"]}
+
+
+def extract_braces(s):
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and first < last:
+        return s[first : last + 1]
+    return None

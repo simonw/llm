@@ -62,6 +62,117 @@ This demonstrates how to register a model with both sync and async versions, and
 
 The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
 
+(plugin-hooks-register-embedding-models)=
+## register_embedding_models(register)
+
+This hook can be used to register one or more additional embedding models, as described in {ref}`embeddings-writing-plugins`.
+
+```python
+import llm
+
+@llm.hookimpl
+def register_embedding_models(register):
+    register(HelloWorld())
+
+class HelloWorld(llm.EmbeddingModel):
+    model_id = "helloworld"
+
+    def embed_batch(self, items):
+        return [[1, 2, 3], [4, 5, 6]]
+```
+
+(plugin-hooks-register-tools)=
+## register_tools(register)
+
+This hook can register one or more tool functions for use with LLM. See {ref}`the tools documentation <tools>` for more details.
+
+This example registers two tools: `upper` and `count_character_in_word`.
+
+```python
+import llm
+
+def upper(text: str) -> str:
+    """Convert text to uppercase."""
+    return text.upper()
+
+def count_char(text: str, character: str) -> int:
+    """Count the number of occurrences of a character in a word."""
+    return text.count(character)
+
+@llm.hookimpl
+def register_tools(register):
+    register(upper)
+    # Here the name= argument is used to specify a different name for the tool:
+    register(count_char, name="count_character_in_word")
+```
+
+Tools can also be implemented as classes, as described in {ref}`Toolbox classes <python-api-toolbox>` in the Python API documentation.
+
+You can register classes like the `Memory` example from there by passing the class (_not_ an instance of the class) to `register()`:
+
+```python
+import llm
+
+class Memory(llm.Toolbox):
+    ...
+
+@llm.hookimpl
+def register_tools(register):
+    register(Memory)
+```
+Once installed, this tool can be used like so:
+
+```bash
+llm chat -T Memory
+```
+If a tool name starts with a capital letter it is assumed to be a toolbox class, not a regular tool function.
+
+Here's an example session with the Memory tool:
+```
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> Remember my name is Henry
+
+Tool call: Memory_set({'key': 'user_name', 'value': 'Henry'})
+  null
+
+Got it, Henry! I'll remember your name. How can I assist you today?
+> what keys are there?
+
+Tool call: Memory_keys({})
+  [
+    "user_name"
+  ]
+
+Currently, there is one key stored: "user_name". Would you like to add or retrieve any information?
+> read it
+
+Tool call: Memory_get({'key': 'user_name'})
+  Henry
+
+The value stored under the key "user_name" is Henry. Is there anything else you'd like to do?
+> add Barrett to it
+
+Tool call: Memory_append({'key': 'user_name', 'value': 'Barrett'})
+  null
+
+I have added "Barrett" to the key "user_name". If you want, I can now show you the updated value.
+> show value
+
+Tool call: Memory_get({'key': 'user_name'})
+  Henry
+  Barrett
+
+The value stored under the key "user_name" is now:
+Henry
+Barrett
+
+Is there anything else you would like to do?
+```
+
 (plugin-hooks-register-template-loaders)=
 ## register_template_loaders(register)
 
@@ -136,6 +247,10 @@ def register_fragment_loaders(register):
 
 
 def my_fragment_loader(argument: str) -> llm.Fragment:
+    """
+    Documentation for the fragment loader goes here. It will be displayed
+    when users run the 'llm fragments loaders' command.
+    """
     try:
         fragment = "Fragment content for {}".format(argument)
         source = "my-fragments:{}".format(argument)
@@ -148,6 +263,7 @@ def my_fragment_loader(argument: str) -> llm.Fragment:
 
 # Or for the case where you want to return multiple fragments and attachments:
 def my_fragment_loader(argument: str) -> list[llm.Fragment]:
+    "Docs go here."
     return [
         llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
         llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),

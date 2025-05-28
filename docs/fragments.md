@@ -39,6 +39,42 @@ This will read the contents of `setup.py` from standard input and use it as a fr
 
 Fragments can also be used as part of your system prompt. Use `--sf value` or `--system-fragment value` instead of `-f`.
 
+## Using fragments in chat
+
+The `chat` command also supports the `-f` and `--sf` arguments to start a chat with fragments.
+
+```bash
+llm chat -f my_doc.txt
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> Explain this document to me
+```
+
+Fragments can also be added *during* a chat conversation using the `!fragment <my_fragment>` command.
+
+```bash
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> !fragment https://llm.datasette.io/en/stable/fragments.html
+```
+
+This can be combined with `!multi`:
+
+```bash
+> !multi
+Explain the difference between fragments and templates to me
+!fragment https://llm.datasette.io/en/stable/fragments.html https://llm.datasette.io/en/stable/templates.html
+!end
+```
+
+Any `!fragment` lines found in a prompt created with `!edit` will not be parsed.
+
 (fragments-browsing)=
 ## Browsing fragments
 

@@ -93,6 +93,13 @@ def test_similar(collection):
     ]
 
 
+def test_similar_prefixed(collection):
+    results = list(collection.similar("hello world", prefix="2"))
+    assert results == [
+        Entry(id="2", score=pytest.approx(0.9863939238321437)),
+    ]
+
+
 def test_similar_by_id(collection):
     results = list(collection.similar_by_id("1"))
     assert results == [

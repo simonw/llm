@@ -120,6 +120,106 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-tools)=
+### Tools
+
+Many models support the ability to call {ref}`external tools <tools>`. Tools can be provided {ref}`by plugins <plugin-hooks-register-tools>` or you can pass a `--functions CODE` option to LLM to define one or more Python functions that the model can then call.
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345'
+```
+Add `--td/--tools-debug` to see full details of the tools that are being executed. You can also set the `LLM_TOOLS_DEBUG` environment variable to `1` to enable this for all prompts.
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --td
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+  7303652730
+34234 multiplied by 213345 is 7,303,652,730.
+```
+Or add `--ta/--tools-approve` to approve each tool call interactively before it is executed:
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --ta
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+Approve tool call? [y/N]:
+```
+The `--functions` option can be passed more than once, and can also point to the filename of a `.py` file containing one or more functions.
+
+If you have any tools that have been made available via plugins you can add them to the prompt using `--tool/-T` option. For example, using [llm-tools-simpleeval](https://github.com/simonw/llm-tools-simpleeval) like this:
+
+```bash
+llm install llm-tools-simpleeval
+llm --tool simple_eval "4444 * 233423" --td
+```
+Run this command to see a list of available tools from plugins:
+```bash
+llm tools
+```
+If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+
+```
+llm -T simple_eval "12345 * 12345" --td
+Tool call: simple_eval({'expression': '12345 * 12345'})
+  152399025
+12345 multiplied by 12345 equals 152,399,025.
+llm -c "that * 6" --td
+Tool call: simple_eval({'expression': '152399025 * 6'})
+  914394150
+152,399,025 multiplied by 6 equals 914,394,150.
+llm chat -c --td
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+> / 123
+Tool call: simple_eval({'expression': '914394150 / 123'})
+  7434098.780487805
+914,394,150 divided by 123 is approximately 7,434,098.78.
+```
+Some tools are bundled in a configurable collection of tools called a **toolbox**. This means a single `--tool` option can load multiple related tools.
+
+[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) is one example. Using a toolbox looks like this:
+
+```bash
+llm install llm-tools-datasette
+llm -T 'Datasette("https://datasette.io/content")' "Show tables" --td
+```
+Toolboxes always start with a capital letter. They can be configured by passing a tool specification, which should fit the following patterns:
+
+- Empty: `ToolboxName` or `ToolboxName()` - has no configuration arguments
+- JSON object: `ToolboxName({"key": "value", "other": 42})`
+- Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
+- Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
+
+Toolboxes are not currently supported with the `llm -c` option, but they work well with `llm chat`. Try chatting with the Datasette content database like this:
+
+```bash
+llm chat -T 'Datasette("https://datasette.io/content")' --td
+```
+```
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+...
+> show tables
+```
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
@@ -331,6 +431,7 @@ Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -352,6 +453,7 @@ Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > !multi custom-end
  Explain this error:
 
@@ -371,8 +473,11 @@ Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > !edit
 ```
+
+`llm chat` takes the same `--tool/-T` and `--functions` options as `llm prompt`. You can use this to start a chat with the specified {ref}`tools <usage-tools>` enabled.
 
 ## Listing available models
 
@@ -449,6 +554,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -488,6 +594,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -603,6 +710,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -623,6 +731,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -643,6 +752,7 @@ OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -799,6 +909,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -819,6 +930,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -839,6 +951,7 @@ OpenAI Chat: o1
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -859,6 +972,7 @@ OpenAI Chat: o1-2024-12-17
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -912,6 +1026,7 @@ OpenAI Chat: o3-mini
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -928,9 +1043,12 @@ OpenAI Chat: o3
     seed: int
     json_object: boolean
     reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -947,9 +1065,12 @@ OpenAI Chat: o4-mini
     seed: int
     json_object: boolean
     reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
   - async
   Keys:
     key: openai
@@ -1028,4 +1149,4 @@ Or clear all default options for a model like this:
 ```bash
 llm models options clear gpt-4o
 ```
-
+Default model options are respected by both the `llm prompt` and the `llm chat` commands. They will not be applied when you use LLM as a {ref}`Python library <python-api>`.
