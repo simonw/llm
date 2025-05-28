@@ -2542,15 +2542,18 @@ def tools_list(json_, python_tools):
                 }
             )
         elif issubclass(tool, BaseToolbox):
+            instance = tool()
             output_toolboxes.append(
                 {
                     "name": name,
                     "tools": [
                         {
-                            "name": "runtime",
-                            "description": "runtime",
-                            "arguments": "runtime"
-                        }
+                            "name": one_tool.name,
+                            "description": one_tool.description,
+                            "arguments": one_tool.input_schema,
+                            "plugin": one_tool.plugin
+                        } 
+                        for one_tool in instance.method_tools()
                     ],
                 }
             )
