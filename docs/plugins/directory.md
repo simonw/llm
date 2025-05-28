@@ -42,6 +42,15 @@ These plugins can be used to interact with remotely hosted models via their API:
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
+## Tools
+
+The following plugins add new {ref}`tools <tools>` that can be used by models:
+
+- **[llm-tools-simpleeval](https://github.com/simonw/llm-tools-simpleeval)** implements simple expression support for things like mathematics.
+- **[llm-tools-quickjs](https://github.com/simonw/llm-tools-quickjs)** provides access to a sandboxed QuickJS JavaScript interpreter, allowing LLMs to run JavaScript code. The environment persists between calls so the model can set variables and build functions and reuse them later on.
+- **[llm-tools-sqlite](https://github.com/simonw/llm-tools-sqlite)** can run read-only SQL queries against local SQLite databases.
+- **[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette)** can run SQL queries against a remote [Datasette](https://datasette.io/) instance.
+
 ## Fragments and template loaders
 
 {ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.

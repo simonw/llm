@@ -368,3 +368,25 @@ def m017_tools_tables(db):
             ("tool_id", "tools", "id"),
         ),
     )
+
+
+@migration
+def m017_tools_plugin(db):
+    db["tools"].add_column("plugin")
+
+
+@migration
+def m018_tool_instances(db):
+    # Used to track instances of Toolbox classes that may be
+    # used multiple times by different tools
+    db["tool_instances"].create(
+        {
+            "id": int,
+            "plugin": str,
+            "name": str,
+            "arguments": str,
+        },
+        pk="id",
+    )
+    # We record which instance was used only on the results
+    db["tool_results"].add_column("instance_id", fk="tool_instances")

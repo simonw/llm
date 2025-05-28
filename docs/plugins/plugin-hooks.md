@@ -106,6 +106,73 @@ def register_tools(register):
     register(count_char, name="count_character_in_word")
 ```
 
+Tools can also be implemented as classes, as described in {ref}`Toolbox classes <python-api-toolbox>` in the Python API documentation.
+
+You can register classes like the `Memory` example from there by passing the class (_not_ an instance of the class) to `register()`:
+
+```python
+import llm
+
+class Memory(llm.Toolbox):
+    ...
+
+@llm.hookimpl
+def register_tools(register):
+    register(Memory)
+```
+Once installed, this tool can be used like so:
+
+```bash
+llm chat -T Memory
+```
+If a tool name starts with a capital letter it is assumed to be a toolbox class, not a regular tool function.
+
+Here's an example session with the Memory tool:
+```
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> Remember my name is Henry
+
+Tool call: Memory_set({'key': 'user_name', 'value': 'Henry'})
+  null
+
+Got it, Henry! I'll remember your name. How can I assist you today?
+> what keys are there?
+
+Tool call: Memory_keys({})
+  [
+    "user_name"
+  ]
+
+Currently, there is one key stored: "user_name". Would you like to add or retrieve any information?
+> read it
+
+Tool call: Memory_get({'key': 'user_name'})
+  Henry
+
+The value stored under the key "user_name" is Henry. Is there anything else you'd like to do?
+> add Barrett to it
+
+Tool call: Memory_append({'key': 'user_name', 'value': 'Barrett'})
+  null
+
+I have added "Barrett" to the key "user_name". If you want, I can now show you the updated value.
+> show value
+
+Tool call: Memory_get({'key': 'user_name'})
+  Henry
+  Barrett
+
+The value stored under the key "user_name" is now:
+Henry
+Barrett
+
+Is there anything else you would like to do?
+```
+
 (plugin-hooks-register-template-loaders)=
 ## register_template_loaders(register)
 

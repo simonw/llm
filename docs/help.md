@@ -163,17 +163,27 @@ Usage: llm chat [OPTIONS]
   Hold an ongoing chat with a model.
 
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  -d, --database FILE          Path to log database
-  --no-stream                  Do not stream output
-  --key TEXT                   API key to use
-  --help                       Show this message and exit.
+  -s, --system TEXT             System prompt to use
+  -m, --model TEXT              Model to use
+  -c, --continue                Continue the most recent conversation.
+  --cid, --conversation TEXT    Continue the conversation with the given ID.
+  -f, --fragment TEXT           Fragment (alias, URL, hash or file path) to add
+                                to the prompt
+  --sf, --system-fragment TEXT  Fragment to add to system prompt
+  -t, --template TEXT           Template to use
+  -p, --param <TEXT TEXT>...    Parameters for template
+  -o, --option <TEXT TEXT>...   key/value options for the model
+  -d, --database FILE           Path to log database
+  --no-stream                   Do not stream output
+  --key TEXT                    API key to use
+  -T, --tool TEXT               Name of a tool to make available to the model
+  --functions TEXT              Python code block or file path defining
+                                functions to register as tools
+  --td, --tools-debug           Show full details of tool executions
+  --ta, --tools-approve         Manually approve every tool execution
+  --cl, --chain-limit INTEGER   How many chained tool responses to allow,
+                                default 5, set 0 for unlimited
+  --help                        Show this message and exit.
 ```
 
 (help-keys)=
@@ -335,6 +345,8 @@ Options:
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
   -f, --fragment TEXT         Filter for prompts using these fragments
+  -T, --tool TEXT             Filter for prompts with results from these tools
+  --tools                     Filter for prompts with results from any tools
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   --data                      Output newline-delimited JSON data for schema
@@ -579,6 +591,8 @@ Options:
   -d, --database FILE  Path to log database
   -q, --query TEXT     Search for schemas matching this string
   --full               Output full schema contents
+  --json               Output as JSON
+  --nl                 Output as newline-delimited JSON
   --help               Show this message and exit.
 ```
 
@@ -811,8 +825,9 @@ Usage: llm plugins [OPTIONS]
   List installed plugins
 
 Options:
-  --all   Include built-in default plugins
-  --help  Show this message and exit.
+  --all        Include built-in default plugins
+  --hook TEXT  Filter for plugins that implement this hook
+  --help       Show this message and exit.
 ```
 
 (help-install)=
@@ -828,6 +843,7 @@ Options:
   --force-reinstall    Reinstall all packages even if they are already up-to-
                        date
   --no-cache-dir       Disable the cache
+  --pre                Include pre-release and development versions
   --help               Show this message and exit.
 ```
 
@@ -940,6 +956,7 @@ Options:
   -n, --number INTEGER  Number of results to return
   -p, --plain           Output in plain text format
   -d, --database FILE
+  --prefix TEXT         Just IDs with this prefix
   --help                Show this message and exit.
 ```
 

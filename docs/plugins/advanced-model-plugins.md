@@ -8,6 +8,7 @@ Features to consider for your model plugin include:
 - {ref}`Accepting API keys <advanced-model-plugins-api-keys>` using the standard mechanism that incorporates `llm keys set`, environment variables and support for passing an explicit key to the model.
 - Including support for {ref}`Async models <advanced-model-plugins-async>` that can be used with Python's `asyncio` library.
 - Support for {ref}`structured output <advanced-model-plugins-schemas>` using JSON schemas.
+- Support for {ref}`tools <advanced-model-plugins-tools>`.
 - Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
 - Tracking {ref}`token usage <advanced-model-plugins-usage>` for models that charge by the token.
 
@@ -121,6 +122,32 @@ And then adding code to your `.execute()` method that checks for `prompt.schema`
 `prompt.schema` will always be a Python dictionary representing a JSON schema, even if the user passed in a Pydantic model class.
 
 Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic](https://github.com/simonw/llm-anthropic) plugins for example of this pattern in action.
+
+(advanced-model-plugins-tools)=
+
+## Supporting tools
+
+Adding {ref}`tools support <tools>` involves several steps:
+
+1. Add `supports_tools = True` to your model class.
+2. If `prompt.tools` is populated, turn that list of `llm.Tool` objects into the correct format for your model.
+3. Look out for requests to call tools in the responses from your model. Call `response.add_tool_call(llm.ToolCall(...))` for each of those. This should work for streaming and non-streaming and async and non-async cases.
+4. If your prompt has a `prompt.tool_results` list, pass the information from those `llm.ToolResult` objects to your model.
+5. Include `prompt.tools` and `prompt.tool_results` and tool calls from `response.tool_calls_or_raise()` in the conversation history constructed by your plugin.
+6. Make sure your code is OK with prompts that do not have `prompt.prompt` set to a value, since they may be carrying exclusively the results of a tool call.
+
+This [commit to llm-gemini](https://github.com/simonw/llm-gemini/commit/a7f1096cfbb733018eb41c29028a8cc6160be298) implementing tools helps demonstrate what this looks like for a real plugin.
+
+Here are the relevant dataclasses:
+
+```{eval-rst}
+.. autoclass:: llm.Tool
+
+.. autoclass:: llm.ToolCall
+
+.. autoclass:: llm.ToolResult
+```
+
 
 (advanced-model-plugins-attachments)=
 
