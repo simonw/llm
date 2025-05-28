@@ -568,6 +568,7 @@ class _BaseResponse:
     id: str
     prompt: "Prompt"
     stream: bool
+    resolved_model: Optional[str] = None
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
     _tool_calls: List[ToolCall] = []
@@ -619,6 +620,9 @@ class _BaseResponse:
         self.input_tokens = input
         self.output_tokens = output
         self.token_details = details
+
+    def set_resolved_model(self, model_id: str):
+        self.resolved_model = model_id
 
     @classmethod
     def from_row(cls, db, row, _async=False):
@@ -814,6 +818,7 @@ class _BaseResponse:
                 json.dumps(self.token_details) if self.token_details else None
             ),
             "schema_id": schema_id,
+            "resolved_model": self.resolved_model,
         }
         db["responses"].insert(response)
 

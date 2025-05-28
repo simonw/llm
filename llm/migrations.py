@@ -390,3 +390,10 @@ def m018_tool_instances(db):
     )
     # We record which instance was used only on the results
     db["tool_results"].add_column("instance_id", fk="tool_instances")
+
+
+@migration
+def m019_resolved_model(db):
+    # For models like gemini-1.5-flash-latest where we wish to record
+    # the resolved model name in addition to the alias
+    db["responses"].add_column("resolved_model", str)

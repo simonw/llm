@@ -279,3 +279,15 @@ This example logs 15 input tokens, 340 output tokens and notes that 37 tokens we
 ```python
 response.set_usage(input=15, output=340, details={"cached": 37})
 ```
+(advanced-model-plugins-resolved-model)=
+
+## Tracking resolved model names
+
+In some cases the model ID that the user requested may not be the exact model that is executed. Many providers have a `model-latest` alias which may execute different models over time.
+
+If those APIs return the _real_ model ID that was used, your plugin can record that in the `resources.resolved_model` column in the logs by calling this method and passing the string representing the resolved, final model ID:
+
+```bash
+response.set_resolved_model(resolved_model_id)
+```
+This string will be recorded in the database and shown in the output of `llm logs` and `llm logs --json`.

@@ -46,6 +46,7 @@ def test_chat_basic(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
             "prompt_json": None,
@@ -63,6 +64,7 @@ def test_chat_basic(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi two",
             "system": None,
             "prompt_json": None,
@@ -110,6 +112,7 @@ def test_chat_basic(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Continue",
             "system": None,
             "prompt_json": None,
@@ -153,6 +156,7 @@ def test_chat_system(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": "You are mean",
             "prompt_json": None,
@@ -195,6 +199,7 @@ def test_chat_options(mock_model, logs_db, user_path):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
             "prompt_json": None,
@@ -212,6 +217,7 @@ def test_chat_options(mock_model, logs_db, user_path):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi with override",
             "system": None,
             "prompt_json": None,

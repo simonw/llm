@@ -1390,6 +1390,7 @@ def logs_turn_off():
 
 LOGS_COLUMNS = """    responses.id,
     responses.model,
+    responses.resolved_model,
     responses.prompt,
     responses.system,
     responses.prompt_json,
@@ -2011,7 +2012,16 @@ def logs_list(
                         else ""
                     ),
                     (
-                        "\nModel: **{}**\n".format(row["model"])
+                        (
+                            "\nModel: **{}**{}\n".format(
+                                row["model"],
+                                (
+                                    " (resolved: **{}**)".format(row["resolved_model"])
+                                    if row["resolved_model"]
+                                    else ""
+                                ),
+                            )
+                        )
                         if should_show_conversation
                         else ""
                     ),

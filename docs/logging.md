@@ -327,7 +327,8 @@ CREATE TABLE "responses" (
   [input_tokens] INTEGER,
   [output_tokens] INTEGER,
   [token_details] TEXT,
-  [schema_id] TEXT REFERENCES [schemas]([id])
+  [schema_id] TEXT REFERENCES [schemas]([id]),
+  [resolved_model] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],

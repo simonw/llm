@@ -8,6 +8,7 @@ import sqlite_utils
 EXPECTED = {
     "id": str,
     "model": str,
+    "resolved_model": str,
     "prompt": str,
     "system": str,
     "prompt_json": str,
