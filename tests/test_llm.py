@@ -1,14 +1,16 @@
-from click.testing import CliRunner
-import llm
-from llm.cli import cli
-from llm.models import Usage
 import json
 import os
 import pathlib
-from pydantic import BaseModel
+from unittest import mock
+
 import pytest
 import sqlite_utils
-from unittest import mock
+from click.testing import CliRunner
+from pydantic import BaseModel
+
+import llm
+from llm.cli import cli
+from llm.models import Usage
 
 
 def test_version():

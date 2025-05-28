@@ -1,49 +1,67 @@
 import asyncio
-import click
-from click_default_group import DefaultGroup
-from dataclasses import asdict
+import base64
+import inspect
 import io
 import json
 import os
+import pathlib
+import re
+import readline
+import shutil
+import sys
+import textwrap
+import warnings
+from dataclasses import asdict
+from runpy import run_module
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union, cast
+
+import click
+import httpx
+import pydantic
+import sqlite_utils
+import yaml
+from click_default_group import DefaultGroup
+from sqlite_utils.utils import Format, rows_from_file
+
 from llm import (
-    Attachment,
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    Attachment,
     CancelToolCall,
     Collection,
     Conversation,
     Fragment,
+    KeyModel,
     Response,
     Template,
     Tool,
     Toolbox,
     UnknownModelError,
-    KeyModel,
     encode,
     get_async_model,
-    get_default_model,
     get_default_embedding_model,
-    get_embedding_models_with_aliases,
-    get_embedding_model_aliases,
+    get_default_model,
     get_embedding_model,
-    get_plugins,
-    get_tools,
+    get_embedding_model_aliases,
+    get_embedding_models_with_aliases,
     get_fragment_loaders,
-    get_template_loaders,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
-    user_dir,
-    set_alias,
-    set_default_model,
-    set_default_embedding_model,
+    get_plugins,
+    get_template_loaders,
+    get_tools,
     remove_alias,
+    set_alias,
+    set_default_embedding_model,
+    set_default_model,
+    user_dir,
 )
-from llm.models import _BaseConversation, ChainResponse
+from llm.models import ChainResponse, _BaseConversation
 
 from .migrations import migrate
-from .plugins import pm, load_plugins
+from .plugins import load_plugins, pm
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
@@ -62,22 +80,6 @@ from .utils import (
     token_usage_string,
     truncate_string,
 )
-import base64
-import httpx
-import inspect
-import pathlib
-import pydantic
-import re
-import readline
-from runpy import run_module
-import shutil
-import sqlite_utils
-from sqlite_utils.utils import rows_from_file, Format
-import sys
-import textwrap
-from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Type, Any
-import warnings
-import yaml
 
 warnings.simplefilter("ignore", ResourceWarning)
 

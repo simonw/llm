@@ -73,3 +73,9 @@ test = [
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+extend-select = ["I"]  # Add isort rules to the default set

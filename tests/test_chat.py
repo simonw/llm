@@ -1,11 +1,13 @@
-from click.testing import CliRunner
-from unittest.mock import ANY
 import json
-import llm.cli
-import pytest
-import sqlite_utils
 import sys
 import textwrap
+from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+import llm.cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

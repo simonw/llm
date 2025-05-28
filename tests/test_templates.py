@@ -1,12 +1,14 @@
-from click.testing import CliRunner
 import json
-from llm import Template
-from llm.cli import cli
 import os
-from unittest import mock
 import pathlib
+from unittest import mock
+
 import pytest
 import yaml
+from click.testing import CliRunner
+
+from llm import Template
+from llm.cli import cli
 
 
 @pytest.mark.parametrize(

@@ -1,14 +1,14 @@
 import asyncio
 import base64
-from condense_json import condense_json
-from dataclasses import dataclass, field
 import datetime
-from .errors import NeedsKeyException
 import hashlib
-import httpx
-from itertools import islice
+import inspect
+import json
 import re
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from itertools import islice
 from typing import (
     Any,
     AsyncGenerator,
@@ -24,19 +24,21 @@ from typing import (
     Union,
     get_type_hints,
 )
+
+import httpx
+from condense_json import condense_json
+from pydantic import BaseModel, ConfigDict, create_model
+
+from .errors import NeedsKeyException
 from .utils import (
     ensure_fragment,
     ensure_tool,
     make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
-    token_usage_string,
     monotonic_ulid,
+    token_usage_string,
 )
-from abc import ABC, abstractmethod
-import inspect
-import json
-from pydantic import BaseModel, ConfigDict, create_model
 
 CONVERSATION_NAME_LENGTH = 32
 
@@ -622,7 +624,7 @@ class _BaseResponse:
 
     @classmethod
     def from_row(cls, db, row, _async=False):
-        from llm import get_model, get_async_model
+        from llm import get_async_model, get_model
 
         if _async:
             model = get_async_model(row["model"])

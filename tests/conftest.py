@@ -1,12 +1,14 @@
+import json
+from typing import Optional
+
+import llm_echo
 import pytest
 import sqlite_utils
-import json
-import llm
-import llm_echo
-from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
-from typing import Optional
+
+import llm
+from llm.plugins import pm
 
 
 def pytest_configure(config):

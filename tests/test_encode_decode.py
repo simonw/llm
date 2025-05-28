@@ -1,6 +1,7 @@
-import llm
-import pytest
 import numpy as np
+import pytest
+
+import llm
 
 
 @pytest.mark.parametrize(

@@ -1,15 +1,17 @@
 import json
+
 import pytest
+
+from llm import Toolbox, get_key
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
+    monotonic_ulid,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
-    monotonic_ulid,
 )
-from llm import get_key, Toolbox
 
 
 @pytest.mark.parametrize(

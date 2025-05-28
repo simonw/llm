@@ -1,9 +1,11 @@
-from click.testing import CliRunner
-from llm.cli import cli
-import llm
 import json
-import pytest
 import re
+
+import pytest
+from click.testing import CliRunner
+
+import llm
+from llm.cli import cli
 
 
 @pytest.mark.parametrize("model_id_or_alias", ("gpt-3.5-turbo", "chatgpt"))

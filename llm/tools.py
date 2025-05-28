@@ -1,6 +1,6 @@
+import time
 from datetime import datetime, timezone
 from importlib.metadata import version
-import time
 
 
 def llm_version() -> str:

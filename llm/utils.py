@@ -1,21 +1,19 @@
-import click
 import hashlib
-import httpx
 import itertools
 import json
-import pathlib
-import puremagic
-import re
-import sqlite_utils
-import textwrap
-from typing import Any, List, Dict, Optional, Tuple, Type
 import os
+import pathlib
+import re
+import textwrap
 import threading
 import time
-from typing import Final
+from typing import Any, Dict, Final, List, Optional, Tuple, Type
 
+import click
+import httpx
+import puremagic
+import sqlite_utils
 from ulid import ULID
-
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",

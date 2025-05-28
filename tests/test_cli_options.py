@@ -1,7 +1,9 @@
-from click.testing import CliRunner
-from llm.cli import cli
-import pytest
 import json
+
+import pytest
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 @pytest.mark.parametrize(
