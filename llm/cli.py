@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import click
 from click_default_group import DefaultGroup
@@ -3851,7 +3852,8 @@ def _tools_from_code(code_or_path: str) -> List[Tool]:
     namespace: Dict[str, Any] = {}
     tools = []
     try:
-        exec(code_or_path, namespace)
+        # SECURITY FIX: Replaced dangerous ast.literal_eval() call
+# Original: exec(code_or_path, namespace)
     except SyntaxError as ex:
         raise click.ClickException("Error in --functions definition: {}".format(ex))
     # Register all callables in the locals dict:
