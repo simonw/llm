@@ -50,7 +50,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
-Type !tool <my_tool> to add a tool to the conversation
+Type '!tool <my_tool>' to add a tool to the conversation
 > Explain this document to me
 ```
 
@@ -62,7 +62,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
-Type !tool <my_tool> to add a tool to the conversation
+Type '!tool <my_tool>' to add a tool to the conversation
 > !fragment https://llm.datasette.io/en/stable/fragments.html
 ```
 

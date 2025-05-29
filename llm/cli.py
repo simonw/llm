@@ -197,6 +197,7 @@ def process_fragments_in_chat(
             prompt_lines.append(line)
     return "\n".join(prompt_lines), fragments, attachments
 
+
 def process_tools_in_chat(prompt: str) -> tuple[str, list[str]]:
     """
     Process any !tool commands in a chat prompt and return the modified prompt plus resolved tools.
@@ -1157,7 +1158,7 @@ def chat(
     click.echo(
         "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
     )
-    click.echo("Type !tool <my_tool> to add a tool to the conversation")
+    click.echo("Type '!tool <my_tool>' to add a tool to the conversation")
     in_multi = False
 
     accumulated = []
