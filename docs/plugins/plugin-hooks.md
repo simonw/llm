@@ -115,6 +115,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type !tool <my_tool> to add a tool to the conversation
 > Remember my name is Henry
 
 Tool call: Memory_set({'key': 'user_name', 'value': 'Henry'})

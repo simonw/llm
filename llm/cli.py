@@ -1157,6 +1157,7 @@ def chat(
     click.echo(
         "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
     )
+    click.echo("Type !tool <my_tool> to add a tool to the conversation")
     in_multi = False
 
     accumulated = []
