@@ -220,6 +220,13 @@ Type 'exit' or 'quit' to exit
 > show tables
 ```
 
+When using `llm chat`, you can add tools dynamically during the conversation using the `!tool` command:
+
+```
+> !tool simple_eval
+> Calculate 2 + 2 for me
+```
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
