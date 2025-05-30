@@ -23,7 +23,7 @@ class Template(BaseModel):
     fragments: Optional[List[str]] = None
     system_fragments: Optional[List[str]] = None
     tools: Optional[List[str]] = None
-    functions: Optional[List[str]] = None
+    functions: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 

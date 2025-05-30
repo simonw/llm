@@ -627,7 +627,7 @@ def prompt(
         if system_fragments:
             to_save["system_fragments"] = list(system_fragments)
         if python_tools:
-            to_save["functions"] = list(python_tools)
+            to_save["functions"] = "\n\n".join(python_tools)
         if tools:
             to_save["tools"] = list(tools)
         if attachments:
@@ -682,7 +682,7 @@ def prompt(
         if template_obj.tools:
             tools = [*template_obj.tools, *tools]
         if template_obj.functions and template_obj._functions_is_trusted:
-            python_tools = [*template_obj.functions, *python_tools]
+            python_tools = [template_obj.functions, *python_tools]
         input_ = ""
         if template_obj.options:
             # Make options mutable (they start as a tuple)
