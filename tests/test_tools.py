@@ -191,6 +191,25 @@ async def test_async_toolbox():
     output = await chain_response.text()
     assert '"output": "This was async"' in output
 
+@pytest.mark.asyncio
+async def test_async_dynamic_toolbox():
+    class Tools(llm.BaseToolbox):
+        def __init__(self, name: str):
+            self.name = name
+
+        def _return_name(self):
+            return self.name
+
+        def method_tools(self):
+            yield llm.Tool(name="return_name", description="This is a test tool with name {name}", implementation=self._return_name)
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "return_name"}]}),
+        tools=[Tools("this_is_name")],
+    )
+    output = await chain_response.text()
+    assert '"output": "this_is_name"' in output
 
 @pytest.mark.vcr
 def test_conversation_with_tools(vcr):

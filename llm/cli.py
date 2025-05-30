@@ -18,6 +18,7 @@ from llm import (
     Template,
     Tool,
     Toolbox,
+    BaseToolbox,
     UnknownModelError,
     KeyModel,
     encode,
@@ -2480,6 +2481,10 @@ def schemas_dsl_debug(input, multi):
     schema = schema_dsl(input, multi)
     click.echo(json.dumps(schema, indent=2))
 
+def describe_type(obj: object) -> str:
+    if isinstance(obj, type):
+        return f"{obj.__module__}.{obj.__qualname__} (class)"
+    return f"{type(obj).__module__}.{type(obj).__qualname__} (instance)"
 
 @cli.group(
     cls=DefaultGroup,
@@ -2500,7 +2505,7 @@ def tools():
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = get_tools()
+    tools: Dict[str, Union[Tool, Type[BaseToolbox]]] = get_tools()
     if python_tools:
         for code_or_path in python_tools:
             for tool in _tools_from_code(code_or_path):
@@ -2510,6 +2515,7 @@ def tools_list(json_, python_tools):
     output_toolboxes = []
     tool_objects = []
     toolbox_objects = []
+    base_toolbox_objects = []
     for name, tool in sorted(tools.items()):
         if isinstance(tool, Tool):
             tool_objects.append(tool)
@@ -2521,7 +2527,7 @@ def tools_list(json_, python_tools):
                     "plugin": tool.plugin,
                 }
             )
-        else:
+        elif issubclass(tool, Toolbox):
             toolbox_objects.append(tool)
             output_toolboxes.append(
                 {
@@ -2536,6 +2542,25 @@ def tools_list(json_, python_tools):
                     ],
                 }
             )
+        elif issubclass(tool, BaseToolbox):
+            instance = tool()
+            base_toolbox_objects.append(instance)
+            output_toolboxes.append(
+                {
+                    "name": name,
+                    "tools": [
+                        {
+                            "name": one_tool.name,
+                            "description": one_tool.description,
+                            "arguments": one_tool.input_schema,
+                            "plugin": one_tool.plugin
+                        } 
+                        for one_tool in instance.method_tools()
+                    ],
+                }
+            )
+        else:
+            print("WTFWTFWWTF")
     if json_:
         click.echo(
             json.dumps(
@@ -2575,6 +2600,12 @@ def tools_list(json_, python_tools):
                     click.echo(
                         textwrap.indent(method["description"].strip(), "    ") + "\n"
                     )
+        for base_toolbox in base_toolbox_objects:
+            click.echo(base_toolbox.name + ":\n")
+            for tool in base_toolbox.method_tools():
+                click.echo("{}{}\n".format(tool.name, " (plugin: {})".format(tool.plugin) if tool.plugin else ""))
+                if tool.description:
+                    click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
 
 
 @cli.group(
@@ -3900,8 +3931,8 @@ def _approve_tool_call(_, tool_call):
 
 def _gather_tools(
     tool_specs: List[str], python_tools: List[str]
-) -> List[Union[Tool, Type[Toolbox]]]:
-    tools: List[Union[Tool, Type[Toolbox]]] = []
+) -> List[Union[Tool, Type[BaseToolbox]]]:
+    tools: List[Union[Tool, Type[BaseToolbox]]] = []
     if python_tools:
         for code_or_path in python_tools:
             tools.extend(_tools_from_code(code_or_path))
