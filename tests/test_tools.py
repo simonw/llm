@@ -1,16 +1,17 @@
 import asyncio
-from click.testing import CliRunner
-from importlib.metadata import version
 import json
+import os
+import time
+from importlib.metadata import version
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
 import llm
 from llm import cli
 from llm.migrations import migrate
 from llm.tools import llm_time
-import os
-import pytest
-import sqlite_utils
-import time
-
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 

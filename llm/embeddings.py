@@ -1,13 +1,15 @@
-from .models import EmbeddingModel
-from .embeddings_migrations import embeddings_migrations
-from dataclasses import dataclass
 import hashlib
-from itertools import islice
 import json
+import time
+from dataclasses import dataclass
+from itertools import islice
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+
 from sqlite_utils import Database
 from sqlite_utils.db import Table
-import time
-from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
+
+from .embeddings_migrations import embeddings_migrations
+from .models import EmbeddingModel
 
 
 @dataclass

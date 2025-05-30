@@ -1,12 +1,14 @@
-from click.testing import CliRunner
-import click
 import importlib
 import json
-import llm
-from llm.tools import llm_version, llm_time
-from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import textwrap
+
+import click
+from click.testing import CliRunner
+
+import llm
+from llm import cli, get_fragment_loaders, get_template_loaders, hookimpl, plugins
+from llm.tools import llm_time, llm_version
 
 
 def test_register_commands():

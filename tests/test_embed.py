@@ -1,9 +1,11 @@
 import json
-import llm
-from llm.embeddings import Entry
+from unittest.mock import ANY
+
 import pytest
 import sqlite_utils
-from unittest.mock import ANY
+
+import llm
+from llm.embeddings import Entry
 
 
 def test_demo_plugin():

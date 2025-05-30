@@ -1,9 +1,11 @@
-from click.testing import CliRunner
 import json
-from llm.cli import cli
 import pathlib
-import pytest
 import sys
+
+import pytest
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

@@ -1,12 +1,14 @@
-from click.testing import CliRunner
-from llm.cli import cli
-from llm import Collection
 import json
 import pathlib
-import pytest
-import sqlite_utils
 import sys
 from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+from llm import Collection
+from llm.cli import cli
 
 
 @pytest.mark.parametrize(

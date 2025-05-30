@@ -1,8 +1,10 @@
-from click.testing import CliRunner
-from llm.cli import cli
-import yaml
-import sqlite_utils
 import textwrap
+
+import sqlite_utils
+import yaml
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 def test_fragments_set_show_remove(user_path):

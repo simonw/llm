@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 import string
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel, ConfigDict
 
 
 class AttachmentType(BaseModel):

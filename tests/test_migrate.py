@@ -1,9 +1,9 @@
-import llm
-from llm.migrations import migrate
-from llm.embeddings_migrations import embeddings_migrations
 import pytest
 import sqlite_utils
 
+import llm
+from llm.embeddings_migrations import embeddings_migrations
+from llm.migrations import migrate
 
 EXPECTED = {
     "id": str,

@@ -1,8 +1,10 @@
-from click.testing import CliRunner
 from unittest.mock import ANY
+
+import pytest
+from click.testing import CliRunner
+
 import llm
 from llm import cli
-import pytest
 
 TINY_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"

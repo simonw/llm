@@ -1,8 +1,18 @@
-from .hookspecs import hookimpl
+import inspect
+import json
+import os
+import pathlib
+import struct
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+
+import click
+
+from .embeddings import Collection
 from .errors import (
     ModelError,
     NeedsKeyException,
 )
+from .hookspecs import hookimpl
 from .models import (
     AsyncConversation,
     AsyncKeyModel,
@@ -24,17 +34,9 @@ from .models import (
     ToolCall,
     ToolResult,
 )
-from .utils import schema_dsl, Fragment
-from .embeddings import Collection
+from .plugins import load_plugins, pm
 from .templates import Template
-from .plugins import pm, load_plugins
-import click
-from typing import Any, Dict, List, Optional, Callable, Type, Union
-import inspect
-import json
-import os
-import pathlib
-import struct
+from .utils import Fragment, schema_dsl
 
 __all__ = [
     "AsyncConversation",

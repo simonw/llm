@@ -1,7 +1,8 @@
-from click.testing import CliRunner
-from llm.cli import cli
 import pytest
 import sqlite_utils
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 @pytest.fixture
