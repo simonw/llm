@@ -95,7 +95,6 @@ class MyAsyncModel(llm.AsyncKeyModel):
     ) -> AsyncGenerator[str, None]:
 ```
 
-
 This async model instance should then be passed to the `register()` method in the `register_models()` plugin hook:
 
 ```python
