@@ -22,11 +22,19 @@ class Template(BaseModel):
     schema_object: Optional[dict] = None
     fragments: Optional[List[str]] = None
     system_fragments: Optional[List[str]] = None
+    tools: Optional[List[str]] = None
+    functions: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
     class MissingVariables(Exception):
         pass
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Not a pydantic field to avoid YAML being able to set it
+        # this controls if Python inline functions code is trusted
+        self._functions_is_trusted = False
 
     def evaluate(
         self, input: str, params: Optional[Dict[str, Any]] = None

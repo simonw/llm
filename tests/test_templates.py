@@ -1,11 +1,14 @@
 from click.testing import CliRunner
+from importlib.metadata import version
 import json
-from llm import Template
+from llm import Template, Toolbox, hookimpl, user_dir
 from llm.cli import cli
+from llm.plugins import pm
 import os
 from unittest import mock
 import pathlib
 import pytest
+import textwrap
 import yaml
 
 
@@ -399,3 +402,138 @@ def test_execute_prompt_from_template_path():
             "stream": True,
             "previous": [],
         }
+
+
+FUNCTIONS_EXAMPLE = """
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+"""
+
+
+class Greeting(Toolbox):
+    def __init__(self, greeting: str):
+        self.greeting = greeting
+
+    def greet(self, name: str) -> str:
+        "Greet name with a greeting"
+        return f"{self.greeting}, {name}!"
+
+
+class GreetingsPlugin:
+    __name__ = "GreetingsPlugin"
+
+    @hookimpl
+    def register_tools(self, register):
+        register(Greeting)
+
+
+@pytest.mark.parametrize(
+    "source,expected_tool_success,expected_functions_success",
+    (
+        ("alias", True, True),
+        ("file", True, True),
+        # Loaded from URL or plugin = functions: should not work
+        ("url", True, False),
+        ("plugin", True, False),
+    ),
+)
+def test_tools_in_templates(
+    source, expected_tool_success, expected_functions_success, httpx_mock, tmpdir
+):
+    template_yaml = textwrap.dedent(
+        """
+    name: test
+    tools:
+    - llm_version
+    - Greeting("hi")
+    functions: |
+      def demo():
+          return "Demo"
+    """
+    )
+    args = []
+
+    def before():
+        pass
+
+    def after():
+        pass
+
+    if source == "alias":
+        args = ["-t", "test"]
+        (user_dir() / "templates").mkdir(parents=True, exist_ok=True)
+        (user_dir() / "templates" / "test.yaml").write_text(template_yaml, "utf-8")
+    elif source == "file":
+        (tmpdir / "test.yaml").write_text(template_yaml, "utf-8")
+        args = ["-t", str(tmpdir / "test.yaml")]
+    elif source == "url":
+        httpx_mock.add_response(
+            url="https://example.com/test.yaml",
+            method="GET",
+            text=template_yaml,
+            status_code=200,
+            is_reusable=True,
+        )
+        args = ["-t", "https://example.com/test.yaml"]
+    elif source == "plugin":
+
+        class LoadTemplatePlugin:
+            __name__ = "LoadTemplatePlugin"
+
+            @hookimpl
+            def register_template_loaders(self, register):
+                register(
+                    "tool-template",
+                    lambda s: Template(
+                        name="tool-template",
+                        tools=["llm_version", 'Greeting("hi")'],
+                        functions=FUNCTIONS_EXAMPLE,
+                    ),
+                )
+
+        def before():
+            pm.register(LoadTemplatePlugin(), name="test-tools-in-templates")
+
+        def after():
+            pm.unregister(name="test-tools-in-templates")
+
+        args = ["-t", "tool-template:"]
+
+    before()
+    pm.register(GreetingsPlugin(), name="greetings-plugin")
+    try:
+        runner = CliRunner()
+        # Test llm_version, then Greeting, then demo
+        for tool_call, text, should_be_present in (
+            ({"name": "llm_version"}, version("llm"), True),
+            (
+                {"name": "Greeting_greet", "arguments": {"name": "Alice"}},
+                "hi, Alice",
+                expected_tool_success,
+            ),
+            (
+                {"name": "Greeting_greet", "arguments": {"name": "Bob"}},
+                "hi, Bob!",
+                expected_tool_success,
+            ),
+            ({"name": "demo"}, '"output": "Demo"', expected_functions_success),
+        ):
+            result = runner.invoke(
+                cli,
+                args
+                + [
+                    "-m",
+                    "echo",
+                    "--no-stream",
+                    json.dumps({"tool_calls": [tool_call]}),
+                ],
+                catch_exceptions=False,
+            )
+            assert result.exit_code == 0
+            if should_be_present:
+                assert text in result.output
+            else:
+                assert text not in result.output
+    finally:
+        after()
+        pm.unregister(name="greetings-plugin")

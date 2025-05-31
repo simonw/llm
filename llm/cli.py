@@ -626,6 +626,10 @@ def prompt(
             to_save["fragments"] = list(fragments)
         if system_fragments:
             to_save["system_fragments"] = list(system_fragments)
+        if python_tools:
+            to_save["functions"] = "\n\n".join(python_tools)
+        if tools:
+            to_save["tools"] = list(tools)
         if attachments:
             # Only works for attachments with a path or url
             to_save["attachments"] = [
@@ -675,6 +679,10 @@ def prompt(
             system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
+        if template_obj.tools:
+            tools = [*template_obj.tools, *tools]
+        if template_obj.functions and template_obj._functions_is_trusted:
+            python_tools = [template_obj.functions, *python_tools]
         input_ = ""
         if template_obj.options:
             # Make options mutable (they start as a tuple)
@@ -3836,7 +3844,10 @@ def load_template(name: str) -> Template:
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
-    return _parse_yaml_template(name, content)
+    template_obj = _parse_yaml_template(name, content)
+    # We trust functions here because they came from the filesystem
+    template_obj._functions_is_trusted = True
+    return template_obj
 
 
 def _tools_from_code(code_or_path: str) -> List[Tool]:
