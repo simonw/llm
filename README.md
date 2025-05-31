@@ -204,6 +204,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [System prompts](https://llm.datasette.io/en/stable/templates.html#system-prompts)
     * [Fragments](https://llm.datasette.io/en/stable/templates.html#fragments)
     * [Options](https://llm.datasette.io/en/stable/templates.html#options)
+    * [Tools](https://llm.datasette.io/en/stable/templates.html#tools)
     * [Schemas](https://llm.datasette.io/en/stable/templates.html#schemas)
     * [Additional template variables](https://llm.datasette.io/en/stable/templates.html#additional-template-variables)
     * [Specifying default parameters](https://llm.datasette.io/en/stable/templates.html#specifying-default-parameters)
