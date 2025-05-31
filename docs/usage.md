@@ -220,6 +220,13 @@ Type 'exit' or 'quit' to exit
 > show tables
 ```
 
+When using `llm chat`, you can add tools dynamically during the conversation using the `!tool` command:
+
+```
+> !tool simple_eval
+> Calculate 2 + 2 for me
+```
+
 (usage-extract-fenced-code)=
 ### Extracting fenced code blocks
 
@@ -432,6 +439,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!tool <my_tool>' to add a tool to the conversation
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -454,6 +462,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!tool <my_tool>' to add a tool to the conversation
 > !multi custom-end
  Explain this error:
 
@@ -474,6 +483,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!tool <my_tool>' to add a tool to the conversation
 > !edit
 ```
 
