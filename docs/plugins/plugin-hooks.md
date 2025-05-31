@@ -215,9 +215,15 @@ def my_template_loader(template_path: str) -> llm.Template:
         # Raise a ValueError with a clear message if the template cannot be found
         raise ValueError(f"Template '{template_path}' could not be loaded: {str(e)}")
 ```
-Consult the latest code in [llm/templates.py](https://github.com/simonw/llm/blob/main/llm/templates.py) for details of that `llm.Template` class.
+The `llm.Template` class has the following constructor:
+
+```{eval-rst}
+.. autoclass:: llm.Template
+```
 
 The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message.
+
+Note that `functions:` provided by templates using this plugin hook will not be made available, to avoid the risk of plugin hooks that load templates from remote sources introducing arbitrary code execution vulnerabilities.
 
 (plugin-hooks-register-fragment-loaders)=
 ## register_fragment_loaders(register)

@@ -75,15 +75,16 @@ This can be combined with the `-m` option to specify a different model:
 curl -s https://llm.datasette.io/en/latest/ | \
   llm -t summarize -m gpt-3.5-turbo-16k
 ```
-Templates can also be specified as full URLs to YAML files:
+Templates can also be specified as a direct path to a YAML file on disk:
+```bash
+llm -t path/to/template.yaml 'extra prompt here'
+```
+Or as a URL to a YAML file hosted online:
 ```bash
 llm -t https://raw.githubusercontent.com/simonw/llm-templates/refs/heads/main/python-app.yaml \
   'Python app to pick a random line from a file'
 ```
-Or as a direct path to a YAML file on disk:
-```bash
-llm -t path/to/template.yaml 'extra prompt here'
-```
+Note that templates loaded via URLs will have any `functions:` keys ignored, to avoid accidentally executing arbitrary code. This restriction also applies to templates loaded via the {ref}`template loaders plugin mechanism <plugin-hooks-register-template-loaders>`.
 
 (prompt-templates-list)=
 
