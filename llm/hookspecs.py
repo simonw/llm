@@ -33,3 +33,7 @@ def register_fragment_loaders(register):
 @hookspec
 def register_tools(register):
     "Register functions that can be used as tools by the LLMs"
+
+@hookspec
+def register_context_providers(register):
+    """Register context providers implementing the Model Context Protocol."""
