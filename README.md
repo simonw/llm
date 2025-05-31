@@ -29,6 +29,7 @@ cog.out(readme_markdown)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/simonw/llm/blob/main/LICENSE)
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/simonw/llm)
 
 A CLI tool and Python library for interacting with **OpenAI**, **Anthropic’s Claude**, **Google’s Gemini**, **Meta’s Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
 
