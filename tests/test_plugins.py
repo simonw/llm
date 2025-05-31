@@ -6,6 +6,7 @@ import llm
 from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
+import pytest
 import textwrap
 
 
@@ -849,6 +850,27 @@ def test_register_toolbox(tmpdir, logs_db):
 
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
+
+
+def test_register_toolbox_fails_on_bad_class():
+    class BadTools:
+        def bad(self):
+            return "this is bad"
+
+    class BadToolsPlugin:
+        __name__ = "BadToolsPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            # This should fail because BadTools is not a subclass of llm.Toolbox
+            register(BadTools)
+
+    try:
+        plugins.pm.register(BadToolsPlugin(), name="BadToolsPlugin")
+        with pytest.raises(TypeError):
+            llm.get_tools()
+    finally:
+        plugins.pm.unregister(name="BadToolsPlugin")
 
 
 def test_toolbox_logging_async(logs_db, tmpdir):
