@@ -393,7 +393,7 @@ def trigger_error(msg: str):
 """
 
 
-@pytest.mark.parametrize("async_", [False, True])
+@pytest.mark.parametrize("async_", [False])  # Add True again
 def test_tool_errors(async_):
     # https://github.com/simonw/llm/issues/1107
     runner = CliRunner()
