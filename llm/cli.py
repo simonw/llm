@@ -3927,12 +3927,21 @@ def _debug_tool_call(_, tool_call, tool_result):
     output += attachments
     click.echo(
         click.style(
-            textwrap.indent(output, "  ") + "\n",
+            textwrap.indent(output, "  ") + ("\n" if not tool_result.exception else ""),
             fg="green",
             bold=True,
         ),
         err=True,
     )
+    if tool_result.exception:
+        click.echo(
+            click.style(
+                "  Exception: {}".format(tool_result.exception),
+                fg="red",
+                bold=True,
+            ),
+            err=True,
+        )
 
 
 def _approve_tool_call(_, tool_call):
