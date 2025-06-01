@@ -307,6 +307,7 @@ def schema_option(fn):
     cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.version_option()
 def cli():
@@ -626,6 +627,10 @@ def prompt(
             to_save["fragments"] = list(fragments)
         if system_fragments:
             to_save["system_fragments"] = list(system_fragments)
+        if python_tools:
+            to_save["functions"] = "\n\n".join(python_tools)
+        if tools:
+            to_save["tools"] = list(tools)
         if attachments:
             # Only works for attachments with a path or url
             to_save["attachments"] = [
@@ -675,6 +680,10 @@ def prompt(
             system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
+        if template_obj.tools:
+            tools = [*template_obj.tools, *tools]
+        if template_obj.functions and template_obj._functions_is_trusted:
+            python_tools = [template_obj.functions, *python_tools]
         input_ = ""
         if template_obj.options:
             # Make options mutable (they start as a tuple)
@@ -1072,6 +1081,11 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
+    if tools_debug:
+        conversation.after_call = _debug_tool_call
+    if tools_approve:
+        conversation.before_call = _approve_tool_call
+
     # Validate options
     validated_options = get_model_options(model.model_id)
     if options:
@@ -1092,10 +1106,6 @@ def chat(
 
     if tool_functions:
         kwargs["chain_limit"] = chain_limit
-        if tools_debug:
-            kwargs["after_call"] = _debug_tool_call
-        if tools_approve:
-            kwargs["before_call"] = _approve_tool_call
         kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
@@ -1390,6 +1400,7 @@ def logs_turn_off():
 
 LOGS_COLUMNS = """    responses.id,
     responses.model,
+    responses.resolved_model,
     responses.prompt,
     responses.system,
     responses.prompt_json,
@@ -1846,7 +1857,21 @@ def logs_list(
             'tool_id', tr.tool_id,
             'name', tr.name,
             'output', tr.output,
-            'tool_call_id', tr.tool_call_id
+            'tool_call_id', tr.tool_call_id,
+            'attachments', COALESCE(
+                (SELECT json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                FROM tool_results_attachments tra
+                JOIN attachments a ON tra.attachment_id = a.id
+                WHERE tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
         ))
         FROM tool_results tr
         WHERE tr.response_id = responses.id
@@ -2011,7 +2036,16 @@ def logs_list(
                         else ""
                     ),
                     (
-                        "\nModel: **{}**\n".format(row["model"])
+                        (
+                            "\nModel: **{}**{}\n".format(
+                                row["model"],
+                                (
+                                    " (resolved: **{}**)".format(row["resolved_model"])
+                                    if row["resolved_model"]
+                                    else ""
+                                ),
+                            )
+                        )
                         if should_show_conversation
                         else ""
                     ),
@@ -2048,8 +2082,20 @@ def logs_list(
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
+                    attachments = ""
+                    for attachment in tool_result["attachments"]:
+                        desc = ""
+                        if attachment.get("type"):
+                            desc += attachment["type"] + ": "
+                        if attachment.get("path"):
+                            desc += attachment["path"]
+                        elif attachment.get("url"):
+                            desc += attachment["url"]
+                        elif attachment.get("content"):
+                            desc += f"<{attachment['content_length']:,} bytes>"
+                        attachments += "\n    - {}".format(desc)
                     click.echo(
-                        "- **{}**:{}<br>\n{}".format(
+                        "- **{}**: `{}`<br>\n{}{}".format(
                             tool_result["name"],
                             (
                                 " `{}`".format(tool_result["tool_call_id"])
@@ -2057,6 +2103,7 @@ def logs_list(
                                 else ""
                             ),
                             textwrap.indent(tool_result["output"], "    "),
+                            attachments,
                         )
                     )
             attachments = attachments_by_id.get(row["id"])
@@ -2289,7 +2336,10 @@ def templates_list():
 @click.argument("name")
 def templates_show(name):
     "Show the specified prompt template"
-    template = load_template(name)
+    try:
+        template = load_template(name)
+    except LoadTemplateError:
+        raise click.ClickException(f"Template '{name}' not found or invalid")
     click.echo(
         yaml.dump(
             dict((k, v) for k, v in template.model_dump().items() if v is not None),
@@ -3830,7 +3880,10 @@ def load_template(name: str) -> Template:
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
-    return _parse_yaml_template(name, content)
+    template_obj = _parse_yaml_template(name, content)
+    # We trust functions here because they came from the filesystem
+    template_obj._functions_is_trusted = True
+    return template_obj
 
 
 def _tools_from_code(code_or_path: str) -> List[Tool]:
@@ -3865,10 +3918,17 @@ def _debug_tool_call(_, tool_call, tool_result):
         err=True,
     )
     output = ""
+    attachments = ""
+    if tool_result.attachments:
+        attachments += "\nAttachments:\n"
+        for attachment in tool_result.attachments:
+            attachments += f"  {repr(attachment)}\n"
+
     try:
         output = json.dumps(json.loads(tool_result.output), indent=2)
     except ValueError:
         output = tool_result.output
+    output += attachments
     click.echo(
         click.style(
             textwrap.indent(output, "  ") + "\n",

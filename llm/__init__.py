@@ -22,6 +22,7 @@ from .models import (
     Tool,
     Toolbox,
     ToolCall,
+    ToolOutput,
     ToolResult,
 )
 from .utils import schema_dsl, Fragment
@@ -60,6 +61,7 @@ __all__ = [
     "Tool",
     "Toolbox",
     "ToolCall",
+    "ToolOutput",
     "ToolResult",
     "user_dir",
     "schema_dsl",
@@ -154,11 +156,18 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
         tool: Union[Tool, Type[Toolbox], None] = None
 
         # If it's a Toolbox class, set the plugin field on it
-        if inspect.isclass(tool_or_function) and issubclass(tool_or_function, Toolbox):
-            tool = tool_or_function
-            if current_plugin_name:
-                tool.plugin = current_plugin_name
-            tool.name = name or tool.__name__
+        if inspect.isclass(tool_or_function):
+            if issubclass(tool_or_function, Toolbox):
+                tool = tool_or_function
+                if current_plugin_name:
+                    tool.plugin = current_plugin_name
+                tool.name = name or tool.__name__
+            else:
+                raise TypeError(
+                    "Toolbox classes must inherit from llm.Toolbox, {} does not.".format(
+                        tool_or_function.__name__
+                    )
+                )
 
         # If it's already a Tool instance, use it directly
         elif isinstance(tool_or_function, Tool):

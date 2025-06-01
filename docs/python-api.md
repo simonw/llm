@@ -148,6 +148,70 @@ for response in chain.responses():
         print(chunk, end="", flush=True)
 ```
 
+(python-api-tools-debug-hooks)=
+
+#### Tool debugging hooks
+
+Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
+
+The method signature is `def before_call(tool: llm.Tool, tool_call: llm.ToolCall)`. Here's an example:
+```python
+import llm
+
+def upper(text: str) -> str:
+    "Convert text to uppercase."
+    return text.upper()
+
+def before_call(tool: llm.Tool, tool_call: llm.ToolCall):
+    print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
+    if tool.name == "upper" and "bad" in repr(tool_call.arguments):
+        raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    before_call=before_call,
+)
+print(response.text())
+```
+The `after_call=` parameter can be used to run a logging function after each tool call has been executed. The method signature is `def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult)`. This continues the previous example:
+```python
+def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult):
+    print(f"Tool {tool.name} called with arguments {tool_call.arguments} returned {tool_result.output}")
+
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    after_call=after_call,
+)
+print(response.text())
+```
+
+(python-api-tools-attachments)=
+
+#### Tools can return attachments
+
+Tools can return {ref}`attachments <python-api-attachments>` in addition to returning text. Attachments that are returned from a tool call will be passed to the model as attachments for the next prompt in the chain.
+
+To return one or more attachments, return a `llm.ToolOutput` instance from your tool function. This can have an `output=` string and an `attachments=` list of `llm.Attachment` instances.
+
+Here's an example:
+```python
+import llm
+
+def generate_image(prompt: str) -> llm.ToolOutput:
+    """Generate an image based on the prompt."""
+    image_content = generate_image_from_prompt(prompt)
+    return llm.ToolOutput(
+        output="Image generated successfully",
+        attachments=[llm.Attachment(
+            content=image_content,
+            mimetype="image/png"
+        )],
+    )
+```
+
 (python-api-toolbox)=
 
 #### Toolbox classes
@@ -488,6 +552,8 @@ async for chunk in model.chain(
 ):
     print(chunk, end="", flush=True)
 ```
+The `before_call` and `after_call` hooks can be async functions when used with async models.
+
 (python-api-conversations)=
 
 ## Conversations
@@ -551,6 +617,8 @@ print(conversation.chain(
     "Same with pangolin"
 ).text())
 ```
+The `before_call=` and `after_call=` parameters {ref}`described above <python-api-tools-debug-hooks>` can be passed directly to the `model.conversation()` method to set those options for all chained prompts in that conversation.
+
 
 (python-api-listing-models)=
 

@@ -62,6 +62,25 @@ This demonstrates how to register a model with both sync and async versions, and
 
 The {ref}`model plugin tutorial <tutorial-model-plugin>` describes how to use this hook in detail. Asynchronous models {ref}`are described here <advanced-model-plugins-async>`.
 
+(plugin-hooks-register-embedding-models)=
+## register_embedding_models(register)
+
+This hook can be used to register one or more additional embedding models, as described in {ref}`embeddings-writing-plugins`.
+
+```python
+import llm
+
+@llm.hookimpl
+def register_embedding_models(register):
+    register(HelloWorld())
+
+class HelloWorld(llm.EmbeddingModel):
+    model_id = "helloworld"
+
+    def embed_batch(self, items):
+        return [[1, 2, 3], [4, 5, 6]]
+```
+
 (plugin-hooks-register-tools)=
 ## register_tools(register)
 
@@ -196,9 +215,15 @@ def my_template_loader(template_path: str) -> llm.Template:
         # Raise a ValueError with a clear message if the template cannot be found
         raise ValueError(f"Template '{template_path}' could not be loaded: {str(e)}")
 ```
-Consult the latest code in [llm/templates.py](https://github.com/simonw/llm/blob/main/llm/templates.py) for details of that `llm.Template` class.
+The `llm.Template` class has the following constructor:
+
+```{eval-rst}
+.. autoclass:: llm.Template
+```
 
 The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message.
+
+Note that `functions:` provided by templates using this plugin hook will not be made available, to avoid the risk of plugin hooks that load templates from remote sources introducing arbitrary code execution vulnerabilities.
 
 (plugin-hooks-register-fragment-loaders)=
 ## register_fragment_loaders(register)

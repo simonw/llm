@@ -944,3 +944,31 @@ def test_logs_backup(logs_db):
         assert result.output.startswith("Backed up ")
         assert result.output.endswith("to backup.db\n")
         assert expected_path.exists()
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
+    mock_model.resolved_model_name = "resolved-mock"
+    async_mock_model.resolved_model_name = "resolved-mock"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["-m", "mock", "simple prompt"] + (["--async"] if async_ else [])
+    )
+    assert result.exit_code == 0
+    # Should have logged the resolved model name
+    assert logs_db["responses"].count
+    response = list(logs_db["responses"].rows)[0]
+    assert response["model"] == "mock"
+    assert response["resolved_model"] == "resolved-mock"
+
+    # Should show up in the JSON logs
+    result2 = runner.invoke(cli, ["logs", "--json"])
+    assert result2.exit_code == 0
+    logs = json.loads(result2.output.strip())
+    assert len(logs) == 1
+    assert logs[0]["model"] == "mock"
+    assert logs[0]["resolved_model"] == "resolved-mock"
+
+    # And the rendered logs
+    result3 = runner.invoke(cli, ["logs"])
+    assert "Model: **mock** (resolved: **resolved-mock**)" in result3.output

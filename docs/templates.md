@@ -37,6 +37,15 @@ If you want to include a literal `$` sign in your prompt, use `$$` instead:
 ```bash
 llm --system 'Estimate the cost in $$ of this: $input' --save estimate
 ```
+Use `--tool/-T` one or more times to add tools to the template:
+```bash
+llm -T llm_time --system 'Always include the current time in the answer' --save time
+```
+You can also use `--functions` to add Python function code directly to the template:
+```bash
+llm --functions 'def reverse_string(s): return s[::-1]' --system 'reverse any input' --save reverse
+llm -t reverse 'Hello, world!'
+```
 
 Add `--schema` to bake a {ref}`schema <usage-schemas>` into your template:
 
@@ -47,7 +56,7 @@ llm --schema dog.schema.json 'invent a dog' --save dog
 If you add `--extract` the setting to  {ref}`extract the first fenced code block <usage-extract-fenced-code>` will be persisted in the template.
 ```bash
 llm --system 'write a Python function' --extract --save python-function
-llm -t python-function 'reverse a string'
+llm -t python-function 'calculate haversine distance between two points'
 ```
 In each of these cases the template will be saved in YAML format in a dedicated directory on disk.
 
@@ -66,15 +75,16 @@ This can be combined with the `-m` option to specify a different model:
 curl -s https://llm.datasette.io/en/latest/ | \
   llm -t summarize -m gpt-3.5-turbo-16k
 ```
-Templates can also be specified as full URLs to YAML files:
+Templates can also be specified as a direct path to a YAML file on disk:
+```bash
+llm -t path/to/template.yaml 'extra prompt here'
+```
+Or as a URL to a YAML file hosted online:
 ```bash
 llm -t https://raw.githubusercontent.com/simonw/llm-templates/refs/heads/main/python-app.yaml \
   'Python app to pick a random line from a file'
 ```
-Or as a direct path to a YAML file on disk:
-```bash
-llm -t path/to/template.yaml 'extra prompt here'
-```
+Note that templates loaded via URLs will have any `functions:` keys ignored, to avoid accidentally executing arbitrary code. This restriction also applies to templates loaded via the {ref}`template loaders plugin mechanism <plugin-hooks-register-template-loaders>`.
 
 (prompt-templates-list)=
 
@@ -190,6 +200,27 @@ options:
   temperature: 1.8
 ```
 
+(prompt-templates-tools)=
+
+### Tools
+
+The `tools:` key can provide a list of tool names from other plugins - either function names or toolbox specifiers:
+```yaml
+name: time-plus
+tools:
+- llm_time
+- Datasette("https://example.com/timezone-lookup")
+```
+The `functions:` key can provide a multi-line string of Python code defining additional functions:
+```yaml
+name: my-functions
+functions: |
+  def reverse_string(s: str):
+      return s[::-1]
+
+  def greet(name: str):
+      return f"Hello, {name}!"
+```
 (prompt-templates-schemas)=
 
 ### Schemas

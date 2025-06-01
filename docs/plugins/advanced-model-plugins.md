@@ -95,7 +95,6 @@ class MyAsyncModel(llm.AsyncKeyModel):
     ) -> AsyncGenerator[str, None]:
 ```
 
-
 This async model instance should then be passed to the `register()` method in the `register_models()` plugin hook:
 
 ```python
@@ -125,7 +124,7 @@ Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic]
 
 (advanced-model-plugins-tools)=
 
-## Support tools
+## Supporting tools
 
 Adding {ref}`tools support <tools>` involves several steps:
 
@@ -278,4 +277,33 @@ This example logs 15 input tokens, 340 output tokens and notes that 37 tokens we
 
 ```python
 response.set_usage(input=15, output=340, details={"cached": 37})
+```
+(advanced-model-plugins-resolved-model)=
+
+## Tracking resolved model names
+
+In some cases the model ID that the user requested may not be the exact model that is executed. Many providers have a `model-latest` alias which may execute different models over time.
+
+If those APIs return the _real_ model ID that was used, your plugin can record that in the `resources.resolved_model` column in the logs by calling this method and passing the string representing the resolved, final model ID:
+
+```bash
+response.set_resolved_model(resolved_model_id)
+```
+This string will be recorded in the database and shown in the output of `llm logs` and `llm logs --json`.
+
+(tutorial-model-plugin-raise-errors)=
+
+## LLM_RAISE_ERRORS
+
+While working on a plugin it can be useful to request that errors are raised instead of being caught and logged, so you can access them from the Python debugger.
+
+Set the `LLM_RAISE_ERRORS` environment variable to enable this behavior, then run `llm` like this:
+
+```bash
+LLM_RAISE_ERRORS=1 python -i -m llm ...
+```
+The `-i` option means Python will drop into an interactive shell if an error occurs. You can then open a debugger at the most recent error using:
+
+```python
+import pdb; pdb.pm()
 ```
