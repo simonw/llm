@@ -1063,7 +1063,7 @@ Usage: llm openai [OPTIONS] COMMAND [ARGS]...
   Commands for working directly with the OpenAI API
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   models  List models available to you from the OpenAI API
@@ -1079,6 +1079,6 @@ Usage: llm openai models [OPTIONS]
 Options:
   --json      Output as JSON
   --key TEXT  OpenAI API key
-  --help      Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 <!-- [[[end]]] -->
