@@ -385,3 +385,50 @@ async def test_tool_conversation_settings_async():
     await conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
     assert len(before_collected) == 2
     assert len(after_collected) == 2
+
+
+ERROR_FUNCTION = """
+def trigger_error(msg: str):
+    raise Exception(msg)
+"""
+
+
+@pytest.mark.parametrize("async_", [False, True])
+def test_tool_errors(async_):
+    # https://github.com/simonw/llm/issues/1107
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        (
+            [
+                "-m",
+                "echo",
+                "--functions",
+                ERROR_FUNCTION,
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {"name": "trigger_error", "arguments": {"msg": "Error!"}}
+                        ]
+                    }
+                ),
+            ]
+            + (["--async"] if async_ else [])
+        ),
+    )
+    assert result.exit_code == 0
+    assert '"output": "Error: Error!"' in result.output
+    # llm logs --json output
+    log_json_result = runner.invoke(cli.cli, ["logs", "--json", "-c"])
+    assert log_json_result.exit_code == 0
+    log_data = json.loads(log_json_result.output)
+    assert len(log_data) == 2
+    assert log_data[1]["tool_results"][0]["exception"] == "Exception: Error!"
+    # llm logs -c output
+    log_text_result = runner.invoke(cli.cli, ["logs", "-c"])
+    assert log_text_result.exit_code == 0
+    assert (
+        "- **trigger_error**: `None`<br>\n"
+        "    Error: Error!<br>\n"
+        "    **Error**: Exception: Error!\n"
+    ) in log_text_result.output
