@@ -2080,11 +2080,24 @@ def logs_list(
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
+                    attachments = ""
+                    for attachment in tool_result["attachments"]:
+                        desc = ""
+                        if attachment.get("type"):
+                            desc += attachment["type"] + ": "
+                        if attachment.get("path"):
+                            desc += attachment["path"]
+                        elif attachment.get("url"):
+                            desc += attachment["url"]
+                        elif attachment.get("content"):
+                            desc += f"<{attachment['content_length']:,} bytes>"
+                        attachments += "\n    - {}".format(desc)
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}".format(
+                        "- **{}**: `{}`<br>\n{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
                             textwrap.indent(tool_result["output"], "    "),
+                            attachments,
                         )
                     )
             attachments = attachments_by_id.get(row["id"])
