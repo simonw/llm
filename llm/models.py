@@ -259,9 +259,6 @@ class Toolbox:
         return methods
 
 
-ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
-
-
 @dataclass
 class ToolCall:
     name: str
@@ -284,6 +281,13 @@ class ToolOutput:
 
     output: Optional[Union[str, dict, list, bool, int, float]] = None
     attachments: List[Attachment] = field(default_factory=list)
+
+
+ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
+BeforeCallSync = Callable[[Tool, ToolCall], None]
+AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
+BeforeCallAsync = Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
+AfterCallAsync = Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
 
 
 class CancelToolCall(Exception):
@@ -368,9 +372,7 @@ class _BaseConversation:
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[Tool]] = None
-    chain_limit: Optional[int] = (None,)
-    before_call: Optional[Callable[[Tool, ToolCall], None]] = (None,)
-    after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = (None,)
+    chain_limit: Optional[int] = None
 
     @classmethod
     @abstractmethod
@@ -380,6 +382,9 @@ class _BaseConversation:
 
 @dataclass
 class Conversation(_BaseConversation):
+    before_call: Optional[BeforeCallSync] = None
+    after_call: Optional[AfterCallSync] = None
+
     def prompt(
         self,
         prompt: Optional[str] = None,
@@ -427,8 +432,8 @@ class Conversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "ChainResponse":
@@ -473,6 +478,9 @@ class Conversation(_BaseConversation):
 
 @dataclass
 class AsyncConversation(_BaseConversation):
+    before_call: Optional[BeforeCallAsync] = None
+    after_call: Optional[AfterCallAsync] = None
+
     def chain(
         self,
         prompt: Optional[str] = None,
@@ -486,12 +494,8 @@ class AsyncConversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
@@ -978,12 +982,8 @@ class Response(_BaseResponse):
     def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
@@ -1150,12 +1150,8 @@ class AsyncResponse(_BaseResponse):
     async def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
     ) -> List[ToolResult]:
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
@@ -1440,12 +1436,8 @@ class _BaseChainResponse:
         conversation: _BaseConversation,
         key: Optional[str] = None,
         chain_limit: Optional[int] = 10,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[Union[BeforeCallSync, BeforeCallAsync]] = None,
+        after_call: Optional[Union[AfterCallSync, AfterCallAsync]] = None,
     ):
         self.prompt = prompt
         self.model = model
@@ -1663,8 +1655,8 @@ class _Model(_BaseModel):
         self,
         tools: Optional[List[Tool]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
     ) -> Conversation:
         return Conversation(
             model=self,
@@ -1720,8 +1712,8 @@ class _Model(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> ChainResponse:
@@ -1772,8 +1764,8 @@ class _AsyncModel(_BaseModel):
         self,
         tools: Optional[List[Tool]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
     ) -> AsyncConversation:
         return AsyncConversation(
             model=self,
@@ -1829,12 +1821,8 @@ class _AsyncModel(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> AsyncChainResponse:
