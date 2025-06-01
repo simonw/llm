@@ -459,12 +459,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null}]',
+                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null}]',
+                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -472,7 +472,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null}]',
+                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null, "attachments": []}]',
             ),
         )
         # Test the --td option
