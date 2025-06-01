@@ -552,6 +552,8 @@ async for chunk in model.chain(
 ):
     print(chunk, end="", flush=True)
 ```
+The `before_call` and `after_call` hooks can be async functions when used with async models.
+
 (python-api-conversations)=
 
 ## Conversations
