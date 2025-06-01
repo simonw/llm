@@ -2303,7 +2303,10 @@ def templates_list():
 @click.argument("name")
 def templates_show(name):
     "Show the specified prompt template"
-    template = load_template(name)
+    try:
+        template = load_template(name)
+    except LoadTemplateError:
+        raise click.ClickException(f"Template '{name}' not found or invalid")
     click.echo(
         yaml.dump(
             dict((k, v) for k, v in template.model_dump().items() if v is not None),
