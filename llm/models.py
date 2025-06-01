@@ -455,9 +455,9 @@ class Conversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            before_call=before_call,
-            after_call=after_call,
-            chain_limit=chain_limit,
+            before_call=before_call or self.before_call,
+            after_call=after_call or self.after_call,
+            chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
     @classmethod
@@ -517,9 +517,9 @@ class AsyncConversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            before_call=before_call,
-            after_call=after_call,
-            chain_limit=chain_limit,
+            before_call=before_call or self.before_call,
+            after_call=after_call or self.after_call,
+            chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
     def prompt(
@@ -1658,9 +1658,9 @@ class _Model(_BaseModel):
     def conversation(
         self,
         tools: Optional[List[Tool]] = None,
-        chain_limit: Optional[int] = None,
         before_call: Optional[BeforeCallSync] = None,
         after_call: Optional[AfterCallSync] = None,
+        chain_limit: Optional[int] = None,
     ) -> Conversation:
         return Conversation(
             model=self,
@@ -1767,9 +1767,9 @@ class _AsyncModel(_BaseModel):
     def conversation(
         self,
         tools: Optional[List[Tool]] = None,
-        chain_limit: Optional[int] = None,
         before_call: Optional[BeforeCallAsync] = None,
         after_call: Optional[AfterCallAsync] = None,
+        chain_limit: Optional[int] = None,
     ) -> AsyncConversation:
         return AsyncConversation(
             model=self,

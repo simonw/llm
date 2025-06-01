@@ -1080,6 +1080,11 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
+    if tools_debug:
+        conversation.after_call = _debug_tool_call
+    if tools_approve:
+        conversation.before_call = _approve_tool_call
+
     # Validate options
     validated_options = get_model_options(model.model_id)
     if options:
@@ -1100,10 +1105,6 @@ def chat(
 
     if tool_functions:
         kwargs["chain_limit"] = chain_limit
-        if tools_debug:
-            kwargs["after_call"] = _debug_tool_call
-        if tools_approve:
-            kwargs["before_call"] = _approve_tool_call
         kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
