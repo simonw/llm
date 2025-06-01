@@ -112,9 +112,12 @@ class Attachment:
 class Tool:
     name: str
     description: Optional[str] = None
-    input_schema: Dict = field(default_factory=dict)
+    input_schema: Optional[Dict] = field(default_factory=dict)
     implementation: Optional[Callable] = None
     plugin: Optional[str] = None  # plugin tool came from, e.g. 'llm_tools_sqlite'
+    special: Optional[Dict] = (
+        None  # Special tools can use this and set input_schema to None
+    )
 
     def __post_init__(self):
         # Convert Pydantic model to JSON schema if needed
@@ -129,6 +132,8 @@ class Tool:
         }
         if self.plugin:
             to_hash["plugin"] = self.plugin
+        if self.special:
+            to_hash["special"] = self.special
         return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
     @classmethod
