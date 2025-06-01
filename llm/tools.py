@@ -1,4 +1,3 @@
-import llm
 from datetime import datetime, timezone
 from importlib.metadata import version
 import time
@@ -36,10 +35,3 @@ def llm_time() -> dict:
         "timezone_offset": timezone_offset,
         "is_dst": is_dst,
     }
-
-
-def fetch_image_url(image_url: str) -> llm.ToolOutput:
-    "Fetch an image from a URL"
-    return llm.ToolOutput(
-        output="Image fetched", attachments=[llm.Attachment(url=image_url)]
-    )
