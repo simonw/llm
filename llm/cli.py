@@ -627,6 +627,10 @@ def prompt(
             to_save["fragments"] = list(fragments)
         if system_fragments:
             to_save["system_fragments"] = list(system_fragments)
+        if python_tools:
+            to_save["functions"] = "\n\n".join(python_tools)
+        if tools:
+            to_save["tools"] = list(tools)
         if attachments:
             # Only works for attachments with a path or url
             to_save["attachments"] = [
@@ -676,6 +680,10 @@ def prompt(
             system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
+        if template_obj.tools:
+            tools = [*template_obj.tools, *tools]
+        if template_obj.functions and template_obj._functions_is_trusted:
+            python_tools = [template_obj.functions, *python_tools]
         input_ = ""
         if template_obj.options:
             # Make options mutable (they start as a tuple)
@@ -1073,6 +1081,11 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
+    if tools_debug:
+        conversation.after_call = _debug_tool_call
+    if tools_approve:
+        conversation.before_call = _approve_tool_call
+
     # Validate options
     validated_options = get_model_options(model.model_id)
     if options:
@@ -1093,10 +1106,6 @@ def chat(
 
     if tool_functions:
         kwargs["chain_limit"] = chain_limit
-        if tools_debug:
-            kwargs["after_call"] = _debug_tool_call
-        if tools_approve:
-            kwargs["before_call"] = _approve_tool_call
         kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
@@ -1255,9 +1264,7 @@ def keys():
     "Manage stored API keys for different models"
 
 
-@keys.command(
-    name="list",
-)
+@keys.command(name="list")
 def keys_list():
     "List names of all stored keys"
     path = user_dir() / "keys.json"
@@ -1270,17 +1277,13 @@ def keys_list():
             click.echo(key)
 
 
-@keys.command(
-    name="path",
-)
+@keys.command(name="path")
 def keys_path_command():
     "Output the path to the keys.json file"
     click.echo(user_dir() / "keys.json")
 
 
-@keys.command(
-    name="get",
-)
+@keys.command(name="get")
 @click.argument("name")
 def keys_get(name):
     """
@@ -1301,9 +1304,7 @@ def keys_get(name):
         raise click.ClickException("No key found with name '{}'".format(name))
 
 
-@keys.command(
-    name="set",
-)
+@keys.command(name="set")
 @click.argument("name")
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
 def keys_set(name, value):
@@ -1339,17 +1340,13 @@ def logs():
     "Tools for exploring logged prompts and responses"
 
 
-@logs.command(
-    name="path",
-)
+@logs.command(name="path")
 def logs_path():
     "Output the path to the logs.db file"
     click.echo(logs_db_path())
 
 
-@logs.command(
-    name="status",
-)
+@logs.command(name="status")
 def logs_status():
     "Show current status of database logging"
     path = logs_db_path()
@@ -1370,9 +1367,7 @@ def logs_status():
     )
 
 
-@logs.command(
-    name="backup",
-)
+@logs.command(name="backup")
 @click.argument("path", type=click.Path(dir_okay=True, writable=True))
 def backup(path):
     "Backup your logs database to this file"
@@ -1388,9 +1383,7 @@ def backup(path):
     )
 
 
-@logs.command(
-    name="on",
-)
+@logs.command(name="on")
 def logs_turn_on():
     "Turn on logging for all prompts"
     path = user_dir() / "logs-off"
@@ -1398,9 +1391,7 @@ def logs_turn_on():
         path.unlink()
 
 
-@logs.command(
-    name="off",
-)
+@logs.command(name="off")
 def logs_turn_off():
     "Turn off logging for all prompts"
     path = user_dir() / "logs-off"
@@ -1463,9 +1454,7 @@ order by prompt_attachments."order"
 """
 
 
-@logs.command(
-    name="list",
-)
+@logs.command(name="list")
 @click.option(
     "-n",
     "--count",
@@ -1868,7 +1857,21 @@ def logs_list(
             'tool_id', tr.tool_id,
             'name', tr.name,
             'output', tr.output,
-            'tool_call_id', tr.tool_call_id
+            'tool_call_id', tr.tool_call_id,
+            'attachments', COALESCE(
+                (SELECT json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                FROM tool_results_attachments tra
+                JOIN attachments a ON tra.attachment_id = a.id
+                WHERE tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
         ))
         FROM tool_results tr
         WHERE tr.response_id = responses.id
@@ -2079,11 +2082,24 @@ def logs_list(
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
+                    attachments = ""
+                    for attachment in tool_result["attachments"]:
+                        desc = ""
+                        if attachment.get("type"):
+                            desc += attachment["type"] + ": "
+                        if attachment.get("path"):
+                            desc += attachment["path"]
+                        elif attachment.get("url"):
+                            desc += attachment["url"]
+                        elif attachment.get("content"):
+                            desc += f"<{attachment['content_length']:,} bytes>"
+                        attachments += "\n    - {}".format(desc)
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}".format(
+                        "- **{}**: `{}`<br>\n{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
                             textwrap.indent(tool_result["output"], "    "),
+                            attachments,
                         )
                     )
             attachments = attachments_by_id.get(row["id"])
@@ -2159,9 +2175,7 @@ _type_lookup = {
 }
 
 
-@models.command(
-    name="list",
-)
+@models.command(name="list")
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
 )
@@ -2259,9 +2273,7 @@ def models_list(options, async_, schemas, tools, query, model_ids):
         click.echo(f"Default: {get_default_model()}")
 
 
-@models.command(
-    name="default",
-)
+@models.command(name="default")
 @click.argument("model", required=False)
 def models_default(model):
     "Show or set the default model"
@@ -2285,9 +2297,7 @@ def templates():
     "Manage stored prompt templates"
 
 
-@templates.command(
-    name="list",
-)
+@templates.command(name="list")
 def templates_list():
     "List available prompt templates"
     path = template_dir()
@@ -2318,13 +2328,14 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
-@templates.command(
-    name="show",
-)
+@templates.command(name="show")
 @click.argument("name")
 def templates_show(name):
     "Show the specified prompt template"
-    template = load_template(name)
+    try:
+        template = load_template(name)
+    except LoadTemplateError:
+        raise click.ClickException(f"Template '{name}' not found or invalid")
     click.echo(
         yaml.dump(
             dict((k, v) for k, v in template.model_dump().items() if v is not None),
@@ -2334,9 +2345,7 @@ def templates_show(name):
     )
 
 
-@templates.command(
-    name="edit",
-)
+@templates.command(name="edit")
 @click.argument("name")
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
@@ -2349,17 +2358,13 @@ def templates_edit(name):
     load_template(name)
 
 
-@templates.command(
-    name="path",
-)
+@templates.command(name="path")
 def templates_path():
     "Output the path to the templates directory"
     click.echo(template_dir())
 
 
-@templates.command(
-    name="loaders",
-)
+@templates.command(name="loaders")
 def templates_loaders():
     "Show template loaders registered by plugins"
     found = False
@@ -2383,9 +2388,7 @@ def schemas():
     "Manage stored schemas"
 
 
-@schemas.command(
-    name="list",
-)
+@schemas.command(name="list")
 @click.option(
     "-p",
     "--path",
@@ -2472,9 +2475,7 @@ def schemas_list(path, database, queries, full, json_, nl):
         )
 
 
-@schemas.command(
-    name="show",
-)
+@schemas.command(name="show")
 @click.argument("schema_id")
 @click.option(
     "-p",
@@ -2506,9 +2507,7 @@ def schemas_show(schema_id, path, database):
     click.echo(json.dumps(json.loads(row["content"]), indent=2))
 
 
-@schemas.command(
-    name="dsl",
-)
+@schemas.command(name="dsl")
 @click.argument("input")
 @click.option("--multi", is_flag=True, help="Wrap in an array")
 def schemas_dsl_debug(input, multi):
@@ -2531,9 +2530,7 @@ def tools():
     "Manage tools that can be made available to LLMs"
 
 
-@tools.command(
-    name="list",
-)
+@tools.command(name="list")
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
@@ -2629,9 +2626,7 @@ def aliases():
     "Manage model aliases"
 
 
-@aliases.command(
-    name="list",
-)
+@aliases.command(name="list")
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def aliases_list(json_):
     "List current aliases"
@@ -2657,9 +2652,7 @@ def aliases_list(json_):
         )
 
 
-@aliases.command(
-    name="set",
-)
+@aliases.command(name="set")
 @click.argument("alias")
 @click.argument("model_id", required=False)
 @click.option(
@@ -2708,9 +2701,7 @@ def aliases_set(alias, model_id, query):
         set_alias(alias, model_id)
 
 
-@aliases.command(
-    name="remove",
-)
+@aliases.command(name="remove")
 @click.argument("alias")
 def aliases_remove(alias):
     """
@@ -2727,9 +2718,7 @@ def aliases_remove(alias):
         raise click.ClickException(ex.args[0])
 
 
-@aliases.command(
-    name="path",
-)
+@aliases.command(name="path")
 def aliases_path():
     "Output the path to the aliases.json file"
     click.echo(user_dir() / "aliases.json")
@@ -2748,9 +2737,7 @@ def fragments():
     """
 
 
-@fragments.command(
-    name="list",
-)
+@fragments.command(name="list")
 @click.option(
     "queries",
     "-q",
@@ -2821,9 +2808,7 @@ def fragments_list(queries, aliases, json_):
             click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
 
 
-@fragments.command(
-    name="set",
-)
+@fragments.command(name="set")
 @click.argument("alias", callback=validate_fragment_alias)
 @click.argument("fragment")
 def fragments_set(alias, fragment):
@@ -2855,9 +2840,7 @@ def fragments_set(alias, fragment):
         db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
 
 
-@fragments.command(
-    name="show",
-)
+@fragments.command(name="show")
 @click.argument("alias_or_hash")
 def fragments_show(alias_or_hash):
     """
@@ -2875,9 +2858,7 @@ def fragments_show(alias_or_hash):
     click.echo(resolved)
 
 
-@fragments.command(
-    name="remove",
-)
+@fragments.command(name="remove")
 @click.argument("alias", callback=validate_fragment_alias)
 def fragments_remove(alias):
     """
@@ -2896,9 +2877,7 @@ def fragments_remove(alias):
         )
 
 
-@fragments.command(
-    name="loaders",
-)
+@fragments.command(name="loaders")
 def fragments_loaders():
     """Show fragment loaders registered by plugins"""
     from llm import get_fragment_loaders
@@ -2918,9 +2897,7 @@ def fragments_loaders():
         click.echo("No fragment loaders found")
 
 
-@cli.command(
-    name="plugins",
-)
+@cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
 @click.option(
     "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
@@ -3427,9 +3404,7 @@ def embed_models():
     "Manage available embedding models"
 
 
-@embed_models.command(
-    name="list",
-)
+@embed_models.command(name="list")
 @click.option(
     "-q",
     "--query",
@@ -3450,9 +3425,7 @@ def embed_models_list(query):
     click.echo("\n".join(output))
 
 
-@embed_models.command(
-    name="default",
-)
+@embed_models.command(name="default")
 @click.argument("model", required=False)
 @click.option(
     "--remove-default", is_flag=True, help="Reset to specifying no default model"
@@ -3486,17 +3459,13 @@ def collections():
     "View and manage collections of embeddings"
 
 
-@collections.command(
-    name="path",
-)
+@collections.command(name="path")
 def collections_path():
     "Output the path to the embeddings database"
     click.echo(user_dir() / "embeddings.db")
 
 
-@collections.command(
-    name="list",
-)
+@collections.command(name="list")
 @click.option(
     "-d",
     "--database",
@@ -3536,9 +3505,7 @@ def embed_db_collections(database, json_):
             )
 
 
-@collections.command(
-    name="delete",
-)
+@collections.command(name="delete")
 @click.argument("collection")
 @click.option(
     "-d",
@@ -3574,9 +3541,7 @@ def options():
     "Manage default options for models"
 
 
-@options.command(
-    name="list",
-)
+@options.command(name="list")
 def options_list():
     """
     List default options for all models
@@ -3597,9 +3562,7 @@ def options_list():
             click.echo(f"  {key}: {value}")
 
 
-@options.command(
-    name="show",
-)
+@options.command(name="show")
 @click.argument("model")
 def options_show(model):
     """
@@ -3629,9 +3592,7 @@ def options_show(model):
         click.echo(f"{key}: {value}")
 
 
-@options.command(
-    name="set",
-)
+@options.command(name="set")
 @click.argument("model")
 @click.argument("key")
 @click.argument("value")
@@ -3667,9 +3628,7 @@ def options_set(model, key, value):
     click.echo(f"Set default option {key}={value} for model {model_id}", err=True)
 
 
-@options.command(
-    name="clear",
-)
+@options.command(name="clear")
 @click.argument("model")
 @click.argument("key", required=False)
 def options_clear(model, key):
@@ -3917,7 +3876,10 @@ def load_template(name: str) -> Template:
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
-    return _parse_yaml_template(name, content)
+    template_obj = _parse_yaml_template(name, content)
+    # We trust functions here because they came from the filesystem
+    template_obj._functions_is_trusted = True
+    return template_obj
 
 
 def _tools_from_code(code_or_path: str) -> List[Tool]:
@@ -3952,10 +3914,17 @@ def _debug_tool_call(_, tool_call, tool_result):
         err=True,
     )
     output = ""
+    attachments = ""
+    if tool_result.attachments:
+        attachments += "\nAttachments:\n"
+        for attachment in tool_result.attachments:
+            attachments += f"  {repr(attachment)}\n"
+
     try:
         output = json.dumps(json.loads(tool_result.output), indent=2)
     except ValueError:
         output = tool_result.output
+    output += attachments
     click.echo(
         click.style(
             textwrap.indent(output, "  ") + "\n",
