@@ -343,3 +343,45 @@ async def test_async_tool_returning_attachment():
     output = await chain_response.text()
     assert '"type": "image/png"' in output
     assert '"output": "Output"' in output
+
+
+def test_tool_conversation_settings():
+    model = llm.get_model("echo")
+    before_collected = []
+    after_collected = []
+
+    def before(*args):
+        before_collected.append(args)
+
+    def after(*args):
+        after_collected.append(args)
+
+    conversation = model.conversation(
+        tools=[llm_time], before_call=before, after_call=after
+    )
+    # Run two things
+    conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    assert len(before_collected) == 2
+    assert len(after_collected) == 2
+
+
+@pytest.mark.asyncio
+async def test_tool_conversation_settings_async():
+    model = llm.get_async_model("echo")
+    before_collected = []
+    after_collected = []
+
+    async def before(*args):
+        before_collected.append(args)
+
+    async def after(*args):
+        after_collected.append(args)
+
+    conversation = model.conversation(
+        tools=[llm_time], before_call=before, after_call=after
+    )
+    await conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    await conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    assert len(before_collected) == 2
+    assert len(after_collected) == 2

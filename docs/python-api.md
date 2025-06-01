@@ -148,6 +148,46 @@ for response in chain.responses():
         print(chunk, end="", flush=True)
 ```
 
+(python-api-tools-debug-hooks)=
+
+#### Tool debugging hooks
+
+Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
+
+The method signature is `def before_call(tool: llm.Tool, tool_call: llm.ToolCall)`. Here's an example:
+```python
+import llm
+
+def upper(text: str) -> str:
+    "Convert text to uppercase."
+    return text.upper()
+
+def before_call(tool: llm.Tool, tool_call: llm.ToolCall):
+    print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
+    if tool.name == "upper" and "bad" in repr(tool_call.arguments):
+        raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    before_call=before_call,
+)
+print(response.text())
+```
+The `after_call=` parameter can be used to run a logging function after each tool call has been executed. The method signature is `def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult)`. This continues the previous example:
+```python
+def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult):
+    print(f"Tool {tool.name} called with arguments {tool_call.arguments} returned {tool_result.output}")
+
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    after_call=after_call,
+)
+print(response.text())
+```
+
 (python-api-tools-attachments)=
 
 #### Tools can return attachments
@@ -575,6 +615,8 @@ print(conversation.chain(
     "Same with pangolin"
 ).text())
 ```
+The `before_call=` and `after_call=` parameters {ref}`described above <python-api-tools-debug-hooks>` can be passed directly to the `model.conversation()` method to set those options for all chained prompts in that conversation.
+
 
 (python-api-listing-models)=
 

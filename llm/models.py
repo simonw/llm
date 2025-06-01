@@ -259,9 +259,6 @@ class Toolbox:
         return methods
 
 
-ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
-
-
 @dataclass
 class ToolCall:
     name: str
@@ -284,6 +281,13 @@ class ToolOutput:
 
     output: Optional[Union[str, dict, list, bool, int, float]] = None
     attachments: List[Attachment] = field(default_factory=list)
+
+
+ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
+BeforeCallSync = Callable[[Tool, ToolCall], None]
+AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
+BeforeCallAsync = Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
+AfterCallAsync = Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
 
 
 class CancelToolCall(Exception):
@@ -368,6 +372,7 @@ class _BaseConversation:
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[Tool]] = None
+    chain_limit: Optional[int] = None
 
     @classmethod
     @abstractmethod
@@ -377,6 +382,9 @@ class _BaseConversation:
 
 @dataclass
 class Conversation(_BaseConversation):
+    before_call: Optional[BeforeCallSync] = None
+    after_call: Optional[AfterCallSync] = None
+
     def prompt(
         self,
         prompt: Optional[str] = None,
@@ -424,8 +432,8 @@ class Conversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "ChainResponse":
@@ -447,9 +455,9 @@ class Conversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            before_call=before_call,
-            after_call=after_call,
-            chain_limit=chain_limit,
+            before_call=before_call or self.before_call,
+            after_call=after_call or self.after_call,
+            chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
     @classmethod
@@ -470,6 +478,9 @@ class Conversation(_BaseConversation):
 
 @dataclass
 class AsyncConversation(_BaseConversation):
+    before_call: Optional[BeforeCallAsync] = None
+    after_call: Optional[AfterCallAsync] = None
+
     def chain(
         self,
         prompt: Optional[str] = None,
@@ -483,12 +494,8 @@ class AsyncConversation(_BaseConversation):
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
@@ -510,9 +517,9 @@ class AsyncConversation(_BaseConversation):
             stream=stream,
             conversation=self,
             key=key,
-            before_call=before_call,
-            after_call=after_call,
-            chain_limit=chain_limit,
+            before_call=before_call or self.before_call,
+            after_call=after_call or self.after_call,
+            chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
     def prompt(
@@ -975,12 +982,8 @@ class Response(_BaseResponse):
     def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
@@ -1147,12 +1150,8 @@ class AsyncResponse(_BaseResponse):
     async def execute_tool_calls(
         self,
         *,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
     ) -> List[ToolResult]:
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
@@ -1437,12 +1436,8 @@ class _BaseChainResponse:
         conversation: _BaseConversation,
         key: Optional[str] = None,
         chain_limit: Optional[int] = 10,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[Union[BeforeCallSync, BeforeCallAsync]] = None,
+        after_call: Optional[Union[AfterCallSync, AfterCallAsync]] = None,
     ):
         self.prompt = prompt
         self.model = model
@@ -1467,6 +1462,8 @@ class _BaseChainResponse:
 
 class ChainResponse(_BaseChainResponse):
     _responses: List["Response"]
+    before_call: Optional[BeforeCallSync] = None
+    after_call: Optional[AfterCallSync] = None
 
     def responses(self) -> Iterator[Response]:
         prompt = self.prompt
@@ -1521,6 +1518,8 @@ class ChainResponse(_BaseChainResponse):
 
 class AsyncChainResponse(_BaseChainResponse):
     _responses: List["AsyncResponse"]
+    before_call: Optional[BeforeCallAsync] = None
+    after_call: Optional[AfterCallAsync] = None
 
     async def responses(self) -> AsyncIterator[AsyncResponse]:
         prompt = self.prompt
@@ -1656,8 +1655,20 @@ class _BaseModel(ABC, _get_key_mixin):
 
 
 class _Model(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> Conversation:
-        return Conversation(model=self, tools=tools)
+    def conversation(
+        self,
+        tools: Optional[List[Tool]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
+        chain_limit: Optional[int] = None,
+    ) -> Conversation:
+        return Conversation(
+            model=self,
+            tools=tools,
+            before_call=before_call,
+            after_call=after_call,
+            chain_limit=chain_limit,
+        )
 
     def prompt(
         self,
@@ -1705,8 +1716,8 @@ class _Model(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
-        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+        before_call: Optional[BeforeCallSync] = None,
+        after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> ChainResponse:
@@ -1753,8 +1764,20 @@ class KeyModel(_Model):
 
 
 class _AsyncModel(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> AsyncConversation:
-        return AsyncConversation(model=self, tools=tools)
+    def conversation(
+        self,
+        tools: Optional[List[Tool]] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
+        chain_limit: Optional[int] = None,
+    ) -> AsyncConversation:
+        return AsyncConversation(
+            model=self,
+            tools=tools,
+            before_call=before_call,
+            after_call=after_call,
+            chain_limit=chain_limit,
+        )
 
     def prompt(
         self,
@@ -1802,12 +1825,8 @@ class _AsyncModel(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[Tool]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[
-            Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
-        ] = None,
-        after_call: Optional[
-            Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
-        ] = None,
+        before_call: Optional[BeforeCallAsync] = None,
+        after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
     ) -> AsyncChainResponse:
