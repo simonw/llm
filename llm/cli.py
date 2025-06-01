@@ -3899,10 +3899,17 @@ def _debug_tool_call(_, tool_call, tool_result):
         err=True,
     )
     output = ""
+    attachments = ""
+    if tool_result.attachments:
+        attachments += "\nAttachments:\n"
+        for attachment in tool_result.attachments:
+            attachments += f"  {repr(attachment)}\n"
+
     try:
         output = json.dumps(json.loads(tool_result.output), indent=2)
     except ValueError:
         output = tool_result.output
+    output += attachments
     click.echo(
         click.style(
             textwrap.indent(output, "  ") + "\n",

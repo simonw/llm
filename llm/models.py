@@ -97,6 +97,18 @@ class Attachment:
     def base64_content(self):
         return base64.b64encode(self.content_bytes()).decode("utf-8")
 
+    def __repr__(self):
+        info = [f"<Attachment: {self.id()}"]
+        if self.type:
+            info.append(f'type="{self.type}"')
+        if self.path:
+            info.append(f'path="{self.path}"')
+        if self.url:
+            info.append(f'url="{self.url}"')
+        if self.content:
+            info.append(f"content={len(self.content)} bytes")
+        return " ".join(info) + ">"
+
     @classmethod
     def from_row(cls, row):
         return cls(
