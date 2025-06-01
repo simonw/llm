@@ -1462,6 +1462,8 @@ class _BaseChainResponse:
 
 class ChainResponse(_BaseChainResponse):
     _responses: List["Response"]
+    before_call: Optional[BeforeCallSync] = None
+    after_call: Optional[AfterCallSync] = None
 
     def responses(self) -> Iterator[Response]:
         prompt = self.prompt
@@ -1516,6 +1518,8 @@ class ChainResponse(_BaseChainResponse):
 
 class AsyncChainResponse(_BaseChainResponse):
     _responses: List["AsyncResponse"]
+    before_call: Optional[BeforeCallAsync] = None
+    after_call: Optional[AfterCallAsync] = None
 
     async def responses(self) -> AsyncIterator[AsyncResponse]:
         prompt = self.prompt
