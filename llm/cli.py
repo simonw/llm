@@ -1858,6 +1858,7 @@ def logs_list(
             'name', tr.name,
             'output', tr.output,
             'tool_call_id', tr.tool_call_id,
+            'exception', tr.exception,
             'attachments', COALESCE(
                 (SELECT json_group_array(json_object(
                     'id', a.id,
@@ -2095,10 +2096,17 @@ def logs_list(
                             desc += f"<{attachment['content_length']:,} bytes>"
                         attachments += "\n    - {}".format(desc)
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}{}".format(
+                        "- **{}**: `{}`<br>\n{}{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
                             textwrap.indent(tool_result["output"], "    "),
+                            (
+                                "<br>\n    **Error**: {}\n".format(
+                                    tool_result["exception"]
+                                )
+                                if tool_result["exception"]
+                                else ""
+                            ),
                             attachments,
                         )
                     )

@@ -405,7 +405,8 @@ CREATE TABLE "tool_results" (
   [name] TEXT,
   [output] TEXT,
   [tool_call_id] TEXT,
-  [instance_id] INTEGER REFERENCES [tool_instances]([id])
+  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
+  [exception] TEXT
 );
 CREATE TABLE [tool_instances] (
   [id] INTEGER PRIMARY KEY,

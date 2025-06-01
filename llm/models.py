@@ -926,6 +926,16 @@ class _BaseResponse:
                         "output": tool_result.output,
                         "tool_call_id": tool_result.tool_call_id,
                         "instance_id": instance_id,
+                        "exception": (
+                            (
+                                "{}: {}".format(
+                                    tool_result.exception.__class__.__name__,
+                                    str(tool_result.exception),
+                                )
+                            )
+                            if tool_result.exception
+                            else None
+                        ),
                     }
                 )
                 .last_pk
