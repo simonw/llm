@@ -1153,8 +1153,6 @@ class AsyncResponse(_BaseResponse):
             if not tool.implementation:
                 raise CancelToolCall(f"No implementation for tool: {tc.name}")
 
-            attachments = []
-
             # If it's an async implementation, wrap it
             if inspect.iscoroutinefunction(tool.implementation):
 
@@ -1165,6 +1163,7 @@ class AsyncResponse(_BaseResponse):
                         if inspect.isawaitable(cb):
                             await cb
 
+                    attachments = []
                     try:
                         result = await tool.implementation(**tc.arguments)
                         if isinstance(result, ToolOutput):
@@ -1181,6 +1180,7 @@ class AsyncResponse(_BaseResponse):
                     tr = ToolResult(
                         name=tc.name,
                         output=output,
+                        attachments=attachments,
                         tool_call_id=tc.tool_call_id,
                         instance=_get_instance(tool.implementation),
                     )
