@@ -573,6 +573,14 @@ class _Shared:
                     )
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
+        for tool_result in prompt.tool_results:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_result.tool_call_id,
+                    "content": tool_result.output,
+                }
+            )
         if not prompt.attachments:
             if prompt.prompt:
                 messages.append({"role": "user", "content": prompt.prompt or ""})
@@ -583,14 +591,6 @@ class _Shared:
             for attachment in prompt.attachments:
                 attachment_message.append(_attachment(attachment))
             messages.append({"role": "user", "content": attachment_message})
-        for tool_result in prompt.tool_results:
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.output,
-                }
-            )
         return messages
 
     def set_usage(self, response, usage):

@@ -22,6 +22,7 @@ from .models import (
     Tool,
     Toolbox,
     ToolCall,
+    ToolOutput,
     ToolResult,
 )
 from .utils import schema_dsl, Fragment
@@ -60,6 +61,7 @@ __all__ = [
     "Tool",
     "Toolbox",
     "ToolCall",
+    "ToolOutput",
     "ToolResult",
     "user_dir",
     "schema_dsl",
