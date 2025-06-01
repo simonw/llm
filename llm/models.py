@@ -259,8 +259,17 @@ class ToolCall:
 class ToolResult:
     name: str
     output: str
+    attachments: List[Attachment] = field(default_factory=list)
     tool_call_id: Optional[str] = None
     instance: Optional[Toolbox] = None
+
+
+@dataclass
+class ToolOutput:
+    "Tool functions can return output with extra attachments"
+
+    output: Optional[Union[str, dict, list, bool, int, float]] = None
+    attachments: List[Attachment] = field(default_factory=list)
 
 
 class CancelToolCall(Exception):
@@ -962,11 +971,17 @@ class Response(_BaseResponse):
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
 
+            attachments = []
+
             try:
                 if asyncio.iscoroutinefunction(tool.implementation):
                     result = asyncio.run(tool.implementation(**tool_call.arguments))
                 else:
                     result = tool.implementation(**tool_call.arguments)
+
+                if isinstance(result, ToolOutput):
+                    attachments = result.attachments
+                    result = result.output
 
                 if not isinstance(result, str):
                     result = json.dumps(result, default=repr)
@@ -976,6 +991,7 @@ class Response(_BaseResponse):
             tool_result_obj = ToolResult(
                 name=tool_call.name,
                 output=result,
+                attachments=attachments,
                 tool_call_id=tool_call.tool_call_id,
                 instance=_get_instance(tool.implementation),
             )
@@ -1113,6 +1129,8 @@ class AsyncResponse(_BaseResponse):
             if not tool.implementation:
                 raise CancelToolCall(f"No implementation for tool: {tc.name}")
 
+            attachments = []
+
             # If it's an async implementation, wrap it
             if inspect.iscoroutinefunction(tool.implementation):
 
@@ -1125,6 +1143,9 @@ class AsyncResponse(_BaseResponse):
 
                     try:
                         result = await tool.implementation(**tc.arguments)
+                        if isinstance(result, ToolOutput):
+                            attachments.extend(result.attachments)
+                            result = result.output
                         output = (
                             result
                             if isinstance(result, str)
@@ -1157,10 +1178,14 @@ class AsyncResponse(_BaseResponse):
                     if inspect.isawaitable(cb):
                         await cb
 
+                attachments = []
                 try:
                     res = tool.implementation(**tc.arguments)
                     if inspect.isawaitable(res):
                         res = await res
+                    if isinstance(res, ToolOutput):
+                        attachments.extend(res.attachments)
+                        res = res.output
                     output = (
                         res if isinstance(res, str) else json.dumps(res, default=repr)
                     )
@@ -1170,6 +1195,7 @@ class AsyncResponse(_BaseResponse):
                 tr = ToolResult(
                     name=tc.name,
                     output=output,
+                    attachments=attachments,
                     tool_call_id=tc.tool_call_id,
                     instance=_get_instance(tool.implementation),
                 )
@@ -1425,6 +1451,9 @@ class ChainResponse(_BaseChainResponse):
             tool_results = current_response.execute_tool_calls(
                 before_call=self.before_call, after_call=self.after_call
             )
+            attachments = []
+            for tool_result in tool_results:
+                attachments.extend(tool_result.attachments)
             if tool_results:
                 current_response = Response(
                     Prompt(
@@ -1433,6 +1462,7 @@ class ChainResponse(_BaseChainResponse):
                         tools=current_response.prompt.tools,
                         tool_results=tool_results,
                         options=self.prompt.options,
+                        attachments=attachments,
                     ),
                     self.model,
                     stream=self.stream,
@@ -1477,12 +1507,16 @@ class AsyncChainResponse(_BaseChainResponse):
                 before_call=self.before_call, after_call=self.after_call
             )
             if tool_results:
+                attachments = []
+                for tool_result in tool_results:
+                    attachments.extend(tool_result.attachments)
                 prompt = Prompt(
                     "",
                     self.model,
                     tools=current_response.prompt.tools,
                     tool_results=tool_results,
                     options=self.prompt.options,
+                    attachments=attachments,
                 )
                 current_response = AsyncResponse(
                     prompt,
