@@ -1855,7 +1855,21 @@ def logs_list(
             'tool_id', tr.tool_id,
             'name', tr.name,
             'output', tr.output,
-            'tool_call_id', tr.tool_call_id
+            'tool_call_id', tr.tool_call_id,
+            'attachments', COALESCE(
+                (SELECT json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                FROM tool_results_attachments tra
+                JOIN attachments a ON tra.attachment_id = a.id
+                WHERE tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
         ))
         FROM tool_results tr
         WHERE tr.response_id = responses.id
@@ -2066,11 +2080,24 @@ def logs_list(
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
+                    attachments = ""
+                    for attachment in tool_result["attachments"]:
+                        desc = ""
+                        if attachment.get("type"):
+                            desc += attachment["type"] + ": "
+                        if attachment.get("path"):
+                            desc += attachment["path"]
+                        elif attachment.get("url"):
+                            desc += attachment["url"]
+                        elif attachment.get("content"):
+                            desc += f"<{attachment['content_length']:,} bytes>"
+                        attachments += "\n    - {}".format(desc)
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}".format(
+                        "- **{}**: `{}`<br>\n{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
                             textwrap.indent(tool_result["output"], "    "),
+                            attachments,
                         )
                     )
             attachments = attachments_by_id.get(row["id"])
@@ -3885,10 +3912,17 @@ def _debug_tool_call(_, tool_call, tool_result):
         err=True,
     )
     output = ""
+    attachments = ""
+    if tool_result.attachments:
+        attachments += "\nAttachments:\n"
+        for attachment in tool_result.attachments:
+            attachments += f"  {repr(attachment)}\n"
+
     try:
         output = json.dumps(json.loads(tool_result.output), indent=2)
     except ValueError:
         output = tool_result.output
+    output += attachments
     click.echo(
         click.style(
             textwrap.indent(output, "  ") + "\n",

@@ -148,6 +148,30 @@ for response in chain.responses():
         print(chunk, end="", flush=True)
 ```
 
+(python-api-tools-attachments)=
+
+#### Tools can return attachments
+
+Tools can return {ref}`attachments <python-api-attachments>` in addition to returning text. Attachments that are returned from a tool call will be passed to the model as attachments for the next prompt in the chain.
+
+To return one or more attachments, return a `llm.ToolOutput` instance from your tool function. This can have an `output=` string and an `attachments=` list of `llm.Attachment` instances.
+
+Here's an example:
+```python
+import llm
+
+def generate_image(prompt: str) -> llm.ToolOutput:
+    """Generate an image based on the prompt."""
+    image_content = generate_image_from_prompt(prompt)
+    return llm.ToolOutput(
+        output="Image generated successfully",
+        attachments=[llm.Attachment(
+            content=image_content,
+            mimetype="image/png"
+        )],
+    )
+```
+
 (python-api-toolbox)=
 
 #### Toolbox classes
