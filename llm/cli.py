@@ -1855,7 +1855,21 @@ def logs_list(
             'tool_id', tr.tool_id,
             'name', tr.name,
             'output', tr.output,
-            'tool_call_id', tr.tool_call_id
+            'tool_call_id', tr.tool_call_id,
+            'attachments', COALESCE(
+                (SELECT json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                FROM tool_results_attachments tra
+                JOIN attachments a ON tra.attachment_id = a.id
+                WHERE tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
         ))
         FROM tool_results tr
         WHERE tr.response_id = responses.id

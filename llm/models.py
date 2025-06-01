@@ -894,16 +894,40 @@ class _BaseResponse:
                     instance_id = tool_result.instance.instance_id
                 except AttributeError:
                     pass
-            db["tool_results"].insert(
-                {
-                    "response_id": response_id,
-                    "tool_id": tool_ids_by_name.get(tool_result.name) or None,
-                    "name": tool_result.name,
-                    "output": tool_result.output,
-                    "tool_call_id": tool_result.tool_call_id,
-                    "instance_id": instance_id,
-                }
+            tool_result_id = (
+                db["tool_results"]
+                .insert(
+                    {
+                        "response_id": response_id,
+                        "tool_id": tool_ids_by_name.get(tool_result.name) or None,
+                        "name": tool_result.name,
+                        "output": tool_result.output,
+                        "tool_call_id": tool_result.tool_call_id,
+                        "instance_id": instance_id,
+                    }
+                )
+                .last_pk
             )
+            # Persist attachments for tool results
+            for index, attachment in enumerate(tool_result.attachments):
+                attachment_id = attachment.id()
+                db["attachments"].insert(
+                    {
+                        "id": attachment_id,
+                        "type": attachment.resolve_type(),
+                        "path": attachment.path,
+                        "url": attachment.url,
+                        "content": attachment.content,
+                    },
+                    replace=True,
+                )
+                db["tool_results_attachments"].insert(
+                    {
+                        "tool_result_id": tool_result_id,
+                        "attachment_id": attachment_id,
+                        "order": index,
+                    },
+                )
 
 
 class Response(_BaseResponse):
