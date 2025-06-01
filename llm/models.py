@@ -344,7 +344,7 @@ class _BaseConversation:
     id: str = field(default_factory=lambda: str(monotonic_ulid()).lower())
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
-    tools: Optional[List[Tool]] = None
+    tools: Optional[List[ToolDef]] = None
 
     @classmethod
     @abstractmethod
@@ -362,7 +362,7 @@ class Conversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
@@ -398,7 +398,7 @@ class Conversation(_BaseConversation):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
@@ -457,7 +457,7 @@ class AsyncConversation(_BaseConversation):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         chain_limit: Optional[int] = None,
         before_call: Optional[
@@ -500,7 +500,7 @@ class AsyncConversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
@@ -1584,7 +1584,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
 
 class _Model(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> Conversation:
+    def conversation(self, tools: Optional[List[ToolDef]] = None) -> Conversation:
         return Conversation(model=self, tools=tools)
 
     def prompt(
@@ -1597,7 +1597,7 @@ class _Model(_BaseModel):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         **options,
     ) -> Response:
@@ -1631,7 +1631,7 @@ class _Model(_BaseModel):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
         after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
@@ -1681,7 +1681,7 @@ class KeyModel(_Model):
 
 
 class _AsyncModel(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> AsyncConversation:
+    def conversation(self, tools: Optional[List[ToolDef]] = None) -> AsyncConversation:
         return AsyncConversation(model=self, tools=tools)
 
     def prompt(
@@ -1692,7 +1692,7 @@ class _AsyncModel(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
@@ -1728,7 +1728,7 @@ class _AsyncModel(_BaseModel):
         system_fragments: Optional[List[str]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         before_call: Optional[
             Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
