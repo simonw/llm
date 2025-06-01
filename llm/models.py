@@ -1169,9 +1169,15 @@ class AsyncResponse(_BaseResponse):
 
         for idx, tc in enumerate(tool_calls_list):
             tool = tools_by_name.get(tc.name)
+            exception: Optional[Exception] = None
 
-            # If it's an async implementation, wrap it
-            if inspect.iscoroutinefunction(tool.implementation):
+            if tool is None:
+                output = f'Error: tool "{tc.name}" does not exist'
+                exception = KeyError(tc.name)
+            elif not tool.implementation:
+                output = f'Error: tool "{tc.name}" has no implementation'
+                exception = KeyError(tc.name)
+            elif inspect.iscoroutinefunction(tool.implementation):
 
                 async def run_async(tc=tc, tool=tool, idx=idx):
                     # before_call inside the task
@@ -1183,23 +1189,19 @@ class AsyncResponse(_BaseResponse):
                     exception = None
                     attachments = []
 
-                    if tool is None:
-                        output = f'Error: tool "{tc.name}" does not exist'
-                        exception = KeyError(tc.name)
-                    else:
-                        try:
-                            result = await tool.implementation(**tc.arguments)
-                            if isinstance(result, ToolOutput):
-                                attachments.extend(result.attachments)
-                                result = result.output
-                            output = (
-                                result
-                                if isinstance(result, str)
-                                else json.dumps(result, default=repr)
-                            )
-                        except Exception as ex:
-                            output = f"Error: {ex}"
-                            exception = ex
+                    try:
+                        result = await tool.implementation(**tc.arguments)
+                        if isinstance(result, ToolOutput):
+                            attachments.extend(result.attachments)
+                            result = result.output
+                        output = (
+                            result
+                            if isinstance(result, str)
+                            else json.dumps(result, default=repr)
+                        )
+                    except Exception as ex:
+                        output = f"Error: {ex}"
+                        exception = ex
 
                     tr = ToolResult(
                         name=tc.name,
@@ -1250,21 +1252,21 @@ class AsyncResponse(_BaseResponse):
                         output = f"Error: {ex}"
                         exception = ex
 
-                tr = ToolResult(
-                    name=tc.name,
-                    output=output,
-                    attachments=attachments,
-                    tool_call_id=tc.tool_call_id,
-                    instance=_get_instance(tool.implementation),
-                    exception=exception,
-                )
+                    tr = ToolResult(
+                        name=tc.name,
+                        output=output,
+                        attachments=attachments,
+                        tool_call_id=tc.tool_call_id,
+                        instance=_get_instance(tool.implementation),
+                        exception=exception,
+                    )
 
-                if tool is not None and after_call:
-                    cb2 = after_call(tool, tc, tr)
-                    if inspect.isawaitable(cb2):
-                        await cb2
+                    if tool is not None and after_call:
+                        cb2 = after_call(tool, tc, tr)
+                        if inspect.isawaitable(cb2):
+                            await cb2
 
-                indexed_results.append((idx, tr))
+                    indexed_results.append((idx, tr))
 
         # Await all async tasks in parallel
         if async_tasks:
