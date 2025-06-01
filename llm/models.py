@@ -183,6 +183,8 @@ class Toolbox:
         original_init = cls.__init__
 
         def wrapped_init(self, *args, **kwargs):
+            # Track args/kwargs passed to constructor in self._config
+            # so we can serialize them to a database entry later on
             sig = inspect.signature(original_init)
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
