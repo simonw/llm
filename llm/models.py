@@ -368,6 +368,9 @@ class _BaseConversation:
     name: Optional[str] = None
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[Tool]] = None
+    chain_limit: Optional[int] = (None,)
+    before_call: Optional[Callable[[Tool, ToolCall], None]] = (None,)
+    after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = (None,)
 
     @classmethod
     @abstractmethod
@@ -1656,8 +1659,20 @@ class _BaseModel(ABC, _get_key_mixin):
 
 
 class _Model(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> Conversation:
-        return Conversation(model=self, tools=tools)
+    def conversation(
+        self,
+        tools: Optional[List[Tool]] = None,
+        chain_limit: Optional[int] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+    ) -> Conversation:
+        return Conversation(
+            model=self,
+            tools=tools,
+            before_call=before_call,
+            after_call=after_call,
+            chain_limit=chain_limit,
+        )
 
     def prompt(
         self,
@@ -1753,8 +1768,20 @@ class KeyModel(_Model):
 
 
 class _AsyncModel(_BaseModel):
-    def conversation(self, tools: Optional[List[Tool]] = None) -> AsyncConversation:
-        return AsyncConversation(model=self, tools=tools)
+    def conversation(
+        self,
+        tools: Optional[List[Tool]] = None,
+        chain_limit: Optional[int] = None,
+        before_call: Optional[Callable[[Tool, ToolCall], None]] = None,
+        after_call: Optional[Callable[[Tool, ToolCall, ToolResult], None]] = None,
+    ) -> AsyncConversation:
+        return AsyncConversation(
+            model=self,
+            tools=tools,
+            before_call=before_call,
+            after_call=after_call,
+            chain_limit=chain_limit,
+        )
 
     def prompt(
         self,
