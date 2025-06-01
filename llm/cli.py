@@ -303,39 +303,11 @@ def schema_option(fn):
     return fn
 
 
-# Shared mixin to add `-h` support
-class HelpMixin:
-    def get_help_option(self, ctx):
-        return click.Option(
-            ["-h", "--help"],
-            is_flag=True,
-            expose_value=False,
-            is_eager=True,
-            help="Show this message and exit.",
-            callback=self._help_callback,
-        )
-
-    def _help_callback(self, ctx, param, value):
-        if not value or ctx.resilient_parsing:
-            return
-        click.echo(ctx.get_help())
-        ctx.exit()
-
-
-# Subclass DefaultGroup with help mixin
-class HelpDefaultGroup(HelpMixin, DefaultGroup):
-    pass
-
-
-# Subclass Command with help mixin
-class HelpCommand(HelpMixin, click.Command):
-    pass
-
-
 @click.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.version_option()
 def cli():
@@ -365,7 +337,7 @@ def cli():
     """
 
 
-@cli.command(name="prompt", cls=HelpCommand)
+@cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
@@ -935,7 +907,7 @@ def prompt(
         response.log_to_db(db)
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -1275,7 +1247,7 @@ def load_conversation(
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -1283,7 +1255,9 @@ def keys():
     "Manage stored API keys for different models"
 
 
-@keys.command(name="list", cls=HelpCommand)
+@keys.command(
+    name="list",
+)
 def keys_list():
     "List names of all stored keys"
     path = user_dir() / "keys.json"
@@ -1296,13 +1270,17 @@ def keys_list():
             click.echo(key)
 
 
-@keys.command(name="path", cls=HelpCommand)
+@keys.command(
+    name="path",
+)
 def keys_path_command():
     "Output the path to the keys.json file"
     click.echo(user_dir() / "keys.json")
 
 
-@keys.command(name="get", cls=HelpCommand)
+@keys.command(
+    name="get",
+)
 @click.argument("name")
 def keys_get(name):
     """
@@ -1323,7 +1301,9 @@ def keys_get(name):
         raise click.ClickException("No key found with name '{}'".format(name))
 
 
-@keys.command(name="set", cls=HelpCommand)
+@keys.command(
+    name="set",
+)
 @click.argument("name")
 @click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
 def keys_set(name, value):
@@ -1351,7 +1331,7 @@ def keys_set(name, value):
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -1359,13 +1339,17 @@ def logs():
     "Tools for exploring logged prompts and responses"
 
 
-@logs.command(name="path", cls=HelpCommand)
+@logs.command(
+    name="path",
+)
 def logs_path():
     "Output the path to the logs.db file"
     click.echo(logs_db_path())
 
 
-@logs.command(name="status", cls=HelpCommand)
+@logs.command(
+    name="status",
+)
 def logs_status():
     "Show current status of database logging"
     path = logs_db_path()
@@ -1386,7 +1370,9 @@ def logs_status():
     )
 
 
-@logs.command(name="backup", cls=HelpCommand)
+@logs.command(
+    name="backup",
+)
 @click.argument("path", type=click.Path(dir_okay=True, writable=True))
 def backup(path):
     "Backup your logs database to this file"
@@ -1402,7 +1388,9 @@ def backup(path):
     )
 
 
-@logs.command(name="on", cls=HelpCommand)
+@logs.command(
+    name="on",
+)
 def logs_turn_on():
     "Turn on logging for all prompts"
     path = user_dir() / "logs-off"
@@ -1410,7 +1398,9 @@ def logs_turn_on():
         path.unlink()
 
 
-@logs.command(name="off", cls=HelpCommand)
+@logs.command(
+    name="off",
+)
 def logs_turn_off():
     "Turn off logging for all prompts"
     path = user_dir() / "logs-off"
@@ -1473,7 +1463,9 @@ order by prompt_attachments."order"
 """
 
 
-@logs.command(name="list", cls=HelpCommand)
+@logs.command(
+    name="list",
+)
 @click.option(
     "-n",
     "--count",
@@ -2151,7 +2143,7 @@ def logs_list(
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2167,7 +2159,9 @@ _type_lookup = {
 }
 
 
-@models.command(name="list", cls=HelpCommand)
+@models.command(
+    name="list",
+)
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
 )
@@ -2265,7 +2259,9 @@ def models_list(options, async_, schemas, tools, query, model_ids):
         click.echo(f"Default: {get_default_model()}")
 
 
-@models.command(name="default", cls=HelpCommand)
+@models.command(
+    name="default",
+)
 @click.argument("model", required=False)
 def models_default(model):
     "Show or set the default model"
@@ -2281,7 +2277,7 @@ def models_default(model):
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2289,7 +2285,9 @@ def templates():
     "Manage stored prompt templates"
 
 
-@templates.command(name="list", cls=HelpCommand)
+@templates.command(
+    name="list",
+)
 def templates_list():
     "List available prompt templates"
     path = template_dir()
@@ -2320,7 +2318,9 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
-@templates.command(name="show", cls=HelpCommand)
+@templates.command(
+    name="show",
+)
 @click.argument("name")
 def templates_show(name):
     "Show the specified prompt template"
@@ -2334,7 +2334,9 @@ def templates_show(name):
     )
 
 
-@templates.command(name="edit", cls=HelpCommand)
+@templates.command(
+    name="edit",
+)
 @click.argument("name")
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
@@ -2347,13 +2349,17 @@ def templates_edit(name):
     load_template(name)
 
 
-@templates.command(name="path", cls=HelpCommand)
+@templates.command(
+    name="path",
+)
 def templates_path():
     "Output the path to the templates directory"
     click.echo(template_dir())
 
 
-@templates.command(name="loaders", cls=HelpCommand)
+@templates.command(
+    name="loaders",
+)
 def templates_loaders():
     "Show template loaders registered by plugins"
     found = False
@@ -2369,7 +2375,7 @@ def templates_loaders():
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2377,7 +2383,9 @@ def schemas():
     "Manage stored schemas"
 
 
-@schemas.command(name="list", cls=HelpCommand)
+@schemas.command(
+    name="list",
+)
 @click.option(
     "-p",
     "--path",
@@ -2464,7 +2472,9 @@ def schemas_list(path, database, queries, full, json_, nl):
         )
 
 
-@schemas.command(name="show", cls=HelpCommand)
+@schemas.command(
+    name="show",
+)
 @click.argument("schema_id")
 @click.option(
     "-p",
@@ -2496,7 +2506,9 @@ def schemas_show(schema_id, path, database):
     click.echo(json.dumps(json.loads(row["content"]), indent=2))
 
 
-@schemas.command(name="dsl", cls=HelpCommand)
+@schemas.command(
+    name="dsl",
+)
 @click.argument("input")
 @click.option("--multi", is_flag=True, help="Wrap in an array")
 def schemas_dsl_debug(input, multi):
@@ -2511,7 +2523,7 @@ def schemas_dsl_debug(input, multi):
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2519,7 +2531,9 @@ def tools():
     "Manage tools that can be made available to LLMs"
 
 
-@tools.command(name="list", cls=HelpCommand)
+@tools.command(
+    name="list",
+)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
@@ -2607,7 +2621,7 @@ def tools_list(json_, python_tools):
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2615,7 +2629,9 @@ def aliases():
     "Manage model aliases"
 
 
-@aliases.command(name="list", cls=HelpCommand)
+@aliases.command(
+    name="list",
+)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def aliases_list(json_):
     "List current aliases"
@@ -2641,7 +2657,9 @@ def aliases_list(json_):
         )
 
 
-@aliases.command(name="set", cls=HelpCommand)
+@aliases.command(
+    name="set",
+)
 @click.argument("alias")
 @click.argument("model_id", required=False)
 @click.option(
@@ -2690,7 +2708,9 @@ def aliases_set(alias, model_id, query):
         set_alias(alias, model_id)
 
 
-@aliases.command(name="remove", cls=HelpCommand)
+@aliases.command(
+    name="remove",
+)
 @click.argument("alias")
 def aliases_remove(alias):
     """
@@ -2707,14 +2727,16 @@ def aliases_remove(alias):
         raise click.ClickException(ex.args[0])
 
 
-@aliases.command(name="path", cls=HelpCommand)
+@aliases.command(
+    name="path",
+)
 def aliases_path():
     "Output the path to the aliases.json file"
     click.echo(user_dir() / "aliases.json")
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -2726,7 +2748,9 @@ def fragments():
     """
 
 
-@fragments.command(name="list", cls=HelpCommand)
+@fragments.command(
+    name="list",
+)
 @click.option(
     "queries",
     "-q",
@@ -2797,7 +2821,9 @@ def fragments_list(queries, aliases, json_):
             click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
 
 
-@fragments.command(name="set", cls=HelpCommand)
+@fragments.command(
+    name="set",
+)
 @click.argument("alias", callback=validate_fragment_alias)
 @click.argument("fragment")
 def fragments_set(alias, fragment):
@@ -2829,7 +2855,9 @@ def fragments_set(alias, fragment):
         db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
 
 
-@fragments.command(name="show", cls=HelpCommand)
+@fragments.command(
+    name="show",
+)
 @click.argument("alias_or_hash")
 def fragments_show(alias_or_hash):
     """
@@ -2847,7 +2875,9 @@ def fragments_show(alias_or_hash):
     click.echo(resolved)
 
 
-@fragments.command(name="remove", cls=HelpCommand)
+@fragments.command(
+    name="remove",
+)
 @click.argument("alias", callback=validate_fragment_alias)
 def fragments_remove(alias):
     """
@@ -2866,7 +2896,9 @@ def fragments_remove(alias):
         )
 
 
-@fragments.command(name="loaders", cls=HelpCommand)
+@fragments.command(
+    name="loaders",
+)
 def fragments_loaders():
     """Show fragment loaders registered by plugins"""
     from llm import get_fragment_loaders
@@ -2886,7 +2918,9 @@ def fragments_loaders():
         click.echo("No fragment loaders found")
 
 
-@cli.command(name="plugins", cls=HelpCommand)
+@cli.command(
+    name="plugins",
+)
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
 @click.option(
     "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
@@ -2908,7 +2942,7 @@ def display_truncated(text):
         return text
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.argument("packages", nargs=-1, required=False)
 @click.option(
     "-U", "--upgrade", is_flag=True, help="Upgrade packages to latest version"
@@ -2951,7 +2985,7 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     run_module("pip", run_name="__main__")
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.argument("packages", nargs=-1, required=True)
 @click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
 def uninstall(packages, yes):
@@ -2960,7 +2994,7 @@ def uninstall(packages, yes):
     run_module("pip", run_name="__main__")
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.argument("collection", required=False)
 @click.argument("id", required=False)
 @click.option(
@@ -3077,7 +3111,7 @@ def embed(
             click.echo(encode(embedding).hex())
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.argument("collection")
 @click.argument(
     "input_path",
@@ -3300,7 +3334,7 @@ def embed_multi(
         collection_obj.embed_multi(tuples(), **embed_kwargs)
 
 
-@cli.command(cls=HelpCommand)
+@cli.command()
 @click.argument("collection")
 @click.argument("id", required=False)
 @click.option(
@@ -3385,7 +3419,7 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -3393,7 +3427,9 @@ def embed_models():
     "Manage available embedding models"
 
 
-@embed_models.command(name="list", cls=HelpCommand)
+@embed_models.command(
+    name="list",
+)
 @click.option(
     "-q",
     "--query",
@@ -3414,7 +3450,9 @@ def embed_models_list(query):
     click.echo("\n".join(output))
 
 
-@embed_models.command(name="default", cls=HelpCommand)
+@embed_models.command(
+    name="default",
+)
 @click.argument("model", required=False)
 @click.option(
     "--remove-default", is_flag=True, help="Reset to specifying no default model"
@@ -3440,7 +3478,7 @@ def embed_models_default(model, remove_default):
 
 
 @cli.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -3448,13 +3486,17 @@ def collections():
     "View and manage collections of embeddings"
 
 
-@collections.command(name="path", cls=HelpCommand)
+@collections.command(
+    name="path",
+)
 def collections_path():
     "Output the path to the embeddings database"
     click.echo(user_dir() / "embeddings.db")
 
 
-@collections.command(name="list", cls=HelpCommand)
+@collections.command(
+    name="list",
+)
 @click.option(
     "-d",
     "--database",
@@ -3494,7 +3536,9 @@ def embed_db_collections(database, json_):
             )
 
 
-@collections.command(name="delete", cls=HelpCommand)
+@collections.command(
+    name="delete",
+)
 @click.argument("collection")
 @click.option(
     "-d",
@@ -3522,7 +3566,7 @@ def collections_delete(collection, database):
 
 
 @models.group(
-    cls=HelpDefaultGroup,
+    cls=DefaultGroup,
     default="list",
     default_if_no_args=True,
 )
@@ -3530,7 +3574,9 @@ def options():
     "Manage default options for models"
 
 
-@options.command(name="list", cls=HelpCommand)
+@options.command(
+    name="list",
+)
 def options_list():
     """
     List default options for all models
@@ -3551,7 +3597,9 @@ def options_list():
             click.echo(f"  {key}: {value}")
 
 
-@options.command(name="show", cls=HelpCommand)
+@options.command(
+    name="show",
+)
 @click.argument("model")
 def options_show(model):
     """
@@ -3581,7 +3629,9 @@ def options_show(model):
         click.echo(f"{key}: {value}")
 
 
-@options.command(name="set", cls=HelpCommand)
+@options.command(
+    name="set",
+)
 @click.argument("model")
 @click.argument("key")
 @click.argument("value")
@@ -3617,7 +3667,9 @@ def options_set(model, key, value):
     click.echo(f"Set default option {key}={value} for model {model_id}", err=True)
 
 
-@options.command(name="clear", cls=HelpCommand)
+@options.command(
+    name="clear",
+)
 @click.argument("model")
 @click.argument("key", required=False)
 def options_clear(model, key):
