@@ -154,15 +154,18 @@ for response in chain.responses():
 
 Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
 
-The method signature is `def before_call(tool: llm.Tool, tool_call: llm.ToolCall)`. Here's an example:
+The method signature is `def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
+
+Here's an example:
 ```python
 import llm
+from typing import Optional
 
 def upper(text: str) -> str:
     "Convert text to uppercase."
     return text.upper()
 
-def before_call(tool: llm.Tool, tool_call: llm.ToolCall):
+def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall):
     print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
     if tool.name == "upper" and "bad" in repr(tool_call.arguments):
         raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")

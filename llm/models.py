@@ -273,6 +273,7 @@ class ToolResult:
     attachments: List[Attachment] = field(default_factory=list)
     tool_call_id: Optional[str] = None
     instance: Optional[Toolbox] = None
+    exception: Optional[Exception] = None
 
 
 @dataclass
@@ -284,9 +285,9 @@ class ToolOutput:
 
 
 ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
-BeforeCallSync = Callable[[Tool, ToolCall], None]
+BeforeCallSync = Callable[[Optional[Tool], ToolCall], None]
 AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
-BeforeCallAsync = Callable[[Tool, ToolCall], Union[None, Awaitable[None]]]
+BeforeCallAsync = Callable[[Optional[Tool], ToolCall], Union[None, Awaitable[None]]]
 AfterCallAsync = Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
 
 
@@ -989,16 +990,8 @@ class Response(_BaseResponse):
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
         for tool_call in self.tool_calls():
             tool = tools_by_name.get(tool_call.name)
-            if tool is None:
-                tool_results.append(
-                    ToolResult(
-                        name=tool_call.name,
-                        output='Error: tool "{}" does not exist'.format(tool_call.name),
-                        tool_call_id=tool_call.tool_call_id,
-                    )
-                )
-                continue
-
+            # Tool could be None if the tool was not found in the prompt tools,
+            # but we still call the before_call method:
             if before_call:
                 cb_result = before_call(tool, tool_call)
                 if inspect.isawaitable(cb_result):
@@ -1007,12 +1000,25 @@ class Response(_BaseResponse):
                         "Please use an async chain/response or a synchronous callback."
                     )
 
+            if tool is None:
+                msg = 'tool "{}" does not exist'.format(tool_call.name)
+                tool_results.append(
+                    ToolResult(
+                        name=tool_call.name,
+                        output="Error: " + msg,
+                        tool_call_id=tool_call.tool_call_id,
+                        exception=KeyError(msg),
+                    )
+                )
+                continue
+
             if not tool.implementation:
                 raise ValueError(
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
 
             attachments = []
+            exception = None
 
             try:
                 if asyncio.iscoroutinefunction(tool.implementation):
@@ -1028,6 +1034,7 @@ class Response(_BaseResponse):
                     result = json.dumps(result, default=repr)
             except Exception as ex:
                 result = f"Error: {ex}"
+                exception = ex
 
             tool_result_obj = ToolResult(
                 name=tool_call.name,
@@ -1035,6 +1042,7 @@ class Response(_BaseResponse):
                 attachments=attachments,
                 tool_call_id=tool_call.tool_call_id,
                 instance=_get_instance(tool.implementation),
+                exception=exception,
             )
 
             if after_call:
@@ -1161,10 +1169,6 @@ class AsyncResponse(_BaseResponse):
 
         for idx, tc in enumerate(tool_calls_list):
             tool = tools_by_name.get(tc.name)
-            if tool is None:
-                raise CancelToolCall(f"Unknown tool: {tc.name}")
-            if not tool.implementation:
-                raise CancelToolCall(f"No implementation for tool: {tc.name}")
 
             # If it's an async implementation, wrap it
             if inspect.iscoroutinefunction(tool.implementation):
@@ -1176,19 +1180,26 @@ class AsyncResponse(_BaseResponse):
                         if inspect.isawaitable(cb):
                             await cb
 
+                    exception = None
                     attachments = []
-                    try:
-                        result = await tool.implementation(**tc.arguments)
-                        if isinstance(result, ToolOutput):
-                            attachments.extend(result.attachments)
-                            result = result.output
-                        output = (
-                            result
-                            if isinstance(result, str)
-                            else json.dumps(result, default=repr)
-                        )
-                    except Exception as ex:
-                        output = f"Error: {ex}"
+
+                    if tool is None:
+                        output = f'Error: tool "{tc.name}" does not exist'
+                        exception = KeyError(tc.name)
+                    else:
+                        try:
+                            result = await tool.implementation(**tc.arguments)
+                            if isinstance(result, ToolOutput):
+                                attachments.extend(result.attachments)
+                                result = result.output
+                            output = (
+                                result
+                                if isinstance(result, str)
+                                else json.dumps(result, default=repr)
+                            )
+                        except Exception as ex:
+                            output = f"Error: {ex}"
+                            exception = ex
 
                     tr = ToolResult(
                         name=tc.name,
@@ -1196,10 +1207,11 @@ class AsyncResponse(_BaseResponse):
                         attachments=attachments,
                         tool_call_id=tc.tool_call_id,
                         instance=_get_instance(tool.implementation),
+                        exception=exception,
                     )
 
                     # after_call inside the task
-                    if after_call:
+                    if tool is not None and after_call:
                         cb2 = after_call(tool, tc, tr)
                         if inspect.isawaitable(cb2):
                             await cb2
@@ -1215,19 +1227,28 @@ class AsyncResponse(_BaseResponse):
                     if inspect.isawaitable(cb):
                         await cb
 
+                exception = None
                 attachments = []
-                try:
-                    res = tool.implementation(**tc.arguments)
-                    if inspect.isawaitable(res):
-                        res = await res
-                    if isinstance(res, ToolOutput):
-                        attachments.extend(res.attachments)
-                        res = res.output
-                    output = (
-                        res if isinstance(res, str) else json.dumps(res, default=repr)
-                    )
-                except Exception as ex:
-                    output = f"Error: {ex}"
+
+                if tool is None:
+                    output = f'Error: tool "{tc.name}" does not exist'
+                    exception = KeyError(tc.name)
+                else:
+                    try:
+                        res = tool.implementation(**tc.arguments)
+                        if inspect.isawaitable(res):
+                            res = await res
+                        if isinstance(res, ToolOutput):
+                            attachments.extend(res.attachments)
+                            res = res.output
+                        output = (
+                            res
+                            if isinstance(res, str)
+                            else json.dumps(res, default=repr)
+                        )
+                    except Exception as ex:
+                        output = f"Error: {ex}"
+                        exception = ex
 
                 tr = ToolResult(
                     name=tc.name,
@@ -1235,9 +1256,10 @@ class AsyncResponse(_BaseResponse):
                     attachments=attachments,
                     tool_call_id=tc.tool_call_id,
                     instance=_get_instance(tool.implementation),
+                    exception=exception,
                 )
 
-                if after_call:
+                if tool is not None and after_call:
                     cb2 = after_call(tool, tc, tr)
                     if inspect.isawaitable(cb2):
                         await cb2
