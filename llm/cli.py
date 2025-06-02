@@ -2548,7 +2548,7 @@ def tools():
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = get_tools()
+    tools = get_tools()
     if python_tools:
         for code_or_path in python_tools:
             for tool in _tools_from_code(code_or_path):
