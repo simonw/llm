@@ -908,10 +908,12 @@ def prompt(
                 err=True,
             )
 
-    # Log to the database
+    # Log responses to the database
     if (logs_on() or log) and not no_log:
+        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
         if isinstance(response, AsyncResponse):
             response = asyncio.run(response.to_sync_response())
+        # At this point ALL forms should have a log_to_db() method that works:
         response.log_to_db(db)
 
 

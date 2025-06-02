@@ -557,6 +557,16 @@ class AsyncConversation(_BaseConversation):
             key=key,
         )
 
+    def to_sync_conversation(self):
+        return Conversation(
+            model=self.model,
+            id=self.id,
+            name=self.name,
+            responses=[],  # Because we only use this in logging
+            tools=self.tools,
+            chain_limit=self.chain_limit,
+        )
+
     @classmethod
     def from_row(cls, row):
         from llm import get_async_model
@@ -1403,10 +1413,7 @@ class AsyncResponse(_BaseResponse):
             self.stream,
             # conversation type needs to be compatible too.
             conversation=(
-                self.conversation.to_sync_conversation()
-                if self.conversation
-                and hasattr(self.conversation, "to_sync_conversation")
-                else None
+                self.conversation.to_sync_conversation() if self.conversation else None
             ),
         )
         response.id = self.id
