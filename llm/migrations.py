@@ -413,3 +413,8 @@ def m020_tool_results_attachments(db):
         ),
         pk=("tool_result_id", "attachment_id"),
     )
+
+
+@migration
+def m021_tool_results_exception(db):
+    db["tool_results"].add_column("exception", str)
