@@ -178,6 +178,8 @@ response = model.chain(
 )
 print(response.text())
 ```
+If you raise `llm.CancelToolCall` in the `before_call` function the model will be informed that the tool call was cancelled.
+
 The `after_call=` parameter can be used to run a logging function after each tool call has been executed. The method signature is `def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult)`. This continues the previous example:
 ```python
 def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult):

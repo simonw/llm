@@ -3,7 +3,7 @@ from click.testing import CliRunner
 from importlib.metadata import version
 import json
 import llm
-from llm import cli
+from llm import cli, CancelToolCall
 from llm.migrations import migrate
 from llm.tools import llm_time
 import os
@@ -432,3 +432,78 @@ def test_tool_errors(async_):
         "    Error: Error!<br>\n"
         "    **Error**: Exception: Error!\n"
     ) in log_text_result.output
+
+
+def test_chain_sync_cancel_only_first_of_two():
+    model = llm.get_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    def t2() -> str:
+        return "ran2"
+
+    def before(tool, tool_call):
+        if tool.name == "t1":
+            raise CancelToolCall("skip1")
+        # allow t2
+        return None
+
+    calls = [
+        {"name": "t1"},
+        {"name": "t2"},
+    ]
+    payload = json.dumps({"tool_calls": calls})
+    chain = model.chain(payload, tools=[t1, t2], before_call=before)
+    _ = chain.text()
+
+    # second response has two results
+    second = chain._responses[1]
+    results = second.prompt.tool_results
+    assert len(results) == 2
+
+    # first cancelled, second executed
+    assert results[0].name == "t1"
+    assert results[0].output == "Cancelled: skip1"
+    assert isinstance(results[0].exception, CancelToolCall)
+
+    assert results[1].name == "t2"
+    assert results[1].output == "ran2"
+    assert results[1].exception is None
+
+
+# 2c async equivalent
+@pytest.mark.asyncio
+async def test_chain_async_cancel_only_first_of_two():
+    async_model = llm.get_async_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    async def t2() -> str:
+        return "ran2"
+
+    async def before(tool, tool_call):
+        if tool.name == "t1":
+            raise CancelToolCall("skip1")
+        return None
+
+    calls = [
+        {"name": "t1"},
+        {"name": "t2"},
+    ]
+    payload = json.dumps({"tool_calls": calls})
+    chain = async_model.chain(payload, tools=[t1, t2], before_call=before)
+    _ = await chain.text()
+
+    second = chain._responses[1]
+    results = second.prompt.tool_results
+    assert len(results) == 2
+
+    assert results[0].name == "t1"
+    assert results[0].output == "Cancelled: skip1"
+    assert isinstance(results[0].exception, CancelToolCall)
+
+    assert results[1].name == "t2"
+    assert results[1].output == "ran2"
+    assert results[1].exception is None

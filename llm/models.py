@@ -1013,12 +1013,23 @@ class Response(_BaseResponse):
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
             if before_call:
-                cb_result = before_call(tool, tool_call)
-                if inspect.isawaitable(cb_result):
-                    raise TypeError(
-                        "Asynchronous 'before_call' callback provided to a synchronous tool execution context. "
-                        "Please use an async chain/response or a synchronous callback."
+                try:
+                    cb_result = before_call(tool, tool_call)
+                    if inspect.isawaitable(cb_result):
+                        raise TypeError(
+                            "Asynchronous 'before_call' callback provided to a synchronous tool execution context. "
+                            "Please use an async chain/response or a synchronous callback."
+                        )
+                except CancelToolCall as ex:
+                    tool_results.append(
+                        ToolResult(
+                            name=tool_call.name,
+                            output="Cancelled: " + str(ex),
+                            tool_call_id=tool_call.tool_call_id,
+                            exception=ex,
+                        )
                     )
+                    continue
 
             if tool is None:
                 msg = 'tool "{}" does not exist'.format(tool_call.name)
@@ -1202,9 +1213,17 @@ class AsyncResponse(_BaseResponse):
                 async def run_async(tc=tc, tool=tool, idx=idx):
                     # before_call inside the task
                     if before_call:
-                        cb = before_call(tool, tc)
-                        if inspect.isawaitable(cb):
-                            await cb
+                        try:
+                            cb = before_call(tool, tc)
+                            if inspect.isawaitable(cb):
+                                await cb
+                        except CancelToolCall as ex:
+                            return idx, ToolResult(
+                                name=tc.name,
+                                output="Cancelled: " + str(ex),
+                                tool_call_id=tc.tool_call_id,
+                                exception=ex,
+                            )
 
                     exception = None
                     attachments = []
@@ -1245,9 +1264,23 @@ class AsyncResponse(_BaseResponse):
             else:
                 # Sync implementation: do hooks and call inline
                 if before_call:
-                    cb = before_call(tool, tc)
-                    if inspect.isawaitable(cb):
-                        await cb
+                    try:
+                        cb = before_call(tool, tc)
+                        if inspect.isawaitable(cb):
+                            await cb
+                    except CancelToolCall as ex:
+                        indexed_results.append(
+                            (
+                                idx,
+                                ToolResult(
+                                    name=tc.name,
+                                    output="Cancelled: " + str(ex),
+                                    tool_call_id=tc.tool_call_id,
+                                    exception=ex,
+                                ),
+                            )
+                        )
+                        continue
 
                 exception = None
                 attachments = []
