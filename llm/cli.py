@@ -159,7 +159,18 @@ def resolve_fragments(
                 # Now try path
                 path = pathlib.Path(fragment)
                 if path.exists():
-                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
+                    # Try multiple encodings with fallback  
+                    encodings_to_try = ('utf-8', 'latin-1', 'cp1252')
+                    content = None
+                    for encoding in encodings_to_try:
+                        try:
+                            content = path.read_text(encoding=encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    if content is None:
+                        raise FragmentNotFound(f"Could not decode file '{fragment}' with any supported encoding")
+                    resolved.append(Fragment(content, str(path.resolve())))
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
