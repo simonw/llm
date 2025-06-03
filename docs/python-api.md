@@ -62,7 +62,7 @@ response = model.prompt(
 
 ### Attachments
 
-Model that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
+Models that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
 
 This example shows two attachments - one from a file path and one from a URL:
 ```python
