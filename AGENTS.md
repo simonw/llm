@@ -1,20 +1,14 @@
-# Repository maintenance notes
+# AGENTS.md
 
-This project uses a Python virtual environment for development and tests.
+This project uses a Python environment for development and tests.
 
 ## Setting up a development environment
 
-1. Create and activate a virtual environment:
-
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
-2. Install the project with its test dependencies:
+1. Install the project with its test dependencies:
    ```bash
    pip install -e '.[test]'
    ```
-3. Run the tests:
+2. Run the tests:
    ```bash
    pytest
    ```
