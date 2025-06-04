@@ -52,6 +52,8 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette)** can run SQL queries against a remote [Datasette](https://datasette.io/) instance.
 - **[llm-tools-exa](https://github.com/daturkel/llm-tools-exa)** by Dan Turkel can perform web searches and question-answering using [exa.ai](https://exa.ai/).
 - **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
+- **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
+- **[llm-tools-kiwix](https://github.com/mozanunal/llm-tools-kiwix)** enables LLMs to search and access articles from offline Wikipedia, Stack Exchange, DevDocs, and other Kiwix ZIM archives found locally, making vast resources available without internet access.
 
 ## Fragments and template loaders
 
