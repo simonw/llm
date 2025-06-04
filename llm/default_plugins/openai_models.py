@@ -3,7 +3,7 @@ import llm
 from llm.utils import (
     dicts_to_table_string,
     remove_dict_none_values,
-    logging_client,
+    create_http_client,
     simplify_usage_dict,
 )
 import click
@@ -621,8 +621,11 @@ class _Shared:
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["default_headers"] = self.headers
-        if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
+        http_client = create_http_client(
+            os.environ.get("LLM_NATIVE_TLS", "false").lower() == "true",
+            os.environ.get("SSL_CERT_FILE", None),
+            os.environ.get("LLM_OPENAI_SHOW_RESPONSES"))
+        kwargs["http_client"]=http_client
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:
