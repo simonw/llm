@@ -66,6 +66,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-fragments-pdf](https://github.com/daturkel/llm-fragments-pdf)** by Dan Turkel converts PDFs to markdown with [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/index.html) to use as fragments: `llm -f pdf:something.pdf "what's this about?"`.
 - **[llm-fragments-site-text](https://github.com/daturkel/llm-fragments-site-text)** by Dan Turkel converts websites to markdown with [Trafilatura](https://trafilatura.readthedocs.io/en/latest/) to use as fragments: `llm -f site:https://example.com "summarize this"`.
 - **[llm-fragments-reader](https://github.com/simonw/llm-fragments-reader)** runs a URL theough the Jina Reader API: `llm -f 'reader:https://simonwillison.net/tags/jina/' summary`.
+- **[llm-fragments-pure](https://github.com/yorickvP/llm-fragments-pure)** converts websites to markdown using pure.md: `llm -f 'pure:https://example.com' "what is this about?"`.
 
 ## Embedding models
 
