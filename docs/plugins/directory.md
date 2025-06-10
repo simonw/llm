@@ -1,4 +1,5 @@
 (plugin-directory)=
+
 # Plugin directory
 
 The following plugins are available for LLM. Here's {ref}`how to install them <installing-plugins>`.
@@ -59,8 +60,10 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 
 - **[llm-video-frames](https://github.com/simonw/llm-video-frames)** uses `ffmpeg` to turn a video into a sequence of JPEG frames suitable for feeding into a vision model that doesn't support video inputs: `llm -f video-frames:video.mp4 'describe the key scenes in this video'`.
 - **[llm-templates-github](https://github.com/simonw/llm-templates-github)** supports loading templates shared on GitHub, e.g. `llm -t gh:simonw/pelican-svg`.
+- **[llm-templates-sourcehut](https://git.sr.ht/~amolith/llm-templates-sourcehut)** supports loading templates shared on SourceHut, e.g. `llm -t srht:~amolith/filename < Document.md`.
 - **[llm-templates-fabric](https://github.com/simonw/llm-templates-fabric)** provides access to the [Fabric](https://github.com/danielmiessler/fabric) collection of prompts: `cat setup.py | llm -t fabric:explain_code`.
 - **[llm-fragments-github](https://github.com/simonw/llm-fragments-github)** can load entire GitHub repositories in a single operation: `llm -f github:simonw/files-to-prompt 'explain this code'`. It can also fetch issue threads as Markdown using `llm -f issue:https://github.com/simonw/llm-fragments-github/issues/3`.
+- **[llm-fragments-sourcehut](https://git.sr.ht/~amolith/llm-fragments-sourcehut)** can load entire SourceHut repositories in a single operation: `llm -f srht:~amolith/adresilo-server 'explain this code'`.
 - **[llm-hacker-news](https://github.com/simonw/llm-hacker-news)** imports conversations from Hacker News as fragments: `llm -f hn:43615912 'summary with illustrative direct quotes'`.
 - **[llm-fragments-pypi](https://github.com/samueldg/llm-fragments-pypi)** loads [PyPI](https://pypi.org/) packages' description and metadata as fragments: `llm -f pypi:ruff "What flake8 plugins does ruff re-implement?"`.
 - **[llm-fragments-pdf](https://github.com/daturkel/llm-fragments-pdf)** by Dan Turkel converts PDFs to markdown with [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/index.html) to use as fragments: `llm -f pdf:something.pdf "what's this about?"`.
