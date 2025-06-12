@@ -143,6 +143,25 @@ def register_models(register):
     )
     register(
         Chat(
+            "o3-pro",
+            vision=True,
+            reasoning=True,
+            can_stream=False,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "o3-pro",
+            vision=True,
+            reasoning=True,
+            can_stream=False,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        aliases=("o3p", "o3pro"),
+    )
+    register(
+        Chat(
             "o4-mini",
             vision=True,
             reasoning=True,
@@ -596,9 +615,20 @@ class _Shared:
     def set_usage(self, response, usage):
         if not usage:
             return
-        input_tokens = usage.pop("prompt_tokens")
-        output_tokens = usage.pop("completion_tokens")
-        usage.pop("total_tokens")
+
+        # -------------------------------------------------------------
+        #  Accept either a dict *or* a Pydantic BaseModel instance
+        # -------------------------------------------------------------
+        if not isinstance(usage, dict):
+            if hasattr(usage, "model_dump"):          # Pydantic v2 objects
+                usage = usage.model_dump()
+            else:                                     # Fallback – very old SDK
+                usage = dict(vars(usage))
+
+        # Now we are guaranteed that usage is a dict
+        input_tokens  = usage.pop("prompt_tokens", None)
+        output_tokens = usage.pop("completion_tokens", None)
+        usage.pop("total_tokens", None)
         response.set_usage(
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
@@ -656,6 +686,68 @@ class _Shared:
             kwargs["stream_options"] = {"include_usage": True}
         return kwargs
 
+    # ------------------------------------------------------------------
+    # Helpers for the new `/responses` endpoint
+    # ------------------------------------------------------------------
+    _RESPONSES_MODELS = {"o3-pro"}
+
+    def _is_responses_model(self) -> bool:
+        return self.model_id in self._RESPONSES_MODELS
+
+    def _previous_response_id(self, conversation) -> str | None:
+        """
+        Return the OpenAI response.id of the *immediately* preceding
+        assistant turn, or None if we do not have one.
+        """
+        if not conversation or not conversation.responses:
+            return None
+        last = conversation.responses[-1]
+        # We store the full OpenAI payload in response.response_json – make
+        # sure it contains an “id” before using it.
+        if last.response_json and "id" in last.response_json:
+            return str(last.response_json["id"])
+        return None
+
+    def _translate_kwargs_for_responses(self, chat_kwargs: dict) -> dict:
+        """
+        The /responses API uses slightly different names – most notably
+        `max_output_tokens` instead of `max_tokens`.
+        """
+        out: dict = {}
+
+        # -----------------------------------------------------------------
+        # 1.  What to include in the server response
+        # -----------------------------------------------------------------
+        # Provide the list ourselves so the SDK won’t create a default one
+        # containing ResponseTextConfig.  “text” and “usage” are what the
+        # Chat API used to return, so that matches existing llm behaviour.
+        out["include"] = []          # ***** NEW *****
+
+        # 1. Straight name mapping  ---------------------------------------
+        direct = {
+            "temperature",
+            "top_p",
+            "frequency_penalty",
+            "presence_penalty",
+            "seed",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+        }
+        for k in direct:
+            if k in chat_kwargs and chat_kwargs[k] is not None:
+                out[k] = chat_kwargs[k]
+
+        # 2. max_tokens → max_output_tokens -------------------------------
+        if "max_tokens" in chat_kwargs and chat_kwargs["max_tokens"] is not None:
+            out["max_output_tokens"] = chat_kwargs["max_tokens"]
+
+        # We deliberately *drop* any `response_format` (for now the
+        # /responses endpoint will just return normal text).
+
+        # *Do not* forward chat‑only keys like stream_options, response_format
+        return out
+
 
 class Chat(_Shared, KeyModel):
     needs_key = "openai"
@@ -669,6 +761,12 @@ class Chat(_Shared, KeyModel):
         )
 
     def execute(self, prompt, stream, response, conversation=None, key=None):
+        if self._is_responses_model():
+            yield from self._execute_responses(
+                prompt, stream, response, conversation, key
+            )
+            return
+
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -736,6 +834,51 @@ class Chat(_Shared, KeyModel):
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
+    # --------------------------------------------------------------------------
+    #  New implementation for models that live behind `/responses`
+    # --------------------------------------------------------------------------
+    def _execute_responses(self, prompt, stream, response, conversation=None, key=None):
+        if stream:
+            raise NotImplementedError(
+                "Streaming for /responses not wired up yet – "
+                "set stream=False for o3‑pro"
+            )
+
+        client = self.get_client(key)
+        kwargs = self._translate_kwargs_for_responses(
+            self.build_kwargs(prompt, stream=False)
+        )
+
+        # Build the request body
+        create_kwargs = {
+            "input": prompt.prompt or "",
+            "model": self.model_name or self.model_id,
+            **kwargs,
+        }
+        if prompt.system:
+            # `/responses` uses `instructions` for system context
+            create_kwargs["instructions"] = prompt.system
+
+        prev_id = self._previous_response_id(conversation)
+        if prev_id:
+            create_kwargs["previous_response_id"] = prev_id
+
+        # Fire the request
+        resp = client.responses.create(**create_kwargs)  # type: ignore[arg-type]
+
+        # Persist the raw payload for debugging / later migrations
+        response.response_json = remove_dict_none_values(resp.model_dump())
+
+        # Usage, if returned, mirrors the chat/comp endpoints
+        self.set_usage(response, getattr(resp, "usage", None))
+
+        # The primary text lives under resp.text
+        if getattr(resp, "output_text", None) is not None:
+            yield resp.output_text
+        else:
+            # Fallback – try to keep behaviour predictable
+            yield ""
+
 
 class AsyncChat(_Shared, AsyncKeyModel):
     needs_key = "openai"
@@ -751,6 +894,13 @@ class AsyncChat(_Shared, AsyncKeyModel):
     async def execute(
         self, prompt, stream, response, conversation=None, key=None
     ) -> AsyncGenerator[str, None]:
+        if self._is_responses_model():
+            async for chunk in self._execute_responses(
+                prompt, stream, response, conversation, key
+            ):
+                yield chunk
+            return
+
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -819,6 +969,37 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 yield completion.choices[0].message.content
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
+
+    # ------------------------------------------------------------------
+    # Async flavour of the /responses implementation
+    # ------------------------------------------------------------------
+    async def _execute_responses(
+        self, prompt, stream, response, conversation=None, key=None
+    ) -> AsyncGenerator[str, None]:
+        if stream:
+            raise NotImplementedError("Streaming for /responses not ready yet")
+
+        client = self.get_client(key, async_=True)
+        kwargs = self._translate_kwargs_for_responses(
+            self.build_kwargs(prompt, stream=False)
+        )
+        create_kwargs = {
+            "input": prompt.prompt or "",
+            "model": self.model_name or self.model_id,
+            **kwargs,
+        }
+        if prompt.system:
+            create_kwargs["instructions"] = prompt.system
+
+        prev_id = self._previous_response_id(conversation)
+        if prev_id:
+            create_kwargs["previous_response_id"] = prev_id
+
+        resp = await client.responses.create(**create_kwargs)  # type: ignore[arg-type]
+        response.response_json = remove_dict_none_values(resp.model_dump())
+        self.set_usage(response, getattr(resp, "usage", None))
+        if getattr(resp, "output_text", None) is not None:
+            yield resp.output_text
 
 
 class Completion(Chat):
