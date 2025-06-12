@@ -620,13 +620,13 @@ class _Shared:
         #  Accept either a dict *or* a Pydantic BaseModel instance
         # -------------------------------------------------------------
         if not isinstance(usage, dict):
-            if hasattr(usage, "model_dump"):          # Pydantic v2 objects
+            if hasattr(usage, "model_dump"):  # Pydantic v2 objects
                 usage = usage.model_dump()
-            else:                                     # Fallback – very old SDK
+            else:  # Fallback – very old SDK
                 usage = dict(vars(usage))
 
         # Now we are guaranteed that usage is a dict
-        input_tokens  = usage.pop("prompt_tokens", None)
+        input_tokens = usage.pop("prompt_tokens", None)
         output_tokens = usage.pop("completion_tokens", None)
         usage.pop("total_tokens", None)
         response.set_usage(
@@ -721,7 +721,7 @@ class _Shared:
         # Provide the list ourselves so the SDK won’t create a default one
         # containing ResponseTextConfig.  “text” and “usage” are what the
         # Chat API used to return, so that matches existing llm behaviour.
-        out["include"] = []          # ***** NEW *****
+        out["include"] = []  # ***** NEW *****
 
         # 1. Straight name mapping  ---------------------------------------
         direct = {
