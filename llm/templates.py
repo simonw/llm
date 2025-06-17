@@ -3,21 +3,38 @@ import string
 from typing import Optional, Any, Dict, List, Tuple
 
 
+class AttachmentType(BaseModel):
+    type: str
+    value: str
+
+
 class Template(BaseModel):
     name: str
     prompt: Optional[str] = None
     system: Optional[str] = None
+    attachments: Optional[List[str]] = None
+    attachment_types: Optional[List[AttachmentType]] = None
     model: Optional[str] = None
     defaults: Optional[Dict[str, Any]] = None
-    # Should a fenced code block be extracted?
-    extract: Optional[bool] = None
+    options: Optional[Dict[str, Any]] = None
+    extract: Optional[bool] = None  # For extracting fenced code blocks
     extract_last: Optional[bool] = None
     schema_object: Optional[dict] = None
+    fragments: Optional[List[str]] = None
+    system_fragments: Optional[List[str]] = None
+    tools: Optional[List[str]] = None
+    functions: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
     class MissingVariables(Exception):
         pass
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Not a pydantic field to avoid YAML being able to set it
+        # this controls if Python inline functions code is trusted
+        self._functions_is_trusted = False
 
     def evaluate(
         self, input: str, params: Optional[Dict[str, Any]] = None
@@ -38,6 +55,14 @@ class Template(BaseModel):
             system = self.interpolate(self.system, params)
         return prompt, system
 
+    def vars(self) -> set:
+        all_vars = set()
+        for text in [self.prompt, self.system]:
+            if not text:
+                continue
+            all_vars.update(self.extract_vars(string.Template(text)))
+        return all_vars
+
     @classmethod
     def interpolate(cls, text: Optional[str], params: Dict[str, Any]) -> Optional[str]:
         if not text:
@@ -57,4 +82,5 @@ class Template(BaseModel):
         return [
             match.group("named")
             for match in string_template.pattern.finditer(string_template.template)
+            if match.group("named")
         ]

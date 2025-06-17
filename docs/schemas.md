@@ -388,6 +388,8 @@ JSON schema covers the following:
 
 Different models may support different subsets of the overall JSON schema language. You should experiment to figure out what works for the model you are using.
 
+LLM recommends that the top level of the schema is an object, not an array, for increased compatibility across multiple models. I suggest using `{"items": [array of objects]}` if you want to return an array.
+
 The dogs schema above, `name, age int, one_sentence_bio`, would look like this as a full JSON schema:
 
 ```json
@@ -454,7 +456,7 @@ This option can take multiple forms:
 - A {ref}`condensed schema definition <schemas-dsl>`: `--schema 'name,age int'`
 - The name or path of a file on disk containing a JSON schema: `--schema dogs.schema.json`
 - The hexadecimal ID of a previously logged schema: `--schema 520f7aabb121afd14d0c6c237b39ba2d` - these IDs can be found using the `llm schemas` command.
-- A schema that has been {ref}`saved in a template <prompt-templates-save>`: `--schema t:name-of-template`
+- A schema that has been {ref}`saved in a template <prompt-templates-save>`: `--schema t:name-of-template`, see {ref}`schemas-reusable`.
 
 (schemas-dsl)=
 
@@ -507,6 +509,25 @@ Output:
 
 The Python utility function `llm.schema_dsl(schema)` can be used to convert this syntax into the equivalent JSON schema dictionary when working with schemas {ref}`in the Python API <python-api-schemas>`.
 
+(schemas-reusable)=
+
+## Saving reusable schemas in templates
+
+If you want to store a schema with a name so you can reuse it easily in the future, the easiest way to do so is to save it {ref}`in a template <prompt-templates-schemas>`.
+
+The quickest way to do that is with the `llm --save` option:
+
+```bash
+llm --schema 'name, age int, one_sentence_bio' --save dog
+```
+Now you can use it like this:
+```bash
+llm --schema t:dog 'invent a dog'
+```
+Or:
+```bash
+llm --schema-multi t:dog 'invent three dogs'
+```
 (schemas-logs)=
 
 ## Browsing logged JSON objects created using schemas

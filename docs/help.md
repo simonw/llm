@@ -59,9 +59,13 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
 
       llm 'Five outrageous names for a pet pelican'
 
+  For a full list of prompting options run:
+
+      llm prompt --help
+
 Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   prompt*       Execute a prompt
@@ -70,7 +74,8 @@ Commands:
   collections   View and manage collections of embeddings
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
-  embed-multi   Store embeddings for multiple strings at once
+  embed-multi   Store embeddings for multiple strings at once in the...
+  fragments     Manage fragments that are stored in the database
   install       Install packages from PyPI into the same environment as LLM
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
@@ -80,6 +85,7 @@ Commands:
   schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
   templates     Manage stored prompt templates
+  tools         Manage tools that can be made available to LLMs
   uninstall     Uninstall Python packages from the LLM environment
 ```
 
@@ -114,12 +120,25 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 Options:
   -s, --system TEXT               System prompt to use
   -m, --model TEXT                Model to use
+  -d, --database FILE             Path to log database
+  -q, --query TEXT                Use first model matching these strings
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
-                                  Attachment with explicit mimetype
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  -T, --tool TEXT                 Name of a tool to make available to the model
+  --functions TEXT                Python code block or file path defining
+                                  functions to register as tools
+  --td, --tools-debug             Show full details of tool executions
+  --ta, --tools-approve           Manually approve every tool execution
+  --cl, --chain-limit INTEGER     How many chained tool responses to allow,
+                                  default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
+  -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
+                                  add to the prompt
+  --sf, --system-fragment TEXT    Fragment to add to system prompt
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
@@ -133,7 +152,7 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
-  --help                          Show this message and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 (help-chat)=
@@ -144,16 +163,27 @@ Usage: llm chat [OPTIONS]
   Hold an ongoing chat with a model.
 
 Options:
-  -s, --system TEXT            System prompt to use
-  -m, --model TEXT             Model to use
-  -c, --continue               Continue the most recent conversation.
-  --cid, --conversation TEXT   Continue the conversation with the given ID.
-  -t, --template TEXT          Template to use
-  -p, --param <TEXT TEXT>...   Parameters for template
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  --no-stream                  Do not stream output
-  --key TEXT                   API key to use
-  --help                       Show this message and exit.
+  -s, --system TEXT             System prompt to use
+  -m, --model TEXT              Model to use
+  -c, --continue                Continue the most recent conversation.
+  --cid, --conversation TEXT    Continue the conversation with the given ID.
+  -f, --fragment TEXT           Fragment (alias, URL, hash or file path) to add
+                                to the prompt
+  --sf, --system-fragment TEXT  Fragment to add to system prompt
+  -t, --template TEXT           Template to use
+  -p, --param <TEXT TEXT>...    Parameters for template
+  -o, --option <TEXT TEXT>...   key/value options for the model
+  -d, --database FILE           Path to log database
+  --no-stream                   Do not stream output
+  --key TEXT                    API key to use
+  -T, --tool TEXT               Name of a tool to make available to the model
+  --functions TEXT              Python code block or file path defining
+                                functions to register as tools
+  --td, --tools-debug           Show full details of tool executions
+  --ta, --tools-approve         Manually approve every tool execution
+  --cl, --chain-limit INTEGER   How many chained tool responses to allow,
+                                default 5, set 0 for unlimited
+  -h, --help                    Show this message and exit.
 ```
 
 (help-keys)=
@@ -164,7 +194,7 @@ Usage: llm keys [OPTIONS] COMMAND [ARGS]...
   Manage stored API keys for different models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*  List names of all stored keys
@@ -181,7 +211,7 @@ Usage: llm keys list [OPTIONS]
   List names of all stored keys
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-keys-path)=
@@ -192,7 +222,7 @@ Usage: llm keys path [OPTIONS]
   Output the path to the keys.json file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-keys-get)=
@@ -207,7 +237,7 @@ Usage: llm keys get [OPTIONS] NAME
       export OPENAI_API_KEY=$(llm keys get openai)
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-keys-set)=
@@ -224,7 +254,7 @@ Usage: llm keys set [OPTIONS] NAME
 
 Options:
   --value TEXT  Value to set
-  --help        Show this message and exit.
+  -h, --help    Show this message and exit.
 ```
 
 (help-logs)=
@@ -235,10 +265,11 @@ Usage: llm logs [OPTIONS] COMMAND [ARGS]...
   Tools for exploring logged prompts and responses
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
-  list*   Show recent logged prompts and their responses
+  list*   Show logged prompts and their responses
+  backup  Backup your logs database to this file
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
@@ -253,7 +284,7 @@ Usage: llm logs path [OPTIONS]
   Output the path to the logs.db file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-status)=
@@ -264,7 +295,18 @@ Usage: llm logs status [OPTIONS]
   Show current status of database logging
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
+```
+
+(help-logs-backup)=
+#### llm logs backup --help
+```
+Usage: llm logs backup [OPTIONS] PATH
+
+  Backup your logs database to this file
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-on)=
@@ -275,7 +317,7 @@ Usage: llm logs on [OPTIONS]
   Turn on logging for all prompts
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-off)=
@@ -286,7 +328,7 @@ Usage: llm logs off [OPTIONS]
   Turn off logging for all prompts
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-logs-list)=
@@ -294,14 +336,17 @@ Options:
 ```
 Usage: llm logs list [OPTIONS]
 
-  Show recent logged prompts and their responses
+  Show logged prompts and their responses
 
 Options:
   -n, --count INTEGER         Number of entries to show - defaults to 3, use 0
                               for all
-  -p, --path FILE             Path to log database
+  -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
+  -f, --fragment TEXT         Filter for prompts using these fragments
+  -T, --tool TEXT             Filter for prompts with results from these tools
+  --tools                     Filter for prompts with results from any tools
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   --data                      Output newline-delimited JSON data for schema
@@ -319,7 +364,8 @@ Options:
   --id-gt TEXT                Return responses with ID > this
   --id-gte TEXT               Return responses with ID >= this
   --json                      Output logs as JSON
-  --help                      Show this message and exit.
+  -e, --expand                Expand fragments to show their content
+  -h, --help                  Show this message and exit.
 ```
 
 (help-models)=
@@ -330,11 +376,12 @@ Usage: llm models [OPTIONS] COMMAND [ARGS]...
   Manage available models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*    List available models
   default  Show or set the default model
+  options  Manage default options for models
 ```
 
 (help-models-list)=
@@ -348,8 +395,10 @@ Options:
   --options         Show options for each model, if available
   --async           List async models
   --schemas         List models that support schemas
+  --tools           List models that support tools
   -q, --query TEXT  Search for models matching these strings
-  --help            Show this message and exit.
+  -m, --model TEXT  Specific model IDs
+  -h, --help        Show this message and exit.
 ```
 
 (help-models-default)=
@@ -360,7 +409,86 @@ Usage: llm models default [OPTIONS] [MODEL]
   Show or set the default model
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
+```
+
+(help-models-options)=
+#### llm models options --help
+```
+Usage: llm models options [OPTIONS] COMMAND [ARGS]...
+
+  Manage default options for models
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  list*  List default options for all models
+  clear  Clear default option(s) for a model
+  set    Set a default option for a model
+  show   List default options set for a specific model
+```
+
+(help-models-options-list)=
+##### llm models options list --help
+```
+Usage: llm models options list [OPTIONS]
+
+  List default options for all models
+
+  Example usage:
+
+      llm models options list
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-options-show)=
+##### llm models options show --help
+```
+Usage: llm models options show [OPTIONS] MODEL
+
+  List default options set for a specific model
+
+  Example usage:
+
+      llm models options show gpt-4o
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-options-set)=
+##### llm models options set --help
+```
+Usage: llm models options set [OPTIONS] MODEL KEY VALUE
+
+  Set a default option for a model
+
+  Example usage:
+
+      llm models options set gpt-4o temperature 0.5
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-options-clear)=
+##### llm models options clear --help
+```
+Usage: llm models options clear [OPTIONS] MODEL [KEY]
+
+  Clear default option(s) for a model
+
+  Example usage:
+
+      llm models options clear gpt-4o
+      # Or for a single option
+      llm models options clear gpt-4o temperature
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates)=
@@ -371,13 +499,14 @@ Usage: llm templates [OPTIONS] COMMAND [ARGS]...
   Manage stored prompt templates
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
-  list*  List available prompt templates
-  edit   Edit the specified prompt template using the default $EDITOR
-  path   Output the path to the templates directory
-  show   Show the specified prompt template
+  list*    List available prompt templates
+  edit     Edit the specified prompt template using the default $EDITOR
+  loaders  Show template loaders registered by plugins
+  path     Output the path to the templates directory
+  show     Show the specified prompt template
 ```
 
 (help-templates-list)=
@@ -388,7 +517,7 @@ Usage: llm templates list [OPTIONS]
   List available prompt templates
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-show)=
@@ -399,7 +528,7 @@ Usage: llm templates show [OPTIONS] NAME
   Show the specified prompt template
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-edit)=
@@ -410,7 +539,7 @@ Usage: llm templates edit [OPTIONS] NAME
   Edit the specified prompt template using the default $EDITOR
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-templates-path)=
@@ -421,7 +550,18 @@ Usage: llm templates path [OPTIONS]
   Output the path to the templates directory
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
+```
+
+(help-templates-loaders)=
+#### llm templates loaders --help
+```
+Usage: llm templates loaders [OPTIONS]
+
+  Show template loaders registered by plugins
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-schemas)=
@@ -432,7 +572,7 @@ Usage: llm schemas [OPTIONS] COMMAND [ARGS]...
   Manage stored schemas
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*  List stored schemas
@@ -448,10 +588,12 @@ Usage: llm schemas list [OPTIONS]
   List stored schemas
 
 Options:
-  -p, --path FILE   Path to log database
-  -q, --query TEXT  Search for schemas matching this string
-  --full            Output full schema contents
-  --help            Show this message and exit.
+  -d, --database FILE  Path to log database
+  -q, --query TEXT     Search for schemas matching this string
+  --full               Output full schema contents
+  --json               Output as JSON
+  --nl                 Output as newline-delimited JSON
+  -h, --help           Show this message and exit.
 ```
 
 (help-schemas-show)=
@@ -462,8 +604,8 @@ Usage: llm schemas show [OPTIONS] SCHEMA_ID
   Show a stored schema
 
 Options:
-  -p, --path FILE  Path to log database
-  --help           Show this message and exit.
+  -d, --database FILE  Path to log database
+  -h, --help           Show this message and exit.
 ```
 
 (help-schemas-dsl)=
@@ -476,8 +618,36 @@ Usage: llm schemas dsl [OPTIONS] INPUT
       llm schema dsl 'name, age int, bio: their bio'
 
 Options:
-  --multi  Wrap in an array
-  --help   Show this message and exit.
+  --multi     Wrap in an array
+  -h, --help  Show this message and exit.
+```
+
+(help-tools)=
+### llm tools --help
+```
+Usage: llm tools [OPTIONS] COMMAND [ARGS]...
+
+  Manage tools that can be made available to LLMs
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  list*  List available tools that have been provided by plugins
+```
+
+(help-tools-list)=
+#### llm tools list --help
+```
+Usage: llm tools list [OPTIONS]
+
+  List available tools that have been provided by plugins
+
+Options:
+  --json            Output as JSON
+  --functions TEXT  Python code block or file path defining functions to
+                    register as tools
+  -h, --help        Show this message and exit.
 ```
 
 (help-aliases)=
@@ -488,7 +658,7 @@ Usage: llm aliases [OPTIONS] COMMAND [ARGS]...
   Manage model aliases
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*   List current aliases
@@ -505,8 +675,8 @@ Usage: llm aliases list [OPTIONS]
   List current aliases
 
 Options:
-  --json  Output as JSON
-  --help  Show this message and exit.
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases-set)=
@@ -527,7 +697,7 @@ Usage: llm aliases set [OPTIONS] ALIAS [MODEL_ID]
 
 Options:
   -q, --query TEXT  Set alias for model matching these strings
-  --help            Show this message and exit.
+  -h, --help        Show this message and exit.
 ```
 
 (help-aliases-remove)=
@@ -542,7 +712,7 @@ Usage: llm aliases remove [OPTIONS] ALIAS
       $ llm aliases remove turbo
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-aliases-path)=
@@ -553,7 +723,98 @@ Usage: llm aliases path [OPTIONS]
   Output the path to the aliases.json file
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
+```
+
+(help-fragments)=
+### llm fragments --help
+```
+Usage: llm fragments [OPTIONS] COMMAND [ARGS]...
+
+  Manage fragments that are stored in the database
+
+  Fragments are reusable snippets of text that are shared across multiple
+  prompts.
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  list*    List current fragments
+  loaders  Show fragment loaders registered by plugins
+  remove   Remove a fragment alias
+  set      Set an alias for a fragment
+  show     Display the fragment stored under an alias or hash
+```
+
+(help-fragments-list)=
+#### llm fragments list --help
+```
+Usage: llm fragments list [OPTIONS]
+
+  List current fragments
+
+Options:
+  -q, --query TEXT  Search for fragments matching these strings
+  --aliases         Show only fragments with aliases
+  --json            Output as JSON
+  -h, --help        Show this message and exit.
+```
+
+(help-fragments-set)=
+#### llm fragments set --help
+```
+Usage: llm fragments set [OPTIONS] ALIAS FRAGMENT
+
+  Set an alias for a fragment
+
+  Accepts an alias and a file path, URL, hash or '-' for stdin
+
+  Example usage:
+
+      llm fragments set mydocs ./docs.md
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-fragments-show)=
+#### llm fragments show --help
+```
+Usage: llm fragments show [OPTIONS] ALIAS_OR_HASH
+
+  Display the fragment stored under an alias or hash
+
+      llm fragments show mydocs
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-fragments-remove)=
+#### llm fragments remove --help
+```
+Usage: llm fragments remove [OPTIONS] ALIAS
+
+  Remove a fragment alias
+
+  Example usage:
+
+      llm fragments remove docs
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-fragments-loaders)=
+#### llm fragments loaders --help
+```
+Usage: llm fragments loaders [OPTIONS]
+
+  Show fragment loaders registered by plugins
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-plugins)=
@@ -564,8 +825,9 @@ Usage: llm plugins [OPTIONS]
   List installed plugins
 
 Options:
-  --all   Include built-in default plugins
-  --help  Show this message and exit.
+  --all        Include built-in default plugins
+  --hook TEXT  Filter for plugins that implement this hook
+  -h, --help   Show this message and exit.
 ```
 
 (help-install)=
@@ -581,7 +843,8 @@ Options:
   --force-reinstall    Reinstall all packages even if they are already up-to-
                        date
   --no-cache-dir       Disable the cache
-  --help               Show this message and exit.
+  --pre                Include pre-release and development versions
+  -h, --help           Show this message and exit.
 ```
 
 (help-uninstall)=
@@ -592,8 +855,8 @@ Usage: llm uninstall [OPTIONS] PACKAGES...
   Uninstall Python packages from the LLM environment
 
 Options:
-  -y, --yes  Don't ask for confirmation
-  --help     Show this message and exit.
+  -y, --yes   Don't ask for confirmation
+  -h, --help  Show this message and exit.
 ```
 
 (help-embed)=
@@ -613,7 +876,7 @@ Options:
   --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
-  --help                          Show this message and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 (help-embed-multi)=
@@ -621,25 +884,42 @@ Options:
 ```
 Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
 
-  Store embeddings for multiple strings at once
-
-  Input can be CSV, TSV or a JSON list of objects.
-
-  The first column is treated as an ID - all other columns are assumed to be
-  text that should be concatenated together in order to calculate the
-  embeddings.
+  Store embeddings for multiple strings at once in the specified collection.
 
   Input data can come from one of three sources:
 
-  1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
-  2. A SQL query against a SQLite database
-  3. A directory of files
+  1. A CSV, TSV, JSON or JSONL file:
+     - CSV/TSV: First column is ID, remaining columns concatenated as content
+     - JSON: Array of objects with "id" field and content fields
+     - JSONL: Newline-delimited JSON objects
+
+     Examples:
+       llm embed-multi docs input.csv
+       cat data.json | llm embed-multi docs -
+       llm embed-multi docs input.json --format json
+
+  2. A SQL query against a SQLite database:
+     - First column returned is used as ID
+     - Other columns concatenated to form content
+
+     Examples:
+       llm embed-multi docs --sql "SELECT id, title, body FROM posts"
+       llm embed-multi docs --attach blog blog.db --sql "SELECT id, content FROM blog.posts"
+
+  3. Files in directories matching glob patterns:
+     - Each file becomes one embedding
+     - Relative file paths become IDs
+
+     Examples:
+       llm embed-multi docs --files docs '**/*.md'
+       llm embed-multi images --files photos '*.jpg' --binary
+       llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
 
 Options:
   --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
   --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
                                and glob pattern
-  --encoding TEXT              Encoding to use when reading --files
+  --encoding TEXT              Encodings to try when reading --files
   --binary                     Treat --files as binary data
   --sql TEXT                   Read input using this SQL query
   --attach <TEXT FILE>...      Additional databases to attach - specify alias
@@ -651,7 +931,7 @@ Options:
                                embedding
   --store                      Store the text itself in the database
   -d, --database FILE
-  --help                       Show this message and exit.
+  -h, --help                   Show this message and exit.
 ```
 
 (help-similar)=
@@ -674,8 +954,10 @@ Options:
   -c, --content TEXT    Content to embed for comparison
   --binary              Treat input as binary data
   -n, --number INTEGER  Number of results to return
+  -p, --plain           Output in plain text format
   -d, --database FILE
-  --help                Show this message and exit.
+  --prefix TEXT         Just IDs with this prefix
+  -h, --help            Show this message and exit.
 ```
 
 (help-embed-models)=
@@ -686,7 +968,7 @@ Usage: llm embed-models [OPTIONS] COMMAND [ARGS]...
   Manage available embedding models
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*    List available embedding models
@@ -702,7 +984,7 @@ Usage: llm embed-models list [OPTIONS]
 
 Options:
   -q, --query TEXT  Search for embedding models matching these strings
-  --help            Show this message and exit.
+  -h, --help        Show this message and exit.
 ```
 
 (help-embed-models-default)=
@@ -714,7 +996,7 @@ Usage: llm embed-models default [OPTIONS] [MODEL]
 
 Options:
   --remove-default  Reset to specifying no default model
-  --help            Show this message and exit.
+  -h, --help        Show this message and exit.
 ```
 
 (help-collections)=
@@ -725,7 +1007,7 @@ Usage: llm collections [OPTIONS] COMMAND [ARGS]...
   View and manage collections of embeddings
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   list*   View a list of collections
@@ -741,7 +1023,7 @@ Usage: llm collections path [OPTIONS]
   Output the path to the embeddings database
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 
 (help-collections-list)=
@@ -754,7 +1036,7 @@ Usage: llm collections list [OPTIONS]
 Options:
   -d, --database FILE  Path to embeddings database
   --json               Output as JSON
-  --help               Show this message and exit.
+  -h, --help           Show this message and exit.
 ```
 
 (help-collections-delete)=
@@ -770,7 +1052,7 @@ Usage: llm collections delete [OPTIONS] COLLECTION
 
 Options:
   -d, --database FILE  Path to embeddings database
-  --help               Show this message and exit.
+  -h, --help           Show this message and exit.
 ```
 
 (help-openai)=
@@ -781,7 +1063,7 @@ Usage: llm openai [OPTIONS] COMMAND [ARGS]...
   Commands for working directly with the OpenAI API
 
 Options:
-  --help  Show this message and exit.
+  -h, --help  Show this message and exit.
 
 Commands:
   models  List models available to you from the OpenAI API
@@ -797,6 +1079,6 @@ Usage: llm openai models [OPTIONS]
 Options:
   --json      Output as JSON
   --key TEXT  OpenAI API key
-  --help      Show this message and exit.
+  -h, --help  Show this message and exit.
 ```
 <!-- [[[end]]] -->

@@ -4,16 +4,20 @@ from click_default_group import DefaultGroup
 from dataclasses import asdict
 import io
 import json
-import re
+import os
 from llm import (
     Attachment,
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    CancelToolCall,
     Collection,
     Conversation,
+    Fragment,
     Response,
     Template,
+    Tool,
+    Toolbox,
     UnknownModelError,
     KeyModel,
     encode,
@@ -24,6 +28,9 @@ from llm import (
     get_embedding_model_aliases,
     get_embedding_model,
     get_plugins,
+    get_tools,
+    get_fragment_loaders,
+    get_template_loaders,
     get_model,
     get_model_aliases,
     get_models_with_aliases,
@@ -33,27 +40,34 @@ from llm import (
     set_default_embedding_model,
     remove_alias,
 )
-from llm.models import _BaseConversation
+from llm.models import _BaseConversation, ChainResponse
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
+    ensure_fragment,
+    extract_fenced_code_block,
+    find_unused_key,
+    has_plugin_prefix,
+    instantiate_from_spec,
+    make_schema_id,
+    maybe_fenced_code,
     mimetype_from_path,
     mimetype_from_string,
-    token_usage_string,
-    extract_fenced_code_block,
-    make_schema_id,
+    multi_schema,
     output_rows_as_json,
     resolve_schema_input,
-    schema_summary,
-    multi_schema,
     schema_dsl,
-    find_unused_key,
+    schema_summary,
+    token_usage_string,
+    truncate_string,
 )
 import base64
 import httpx
+import inspect
 import pathlib
 import pydantic
+import re
 import readline
 from runpy import run_module
 import shutil
@@ -61,7 +75,7 @@ import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
 import textwrap
-from typing import cast, Optional, Iterable, Union, Tuple, Dict, Any
+from typing import cast, Dict, Optional, Iterable, List, Union, Tuple, Type, Any
 import warnings
 import yaml
 
@@ -70,54 +84,198 @@ warnings.simplefilter("ignore", ResourceWarning)
 DEFAULT_TEMPLATE = "prompt: "
 
 
+class FragmentNotFound(Exception):
+    pass
+
+
+def validate_fragment_alias(ctx, param, value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
+        raise click.BadParameter("Fragment alias must be alphanumeric")
+    return value
+
+
+def resolve_fragments(
+    db: sqlite_utils.Database, fragments: Iterable[str], allow_attachments: bool = False
+) -> List[Union[Fragment, Attachment]]:
+    """
+    Resolve fragment strings into a mixed of llm.Fragment() and llm.Attachment() objects.
+    """
+
+    def _load_by_alias(fragment: str) -> Tuple[Optional[str], Optional[str]]:
+        rows = list(
+            db.query(
+                """
+                select content, source from fragments
+                left join fragment_aliases on fragments.id = fragment_aliases.fragment_id
+                where alias = :alias or hash = :alias limit 1
+                """,
+                {"alias": fragment},
+            )
+        )
+        if rows:
+            row = rows[0]
+            return row["content"], row["source"]
+        return None, None
+
+    # The fragment strings could be URLs or paths or plugin references
+    resolved: List[Union[Fragment, Attachment]] = []
+    for fragment in fragments:
+        if fragment.startswith("http://") or fragment.startswith("https://"):
+            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            response = client.get(fragment)
+            response.raise_for_status()
+            resolved.append(Fragment(response.text, fragment))
+        elif fragment == "-":
+            resolved.append(Fragment(sys.stdin.read(), "-"))
+        elif has_plugin_prefix(fragment):
+            prefix, rest = fragment.split(":", 1)
+            loaders = get_fragment_loaders()
+            if prefix not in loaders:
+                raise FragmentNotFound("Unknown fragment prefix: {}".format(prefix))
+            loader = loaders[prefix]
+            try:
+                result = loader(rest)
+                if not isinstance(result, list):
+                    result = [result]
+                if not allow_attachments and any(
+                    isinstance(r, Attachment) for r in result
+                ):
+                    raise FragmentNotFound(
+                        "Fragment loader {} returned a disallowed attachment".format(
+                            prefix
+                        )
+                    )
+                resolved.extend(result)
+            except Exception as ex:
+                raise FragmentNotFound(
+                    "Could not load fragment {}: {}".format(fragment, ex)
+                )
+        else:
+            # Try from the DB
+            content, source = _load_by_alias(fragment)
+            if content is not None:
+                resolved.append(Fragment(content, source))
+            else:
+                # Now try path
+                path = pathlib.Path(fragment)
+                if path.exists():
+                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
+                else:
+                    raise FragmentNotFound(f"Fragment '{fragment}' not found")
+    return resolved
+
+
+def process_fragments_in_chat(
+    db: sqlite_utils.Database, prompt: str
+) -> tuple[str, list[Fragment], list[Attachment]]:
+    """
+    Process any !fragment commands in a chat prompt and return the modified prompt plus resolved fragments and attachments.
+    """
+    prompt_lines = []
+    fragments = []
+    attachments = []
+    for line in prompt.splitlines():
+        if line.startswith("!fragment "):
+            try:
+                fragment_strs = line.strip().removeprefix("!fragment ").split()
+                fragments_and_attachments = resolve_fragments(
+                    db, fragments=fragment_strs, allow_attachments=True
+                )
+                fragments += [
+                    fragment
+                    for fragment in fragments_and_attachments
+                    if isinstance(fragment, Fragment)
+                ]
+                attachments += [
+                    attachment
+                    for attachment in fragments_and_attachments
+                    if isinstance(attachment, Attachment)
+                ]
+            except FragmentNotFound as ex:
+                raise click.ClickException(str(ex))
+        else:
+            prompt_lines.append(line)
+    return "\n".join(prompt_lines), fragments, attachments
+
+
+class AttachmentError(Exception):
+    """Exception raised for errors in attachment resolution."""
+
+    pass
+
+
+def resolve_attachment(value):
+    """
+    Resolve an attachment from a string value which could be:
+    - "-" for stdin
+    - A URL
+    - A file path
+
+    Returns an Attachment object.
+    Raises AttachmentError if the attachment cannot be resolved.
+    """
+    if value == "-":
+        content = sys.stdin.buffer.read()
+        # Try to guess type
+        mimetype = mimetype_from_string(content)
+        if mimetype is None:
+            raise AttachmentError("Could not determine mimetype of stdin")
+        return Attachment(type=mimetype, path=None, url=None, content=content)
+
+    if "://" in value:
+        # Confirm URL exists and try to guess type
+        try:
+            response = httpx.head(value)
+            response.raise_for_status()
+            mimetype = response.headers.get("content-type")
+        except httpx.HTTPError as ex:
+            raise AttachmentError(str(ex))
+        return Attachment(type=mimetype, path=None, url=value, content=None)
+
+    # Check that the file exists
+    path = pathlib.Path(value)
+    if not path.exists():
+        raise AttachmentError(f"File {value} does not exist")
+    path = path.resolve()
+
+    # Try to guess type
+    mimetype = mimetype_from_path(str(path))
+    if mimetype is None:
+        raise AttachmentError(f"Could not determine mimetype of {value}")
+
+    return Attachment(type=mimetype, path=str(path), url=None, content=None)
+
+
 class AttachmentType(click.ParamType):
     name = "attachment"
 
     def convert(self, value, param, ctx):
-        if value == "-":
-            content = sys.stdin.buffer.read()
-            # Try to guess type
-            mimetype = mimetype_from_string(content)
-            if mimetype is None:
-                raise click.BadParameter("Could not determine mimetype of stdin")
-            return Attachment(type=mimetype, path=None, url=None, content=content)
-        if "://" in value:
-            # Confirm URL exists and try to guess type
-            try:
-                response = httpx.head(value)
-                response.raise_for_status()
-                mimetype = response.headers.get("content-type")
-            except httpx.HTTPError as ex:
-                raise click.BadParameter(str(ex))
-            return Attachment(mimetype, None, value, None)
-        # Check that the file exists
+        try:
+            return resolve_attachment(value)
+        except AttachmentError as e:
+            self.fail(str(e), param, ctx)
+
+
+def resolve_attachment_with_type(value: str, mimetype: str) -> Attachment:
+    if "://" in value:
+        attachment = Attachment(mimetype, None, value, None)
+    elif value == "-":
+        content = sys.stdin.buffer.read()
+        attachment = Attachment(mimetype, None, None, content)
+    else:
+        # Look for file
         path = pathlib.Path(value)
         if not path.exists():
-            self.fail(f"File {value} does not exist", param, ctx)
+            raise click.BadParameter(f"File {value} does not exist")
         path = path.resolve()
-        # Try to guess type
-        mimetype = mimetype_from_path(str(path))
-        if mimetype is None:
-            raise click.BadParameter(f"Could not determine mimetype of {value}")
-        return Attachment(type=mimetype, path=str(path), url=None, content=None)
+        attachment = Attachment(mimetype, str(path), None, None)
+    return attachment
 
 
-def attachment_types_callback(ctx, param, values):
+def attachment_types_callback(ctx, param, values) -> List[Attachment]:
     collected = []
     for value, mimetype in values:
-        if "://" in value:
-            attachment = Attachment(mimetype, None, value, None)
-        elif value == "-":
-            content = sys.stdin.buffer.read()
-            attachment = Attachment(mimetype, None, None, content)
-        else:
-            # Look for file
-            path = pathlib.Path(value)
-            if not path.exists():
-                raise click.BadParameter(f"File {value} does not exist")
-            path = path.resolve()
-            attachment = Attachment(mimetype, str(path), None, None)
-        collected.append(attachment)
+        collected.append(resolve_attachment_with_type(value, mimetype))
     return collected
 
 
@@ -149,6 +307,7 @@ def schema_option(fn):
     cls=DefaultGroup,
     default="prompt",
     default_if_no_args=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.version_option()
 def cli():
@@ -171,13 +330,30 @@ def cli():
     Then execute a prompt like this:
 
         llm 'Five outrageous names for a pet pelican'
+
+    For a full list of prompting options run:
+
+        llm prompt --help
     """
 
 
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Use first model matching these strings",
+)
 @click.option(
     "attachments",
     "-a",
@@ -193,7 +369,43 @@ def cli():
     type=(str, str),
     multiple=True,
     callback=attachment_types_callback,
-    help="Attachment with explicit mimetype",
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Name of a tool to make available to the model",
+)
+@click.option(
+    "python_tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
+)
+@click.option(
+    "tools_debug",
+    "--td",
+    "--tools-debug",
+    is_flag=True,
+    help="Show full details of tool executions",
+    envvar="LLM_TOOLS_DEBUG",
+)
+@click.option(
+    "tools_approve",
+    "--ta",
+    "--tools-approve",
+    is_flag=True,
+    help="Manually approve every tool execution",
+)
+@click.option(
+    "chain_limit",
+    "--cl",
+    "--chain-limit",
+    type=int,
+    default=5,
+    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
 @click.option(
     "options",
@@ -207,6 +419,20 @@ def cli():
 @click.option(
     "--schema-multi",
     help="JSON schema to use for multiple results",
+)
+@click.option(
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+)
+@click.option(
+    "system_fragments",
+    "--sf",
+    "--system-fragment",
+    multiple=True,
+    help="Fragment to add to system prompt",
 )
 @click.option("-t", "--template", help="Template to use")
 @click.option(
@@ -249,11 +475,20 @@ def prompt(
     prompt,
     system,
     model_id,
+    database,
+    queries,
     attachments,
     attachment_types,
+    tools,
+    python_tools,
+    tools_debug,
+    tools_approve,
+    chain_limit,
     options,
     schema_input,
     schema_multi,
+    fragments,
+    system_fragments,
     template,
     param,
     no_stream,
@@ -298,10 +533,22 @@ def prompt(
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
-    log_path = logs_db_path()
+    log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
+
+    if queries and not model_id:
+        # Use -q options to find model with shortest model_id
+        matches = []
+        for model_with_aliases in get_models_with_aliases():
+            if all(model_with_aliases.matches(q) for q in queries):
+                matches.append(model_with_aliases.model.model_id)
+        if not matches:
+            raise click.ClickException(
+                "No model found matching queries {}".format(", ".join(queries))
+            )
+        model_id = min(matches, key=len)
 
     if schema_multi:
         schema_input = schema_multi
@@ -335,6 +582,7 @@ def prompt(
             and not attachments
             and not attachment_types
             and not schema
+            and not fragments
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -375,6 +623,36 @@ def prompt(
             to_save["extract_last"] = True
         if schema:
             to_save["schema_object"] = schema
+        if fragments:
+            to_save["fragments"] = list(fragments)
+        if system_fragments:
+            to_save["system_fragments"] = list(system_fragments)
+        if python_tools:
+            to_save["functions"] = "\n\n".join(python_tools)
+        if tools:
+            to_save["tools"] = list(tools)
+        if attachments:
+            # Only works for attachments with a path or url
+            to_save["attachments"] = [
+                (a.path or a.url) for a in attachments if (a.path or a.url)
+            ]
+        if attachment_types:
+            to_save["attachment_types"] = [
+                {"type": a.type, "value": a.path or a.url}
+                for a in attachment_types
+                if (a.path or a.url)
+            ]
+        if options:
+            # Need to validate and convert their types first
+            model = get_model(model_id or get_default_model())
+            try:
+                to_save["options"] = dict(
+                    (key, value)
+                    for key, value in model.Options(**dict(options))
+                    if value is not None
+                )
+            except pydantic.ValidationError as ex:
+                raise click.ClickException(render_errors(ex.errors()))
         path.write_text(
             yaml.dump(
                 to_save,
@@ -389,21 +667,58 @@ def prompt(
     if template:
         params = dict(param)
         # Cannot be used with system
-        if system:
-            raise click.ClickException("Cannot use -t/--template and --system together")
-        template_obj = load_template(template)
+        try:
+            template_obj = load_template(template)
+        except LoadTemplateError as ex:
+            raise click.ClickException(str(ex))
         extract = template_obj.extract
         extract_last = template_obj.extract_last
+        # Combine with template fragments/system_fragments
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
-        prompt = read_prompt()
+        if template_obj.tools:
+            tools = [*template_obj.tools, *tools]
+        if template_obj.functions and template_obj._functions_is_trusted:
+            python_tools = [template_obj.functions, *python_tools]
+        input_ = ""
+        if template_obj.options:
+            # Make options mutable (they start as a tuple)
+            options = list(options)
+            # Load any options, provided they were not set using -o already
+            specified_options = dict(options)
+            for option_name, option_value in template_obj.options.items():
+                if option_name not in specified_options:
+                    options.append((option_name, option_value))
+        if "input" in template_obj.vars():
+            input_ = read_prompt()
         try:
-            prompt, system = template_obj.evaluate(prompt, params)
+            template_prompt, template_system = template_obj.evaluate(input_, params)
+            if template_prompt:
+                # Combine with user prompt
+                if prompt and "input" not in template_obj.vars():
+                    prompt = template_prompt + "\n" + prompt
+                else:
+                    prompt = template_prompt
+            if template_system and not system:
+                system = template_system
         except Template.MissingVariables as ex:
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-
+        # Merge in any attachments
+        if template_obj.attachments:
+            attachments = [
+                resolve_attachment(a) for a in template_obj.attachments
+            ] + list(attachments)
+        if template_obj.attachment_types:
+            attachment_types = [
+                resolve_attachment_with_type(at.value, at.type)
+                for at in template_obj.attachment_types
+            ] + list(attachment_types)
     if extract or extract_last:
         no_stream = True
 
@@ -411,9 +726,14 @@ def prompt(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id, async_=async_)
+            conversation = load_conversation(
+                conversation_id, async_=async_, database=database
+            )
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
+
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
 
     # Figure out which model we are using
     if model_id is None:
@@ -430,6 +750,9 @@ def prompt(
             model = get_model(model_id)
     except UnknownModelError as ex:
         raise click.ClickException(ex)
+
+    if conversation is None and (tools or python_tools):
+        conversation = model.conversation()
 
     if conversation:
         # To ensure it can see the key
@@ -448,6 +771,12 @@ def prompt(
         except pydantic.ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
+    # Add on any default model options
+    default_options = get_model_options(model.model_id)
+    for key_, value in default_options.items():
+        if key_ not in validated_options:
+            validated_options[key_] = value
+
     kwargs = {**validated_options}
 
     resolved_attachments = [*attachments, *attachment_types]
@@ -462,9 +791,38 @@ def prompt(
     prompt = read_prompt()
     response = None
 
+    try:
+        fragments_and_attachments = resolve_fragments(
+            db, fragments, allow_attachments=True
+        )
+        resolved_fragments = [
+            fragment
+            for fragment in fragments_and_attachments
+            if isinstance(fragment, Fragment)
+        ]
+        resolved_attachments.extend(
+            attachment
+            for attachment in fragments_and_attachments
+            if isinstance(attachment, Attachment)
+        )
+        resolved_system_fragments = resolve_fragments(db, system_fragments)
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+
     prompt_method = model.prompt
     if conversation:
         prompt_method = conversation.prompt
+
+    tool_implementations = _gather_tools(tools, python_tools)
+
+    if tool_implementations:
+        prompt_method = conversation.chain
+        kwargs["chain_limit"] = chain_limit
+        if tools_debug:
+            kwargs["after_call"] = _debug_tool_call
+        if tools_approve:
+            kwargs["before_call"] = _approve_tool_call
+        kwargs["tools"] = tool_implementations
 
     try:
         if async_:
@@ -476,6 +834,8 @@ def prompt(
                         attachments=resolved_attachments,
                         system=system,
                         schema=schema,
+                        fragments=resolved_fragments,
+                        system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
                     async for chunk in response:
@@ -485,9 +845,11 @@ def prompt(
                 else:
                     response = prompt_method(
                         prompt,
+                        fragments=resolved_fragments,
                         attachments=resolved_attachments,
-                        system=system,
                         schema=schema,
+                        system=system,
+                        system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
                     text = await response.text()
@@ -502,9 +864,11 @@ def prompt(
         else:
             response = prompt_method(
                 prompt,
+                fragments=resolved_fragments,
                 attachments=resolved_attachments,
                 system=system,
                 schema=schema,
+                system_fragments=resolved_system_fragments,
                 **kwargs,
             )
             if should_stream:
@@ -522,30 +886,40 @@ def prompt(
         raise click.ClickException(str(ex))
     except Exception as ex:
         # All other exceptions should raise in pytest, show to user otherwise
-        if getattr(sys, "_called_from_test", False):
+        if getattr(sys, "_called_from_test", False) or os.environ.get(
+            "LLM_RAISE_ERRORS", None
+        ):
             raise
         raise click.ClickException(str(ex))
 
-    if isinstance(response, AsyncResponse):
-        response = asyncio.run(response.to_sync_response())
-
     if usage:
-        # Show token usage to stderr in yellow
-        click.echo(
-            click.style(
-                "Token usage: {}".format(response.token_usage()), fg="yellow", bold=True
-            ),
-            err=True,
-        )
+        if isinstance(response, ChainResponse):
+            responses = response._responses
+        else:
+            responses = [response]
+        for response_object in responses:
+            # Show token usage to stderr in yellow
+            click.echo(
+                click.style(
+                    "Token usage: {}".format(response_object.token_usage()),
+                    fg="yellow",
+                    bold=True,
+                ),
+                err=True,
+            )
 
-    # Log to the database
+    # Log responses to the database
     if (logs_on() or log) and not no_log:
+        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
+        if isinstance(response, AsyncResponse):
+            response = asyncio.run(response.to_sync_response())
+        # At this point ALL forms should have a log_to_db() method that works:
         response.log_to_db(db)
 
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
     "_continue",
     "-c",
@@ -559,6 +933,20 @@ def prompt(
     "--cid",
     "--conversation",
     help="Continue the conversation with the given ID.",
+)
+@click.option(
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+)
+@click.option(
+    "system_fragments",
+    "--sf",
+    "--system-fragment",
+    multiple=True,
+    help="Fragment to add to system prompt",
 )
 @click.option("-t", "--template", help="Template to use")
 @click.option(
@@ -576,18 +964,68 @@ def prompt(
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, dir_okay=False),
+    help="Path to log database",
+)
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("--key", help="API key to use")
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Name of a tool to make available to the model",
+)
+@click.option(
+    "python_tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
+)
+@click.option(
+    "tools_debug",
+    "--td",
+    "--tools-debug",
+    is_flag=True,
+    help="Show full details of tool executions",
+    envvar="LLM_TOOLS_DEBUG",
+)
+@click.option(
+    "tools_approve",
+    "--ta",
+    "--tools-approve",
+    is_flag=True,
+    help="Manually approve every tool execution",
+)
+@click.option(
+    "chain_limit",
+    "--cl",
+    "--chain-limit",
+    type=int,
+    default=5,
+    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+)
 def chat(
     system,
     model_id,
     _continue,
     conversation_id,
+    fragments,
+    system_fragments,
     template,
     param,
     options,
     no_stream,
     key,
+    database,
+    tools,
+    python_tools,
+    tools_debug,
+    tools_approve,
+    chain_limit,
 ):
     """
     Hold an ongoing chat with a model.
@@ -599,7 +1037,7 @@ def chat(
     else:
         readline.parse_and_bind("bind -x '\\e[D: backward-char'")
         readline.parse_and_bind("bind -x '\\e[C: forward-char'")
-    log_path = logs_db_path()
+    log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -608,17 +1046,20 @@ def chat(
     if conversation_id or _continue:
         # Load the conversation - loads most recent if no ID provided
         try:
-            conversation = load_conversation(conversation_id)
+            conversation = load_conversation(conversation_id, database=database)
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
+
+    if conversation_tools := _get_conversation_tools(conversation, tools):
+        tools = conversation_tools
 
     template_obj = None
     if template:
         params = dict(param)
-        # Cannot be used with system
-        if system:
-            raise click.ClickException("Cannot use -t/--template and --system together")
-        template_obj = load_template(template)
+        try:
+            template_obj = load_template(template)
+        except LoadTemplateError as ex:
+            raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
 
@@ -642,8 +1083,13 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
+    if tools_debug:
+        conversation.after_call = _debug_tool_call
+    if tools_approve:
+        conversation.before_call = _approve_tool_call
+
     # Validate options
-    validated_options = {}
+    validated_options = get_model_options(model.model_id)
     if options:
         try:
             validated_options = dict(
@@ -655,7 +1101,14 @@ def chat(
             raise click.ClickException(render_errors(ex.errors()))
 
     kwargs = {}
-    kwargs.update(validated_options)
+    if validated_options:
+        kwargs["options"] = validated_options
+
+    tool_functions = _gather_tools(tools, python_tools)
+
+    if tool_functions:
+        kwargs["chain_limit"] = chain_limit
+        kwargs["tools"] = tool_functions
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -664,38 +1117,107 @@ def chat(
     if key and isinstance(model, KeyModel):
         kwargs["key"] = key
 
+    try:
+        fragments_and_attachments = resolve_fragments(
+            db, fragments, allow_attachments=True
+        )
+        argument_fragments = [
+            fragment
+            for fragment in fragments_and_attachments
+            if isinstance(fragment, Fragment)
+        ]
+        argument_attachments = [
+            attachment
+            for attachment in fragments_and_attachments
+            if isinstance(attachment, Attachment)
+        ]
+        argument_system_fragments = resolve_fragments(db, system_fragments)
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+
     click.echo("Chatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    click.echo("Type '!edit' to open your default editor and modify the prompt")
+    click.echo(
+        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+    )
     in_multi = False
+
     accumulated = []
+    accumulated_fragments = []
+    accumulated_attachments = []
     end_token = "!end"
     while True:
         prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        fragments = []
+        attachments = []
+        if argument_fragments:
+            fragments += argument_fragments
+            # fragments from --fragments will get added to the first message only
+            argument_fragments = []
+        if argument_attachments:
+            attachments = argument_attachments
+            argument_attachments = []
         if prompt.strip().startswith("!multi"):
             in_multi = True
             bits = prompt.strip().split()
             if len(bits) > 1:
                 end_token = "!end {}".format(" ".join(bits[1:]))
             continue
+        if prompt.strip() == "!edit":
+            edited_prompt = click.edit()
+            if edited_prompt is None:
+                click.echo("Editor closed without saving.", err=True)
+                continue
+            prompt = edited_prompt.strip()
+        if prompt.strip().startswith("!fragment "):
+            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+
         if in_multi:
             if prompt.strip() == end_token:
                 prompt = "\n".join(accumulated)
+                fragments = accumulated_fragments
+                attachments = accumulated_attachments
                 in_multi = False
                 accumulated = []
+                accumulated_fragments = []
+                accumulated_attachments = []
             else:
-                accumulated.append(prompt)
+                if prompt:
+                    accumulated.append(prompt)
+                accumulated_fragments += fragments
+                accumulated_attachments += attachments
                 continue
         if template_obj:
             try:
-                prompt, system = template_obj.evaluate(prompt, params)
+                template_prompt, template_system = template_obj.evaluate(prompt, params)
             except Template.MissingVariables as ex:
                 raise click.ClickException(str(ex))
+            if template_system and not system:
+                system = template_system
+            if template_prompt:
+                new_prompt = template_prompt
+                if prompt:
+                    new_prompt += "\n" + prompt
+                prompt = new_prompt
         if prompt.strip() in ("exit", "quit"):
             break
-        response = conversation.prompt(prompt, system=system, **kwargs)
+
+        response = conversation.chain(
+            prompt,
+            fragments=[str(fragment) for fragment in fragments],
+            system_fragments=[
+                str(system_fragment) for system_fragment in argument_system_fragments
+            ],
+            attachments=attachments,
+            system=system,
+            **kwargs,
+        )
+
         # System prompt only sent for the first message:
         system = None
+        system_fragments = []
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
@@ -704,9 +1226,12 @@ def chat(
 
 
 def load_conversation(
-    conversation_id: Optional[str], async_=False
+    conversation_id: Optional[str],
+    async_=False,
+    database=None,
 ) -> Optional[_BaseConversation]:
-    db = sqlite_utils.Database(logs_db_path())
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
         # Return the most recent conversation, or None if there are none
@@ -844,6 +1369,22 @@ def logs_status():
     )
 
 
+@logs.command(name="backup")
+@click.argument("path", type=click.Path(dir_okay=True, writable=True))
+def backup(path):
+    "Backup your logs database to this file"
+    logs_path = logs_db_path()
+    path = pathlib.Path(path)
+    db = sqlite_utils.Database(logs_path)
+    try:
+        db.execute("vacuum into ?", [str(path)])
+    except Exception as ex:
+        raise click.ClickException(str(ex))
+    click.echo(
+        "Backed up {} to {}".format(_human_readable_size(path.stat().st_size), path)
+    )
+
+
 @logs.command(name="on")
 def logs_turn_on():
     "Turn on logging for all prompts"
@@ -861,6 +1402,7 @@ def logs_turn_off():
 
 LOGS_COLUMNS = """    responses.id,
     responses.model,
+    responses.resolved_model,
     responses.prompt,
     responses.system,
     responses.prompt_json,
@@ -927,9 +1469,36 @@ order by prompt_attachments."order"
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
+@click.option(
+    "fragments",
+    "--fragment",
+    "-f",
+    help="Filter for prompts using these fragments",
+    multiple=True,
+)
+@click.option(
+    "tools",
+    "-T",
+    "--tool",
+    multiple=True,
+    help="Filter for prompts with results from these tools",
+)
+@click.option(
+    "any_tools",
+    "--tools",
+    is_flag=True,
+    help="Filter for prompts with results from any tools",
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -979,11 +1548,21 @@ order by prompt_attachments."order"
     is_flag=True,
     help="Output logs as JSON",
 )
+@click.option(
+    "--expand",
+    "-e",
+    is_flag=True,
+    help="Expand fragments to show their content",
+)
 def logs_list(
     count,
     path,
+    database,
     model,
     query,
+    fragments,
+    tools,
+    any_tools,
     schema_input,
     schema_multi,
     data,
@@ -1001,8 +1580,11 @@ def logs_list(
     id_gt,
     id_gte,
     json_output,
+    expand,
 ):
-    "Show recent logged prompts and their responses"
+    "Show logged prompts and their responses"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -1069,6 +1651,13 @@ def logs_list(
         "extra_where": "",
     }
     where_bits = []
+    sql_params = {
+        "model": model_id,
+        "query": query,
+        "conversation_id": conversation_id,
+        "id_gt": id_gt,
+        "id_gte": id_gte,
+    }
     if model_id:
         where_bits.append("responses.model = :model")
     if conversation_id:
@@ -1077,29 +1666,88 @@ def logs_list(
         where_bits.append("responses.id > :id_gt")
     if id_gte:
         where_bits.append("responses.id >= :id_gte")
+    if fragments:
+        # Resolve the fragments to their hashes
+        fragment_hashes = [
+            fragment.id() for fragment in resolve_fragments(db, fragments)
+        ]
+        exists_clauses = []
+
+        for i, fragment_hash in enumerate(fragment_hashes):
+            exists_clause = f"""
+            exists (
+                select 1 from prompt_fragments
+                where prompt_fragments.response_id = responses.id
+                and prompt_fragments.fragment_id in (
+                    select fragments.id from fragments
+                    where hash = :f{i}
+                )
+                union
+                select 1 from system_fragments
+                where system_fragments.response_id = responses.id
+                and system_fragments.fragment_id in (
+                    select fragments.id from fragments
+                    where hash = :f{i}
+                )
+            )
+            """
+            exists_clauses.append(exists_clause)
+            sql_params["f{}".format(i)] = fragment_hash
+
+        where_bits.append(" and ".join(exists_clauses))
+
+    if any_tools:
+        # Any response that involved at least one tool result
+        where_bits.append(
+            """
+            exists (
+              select 1
+                from tool_results
+              where
+                tool_results.response_id = responses.id
+            )
+        """
+        )
+    if tools:
+        tools_by_name = get_tools()
+        # Filter responses by tools (must have ALL of the named tools, including plugin)
+        tool_clauses = []
+        for i, tool_name in enumerate(tools):
+            try:
+                plugin_name = tools_by_name[tool_name].plugin
+            except KeyError:
+                raise click.ClickException(f"Unknown tool: {tool_name}")
+
+            tool_clauses.append(
+                f"""
+            exists (
+              select 1
+                from tool_results
+                join tools on tools.id = tool_results.tool_id
+               where tool_results.response_id = responses.id
+                 and tools.name = :tool{i}
+                 and tools.plugin = :plugin{i}
+            )
+            """
+            )
+            sql_params[f"tool{i}"] = tool_name
+            sql_params[f"plugin{i}"] = plugin_name
+
+        # AND means “must have all” — use OR instead if you want “any of”
+        where_bits.append(" and ".join(tool_clauses))
+
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
         where_bits.append("responses.schema_id = :schema_id")
+        sql_params["schema_id"] = schema_id
 
     if where_bits:
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
 
     final_sql = sql.format(**sql_format)
-    rows = list(
-        db.query(
-            final_sql,
-            {
-                "model": model_id,
-                "query": query,
-                "conversation_id": conversation_id,
-                "schema_id": schema_id,
-                "id_gt": id_gt,
-                "id_gte": id_gte,
-            },
-        )
-    )
+    rows = list(db.query(final_sql, sql_params))
 
     # Reverse the order - we do this because we 'order by id desc limit 3' to get the
     # 3 most recent results, but we still want to display them in chronological order
@@ -1113,6 +1761,36 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    FRAGMENTS_SQL = """
+    select
+        {table}.response_id,
+        fragments.hash,
+        fragments.id as fragment_id,
+        fragments.content,
+        (
+            select json_group_array(fragment_aliases.alias)
+            from fragment_aliases
+            where fragment_aliases.fragment_id = fragments.id
+        ) as aliases
+    from {table}
+    join fragments on {table}.fragment_id = fragments.id
+    where {table}.response_id in ({placeholders})
+    order by {table}."order"
+    """
+
+    # Fetch any prompt or system prompt fragments
+    prompt_fragments_by_id = {}
+    system_fragments_by_id = {}
+    for table, dictionary in (
+        ("prompt_fragments", prompt_fragments_by_id),
+        ("system_fragments", system_fragments_by_id),
+    ):
+        for fragment in db.query(
+            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
+            ids,
+        ):
+            dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1138,13 +1816,107 @@ def logs_list(
                 to_output.extend(new_items)
             except ValueError:
                 pass
-        click.echo(output_rows_as_json(to_output, not data_array))
+        for line in output_rows_as_json(to_output, nl=not data_array, compact=True):
+            click.echo(line)
         return
+
+    # Tool usage information
+    TOOLS_SQL = """
+    SELECT responses.id,
+    -- Tools related to this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', t.id,
+            'hash', t.hash,
+            'name', t.name,
+            'description', t.description,
+            'input_schema', json(t.input_schema)
+        ))
+        FROM tools t
+        JOIN tool_responses tr ON t.id = tr.tool_id
+        WHERE tr.response_id = responses.id
+        ),
+        '[]'
+    ) AS tools,
+    -- Tool calls for this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', tc.id,
+            'tool_id', tc.tool_id,
+            'name', tc.name,
+            'arguments', json(tc.arguments),
+            'tool_call_id', tc.tool_call_id
+        ))
+        FROM tool_calls tc
+        WHERE tc.response_id = responses.id
+        ),
+        '[]'
+    ) AS tool_calls,
+    -- Tool results for this response
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', tr.id,
+            'tool_id', tr.tool_id,
+            'name', tr.name,
+            'output', tr.output,
+            'tool_call_id', tr.tool_call_id,
+            'exception', tr.exception,
+            'attachments', COALESCE(
+                (SELECT json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                FROM tool_results_attachments tra
+                JOIN attachments a ON tra.attachment_id = a.id
+                WHERE tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
+        ))
+        FROM tool_results tr
+        WHERE tr.response_id = responses.id
+        ),
+        '[]'
+    ) AS tool_results
+    FROM responses
+    where id in ({placeholders})
+    """
+    tool_info_by_id = {
+        row["id"]: {
+            "tools": json.loads(row["tools"]),
+            "tool_calls": json.loads(row["tool_calls"]),
+            "tool_results": json.loads(row["tool_results"]),
+        }
+        for row in db.query(
+            TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
+        )
+    }
 
     for row in rows:
         if truncate:
-            row["prompt"] = _truncate_string(row["prompt"])
-            row["response"] = _truncate_string(row["response"])
+            row["prompt"] = truncate_string(row["prompt"] or "")
+            row["response"] = truncate_string(row["response"] or "")
+        # Add prompt and system fragments
+        for key in ("prompt_fragments", "system_fragments"):
+            row[key] = [
+                {
+                    "hash": fragment["hash"],
+                    "content": (
+                        fragment["content"]
+                        if expand
+                        else truncate_string(fragment["content"])
+                    ),
+                    "aliases": json.loads(fragment["aliases"]),
+                }
+                for fragment in (
+                    prompt_fragments_by_id.get(row["id"], [])
+                    if key == "prompt_fragments"
+                    else system_fragments_by_id.get(row["id"], [])
+                )
+            ]
         # Either decode or remove all JSON keys
         keys = list(row.keys())
         for key in keys:
@@ -1153,6 +1925,7 @@ def logs_list(
                     del row[key]
                 else:
                     row[key] = json.loads(row[key])
+        row.update(tool_info_by_id[row["id"]])
 
     output = None
     if json_output:
@@ -1178,12 +1951,35 @@ def logs_list(
         click.echo(output)
     else:
         # Output neatly formatted human-readable logs
+        def _display_fragments(fragments, title):
+            if not fragments:
+                return
+            if not expand:
+                content = "\n".join(
+                    ["- {}".format(fragment["hash"]) for fragment in fragments]
+                )
+            else:
+                # <details><summary> for each one
+                bits = []
+                for fragment in fragments:
+                    bits.append(
+                        "<details><summary>{}</summary>\n{}\n</details>".format(
+                            fragment["hash"], maybe_fenced_code(fragment["content"])
+                        )
+                    )
+                content = "\n".join(bits)
+            click.echo(f"\n### {title}\n\n{content}")
+
         current_system = None
         should_show_conversation = True
         for row in rows:
             if short:
-                system = _truncate_string(row["system"], 120, end=True)
-                prompt = _truncate_string(row["prompt"], 120, end=True)
+                system = truncate_string(
+                    row["system"] or "", 120, normalize_whitespace=True
+                )
+                prompt = truncate_string(
+                    row["prompt"] or "", 120, normalize_whitespace=True, keep_end=True
+                )
                 cid = row["conversation_id"]
                 attachments = attachments_by_id.get(row["id"])
                 obj = {
@@ -1191,6 +1987,20 @@ def logs_list(
                     "datetime": row["datetime_utc"].split(".")[0],
                     "conversation": cid,
                 }
+                if row["tool_calls"]:
+                    obj["tool_calls"] = [
+                        "{}({})".format(
+                            tool_call["name"], json.dumps(tool_call["arguments"])
+                        )
+                        for tool_call in row["tool_calls"]
+                    ]
+                if row["tool_results"]:
+                    obj["tool_results"] = [
+                        "{}: {}".format(
+                            tool_result["name"], truncate_string(tool_result["output"])
+                        )
+                        for tool_result in row["tool_results"]
+                    ]
                 if system:
                     obj["system"] = system
                 if prompt:
@@ -1205,6 +2015,8 @@ def logs_list(
                             details["url"] = attachment["url"]
                         items.append(details)
                     obj["attachments"] = items
+                for key in ("prompt_fragments", "system_fragments"):
+                    obj[key] = [fragment["hash"] for fragment in row[key]]
                 if usage and (row["input_tokens"] or row["output_tokens"]):
                     usage_details = {
                         "input": row["input_tokens"],
@@ -1215,6 +2027,7 @@ def logs_list(
                     obj["usage"] = usage_details
                 click.echo(yaml.dump([obj], sort_keys=False).strip())
                 continue
+            # Not short, output Markdown
             click.echo(
                 "# {}{}\n{}".format(
                     row["datetime_utc"].split(".")[0],
@@ -1226,7 +2039,16 @@ def logs_list(
                         else ""
                     ),
                     (
-                        "\nModel: **{}**\n".format(row["model"])
+                        (
+                            "\nModel: **{}**{}\n".format(
+                                row["model"],
+                                (
+                                    " (resolved: **{}**)".format(row["resolved_model"])
+                                    if row["resolved_model"]
+                                    else ""
+                                ),
+                            )
+                        )
                         if should_show_conversation
                         else ""
                     ),
@@ -1236,16 +2058,60 @@ def logs_list(
             if conversation_id:
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
+            _display_fragments(row["prompt_fragments"], "Prompt fragments")
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
+            _display_fragments(row["system_fragments"], "System fragments")
             if row["schema_json"]:
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
                     )
                 )
+            # Show tool calls and results
+            if row["tools"]:
+                click.echo("\n### Tools\n")
+                for tool in row["tools"]:
+                    click.echo(
+                        "- **{}**: `{}`<br>\n    {}<br>\n    Arguments: {}".format(
+                            tool["name"],
+                            tool["hash"],
+                            tool["description"],
+                            json.dumps(tool["input_schema"]["properties"]),
+                        )
+                    )
+            if row["tool_results"]:
+                click.echo("\n### Tool results\n")
+                for tool_result in row["tool_results"]:
+                    attachments = ""
+                    for attachment in tool_result["attachments"]:
+                        desc = ""
+                        if attachment.get("type"):
+                            desc += attachment["type"] + ": "
+                        if attachment.get("path"):
+                            desc += attachment["path"]
+                        elif attachment.get("url"):
+                            desc += attachment["url"]
+                        elif attachment.get("content"):
+                            desc += f"<{attachment['content_length']:,} bytes>"
+                        attachments += "\n    - {}".format(desc)
+                    click.echo(
+                        "- **{}**: `{}`<br>\n{}{}{}".format(
+                            tool_result["name"],
+                            tool_result["tool_call_id"],
+                            textwrap.indent(tool_result["output"], "    "),
+                            (
+                                "<br>\n    **Error**: {}\n".format(
+                                    tool_result["exception"]
+                                )
+                                if tool_result["exception"]
+                                else ""
+                            ),
+                            attachments,
+                        )
+                    )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -1278,7 +2144,20 @@ def logs_list(
                     response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
                 except ValueError:
                     pass
-            click.echo("\n## Response\n\n{}\n".format(response))
+            click.echo("\n## Response\n")
+            if row["tool_calls"]:
+                click.echo("### Tool calls\n")
+                for tool_call in row["tool_calls"]:
+                    click.echo(
+                        "- **{}**: `{}`<br>\n    Arguments: {}".format(
+                            tool_call["name"],
+                            tool_call["tool_call_id"],
+                            json.dumps(tool_call["arguments"]),
+                        )
+                    )
+                click.echo("")
+            if response:
+                click.echo("{}\n".format(response))
             if usage:
                 token_usage = token_usage_string(
                     row["input_tokens"],
@@ -1286,7 +2165,7 @@ def logs_list(
                     json.loads(row["token_details"]) if row["token_details"] else None,
                 )
                 if token_usage:
-                    click.echo("## Token usage:\n\n{}\n".format(token_usage))
+                    click.echo("## Token usage\n\n{}\n".format(token_usage))
 
 
 @cli.group(
@@ -1312,13 +2191,15 @@ _type_lookup = {
 )
 @click.option("async_", "--async", is_flag=True, help="List async models")
 @click.option("--schemas", is_flag=True, help="List models that support schemas")
+@click.option("--tools", is_flag=True, help="List models that support tools")
 @click.option(
     "-q",
     "--query",
     multiple=True,
     help="Search for models matching these strings",
 )
-def models_list(options, async_, schemas, query):
+@click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
+def models_list(options, async_, schemas, tools, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
@@ -1328,15 +2209,27 @@ def models_list(options, async_, schemas, query):
             # Only show models where every provided query string matches
             if not all(model_with_aliases.matches(q) for q in query):
                 continue
+        if model_ids:
+            ids_and_aliases = set(
+                [model_with_aliases.model.model_id] + model_with_aliases.aliases
+            )
+            if not ids_and_aliases.intersection(model_ids):
+                continue
         if schemas and not model_with_aliases.model.supports_schema:
             continue
-        extra = ""
+        if tools and not model_with_aliases.model.supports_tools:
+            continue
+        extra_info = []
         if model_with_aliases.aliases:
-            extra = " (aliases: {})".format(", ".join(model_with_aliases.aliases))
+            extra_info.append(
+                "aliases: {}".format(", ".join(model_with_aliases.aliases))
+            )
         model = (
             model_with_aliases.model if not async_ else model_with_aliases.async_model
         )
-        output = str(model) + extra
+        output = str(model)
+        if extra_info:
+            output += " ({})".format(", ".join(extra_info))
         if options and model.Options.model_json_schema()["properties"]:
             output += "\n  Options:"
             for name, field in model.Options.model_json_schema()["properties"].items():
@@ -1372,13 +2265,21 @@ def models_list(options, async_, schemas, query):
             []
             + (["streaming"] if model.can_stream else [])
             + (["schemas"] if model.supports_schema else [])
+            + (["tools"] if model.supports_tools else [])
+            + (["async"] if model_with_aliases.async_model else [])
         )
         if options and features:
             output += "\n  Features:\n{}".format(
                 "\n".join("  - {}".format(feature) for feature in features)
             )
+        if options and hasattr(model, "needs_key") and model.needs_key:
+            output += "\n  Keys:"
+            if hasattr(model, "needs_key") and model.needs_key:
+                output += "\n    key: {}".format(model.needs_key)
+            if hasattr(model, "key_env_var") and model.key_env_var:
+                output += "\n    env_var: {}".format(model.key_env_var)
         click.echo(output)
-    if not query and not options and not schemas:
+    if not query and not options and not schemas and not model_ids:
         click.echo(f"Default: {get_default_model()}")
 
 
@@ -1413,7 +2314,11 @@ def templates_list():
     pairs = []
     for file in path.glob("*.yaml"):
         name = file.stem
-        template = load_template(name)
+        try:
+            template = load_template(name)
+        except LoadTemplateError:
+            # Skip invalid templates
+            continue
         text = []
         if template.system:
             text.append(f"system: {template.system}")
@@ -1433,6 +2338,57 @@ def templates_list():
             click.echo(display_truncated(text))
 
 
+@templates.command(name="show")
+@click.argument("name")
+def templates_show(name):
+    "Show the specified prompt template"
+    try:
+        template = load_template(name)
+    except LoadTemplateError:
+        raise click.ClickException(f"Template '{name}' not found or invalid")
+    click.echo(
+        yaml.dump(
+            dict((k, v) for k, v in template.model_dump().items() if v is not None),
+            indent=4,
+            default_flow_style=False,
+        )
+    )
+
+
+@templates.command(name="edit")
+@click.argument("name")
+def templates_edit(name):
+    "Edit the specified prompt template using the default $EDITOR"
+    # First ensure it exists
+    path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        path.write_text(DEFAULT_TEMPLATE, "utf-8")
+    click.edit(filename=str(path))
+    # Validate that template
+    load_template(name)
+
+
+@templates.command(name="path")
+def templates_path():
+    "Output the path to the templates directory"
+    click.echo(template_dir())
+
+
+@templates.command(name="loaders")
+def templates_loaders():
+    "Show template loaders registered by plugins"
+    found = False
+    for prefix, loader in get_template_loaders().items():
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No template loaders found")
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
@@ -1448,6 +2404,13 @@ def schemas():
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
 )
 @click.option(
     "queries",
@@ -1457,8 +2420,12 @@ def schemas():
     help="Search for schemas matching this string",
 )
 @click.option("--full", is_flag=True, help="Output full schema contents")
-def schemas_list(path, queries, full):
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option("nl", "--nl", is_flag=True, help="Output as newline-delimited JSON")
+def schemas_list(path, database, queries, full, json_, nl):
     "List stored schemas"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -1487,6 +2454,12 @@ def schemas_list(path, queries, full):
         where_sql
     )
     rows = db.query(sql, params)
+
+    if json_ or nl:
+        for line in output_rows_as_json(rows, json_cols={"content"}, nl=nl):
+            click.echo(line)
+        return
+
     for row in rows:
         click.echo("- id: {}".format(row["id"]))
         if full:
@@ -1519,9 +2492,18 @@ def schemas_list(path, queries, full):
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
     help="Path to log database",
+    hidden=True,
 )
-def schemas_show(schema_id, path):
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def schemas_show(schema_id, path, database):
     "Show a stored schema"
+    if database and not path:
+        path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException("No log database found at {}".format(path))
@@ -1547,6 +2529,102 @@ def schemas_dsl_debug(input, multi):
     """
     schema = schema_dsl(input, multi)
     click.echo(json.dumps(schema, indent=2))
+
+
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def tools():
+    "Manage tools that can be made available to LLMs"
+
+
+@tools.command(name="list")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option(
+    "python_tools",
+    "--functions",
+    help="Python code block or file path defining functions to register as tools",
+    multiple=True,
+)
+def tools_list(json_, python_tools):
+    "List available tools that have been provided by plugins"
+    tools = get_tools()
+    if python_tools:
+        for code_or_path in python_tools:
+            for tool in _tools_from_code(code_or_path):
+                tools[tool.name] = tool
+
+    output_tools = []
+    output_toolboxes = []
+    tool_objects = []
+    toolbox_objects = []
+    for name, tool in sorted(tools.items()):
+        if isinstance(tool, Tool):
+            tool_objects.append(tool)
+            output_tools.append(
+                {
+                    "name": name,
+                    "description": tool.description,
+                    "arguments": tool.input_schema,
+                    "plugin": tool.plugin,
+                }
+            )
+        else:
+            toolbox_objects.append(tool)
+            output_toolboxes.append(
+                {
+                    "name": name,
+                    "tools": [
+                        {
+                            "name": method["name"],
+                            "description": method["description"],
+                            "arguments": method["arguments"],
+                        }
+                        for method in tool.introspect_methods()
+                    ],
+                }
+            )
+    if json_:
+        click.echo(
+            json.dumps(
+                {"tools": output_tools, "toolboxes": output_toolboxes},
+                indent=2,
+            )
+        )
+    else:
+        for tool in tool_objects:
+            sig = "()"
+            if tool.implementation:
+                sig = str(inspect.signature(tool.implementation))
+            click.echo(
+                "{}{}{}\n".format(
+                    tool.name,
+                    sig,
+                    " (plugin: {})".format(tool.plugin) if tool.plugin else "",
+                )
+            )
+            if tool.description:
+                click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
+        for toolbox in toolbox_objects:
+            click.echo(toolbox.name + ":\n")
+            for method in toolbox.introspect_methods():
+                sig = (
+                    str(inspect.signature(method["implementation"]))
+                    .replace("(self, ", "(")
+                    .replace("(self)", "()")
+                )
+                click.echo(
+                    "  {}{}\n".format(
+                        method["name"],
+                        sig,
+                    )
+                )
+                if method["description"]:
+                    click.echo(
+                        textwrap.indent(method["description"].strip(), "    ") + "\n"
+                    )
 
 
 @cli.group(
@@ -1656,11 +2734,191 @@ def aliases_path():
     click.echo(user_dir() / "aliases.json")
 
 
+@cli.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def fragments():
+    """
+    Manage fragments that are stored in the database
+
+    Fragments are reusable snippets of text that are shared across multiple prompts.
+    """
+
+
+@fragments.command(name="list")
+@click.option(
+    "queries",
+    "-q",
+    "--query",
+    multiple=True,
+    help="Search for fragments matching these strings",
+)
+@click.option("--aliases", is_flag=True, help="Show only fragments with aliases")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+def fragments_list(queries, aliases, json_):
+    "List current fragments"
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    params = {}
+    param_count = 0
+    where_bits = []
+    if aliases:
+        where_bits.append("fragment_aliases.alias is not null")
+    for q in queries:
+        param_count += 1
+        p = f"p{param_count}"
+        params[p] = q
+        where_bits.append(
+            f"""
+            (fragments.hash = :{p} or fragment_aliases.alias = :{p}
+            or fragments.source like '%' || :{p} || '%'
+            or fragments.content like '%' || :{p} || '%')
+        """
+        )
+    where = "\n      and\n  ".join(where_bits)
+    if where:
+        where = " where " + where
+    sql = """
+    select
+        fragments.hash,
+        json_group_array(fragment_aliases.alias) filter (
+            where
+            fragment_aliases.alias is not null
+        ) as aliases,
+        fragments.datetime_utc,
+        fragments.source,
+        fragments.content
+    from
+        fragments
+    left join
+        fragment_aliases on fragment_aliases.fragment_id = fragments.id
+    {where}
+    group by
+        fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
+    order by fragments.datetime_utc
+    """.format(
+        where=where
+    )
+    results = list(db.query(sql, params))
+    for result in results:
+        result["aliases"] = json.loads(result["aliases"])
+    if json_:
+        click.echo(json.dumps(results, indent=4))
+    else:
+        yaml.add_representer(
+            str,
+            lambda dumper, data: dumper.represent_scalar(
+                "tag:yaml.org,2002:str", data, style="|" if "\n" in data else None
+            ),
+        )
+        for result in results:
+            result["content"] = truncate_string(result["content"])
+            click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
+
+
+@fragments.command(name="set")
+@click.argument("alias", callback=validate_fragment_alias)
+@click.argument("fragment")
+def fragments_set(alias, fragment):
+    """
+    Set an alias for a fragment
+
+    Accepts an alias and a file path, URL, hash or '-' for stdin
+
+    Example usage:
+
+    \b
+        llm fragments set mydocs ./docs.md
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    try:
+        resolved = resolve_fragments(db, [fragment])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+    migrate(db)
+    alias_sql = """
+    insert into fragment_aliases (alias, fragment_id)
+    values (:alias, :fragment_id)
+    on conflict(alias) do update set
+        fragment_id = excluded.fragment_id;
+    """
+    with db.conn:
+        fragment_id = ensure_fragment(db, resolved)
+        db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
+
+
+@fragments.command(name="show")
+@click.argument("alias_or_hash")
+def fragments_show(alias_or_hash):
+    """
+    Display the fragment stored under an alias or hash
+
+    \b
+        llm fragments show mydocs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    try:
+        resolved = resolve_fragments(db, [alias_or_hash])[0]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+    click.echo(resolved)
+
+
+@fragments.command(name="remove")
+@click.argument("alias", callback=validate_fragment_alias)
+def fragments_remove(alias):
+    """
+    Remove a fragment alias
+
+    Example usage:
+
+    \b
+        llm fragments remove docs
+    """
+    db = sqlite_utils.Database(logs_db_path())
+    migrate(db)
+    with db.conn:
+        db.conn.execute(
+            "delete from fragment_aliases where alias = :alias", {"alias": alias}
+        )
+
+
+@fragments.command(name="loaders")
+def fragments_loaders():
+    """Show fragment loaders registered by plugins"""
+    from llm import get_fragment_loaders
+
+    found = False
+    for prefix, loader in get_fragment_loaders().items():
+        if found:
+            # Extra newline on all after the first
+            click.echo("")
+        found = True
+        docs = "Undocumented"
+        if loader.__doc__:
+            docs = textwrap.dedent(loader.__doc__).strip()
+        click.echo(f"{prefix}:")
+        click.echo(textwrap.indent(docs, "  "))
+    if not found:
+        click.echo("No fragment loaders found")
+
+
 @cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
-def plugins_list(all):
+@click.option(
+    "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
+)
+def plugins_list(all, hooks):
     "List installed plugins"
-    click.echo(json.dumps(get_plugins(all), indent=2))
+    plugins = get_plugins(all)
+    hooks = set(hooks)
+    if hooks:
+        plugins = [plugin for plugin in plugins if hooks.intersection(plugin["hooks"])]
+    click.echo(json.dumps(plugins, indent=2))
 
 
 def display_truncated(text):
@@ -1669,39 +2927,6 @@ def display_truncated(text):
         return text[: console_width - 3] + "..."
     else:
         return text
-
-
-@templates.command(name="show")
-@click.argument("name")
-def templates_show(name):
-    "Show the specified prompt template"
-    template = load_template(name)
-    click.echo(
-        yaml.dump(
-            dict((k, v) for k, v in template.model_dump().items() if v is not None),
-            indent=4,
-            default_flow_style=False,
-        )
-    )
-
-
-@templates.command(name="edit")
-@click.argument("name")
-def templates_edit(name):
-    "Edit the specified prompt template using the default $EDITOR"
-    # First ensure it exists
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        path.write_text(DEFAULT_TEMPLATE, "utf-8")
-    click.edit(filename=path)
-    # Validate that template
-    load_template(name)
-
-
-@templates.command(name="path")
-def templates_path():
-    "Output the path to the templates directory"
-    click.echo(template_dir())
 
 
 @cli.command()
@@ -1724,7 +2949,12 @@ def templates_path():
     is_flag=True,
     help="Disable the cache",
 )
-def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
+@click.option(
+    "--pre",
+    is_flag=True,
+    help="Include pre-release and development versions",
+)
+def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
@@ -1735,6 +2965,8 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir):
         args += ["--force-reinstall"]
     if no_cache_dir:
         args += ["--no-cache-dir"]
+    if pre:
+        args += ["--pre"]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
@@ -1758,7 +2990,9 @@ def uninstall(packages, yes):
     type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed",
 )
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -1885,7 +3119,7 @@ def embed(
 @click.option(
     "encodings",
     "--encoding",
-    help="Encoding to use when reading --files",
+    help="Encodings to try when reading --files",
     multiple=True,
 )
 @click.option("--binary", is_flag=True, help="Treat --files as binary data")
@@ -1900,7 +3134,9 @@ def embed(
     "--batch-size", type=int, help="Batch size to use when running embeddings"
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
-@click.option("-m", "--model", help="Embedding model to use")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
@@ -1929,23 +3165,46 @@ def embed_multi(
     database,
 ):
     """
-    Store embeddings for multiple strings at once
-
-    Input can be CSV, TSV or a JSON list of objects.
-
-    The first column is treated as an ID - all other columns
-    are assumed to be text that should be concatenated together
-    in order to calculate the embeddings.
-
-    When using JSON input, you can specify a "metadata" field in your objects
-    which will be stored with the embeddings.
+    Store embeddings for multiple strings at once in the specified collection.
 
     Input data can come from one of three sources:
 
     \b
-    1. A CSV, JSON, TSV or JSON-nl file (including on standard input)
-    2. A SQL query against a SQLite database
-    3. A directory of files
+    1. A CSV, TSV, JSON or JSONL file:
+       - CSV/TSV: First column is ID, remaining columns concatenated as content
+       - JSON: Array of objects with "id" field and content fields
+       - JSONL: Newline-delimited JSON objects
+ 
+    \b
+       Examples:
+         llm embed-multi docs input.csv
+         cat data.json | llm embed-multi docs -
+         llm embed-multi docs input.json --format json
+
+    \b
+    2. A SQL query against a SQLite database:
+       - First column returned is used as ID
+       - Other columns concatenated to form content
+
+    \b
+       Examples:
+         llm embed-multi docs --sql "SELECT id, title, body FROM posts"
+         llm embed-multi docs --attach blog blog.db --sql "SELECT id, content FROM blog.posts"
+
+    \b
+    3. Files in directories matching glob patterns:
+       - Each file becomes one embedding
+       - Relative file paths become IDs
+
+
+    \b
+       Examples:
+         llm embed-multi docs --files docs '**/*.md'
+         llm embed-multi images --files photos '*.jpg' --binary
+         llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
+         
+    When using JSON input, you can specify a "metadata" field in your objects
+    which will be stored with the embeddings.
     """
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
@@ -2091,13 +3350,15 @@ def embed_multi(
 @click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
+@click.option("-p", "--plain", is_flag=True, help="Output in plain text format")
 @click.option(
     "-d",
     "--database",
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
 )
-def similar(collection, id, input, content, binary, number, database):
+@click.option("--prefix", help="Just IDs with this prefix", default="")
+def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -2129,7 +3390,7 @@ def similar(collection, id, input, content, binary, number, database):
 
     if id:
         try:
-            results = collection_obj.similar_by_id(id, number)
+            results = collection_obj.similar_by_id(id, number, prefix=prefix)
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
@@ -2145,10 +3406,18 @@ def similar(collection, id, input, content, binary, number, database):
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number)
+        results = collection_obj.similar(content, number, prefix=prefix)
 
     for result in results:
-        click.echo(json.dumps(asdict(result)))
+        if plain:
+            click.echo(f"{result.id} ({result.score})\n")
+            if result.content:
+                click.echo(textwrap.indent(result.content, "  "))
+            if result.metadata:
+                click.echo(textwrap.indent(json.dumps(result.metadata), "  "))
+            click.echo("")
+        else:
+            click.echo(json.dumps(asdict(result)))
 
 
 @cli.group(
@@ -2288,46 +3557,151 @@ def collections_delete(collection, database):
     collection_obj.delete()
 
 
+@models.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def options():
+    "Manage default options for models"
+
+
+@options.command(name="list")
+def options_list():
+    """
+    List default options for all models
+
+    Example usage:
+
+    \b
+        llm models options list
+    """
+    options = get_all_model_options()
+    if not options:
+        click.echo("No default options set for any models.", err=True)
+        return
+
+    for model_id, model_options in options.items():
+        click.echo(f"{model_id}:")
+        for key, value in model_options.items():
+            click.echo(f"  {key}: {value}")
+
+
+@options.command(name="show")
+@click.argument("model")
+def options_show(model):
+    """
+    List default options set for a specific model
+
+    Example usage:
+
+    \b
+        llm models options show gpt-4o
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    options = get_model_options(model_id)
+    if not options:
+        click.echo(f"No default options set for model '{model_id}'.", err=True)
+        return
+
+    for key, value in options.items():
+        click.echo(f"{key}: {value}")
+
+
+@options.command(name="set")
+@click.argument("model")
+@click.argument("key")
+@click.argument("value")
+def options_set(model, key, value):
+    """
+    Set a default option for a model
+
+    Example usage:
+
+    \b
+        llm models options set gpt-4o temperature 0.5
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+
+        # Validate option against model schema
+        try:
+            # Create a test Options object to validate
+            test_options = {key: value}
+            model_obj.Options(**test_options)
+        except pydantic.ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    set_model_option(model_id, key, value)
+    click.echo(f"Set default option {key}={value} for model {model_id}", err=True)
+
+
+@options.command(name="clear")
+@click.argument("model")
+@click.argument("key", required=False)
+def options_clear(model, key):
+    """
+    Clear default option(s) for a model
+
+    Example usage:
+
+    \b
+        llm models options clear gpt-4o
+        # Or for a single option
+        llm models options clear gpt-4o temperature
+    """
+    import llm
+
+    try:
+        # Resolve alias to model ID
+        model_obj = llm.get_model(model)
+        model_id = model_obj.model_id
+    except llm.UnknownModelError:
+        # Use as-is if not found
+        model_id = model
+
+    cleared_keys = []
+    if not key:
+        cleared_keys = list(get_model_options(model_id).keys())
+        for key_ in cleared_keys:
+            clear_model_option(model_id, key_)
+    else:
+        cleared_keys.append(key)
+        clear_model_option(model_id, key)
+    if cleared_keys:
+        if len(cleared_keys) == 1:
+            click.echo(f"Cleared option '{cleared_keys[0]}' for model {model_id}")
+        else:
+            click.echo(
+                f"Cleared {', '.join(cleared_keys)} options for model {model_id}"
+            )
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _truncate_string(s, max_length=100, end=False):
-    if not s:
-        return s
-    if end:
-        s = re.sub(r"\s+", " ", s)
-        if len(s) <= max_length:
-            return s
-        return s[: max_length - 3] + "..."
-    if len(s) <= max_length:
-        return s
-    return s[: max_length - 3] + "..."
-
-
 def logs_db_path():
     return user_dir() / "logs.db"
-
-
-def load_template(name):
-    path = template_dir() / f"{name}.yaml"
-    if not path.exists():
-        raise click.ClickException(f"Invalid template: {name}")
-    try:
-        loaded = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as ex:
-        raise click.ClickException("Invalid YAML: {}".format(str(ex)))
-    if isinstance(loaded, str):
-        return Template(name=name, prompt=loaded)
-    loaded["name"] = name
-    try:
-        return Template(**loaded)
-    except pydantic.ValidationError as ex:
-        msg = "A validation error occurred:\n"
-        msg += render_errors(ex.errors())
-        raise click.ClickException(msg)
 
 
 def get_history(chat_id):
@@ -2378,3 +3752,287 @@ def _human_readable_size(size_bytes):
 
 def logs_on():
     return not (user_dir() / "logs-off").exists()
+
+
+def get_all_model_options() -> dict:
+    """
+    Get all default options for all models
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options
+
+
+def get_model_options(model_id: str) -> dict:
+    """
+    Get default options for a specific model
+
+    Args:
+        model_id: Return options for model with this ID
+
+    Returns:
+        A dictionary of model options
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return {}
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+    return options.get(model_id, {})
+
+
+def set_model_option(model_id: str, key: str, value: Any) -> None:
+    """
+    Set a default option for a model.
+
+    Args:
+        model_id: The model ID
+        key: The option key
+        value: The option value
+    """
+    path = user_dir() / "model_options.json"
+    if path.exists():
+        try:
+            options = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            options = {}
+    else:
+        options = {}
+
+    # Ensure the model has an entry
+    if model_id not in options:
+        options[model_id] = {}
+
+    # Set the option
+    options[model_id][key] = value
+
+    # Save the options
+    path.write_text(json.dumps(options, indent=2))
+
+
+def clear_model_option(model_id: str, key: str) -> None:
+    """
+    Clear a model option
+
+    Args:
+        model_id: The model ID
+        key: Key to clear
+    """
+    path = user_dir() / "model_options.json"
+    if not path.exists():
+        return
+
+    try:
+        options = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return
+
+    if model_id not in options:
+        return
+
+    if key in options[model_id]:
+        del options[model_id][key]
+        if not options[model_id]:
+            del options[model_id]
+
+    path.write_text(json.dumps(options, indent=2))
+
+
+class LoadTemplateError(ValueError):
+    pass
+
+
+def _parse_yaml_template(name, content):
+    try:
+        loaded = yaml.safe_load(content)
+    except yaml.YAMLError as ex:
+        raise LoadTemplateError("Invalid YAML: {}".format(str(ex)))
+    if isinstance(loaded, str):
+        return Template(name=name, prompt=loaded)
+    loaded["name"] = name
+    try:
+        return Template(**loaded)
+    except pydantic.ValidationError as ex:
+        msg = "A validation error occurred:\n"
+        msg += render_errors(ex.errors())
+        raise LoadTemplateError(msg)
+
+
+def load_template(name: str) -> Template:
+    "Load template, or raise LoadTemplateError(msg)"
+    if name.startswith("https://") or name.startswith("http://"):
+        response = httpx.get(name)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as ex:
+            raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
+        return _parse_yaml_template(name, response.text)
+
+    potential_path = pathlib.Path(name)
+
+    if has_plugin_prefix(name) and not potential_path.exists():
+        prefix, rest = name.split(":", 1)
+        loaders = get_template_loaders()
+        if prefix not in loaders:
+            raise LoadTemplateError("Unknown template prefix: {}".format(prefix))
+        loader = loaders[prefix]
+        try:
+            return loader(rest)
+        except Exception as ex:
+            raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
+
+    # Try local file
+    if potential_path.exists():
+        path = potential_path
+    else:
+        # Look for template in template_dir()
+        path = template_dir() / f"{name}.yaml"
+    if not path.exists():
+        raise LoadTemplateError(f"Invalid template: {name}")
+    content = path.read_text()
+    template_obj = _parse_yaml_template(name, content)
+    # We trust functions here because they came from the filesystem
+    template_obj._functions_is_trusted = True
+    return template_obj
+
+
+def _tools_from_code(code_or_path: str) -> List[Tool]:
+    """
+    Treat all Python functions in the code as tools
+    """
+    if "\n" not in code_or_path and code_or_path.endswith(".py"):
+        try:
+            code_or_path = pathlib.Path(code_or_path).read_text()
+        except FileNotFoundError:
+            raise click.ClickException("File not found: {}".format(code_or_path))
+    namespace: Dict[str, Any] = {}
+    tools = []
+    try:
+        exec(code_or_path, namespace)
+    except SyntaxError as ex:
+        raise click.ClickException("Error in --functions definition: {}".format(ex))
+    # Register all callables in the locals dict:
+    for name, value in namespace.items():
+        if callable(value) and not name.startswith("_"):
+            tools.append(Tool.function(value))
+    return tools
+
+
+def _debug_tool_call(_, tool_call, tool_result):
+    click.echo(
+        click.style(
+            "\nTool call: {}({})".format(tool_call.name, tool_call.arguments),
+            fg="yellow",
+            bold=True,
+        ),
+        err=True,
+    )
+    output = ""
+    attachments = ""
+    if tool_result.attachments:
+        attachments += "\nAttachments:\n"
+        for attachment in tool_result.attachments:
+            attachments += f"  {repr(attachment)}\n"
+
+    try:
+        output = json.dumps(json.loads(tool_result.output), indent=2)
+    except ValueError:
+        output = tool_result.output
+    output += attachments
+    click.echo(
+        click.style(
+            textwrap.indent(output, "  ") + ("\n" if not tool_result.exception else ""),
+            fg="green",
+            bold=True,
+        ),
+        err=True,
+    )
+    if tool_result.exception:
+        click.echo(
+            click.style(
+                "  Exception: {}".format(tool_result.exception),
+                fg="red",
+                bold=True,
+            ),
+            err=True,
+        )
+
+
+def _approve_tool_call(_, tool_call):
+    click.echo(
+        click.style(
+            "Tool call: {}({})".format(tool_call.name, tool_call.arguments),
+            fg="yellow",
+            bold=True,
+        ),
+        err=True,
+    )
+    if not click.confirm("Approve tool call?"):
+        raise CancelToolCall("User cancelled tool call")
+
+
+def _gather_tools(
+    tool_specs: List[str], python_tools: List[str]
+) -> List[Union[Tool, Type[Toolbox]]]:
+    tools: List[Union[Tool, Type[Toolbox]]] = []
+    if python_tools:
+        for code_or_path in python_tools:
+            tools.extend(_tools_from_code(code_or_path))
+    registered_tools = get_tools()
+    registered_classes = dict(
+        (key, value)
+        for key, value in registered_tools.items()
+        if inspect.isclass(value)
+    )
+    bad_tools = [
+        tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
+    ]
+    if bad_tools:
+        # Are any of them toolbox tools?
+        bad_tool_classes = list(
+            set(
+                bad_tool.split("_")[0]
+                for bad_tool in bad_tools
+                if bad_tool[0].isupper()
+            )
+        )
+        if bad_tool_classes:
+            raise click.ClickException(
+                "Toolbox tools ({}) are not yet supported with llm -c".format(
+                    ", ".join(bad_tool_classes)
+                )
+            )
+        else:
+            raise click.ClickException(
+                "Tool(s) {} not found. Available tools: {}".format(
+                    ", ".join(bad_tools), ", ".join(registered_tools.keys())
+                )
+            )
+    for tool_spec in tool_specs:
+        if not tool_spec[0].isupper():
+            # It's a function
+            tools.append(registered_tools[tool_spec])
+        else:
+            # It's a class
+            tools.append(instantiate_from_spec(registered_classes, tool_spec))
+    return tools
+
+
+def _get_conversation_tools(conversation, tools):
+    if conversation and not tools and conversation.responses:
+        # Copy plugin tools from first response in conversation
+        initial_tools = conversation.responses[0].prompt.tools
+        if initial_tools:
+            # Only tools from plugins:
+            return [tool.name for tool in initial_tools if tool.plugin]

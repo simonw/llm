@@ -8,27 +8,20 @@
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI utility and Python library for interacting with Large Language Models, both via remote APIs and models that can be installed and run on your own machine.
+A CLI tool and Python library for interacting with **OpenAI**, **Anthropic's Claude**, **Google's Gemini**, **Meta's Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
 
-{ref}`Run prompts from the command-line <usage-executing-prompts>`, {ref}`store the results in SQLite <logging>`, {ref}`generate embeddings <embeddings>` and more.
+Watch **[Language models on the command-line](https://www.youtube.com/watch?v=QUXQNi6jQ30)** on YouTube for a demo or [read the accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
-Here's a [YouTube video demo](https://www.youtube.com/watch?v=QUXQNi6jQ30) and [accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
-
-Background on this project:
-- [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
-- [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
-- [Accessing Llama 2 from the command-line with the llm-replicate plugin](https://simonwillison.net/2023/Jul/18/accessing-llama-2/)
-- [Run Llama 2 on your own Mac using LLM and Homebrew](https://simonwillison.net/2023/Aug/1/llama-2-mac/)
-- [Catching up on the weird world of LLMs](https://simonwillison.net/2023/Aug/3/weird-world-of-llms/)
-- [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
-- [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
-- [Many options for running Mistral models in your terminal using LLM](https://simonwillison.net/2023/Dec/18/mistral/)
-
-For more check out [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
+With LLM you can:
+- {ref}`Run prompts from the command-line <usage-executing-prompts>`
+- {ref}`Store prompts and responses in SQLite <logging>`
+- {ref}`Generate and store embeddings <embeddings>`
+- {ref}`Extract structured content from text and images <schemas>`
+- ... and much, much more
 
 ## Quick start
 
-First, install LLM using `pip` or Homebrew or `pipx`:
+First, install LLM using `pip` or Homebrew or `pipx` or `uv`:
 
 ```bash
 pip install llm
@@ -59,28 +52,54 @@ llm "extract text" -a scanned-document.jpg
 # Use a system prompt against a file
 cat myfile.py | llm -s "Explain this code"
 ```
-Or you can {ref}`install a plugin <installing-plugins>` and use models that can run on your local device:
+Run prompts against [Gemini](https://aistudio.google.com/apikey) or [Anthropic](https://console.anthropic.com/) with their respective plugins:
+```bash
+llm install llm-gemini
+llm keys set gemini
+# Paste Gemini API key here
+llm -m gemini-2.0-flash 'Tell me fun facts about Mountain View'
+
+llm install llm-anthropic
+llm keys set anthropic
+# Paste Anthropic API key here
+llm -m claude-4-opus 'Impress me with wild facts about turnips'
+```
+You can also {ref}`install a plugin <installing-plugins>` to access models that can run on your local device. If you use [Ollama](https://ollama.com/):
 ```bash
 # Install the plugin
-llm install llm-gpt4all
+llm install llm-ollama
 
 # Download and run a prompt against the Orca Mini 7B model
-llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
+ollama pull llama3.2:latest
+llm -m llama3.2:latest 'What is the capital of France?'
 ```
 To start {ref}`an interactive chat <usage-chat>` with a model, use `llm chat`:
 ```bash
-llm chat -m gpt-4o
+llm chat -m gpt-4.1
 ```
 ```
-Chatting with gpt-4o
+Chatting with gpt-4.1
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > Tell me a joke about a pelican
 Why don't pelicans like to tip waiters?
 
 Because they always have a big bill!
->
 ```
+
+More background on this project:
+
+- [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
+- [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
+- [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
+- [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
+- [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
+- [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
+- [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
+
+See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 
 ## Contents
 
@@ -92,15 +111,22 @@ setup
 usage
 openai-models
 other-models
-embeddings/index
-plugins/index
-aliases
-python-api
+tools
 schemas
 templates
+fragments
+aliases
+embeddings/index
+plugins/index
+python-api
 logging
 related-tools
 help
 contributing
+```
+```{toctree}
+---
+maxdepth: 1
+---
 changelog
 ```

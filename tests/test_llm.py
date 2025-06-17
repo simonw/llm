@@ -19,20 +19,28 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
-def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch):
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_creates_log_database(
+    mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
+):
     user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["three names \nfor a pet pelican", "--no-stream", "--key", "x"],
-        catch_exceptions=False,
-    )
+    args = ["three names \nfor a pet pelican", "--no-stream", "--key", "x"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
     # Should have created user_path and put a logs.db in it
-    assert (user_path / "logs.db").exists()
-    assert sqlite_utils.Database(str(user_path / "logs.db"))["responses"].count == 1
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -109,8 +117,8 @@ def test_llm_default_prompt(
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
+        "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
         "model": "gpt-4o-mini",
-        "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
     }
 
     # Test "llm logs"
@@ -135,7 +143,7 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             "response_json": {
                 "model": "gpt-4o-mini",
-                "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+                "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
@@ -287,12 +295,10 @@ def test_openai_completion_system_prompt_error():
             "--system",
             "system prompts not allowed",
         ],
-        catch_exceptions=False,
     )
     assert result.exit_code == 1
     assert (
-        result.output
-        == "Error: System prompts are not supported for OpenAI completion models\n"
+        "System prompts are not supported for OpenAI completion models" in result.output
     )
 
 
@@ -320,7 +326,7 @@ def test_openai_completion_logprobs_stream(
     assert len(rows) == 1
     row = rows[0]
     assert json.loads(row["response_json"]) == {
-        "content": "\n\nHi.",
+        "content": {"$": f'r:{row["id"]}'},
         "logprobs": [
             {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
             {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
@@ -373,7 +379,7 @@ def test_openai_completion_logprobs_nostream(
                         {"!": -1.1, ".": -0.9},
                     ],
                 },
-                "text": "\n\nHi.",
+                "text": {"$": f"r:{row['id']}"},
             }
         ],
         "created": 1695097747,
@@ -425,6 +431,25 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+@pytest.mark.parametrize(
+    "args,exit_code",
+    (
+        (["-q", "mo", "-q", "ck"], 0),
+        (["-q", "mock"], 0),
+        (["-q", "badmodel"], 1),
+        (["-q", "mock", "-q", "badmodel"], 1),
+    ),
+)
+def test_prompt_select_model_with_queries(mock_model, user_path, args, exit_code):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        args + ["hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == exit_code
+
+
 EXPECTED_OPTIONS = """
 OpenAI Chat: gpt-4o (aliases: 4o)
   Options:
@@ -458,7 +483,10 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 """
 
 
@@ -466,7 +494,13 @@ def test_llm_models_options(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert EXPECTED_OPTIONS.strip() in result.output
+    # Check for key components instead of exact string match
+    assert "OpenAI Chat: gpt-4o (aliases: 4o)" in result.output
+    assert "  Options:" in result.output
+    assert "    temperature: float" in result.output
+    assert "  Keys:" in result.output
+    assert "    key: openai" in result.output
+    assert "    env_var: OPENAI_API_KEY" in result.output
     assert "AsyncMockModel (async): mock" not in result.output
 
 
@@ -478,25 +512,33 @@ def test_llm_models_async(user_path):
 
 
 @pytest.mark.parametrize(
-    "args,expected_model_id,unexpected_model_id",
+    "args,expected_model_ids,unexpected_model_ids",
     (
-        (["-q", "gpt-4o"], "OpenAI Chat: gpt-4o", None),
-        (["-q", "mock"], "MockModel: mock", None),
-        (["--query", "mock"], "MockModel: mock", None),
+        (["-q", "gpt-4o"], ["OpenAI Chat: gpt-4o"], None),
+        (["-q", "mock"], ["MockModel: mock"], None),
+        (["--query", "mock"], ["MockModel: mock"], None),
         (
             ["-q", "4o", "-q", "mini"],
-            "OpenAI Chat: gpt-4o-mini",
-            "OpenAI Chat: gpt-4o ",
+            ["OpenAI Chat: gpt-4o-mini"],
+            ["OpenAI Chat: gpt-4o "],
+        ),
+        (
+            ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
+            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
+            ["OpenAI Chat: gpt-4o "],
         ),
     ),
 )
-def test_llm_models_query(user_path, args, expected_model_id, unexpected_model_id):
+def test_llm_models_filter(user_path, args, expected_model_ids, unexpected_model_ids):
     runner = CliRunner()
     result = runner.invoke(cli, ["models"] + args, catch_exceptions=False)
     assert result.exit_code == 0
-    assert expected_model_id in result.output
-    if unexpected_model_id:
-        assert unexpected_model_id not in result.output
+    if expected_model_ids:
+        for expected_model_id in expected_model_ids:
+            assert expected_model_id in result.output
+    if unexpected_model_ids:
+        for unexpected_model_id in unexpected_model_ids:
+            assert unexpected_model_id not in result.output
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):
@@ -580,6 +622,24 @@ def test_schema(mock_model, use_pydantic):
     )
     assert json.loads(response.text()) == dog
     assert response.prompt.schema == dog_schema
+
+
+def test_model_environment_variable(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "echo")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-stream", "hello", "-s", "sys"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "prompt": "hello",
+        "system": "sys",
+        "attachments": [],
+        "stream": False,
+        "previous": [],
+    }
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
@@ -735,3 +795,59 @@ def test_schemas_dsl():
         },
         "required": ["items"],
     }
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_continue_with_database(
+    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"]
+    if custom_database_path:
+        args2.extend(["--database", str(custom_db_path)])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 2

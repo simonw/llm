@@ -31,6 +31,13 @@ The `llm embed` command returns a JSON array of floating point numbers directly 
 ```
 You can omit the `-m/--model` option if you set a {ref}`default embedding model <embeddings-cli-embed-models-default>`.
 
+You can also set the `LLM_EMBEDDING_MODEL` environment variable to set a default model for all `llm embed` commands in the current shell session:
+
+```bash
+export LLM_EMBEDDING_MODEL=3-small
+llm embed -c 'This is some content'
+```
+
 LLM also offers a binary storage format for embeddings, described in {ref}`embeddings storage format <embeddings-storage>`.
 
 You can output embeddings using that format as raw bytes using `--format blob`, or in hexadecimal using `--format hex`, or in Base64 using `--format base64`:
@@ -338,6 +345,14 @@ This embeds the provided string and returns a newline-delimited list of JSON obj
 ```json
 {"id": "philkarlton-1", "score": 0.8323904531677017, "content": null, "metadata": null}
 ```
+Use `-p/--plain` to get back results in plain text instead of JSON:
+```bash
+llm similar quotations -c 'computer science' -p
+```
+Example output:
+```
+philkarlton-1 (0.8323904531677017)
+```
 You can compare against text stored in a file using `-i filename`:
 ```bash
 llm similar quotations -i one.txt
@@ -349,6 +364,12 @@ echo 'computer science' | llm similar quotations -i -
 When using a model like CLIP, you can find images similar to an input image using `-i filename` with `--binary`:
 ```bash
 llm similar photos -i image.jpg --binary
+```
+
+You can filter results to only show IDs that begin with a specific prefix using --prefix:
+
+```bash
+llm similar quotations --prefix 'movies/' -c 'star wars'
 ```
 
 (embeddings-cli-embed-models)=

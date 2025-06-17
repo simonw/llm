@@ -25,7 +25,7 @@ jobs:
         pip install -e '.[test]'
     - name: Run tests
       run: |
-        pytest
+        python -m pytest -vv
     - name: Check if cog needs to be run
       if: matrix.os != 'windows-latest'
       run: |
@@ -44,8 +44,17 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: |
         ruff check .
+    - name: Check it builds
+      run: |
+        python -m build
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |
         llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh
+    - name: Upload artifact of builds
+      if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-${{ matrix.os }}-${{ matrix.python-version }}
+        path: dist/*

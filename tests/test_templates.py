@@ -1,10 +1,14 @@
 from click.testing import CliRunner
+from importlib.metadata import version
 import json
-from llm import Template
+from llm import Template, Toolbox, hookimpl, user_dir
 from llm.cli import cli
+from llm.plugins import pm
 import os
 from unittest import mock
+import pathlib
 import pytest
+import textwrap
 import yaml
 
 
@@ -17,6 +21,7 @@ import yaml
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
         ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
         ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
+        ("$one and $$2", None, None, {"one": 1}, "1 and $2", None, None),
         (
             "$one and $two",
             None,
@@ -63,6 +68,7 @@ def test_templates_list(templates_path, args):
         "system: summarize this\nprompt: $input", "utf-8"
     )
     (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
+    (templates_path / "invalid.yaml").write_text("system2: This is invalid", "utf-8")
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
@@ -77,7 +83,7 @@ def test_templates_list(templates_path, args):
 
 
 @pytest.mark.parametrize(
-    "args,expected_prompt,expected_error",
+    "args,expected,expected_error",
     (
         (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
         (["hello $foo"], {"prompt": "hello $foo"}, None),
@@ -89,6 +95,12 @@ def test_templates_list(templates_path, args):
         (
             ["Say hello as $name", "-p", "name", "default-name"],
             {"prompt": "Say hello as $name", "defaults": {"name": "default-name"}},
+            None,
+        ),
+        # Options
+        (
+            ["-o", "temperature", "0.5", "--system", "in french"],
+            {"system": "in french", "options": {"temperature": 0.5}},
             None,
         ),
         # -x/--extract should be persisted:
@@ -110,18 +122,45 @@ def test_templates_list(templates_path, args):
             },
             None,
         ),
+        # And fragments and system_fragments
+        (
+            ["--fragment", "f1.txt", "--system-fragment", "https://example.com/f2.txt"],
+            {
+                "fragments": ["f1.txt"],
+                "system_fragments": ["https://example.com/f2.txt"],
+            },
+            None,
+        ),
+        # And attachments and attachment_types
+        (
+            ["--attachment", "a.txt", "--attachment-type", "b.txt", "text/plain"],
+            {
+                "attachments": ["a.txt"],
+                "attachment_types": [{"type": "text/plain", "value": "b.txt"}],
+            },
+            None,
+        ),
     ),
 )
-def test_templates_prompt_save(templates_path, args, expected_prompt, expected_error):
+def test_templates_prompt_save(templates_path, args, expected, expected_error):
     assert not (templates_path / "saved.yaml").exists()
     runner = CliRunner()
-    result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
+    with runner.isolated_filesystem():
+        # Create a file to test attachment
+        pathlib.Path("a.txt").write_text("attachment", "utf-8")
+        pathlib.Path("b.txt").write_text("attachment type", "utf-8")
+        result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
     if not expected_error:
         assert result.exit_code == 0
-        assert (
-            yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
-            == expected_prompt
-        )
+        yaml_data = yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
+        # Adjust attachment and attachment_types paths to be just the filename
+        if "attachments" in yaml_data:
+            yaml_data["attachments"] = [
+                os.path.basename(path) for path in yaml_data["attachments"]
+            ]
+        for item in yaml_data.get("attachment_types", []):
+            item["value"] = os.path.basename(item["value"])
+        assert yaml_data == expected
     else:
         assert result.exit_code == 1
         assert expected_error in result.output
@@ -146,79 +185,355 @@ def test_templates_error_on_missing_schema(templates_path):
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize(
-    "template,extra_args,expected_model,expected_input,expected_error",
+    "template,input_text,extra_args,expected_model,expected_input,expected_error,expected_options",
     (
         (
             "'Summarize this: $input'",
+            "Input text",
             [],
             "gpt-4o-mini",
             "Summarize this: Input text",
+            None,
             None,
         ),
         (
             "prompt: 'Summarize this: $input'\nmodel: gpt-4",
+            "Input text",
             [],
             "gpt-4",
             "Summarize this: Input text",
+            None,
             None,
         ),
         (
             "prompt: 'Summarize this: $input'",
+            "Input text",
             ["-m", "4"],
             "gpt-4",
             "Summarize this: Input text",
             None,
+            None,
         ),
+        # -s system prompt should over-ride template system prompt
         pytest.param(
             "boo",
-            ["-s", "s"],
+            "Input text",
+            ["-s", "custom system"],
+            "gpt-4o-mini",
+            [
+                {"role": "system", "content": "custom system"},
+                {"role": "user", "content": "boo\nInput text"},
+            ],
             None,
             None,
-            "Error: Cannot use -t/--template and --system together",
             marks=pytest.mark.httpx_mock(),
         ),
         pytest.param(
             "prompt: 'Say $hello'",
+            "Input text",
             [],
             None,
             None,
             "Error: Missing variables: hello",
+            None,
             marks=pytest.mark.httpx_mock(),
         ),
+        # Template generated prompt should combine with CLI prompt
         (
             "prompt: 'Say $hello'",
+            "Input text",
             ["-p", "hello", "Blah"],
             "gpt-4o-mini",
-            "Say Blah",
+            "Say Blah\nInput text",
             None,
+            None,
+        ),
+        (
+            "prompt: 'Say pelican'",
+            "",
+            [],
+            "gpt-4o-mini",
+            "Say pelican",
+            None,
+            None,
+        ),
+        # Template with just a system prompt
+        (
+            "system: 'Summarize this'",
+            "Input text",
+            [],
+            "gpt-4o-mini",
+            [
+                {"content": "Summarize this", "role": "system"},
+                {"content": "Input text", "role": "user"},
+            ],
+            None,
+            None,
+        ),
+        # Options
+        (
+            "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
+            "Input text",
+            [],
+            "gpt-4o-mini",
+            "Summarize this: Input text",
+            None,
+            {"temperature": 0.5},
+        ),
+        # Should be over-ridden by CLI
+        (
+            "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
+            "Input text",
+            ["-o", "temperature", "0.7"],
+            "gpt-4o-mini",
+            "Summarize this: Input text",
+            None,
+            {"temperature": 0.7},
         ),
     ),
 )
-def test_template_basic(
+def test_execute_prompt_with_a_template(
     templates_path,
     mocked_openai_chat,
     template,
+    input_text,
     extra_args,
     expected_model,
     expected_input,
     expected_error,
+    expected_options,
 ):
     (templates_path / "template.yaml").write_text(template, "utf-8")
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-stream", "-t", "template", "Input text"] + extra_args,
+        ["--no-stream", "-t", "template"]
+        + ([input_text] if input_text else [])
+        + extra_args,
         catch_exceptions=False,
     )
+    if isinstance(expected_input, str):
+        expected_messages = [{"role": "user", "content": expected_input}]
+    else:
+        expected_messages = expected_input
+
     if expected_error is None:
         assert result.exit_code == 0
         last_request = mocked_openai_chat.get_requests()[-1]
-        assert json.loads(last_request.content) == {
+        expected_data = {
             "model": expected_model,
-            "messages": [{"role": "user", "content": expected_input}],
+            "messages": expected_messages,
             "stream": False,
         }
+        if expected_options:
+            expected_data.update(expected_options)
+        assert json.loads(last_request.content) == expected_data
     else:
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
         mocked_openai_chat.reset()
+
+
+@pytest.mark.parametrize(
+    "template,expected",
+    (
+        (
+            "system: system\nprompt: prompt",
+            {
+                "prompt": "prompt",
+                "system": "system",
+                "attachments": [],
+                "stream": True,
+                "previous": [],
+            },
+        ),
+        (
+            "prompt: |\n  This is\n  ```\n  code to extract\n  ```",
+            {
+                "prompt": "This is\n```\ncode to extract\n```",
+                "system": "",
+                "attachments": [],
+                "stream": True,
+                "previous": [],
+            },
+        ),
+        # Now try that with extract: true
+        (
+            'extract: true\nprompt: |\n  {"raw": "This is\\n```\\ncode to extract\\n```"}',
+            "code to extract",
+        ),
+    ),
+)
+def test_execute_prompt_from_template_url(httpx_mock, template, expected):
+    httpx_mock.add_response(
+        url="https://example.com/prompt.yaml",
+        method="GET",
+        text=template,
+        status_code=200,
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-t", "https://example.com/prompt.yaml", "-m", "echo"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    if isinstance(expected, dict):
+        assert json.loads(result.output.strip()) == expected
+    else:
+        assert result.output.strip() == expected
+
+
+def test_execute_prompt_from_template_path():
+    runner = CliRunner()
+    with runner.isolated_filesystem() as temp_dir:
+        path = pathlib.Path(temp_dir) / "my-template.yaml"
+        path.write_text("system: system\nprompt: prompt", "utf-8")
+        result = runner.invoke(
+            cli,
+            ["-t", str(path), "-m", "echo"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output) == {
+            "prompt": "prompt",
+            "system": "system",
+            "attachments": [],
+            "stream": True,
+            "previous": [],
+        }
+
+
+FUNCTIONS_EXAMPLE = """
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+"""
+
+
+class Greeting(Toolbox):
+    def __init__(self, greeting: str):
+        self.greeting = greeting
+
+    def greet(self, name: str) -> str:
+        "Greet name with a greeting"
+        return f"{self.greeting}, {name}!"
+
+
+class GreetingsPlugin:
+    __name__ = "GreetingsPlugin"
+
+    @hookimpl
+    def register_tools(self, register):
+        register(Greeting)
+
+
+@pytest.mark.parametrize(
+    "source,expected_tool_success,expected_functions_success",
+    (
+        ("alias", True, True),
+        ("file", True, True),
+        # Loaded from URL or plugin = functions: should not work
+        ("url", True, False),
+        ("plugin", True, False),
+    ),
+)
+def test_tools_in_templates(
+    source, expected_tool_success, expected_functions_success, httpx_mock, tmpdir
+):
+    template_yaml = textwrap.dedent(
+        """
+    name: test
+    tools:
+    - llm_version
+    - Greeting("hi")
+    functions: |
+      def demo():
+          return "Demo"
+    """
+    )
+    args = []
+
+    def before():
+        pass
+
+    def after():
+        pass
+
+    if source == "alias":
+        args = ["-t", "test"]
+        (user_dir() / "templates").mkdir(parents=True, exist_ok=True)
+        (user_dir() / "templates" / "test.yaml").write_text(template_yaml, "utf-8")
+    elif source == "file":
+        (tmpdir / "test.yaml").write_text(template_yaml, "utf-8")
+        args = ["-t", str(tmpdir / "test.yaml")]
+    elif source == "url":
+        httpx_mock.add_response(
+            url="https://example.com/test.yaml",
+            method="GET",
+            text=template_yaml,
+            status_code=200,
+            is_reusable=True,
+        )
+        args = ["-t", "https://example.com/test.yaml"]
+    elif source == "plugin":
+
+        class LoadTemplatePlugin:
+            __name__ = "LoadTemplatePlugin"
+
+            @hookimpl
+            def register_template_loaders(self, register):
+                register(
+                    "tool-template",
+                    lambda s: Template(
+                        name="tool-template",
+                        tools=["llm_version", 'Greeting("hi")'],
+                        functions=FUNCTIONS_EXAMPLE,
+                    ),
+                )
+
+        def before():
+            pm.register(LoadTemplatePlugin(), name="test-tools-in-templates")
+
+        def after():
+            pm.unregister(name="test-tools-in-templates")
+
+        args = ["-t", "tool-template:"]
+
+    before()
+    pm.register(GreetingsPlugin(), name="greetings-plugin")
+    try:
+        runner = CliRunner()
+        # Test llm_version, then Greeting, then demo
+        for tool_call, text, should_be_present in (
+            ({"name": "llm_version"}, version("llm"), True),
+            (
+                {"name": "Greeting_greet", "arguments": {"name": "Alice"}},
+                "hi, Alice",
+                expected_tool_success,
+            ),
+            (
+                {"name": "Greeting_greet", "arguments": {"name": "Bob"}},
+                "hi, Bob!",
+                expected_tool_success,
+            ),
+            ({"name": "demo"}, '"output": "Demo"', expected_functions_success),
+        ):
+            result = runner.invoke(
+                cli,
+                args
+                + [
+                    "-m",
+                    "echo",
+                    "--no-stream",
+                    json.dumps({"tool_calls": [tool_call]}),
+                ],
+                catch_exceptions=False,
+            )
+            assert result.exit_code == 0
+            if should_be_present:
+                assert text in result.output
+            else:
+                assert text not in result.output
+    finally:
+        after()
+        pm.unregister(name="greetings-plugin")

@@ -24,8 +24,8 @@ import yaml
 def register_models(register):
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True, supports_schema=True),
-        AsyncChat("gpt-4o", vision=True, supports_schema=True),
+        Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
         aliases=("4o",),
     )
     register(
@@ -34,8 +34,10 @@ def register_models(register):
         aliases=("chatgpt-4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True),
-        AsyncChat("gpt-4o-mini", vision=True, supports_schema=True),
+        Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat(
+            "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
+        ),
         aliases=("4o-mini",),
     )
     for audio_model_id in (
@@ -48,6 +50,13 @@ def register_models(register):
         register(
             Chat(audio_model_id, audio=True),
             AsyncChat(audio_model_id, audio=True),
+        )
+    # GPT-4.1
+    for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+        register(
+            Chat(model_id, vision=True, supports_schema=True, supports_tools=True),
+            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True),
+            aliases=(model_id.replace("gpt-", ""),),
         )
     # 3.5 and 4
     register(
@@ -71,12 +80,24 @@ def register_models(register):
     )
     # GPT-4.5
     register(
-        Chat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
-        AsyncChat("gpt-4.5-preview-2025-02-27", vision=True, supports_schema=True),
+        Chat(
+            "gpt-4.5-preview-2025-02-27",
+            vision=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "gpt-4.5-preview-2025-02-27",
+            vision=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
     )
     register(
-        Chat("gpt-4.5-preview", vision=True, supports_schema=True),
-        AsyncChat("gpt-4.5-preview", vision=True, supports_schema=True),
+        Chat("gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat(
+            "gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True
+        ),
         aliases=("gpt-4.5",),
     )
     # o1
@@ -88,6 +109,7 @@ def register_models(register):
                 can_stream=False,
                 reasoning=True,
                 supports_schema=True,
+                supports_tools=True,
             ),
             AsyncChat(
                 model_id,
@@ -95,6 +117,7 @@ def register_models(register):
                 can_stream=False,
                 reasoning=True,
                 supports_schema=True,
+                supports_tools=True,
             ),
         )
 
@@ -107,8 +130,32 @@ def register_models(register):
         AsyncChat("o1-mini", allows_system_prompt=False),
     )
     register(
-        Chat("o3-mini", reasoning=True, supports_schema=True),
-        AsyncChat("o3-mini", reasoning=True, supports_schema=True),
+        Chat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        AsyncChat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+    )
+    register(
+        Chat(
+            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+        ),
+        AsyncChat(
+            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+        ),
+    )
+    register(
+        Chat(
+            "o4-mini",
+            vision=True,
+            reasoning=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "o4-mini",
+            vision=True,
+            reasoning=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
     )
     # The -instruct completion model
     register(
@@ -135,6 +182,14 @@ def register_models(register):
         kwargs = {}
         if extra_model.get("can_stream") is False:
             kwargs["can_stream"] = False
+        if extra_model.get("supports_schema") is True:
+            kwargs["supports_schema"] = True
+        if extra_model.get("supports_tools") is True:
+            kwargs["supports_tools"] = True
+        if extra_model.get("vision") is True:
+            kwargs["vision"] = True
+        if extra_model.get("audio") is True:
+            kwargs["audio"] = True
         if extra_model.get("completion"):
             klass = Completion
         else:
@@ -378,6 +433,16 @@ def _attachment(attachment):
     if not url or attachment.resolve_type().startswith("audio/"):
         base64_content = attachment.base64_content()
         url = f"data:{attachment.resolve_type()};base64,{base64_content}"
+    if attachment.resolve_type() == "application/pdf":
+        if not base64_content:
+            base64_content = attachment.base64_content()
+        return {
+            "type": "file",
+            "file": {
+                "filename": f"{attachment.id()}.pdf",
+                "file_data": f"data:application/pdf;base64,{base64_content}",
+            },
+        }
     if attachment.resolve_type().startswith("image/"):
         return {"type": "image_url", "image_url": {"url": url}}
     else:
@@ -407,11 +472,13 @@ class _Shared:
         audio=False,
         reasoning=False,
         supports_schema=False,
+        supports_tools=False,
         allows_system_prompt=True,
     ):
         self.model_id = model_id
         self.key = key
         self.supports_schema = supports_schema
+        self.supports_tools = supports_tools
         self.model_name = model_name
         self.api_base = api_base
         self.api_type = api_type
@@ -434,6 +501,7 @@ class _Shared:
                     "image/jpeg",
                     "image/webp",
                     "image/gif",
+                    "application/pdf",
                 }
             )
 
@@ -470,17 +538,52 @@ class _Shared:
                     for attachment in prev_response.attachments:
                         attachment_message.append(_attachment(attachment))
                     messages.append({"role": "user", "content": attachment_message})
-                else:
+                elif prev_response.prompt.prompt:
                     messages.append(
                         {"role": "user", "content": prev_response.prompt.prompt}
                     )
-                messages.append(
-                    {"role": "assistant", "content": prev_response.text_or_raise()}
-                )
+                for tool_result in prev_response.prompt.tool_results:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_result.tool_call_id,
+                            "content": tool_result.output,
+                        }
+                    )
+                prev_text = prev_response.text_or_raise()
+                if prev_text:
+                    messages.append({"role": "assistant", "content": prev_text})
+                tool_calls = prev_response.tool_calls_or_raise()
+                if tool_calls:
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "id": tool_call.tool_call_id,
+                                    "function": {
+                                        "name": tool_call.name,
+                                        "arguments": json.dumps(tool_call.arguments),
+                                    },
+                                }
+                                for tool_call in tool_calls
+                            ],
+                        }
+                    )
         if prompt.system and prompt.system != current_system:
             messages.append({"role": "system", "content": prompt.system})
+        for tool_result in prompt.tool_results:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_result.tool_call_id,
+                    "content": tool_result.output,
+                }
+            )
         if not prompt.attachments:
-            messages.append({"role": "user", "content": prompt.prompt or ""})
+            if prompt.prompt:
+                messages.append({"role": "user", "content": prompt.prompt or ""})
         else:
             attachment_message = []
             if prompt.prompt:
@@ -537,6 +640,18 @@ class _Shared:
                 "type": "json_schema",
                 "json_schema": {"name": "output", "schema": prompt.schema},
             }
+        if prompt.tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description or None,
+                        "parameters": tool.input_schema,
+                    },
+                }
+                for tool in prompt.tools
+            ]
         if stream:
             kwargs["stream_options"] = {"include_usage": True}
         return kwargs
@@ -568,10 +683,19 @@ class Chat(_Shared, KeyModel):
                 **kwargs,
             )
             chunks = []
+            tool_calls = {}
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
+                if chunk.choices and chunk.choices[0].delta:
+                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        index = tool_call.index
+                        if index not in tool_calls:
+                            tool_calls[index] = tool_call
+                        tool_calls[
+                            index
+                        ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
@@ -579,6 +703,17 @@ class Chat(_Shared, KeyModel):
                 if content is not None:
                     yield content
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
+            if tool_calls:
+                for value in tool_calls.values():
+                    # value.function looks like this:
+                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
+                    response.add_tool_call(
+                        llm.ToolCall(
+                            tool_call_id=value.id,
+                            name=value.function.name,
+                            arguments=json.loads(value.function.arguments),
+                        )
+                    )
         else:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -588,7 +723,16 @@ class Chat(_Shared, KeyModel):
             )
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
-            yield completion.choices[0].message.content
+            for tool_call in completion.choices[0].message.tool_calls or []:
+                response.add_tool_call(
+                    llm.ToolCall(
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        arguments=json.loads(tool_call.function.arguments),
+                    )
+                )
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -621,16 +765,38 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 **kwargs,
             )
             chunks = []
+            tool_calls = {}
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 chunks.append(chunk)
+                if chunk.usage:
+                    usage = chunk.usage.model_dump()
+                if chunk.choices and chunk.choices[0].delta:
+                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        index = tool_call.index
+                        if index not in tool_calls:
+                            tool_calls[index] = tool_call
+                        tool_calls[
+                            index
+                        ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
                 if content is not None:
                     yield content
+            if tool_calls:
+                for value in tool_calls.values():
+                    # value.function looks like this:
+                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
+                    response.add_tool_call(
+                        llm.ToolCall(
+                            tool_call_id=value.id,
+                            name=value.function.name,
+                            arguments=json.loads(value.function.arguments),
+                        )
+                    )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
         else:
             completion = await client.chat.completions.create(
@@ -641,7 +807,16 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
-            yield completion.choices[0].message.content
+            for tool_call in completion.choices[0].message.tool_calls or []:
+                response.add_tool_call(
+                    llm.ToolCall(
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        arguments=json.loads(tool_call.function.arguments),
+                    )
+                )
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -720,7 +895,7 @@ def combine_chunks(chunks: List) -> dict:
 
     for item in chunks:
         if item.usage:
-            usage = item.usage.dict()
+            usage = item.usage.model_dump()
         for choice in item.choices:
             if choice.logprobs and hasattr(choice.logprobs, "top_logprobs"):
                 logprobs.append(

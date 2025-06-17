@@ -211,9 +211,21 @@ def test_similar_by_id_cli(user_path_with_embeddings):
     assert json.loads(result.output) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
+
+
+@pytest.mark.parametrize("option", ("-p", "--plain"))
+def test_similar_by_id_cli_output_plain(user_path_with_embeddings, option):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["similar", "demo", "1", option], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    # Replace score with a placeholder
+    output = result.output.split("(")[0] + "(score)" + result.output.split(")")[1]
+    assert output == "2 (score)\n\n  goodbye world\n\n"
 
 
 @pytest.mark.parametrize("scenario", ("argument", "file", "stdin"))
@@ -237,15 +249,51 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
     assert json.loads(lines[0]) == {
         "id": "1",
         "score": pytest.approx(0.9999999999999999),
-        "content": None,
+        "content": "hello world",
         "metadata": None,
     }
     assert json.loads(lines[1]) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
+
+
+@pytest.mark.parametrize(
+    "prefix,expected_result",
+    (
+        (
+            1,
+            {
+                "id": "1",
+                "score": pytest.approx(0.7071067811865475),
+                "content": "hello world",
+                "metadata": None,
+            },
+        ),
+        (
+            2,
+            {
+                "id": "2",
+                "score": pytest.approx(0.8137334712067349),
+                "content": "goodbye world",
+                "metadata": None,
+            },
+        ),
+    ),
+)
+def test_similar_by_content_prefixed(
+    user_path_with_embeddings, prefix, expected_result
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output) == expected_result
 
 
 @pytest.mark.parametrize("use_stdin", (False, True))

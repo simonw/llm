@@ -13,11 +13,19 @@ To run a prompt against the `gpt-4o-mini` model, run this:
 import llm
 
 model = llm.get_model("gpt-4o-mini")
-# Optional, you can configure the key in other ways:
-model.key = "sk-..."
-response = model.prompt("Five surprising names for a pet pelican")
+# key= is optional, you can configure the key in other ways
+response = model.prompt(
+    "Five surprising names for a pet pelican",
+    key="sk-..."
+)
 print(response.text())
 ```
+Note that the prompt will not be evaluated until you call that `response.text()` method - a form of lazy loading.
+
+If you inspect the response before it has been evaluated it will look like this:
+
+    <Response prompt='Your prompt' text='... not yet done ...'>
+
 The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
@@ -54,7 +62,7 @@ response = model.prompt(
 
 ### Attachments
 
-Model that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
+Models that accept multi-modal input (images, audio, video etc) can be passed attachments using the `attachments=` keyword argument. This accepts a list of `llm.Attachment()` instances.
 
 This example shows two attachments - one from a file path and one from a URL:
 ```python
@@ -82,6 +90,192 @@ if "image/jpeg" in model.attachment_types:
     # Use a JPEG attachment here
     ...
 ```
+
+(python-api-tools)=
+
+### Tools
+
+{ref}`Tools <tools>` are functions that can be executed by the model as part of a chain of responses.
+
+You can define tools in Python code - with a docstring to describe what they do - and then pass them to the `model.prompt()` method using the `tools=` keyword argument. If the model decides to request a tool call the `response.tool_calls()` method show what the model wants to execute:
+
+```python
+import llm
+
+def upper(text: str) -> str:
+    """Convert text to uppercase."""
+    return text.upper()
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.prompt("Convert panda to upper", tools=[upper])
+tool_calls = response.tool_calls()
+# [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
+```
+You can call `response.execute_tool_calls()` to execute those calls and get back the results:
+```python
+tool_results = response.execute_tool_calls()
+# [ToolResult(name='upper', output='PANDA', tool_call_id='...')]
+```
+You can use the `model.chain()` to pass the results of tool calls back to the model automatically as subsequent prompts:
+```python
+chain_response = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+print(chain_response.text())
+# The word "panda" converted to uppercase is "PANDA".
+```
+You can also loop through the `model.chain()` response to get a stream of tokens, like this:
+```python
+for chunk in model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+):
+    print(chunk, end="", flush=True)
+```
+This will stream each of the chain of responses in turn as they are generated.
+
+You can access the individual responses that make up the chain using `chain.responses()`. This can be iterated over as the chain executes like this:
+
+```python
+chain = model.chain(
+    "Convert panda to upper",
+    tools=[upper],
+)
+for response in chain.responses():
+    print(response.prompt)
+    for chunk in response:
+        print(chunk, end="", flush=True)
+```
+
+(python-api-tools-debug-hooks)=
+
+#### Tool debugging hooks
+
+Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
+
+The method signature is `def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
+
+Here's an example:
+```python
+import llm
+from typing import Optional
+
+def upper(text: str) -> str:
+    "Convert text to uppercase."
+    return text.upper()
+
+def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall):
+    print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
+    if tool.name == "upper" and "bad" in repr(tool_call.arguments):
+        raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    before_call=before_call,
+)
+print(response.text())
+```
+If you raise `llm.CancelToolCall` in the `before_call` function the model will be informed that the tool call was cancelled.
+
+The `after_call=` parameter can be used to run a logging function after each tool call has been executed. The method signature is `def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult)`. This continues the previous example:
+```python
+def after_call(tool: llm.Tool, tool_call: llm.ToolCall, tool_result: llm.ToolResult):
+    print(f"Tool {tool.name} called with arguments {tool_call.arguments} returned {tool_result.output}")
+
+response = model.chain(
+    "Convert panda to upper and badger to upper",
+    tools=[upper],
+    after_call=after_call,
+)
+print(response.text())
+```
+
+(python-api-tools-attachments)=
+
+#### Tools can return attachments
+
+Tools can return {ref}`attachments <python-api-attachments>` in addition to returning text. Attachments that are returned from a tool call will be passed to the model as attachments for the next prompt in the chain.
+
+To return one or more attachments, return a `llm.ToolOutput` instance from your tool function. This can have an `output=` string and an `attachments=` list of `llm.Attachment` instances.
+
+Here's an example:
+```python
+import llm
+
+def generate_image(prompt: str) -> llm.ToolOutput:
+    """Generate an image based on the prompt."""
+    image_content = generate_image_from_prompt(prompt)
+    return llm.ToolOutput(
+        output="Image generated successfully",
+        attachments=[llm.Attachment(
+            content=image_content,
+            mimetype="image/png"
+        )],
+    )
+```
+
+(python-api-toolbox)=
+
+#### Toolbox classes
+
+Functions are useful for simple tools, but some tools may have more advanced needs. You can also define tools as a class (known as a "toolbox"), which provides the following advantages:
+
+- Toolbox tools can bundle multiple tools together
+- Toolbox tools can be configured, e.g. to give filesystem tools access to a specific directory
+- Toolbox instances can persist shared state in between tool invocations
+
+Toolboxes are classes that extend `llm.Toolbox`. Any methods that do not begin with an underscore will be exposed as tool functions.
+
+This example sets up key/value memory storage that can be used by the model:
+```python
+import llm
+
+class Memory(llm.Toolbox):
+    _memory = None
+
+    def _get_memory(self):
+        if self._memory is None:
+            self._memory = {}
+        return self._memory
+
+    def set(self, key: str, value: str):
+        "Set something as a key"
+        self._get_memory()[key] = value
+
+    def get(self, key: str):
+        "Get something from a key"
+        return self._get_memory().get(key) or ""
+
+    def append(self, key: str, value: str):
+        "Append something as a key"
+        memory = self._get_memory()
+        memory[key] = (memory.get(key) or "") + "\n" + value
+
+    def keys(self):
+        "Return a list of keys"
+        return list(self._get_memory().keys())
+```
+You can then use that from Python like this:
+```python
+model = llm.get_model("gpt-4.1-mini")
+memory = Memory()
+
+conversation = model.conversation(tools=[memory])
+print(conversation.chain("Set name to Simon", after_call=print).text())
+
+print(memory._memory)
+# Should show {'name': 'Simon'}
+
+print(conversation.chain("Set name to Penguin", after_call=print).text())
+# Now it should be {'name': 'Penguin'}
+
+print(conversation.chain("Print current name", after_call=print).text())
+```
+
+See the {ref}`register_tools() plugin hook documentation <plugin-hooks-register-tools>` for an example of this tool in action as a CLI plugin.
 
 (python-api-schemas)=
 
@@ -134,6 +328,32 @@ print(model.prompt(
     schema=llm.schema_dsl("name, age int, bio", multi=True)
 ))
 ```
+
+(python-api-fragments)=
+
+### Fragments
+
+The {ref}`fragment system <usage-fragments>` from the CLI tool can also be accessed from the Python API, by passing `fragments=` and/or `system_fragments=` lists of strings to the `prompt()` method:
+
+```python
+response = model.prompt(
+    "What do these documents say about dogs?",
+    fragments=[
+        open("dogs1.txt").read(),
+        open("dogs2.txt").read(),
+    ],
+    system_fragments=[
+        "You answer questions like Snoopy",
+    ]
+)
+```
+This mechanism has limited utility in Python, as you can also assemble the contents of these strings together into the `prompt=` and `system=` strings directly.
+
+Fragments become more interesting if you are working with LLM's mechanisms for storing prompts to a SQLite database, which are not yet part of the stable, documented Python API.
+
+Some model plugins may include features that take advantage of fragments, for example [llm-anthropic](https://github.com/simonw/llm-anthropic) aims to use them as part of a mechanism that taps into Claude's prompt caching system.
+
+
 (python-api-model-options)=
 
 ### Model options
@@ -273,10 +493,9 @@ model = llm.get_async_model("gpt-4o")
 You can then run a prompt using `await model.prompt(...)`:
 
 ```python
-response = await model.prompt(
+print(await model.prompt(
     "Five surprising names for a pet pelican"
-)
-print(await response.text())
+).text())
 ```
 Or use `async for chunk in ...` to stream the response as it is generated:
 ```python
@@ -286,6 +505,59 @@ async for chunk in model.prompt(
     print(chunk, end="", flush=True)
 ```
 This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
+
+(python-api-async-tools)=
+
+### Tool functions can be sync or async
+
+{ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
+
+If an `async def` function is used in a synchronous context LLM will automatically execute it in a thread pool using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
+
+```python
+async def hello(name: str) -> str:
+    "Say hello to name"
+    return "Hello there " + name
+
+model = llm.get_model("gpt-4.1-mini")
+chain_response = model.chain(
+    "Say hello to Percival", tools=[hello]
+)
+print(chain_response.text())
+```
+This also works for `async def` methods of `llm.Toolbox` subclasses.
+
+### Tool use for async models
+
+Tool use is also supported for async models, using either synchronous or asynchronous tool functions. Synchronous functions will block the event loop so only use those in asynchronous context if you are certain they are extremely fast.
+
+The `response.execute_tool_calls()` and `chain_response.text()` and `chain_response.responses()` methods must all be awaited when run against asynchronous models:
+
+```python
+import llm
+model = llm.get_async_model("gpt-4.1")
+
+def upper(string):
+    "Converts string to uppercase"
+    return string.upper()
+
+chain = model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper],
+    after_call=print
+)
+print(await chain.text())
+```
+
+To iterate over the chained response output as it arrives use `async for`:
+```python
+async for chunk in model.chain(
+    "Convert panda to uppercase then pelican to uppercase",
+    tools=[upper]
+):
+    print(chunk, end="", flush=True)
+```
+The `before_call` and `after_call` hooks can be async functions when used with async models.
 
 (python-api-conversations)=
 
@@ -323,6 +595,35 @@ response = conversation.prompt(
 ```
 
 Access `conversation.responses` for a list of all of the responses that have so far been returned during the conversation.
+
+### Conversations using tools
+
+You can pass a list of tool functions to the `tools=[]` argument when you start a new conversation:
+```python
+import llm
+
+def upper(text: str) -> str:
+    "convert text to upper case"
+    return text.upper()
+
+def reverse(text: str) -> str:
+    "reverse text"
+    return text[::-1]
+
+model = llm.get_model("gpt-4.1-mini")
+conversation = model.conversation(tools=[upper, reverse])
+```
+You can then call the `conversation.chain()` method multiple times to have a conversation that uses those tools:
+```python
+print(conversation.chain(
+    "Convert panda to uppercase and reverse it"
+).text())
+print(conversation.chain(
+    "Same with pangolin"
+).text())
+```
+The `before_call=` and `after_call=` parameters {ref}`described above <python-api-tools-debug-hooks>` can be passed directly to the `model.conversation()` method to set those options for all chained prompts in that conversation.
+
 
 (python-api-listing-models)=
 

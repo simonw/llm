@@ -2,6 +2,7 @@ import pytest
 import sqlite_utils
 import json
 import llm
+import llm_echo
 from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
@@ -31,8 +32,8 @@ def user_path_with_embeddings(user_path):
     path = str(user_path / "embeddings.db")
     db = sqlite_utils.Database(path)
     collection = llm.Collection("demo", db, model_id="embed-demo")
-    collection.embed("1", "hello world")
-    collection.embed("2", "goodbye world")
+    collection.embed("1", "hello world", store=True)
+    collection.embed("2", "goodbye world", store=True)
 
 
 @pytest.fixture
@@ -60,6 +61,7 @@ class MockModel(llm.Model):
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -80,6 +82,8 @@ class MockModel(llm.Model):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class MockKeyModel(llm.KeyModel):
@@ -105,6 +109,7 @@ class AsyncMockModel(llm.AsyncModel):
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -125,6 +130,8 @@ class AsyncMockModel(llm.AsyncModel):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class EmbedDemo(llm.EmbeddingModel):
@@ -205,6 +212,22 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
         yield
     finally:
         pm.unregister(name="undo-mock-models-plugin")
+
+
+@pytest.fixture(autouse=True)
+def register_echo_model():
+    class EchoModelPlugin:
+        __name__ = "EchoModelPlugin"
+
+        @llm.hookimpl
+        def register_models(self, register):
+            register(llm_echo.Echo(), llm_echo.EchoAsync())
+
+    pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
+    try:
+        yield
+    finally:
+        pm.unregister(name="undo-EchoModelPlugin")
 
 
 @pytest.fixture
@@ -448,3 +471,16 @@ def collection():
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"filter_headers": ["Authorization"]}
+
+
+def extract_braces(s):
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and first < last:
+        return s[first : last + 1]
+    return None

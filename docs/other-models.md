@@ -47,6 +47,12 @@ Add `completion: true` if the model is a completion model that uses a `/completi
 
 If a model does not support streaming, add `can_stream: false` to disable the streaming option.
 
+If a model supports structured output via JSON schemas, you can add `supports_schema: true` to support this feature.
+
+If a model is a vision model, you can add `vision: true` to support this feature and use image attachments.
+
+If a model is an audio model, you can add `audio: true` to support this feature and use audio attachments.
+
 Having configured the model like this, run `llm models` to check that it installed correctly. You can then run prompts against it like so:
 
 ```bash

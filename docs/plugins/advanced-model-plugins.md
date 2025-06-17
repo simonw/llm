@@ -1,9 +1,24 @@
 (advanced-model-plugins)=
 # Advanced model plugins
 
-The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of developing a plugin that adds support for a new model.
+The {ref}`model plugin tutorial <tutorial-model-plugin>` covers the basics of developing a plugin that adds support for a new model. This document covers more advanced topics.
 
-This document covers more advanced topics.
+Features to consider for your model plugin include:
+
+- {ref}`Accepting API keys <advanced-model-plugins-api-keys>` using the standard mechanism that incorporates `llm keys set`, environment variables and support for passing an explicit key to the model.
+- Including support for {ref}`Async models <advanced-model-plugins-async>` that can be used with Python's `asyncio` library.
+- Support for {ref}`structured output <advanced-model-plugins-schemas>` using JSON schemas.
+- Support for {ref}`tools <advanced-model-plugins-tools>`.
+- Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
+- Tracking {ref}`token usage <advanced-model-plugins-usage>` for models that charge by the token.
+
+(advanced-model-plugins-lazy)=
+
+## Tip: lazily load expensive dependencies
+
+If your plugin depends on an expensive library such as [PyTorch](https://pytorch.org/) you should avoid importing that dependency (or a dependency that uses that dependency) at the top level of your module. Expensive imports in plugins mean that even simple commands like `llm --help` can take a long time to run.
+
+Instead, move those imports to inside the methods that need them. Here's an example [change to llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers/commit/f87df71e8a652a8cb05ad3836a79b815bcbfa64b) that shaved 1.8 seconds off the time it took to run `llm --help`!
 
 (advanced-model-plugins-api-keys)=
 
@@ -67,7 +82,8 @@ class MyAsyncModel(llm.AsyncModel):
                 messages=messages,
                 stream=False,
             )
-            yield completion.choices[0].message.content
+            if completion.choices[0].message.content is not None:
+                yield completion.choices[0].message.content
 ```
 If your model takes an API key you should instead subclass `llm.AsyncKeyModel` and have a `key=` parameter on your `.execute()` method:
 
@@ -78,7 +94,6 @@ class MyAsyncModel(llm.AsyncKeyModel):
         self, prompt, stream, response, conversation=None, key=None
     ) -> AsyncGenerator[str, None]:
 ```
-
 
 This async model instance should then be passed to the `register()` method in the `register_models()` plugin hook:
 
@@ -106,6 +121,32 @@ And then adding code to your `.execute()` method that checks for `prompt.schema`
 `prompt.schema` will always be a Python dictionary representing a JSON schema, even if the user passed in a Pydantic model class.
 
 Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic](https://github.com/simonw/llm-anthropic) plugins for example of this pattern in action.
+
+(advanced-model-plugins-tools)=
+
+## Supporting tools
+
+Adding {ref}`tools support <tools>` involves several steps:
+
+1. Add `supports_tools = True` to your model class.
+2. If `prompt.tools` is populated, turn that list of `llm.Tool` objects into the correct format for your model.
+3. Look out for requests to call tools in the responses from your model. Call `response.add_tool_call(llm.ToolCall(...))` for each of those. This should work for streaming and non-streaming and async and non-async cases.
+4. If your prompt has a `prompt.tool_results` list, pass the information from those `llm.ToolResult` objects to your model.
+5. Include `prompt.tools` and `prompt.tool_results` and tool calls from `response.tool_calls_or_raise()` in the conversation history constructed by your plugin.
+6. Make sure your code is OK with prompts that do not have `prompt.prompt` set to a value, since they may be carrying exclusively the results of a tool call.
+
+This [commit to llm-gemini](https://github.com/simonw/llm-gemini/commit/a7f1096cfbb733018eb41c29028a8cc6160be298) implementing tools helps demonstrate what this looks like for a real plugin.
+
+Here are the relevant dataclasses:
+
+```{eval-rst}
+.. autoclass:: llm.Tool
+
+.. autoclass:: llm.ToolCall
+
+.. autoclass:: llm.ToolResult
+```
+
 
 (advanced-model-plugins-attachments)=
 
@@ -236,4 +277,33 @@ This example logs 15 input tokens, 340 output tokens and notes that 37 tokens we
 
 ```python
 response.set_usage(input=15, output=340, details={"cached": 37})
+```
+(advanced-model-plugins-resolved-model)=
+
+## Tracking resolved model names
+
+In some cases the model ID that the user requested may not be the exact model that is executed. Many providers have a `model-latest` alias which may execute different models over time.
+
+If those APIs return the _real_ model ID that was used, your plugin can record that in the `resources.resolved_model` column in the logs by calling this method and passing the string representing the resolved, final model ID:
+
+```bash
+response.set_resolved_model(resolved_model_id)
+```
+This string will be recorded in the database and shown in the output of `llm logs` and `llm logs --json`.
+
+(tutorial-model-plugin-raise-errors)=
+
+## LLM_RAISE_ERRORS
+
+While working on a plugin it can be useful to request that errors are raised instead of being caught and logged, so you can access them from the Python debugger.
+
+Set the `LLM_RAISE_ERRORS` environment variable to enable this behavior, then run `llm` like this:
+
+```bash
+LLM_RAISE_ERRORS=1 python -i -m llm ...
+```
+The `-i` option means Python will drop into an interactive shell if an error occurs. You can then open a debugger at the most recent error using:
+
+```python
+import pdb; pdb.pm()
 ```

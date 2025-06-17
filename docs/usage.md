@@ -26,7 +26,17 @@ You can use `-m 4o` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
-You can also send a prompt to standard input, for example:
+Or if you know the name is too long to type, use `-q` once or more to provide search terms - the model with the shortest model ID that matches all of those terms (as a lowercase substring) will be used:
+```bash
+llm 'Ten names for cheesecakes' -q 4o -q mini
+```
+To change the default model for the current session, set the `LLM_MODEL` environment variable:
+```bash
+export LLM_MODEL=gpt-4.1-mini
+llm 'Ten names for cheesecakes' # Uses gpt-4.1-mini
+```
+
+You can send a prompt directly to standard input like this:
 ```bash
 echo 'Ten names for cheesecakes' | llm
 ```
@@ -40,30 +50,18 @@ Will run a prompt of:
 ```
 For models that support them, {ref}`system prompts <usage-system-prompts>` are a better tool for this kind of prompting.
 
+(usage-model-options)=
+### Model options
+
 Some models support options. You can pass these using `-o/--option name value` - for example, to set the temperature to 1.5 run this:
 
 ```bash
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
-(usage-extract-fenced-code)=
-### Extracting fenced code blocks
+Use the `llm models --options` command to see which options are supported by each model.
 
-If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
-
-The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
-
-````
-```python
-def my_function():
-    # ...
-```
-````
-It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
-
-Use `--xl/--extract-last` to return the last fenced code block instead of the first.
-
-The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
+You can also {ref}`configure default options <usage-executing-default-options>` for a model using the `llm models options` commands.
 
 (usage-attachments)=
 ### Attachments
@@ -122,6 +120,125 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-tools)=
+### Tools
+
+Many models support the ability to call {ref}`external tools <tools>`. Tools can be provided {ref}`by plugins <plugin-hooks-register-tools>` or you can pass a `--functions CODE` option to LLM to define one or more Python functions that the model can then call.
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345'
+```
+Add `--td/--tools-debug` to see full details of the tools that are being executed. You can also set the `LLM_TOOLS_DEBUG` environment variable to `1` to enable this for all prompts.
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --td
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+  7303652730
+34234 multiplied by 213345 is 7,303,652,730.
+```
+Or add `--ta/--tools-approve` to approve each tool call interactively before it is executed:
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345' --ta
+```
+Output:
+```
+Tool call: multiply({'x': 34234, 'y': 213345})
+Approve tool call? [y/N]:
+```
+The `--functions` option can be passed more than once, and can also point to the filename of a `.py` file containing one or more functions.
+
+If you have any tools that have been made available via plugins you can add them to the prompt using `--tool/-T` option. For example, using [llm-tools-simpleeval](https://github.com/simonw/llm-tools-simpleeval) like this:
+
+```bash
+llm install llm-tools-simpleeval
+llm --tool simple_eval "4444 * 233423" --td
+```
+Run this command to see a list of available tools from plugins:
+```bash
+llm tools
+```
+If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+
+```
+llm -T simple_eval "12345 * 12345" --td
+Tool call: simple_eval({'expression': '12345 * 12345'})
+  152399025
+12345 multiplied by 12345 equals 152,399,025.
+llm -c "that * 6" --td
+Tool call: simple_eval({'expression': '152399025 * 6'})
+  914394150
+152,399,025 multiplied by 6 equals 914,394,150.
+llm chat -c --td
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+> / 123
+Tool call: simple_eval({'expression': '914394150 / 123'})
+  7434098.780487805
+914,394,150 divided by 123 is approximately 7,434,098.78.
+```
+Some tools are bundled in a configurable collection of tools called a **toolbox**. This means a single `--tool` option can load multiple related tools.
+
+[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) is one example. Using a toolbox looks like this:
+
+```bash
+llm install llm-tools-datasette
+llm -T 'Datasette("https://datasette.io/content")' "Show tables" --td
+```
+Toolboxes always start with a capital letter. They can be configured by passing a tool specification, which should fit the following patterns:
+
+- Empty: `ToolboxName` or `ToolboxName()` - has no configuration arguments
+- JSON object: `ToolboxName({"key": "value", "other": 42})`
+- Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
+- Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
+
+Toolboxes are not currently supported with the `llm -c` option, but they work well with `llm chat`. Try chatting with the Datasette content database like this:
+
+```bash
+llm chat -T 'Datasette("https://datasette.io/content")' --td
+```
+```
+Chatting with gpt-4.1-mini
+Type 'exit' or 'quit' to exit
+...
+> show tables
+```
+
+(usage-extract-fenced-code)=
+### Extracting fenced code blocks
+
+If you are using an LLM to generate code it can be useful to retrieve just the code it produces without any of the surrounding explanatory text.
+
+The `-x/--extract` option will scan the response for the first instance of a Markdown fenced code block - something that looks like this:
+
+````
+```python
+def my_function():
+    # ...
+```
+````
+It will extract and returns just the content of that block, excluding the fenced coded delimiters. If there are no fenced code blocks it will return the full response.
+
+Use `--xl/--extract-last` to return the last fenced code block instead of the first.
+
+The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
+
 (usage-schemas)=
 ### Schemas
 
@@ -178,6 +295,55 @@ llm -t dogs 'invent two dogs'
 Be warned that different models may support different dialects of the JSON schema specification.
 
 See {ref}`schemas-logs` for tips on using the `llm logs --schema X` command to access JSON objects you have previously logged using this option.
+
+(usage-fragments)=
+### Fragments
+
+You can use the `-f/--fragment` option to reference fragments of context that you would like to load into your prompt. Fragments can be specified as URLs, file paths or as aliases to previously saved fragments.
+
+Fragments are designed for running longer prompts. LLM {ref}`stores prompts in a database <logging>`, and the same prompt repeated many times can end up stored as multiple copies, wasting disk space. A fragment will be stored just once and referenced by all of the prompts that use it.
+
+The `-f` option can accept a path to a file on disk, a URL or the hash or alias of a previous fragment.
+
+For example, to ask a question about the `robots.txt` file on `llm.datasette.io`:
+```bash
+llm -f https://llm.datasette.io/robots.txt 'explain this'
+```
+For a poem inspired by some Python code on disk:
+```bash
+llm -f cli.py 'a short snappy poem inspired by this code'
+```
+You can use as many `-f` options as you like - the fragments will be concatenated together in the order you provided, with any additional prompt added at the end.
+
+Fragments can also be used for the system prompt using the `--sf/--system-fragment` option. If you have a file called `explain_code.txt` containing this:
+
+```
+Explain this code in detail. Include copies of the code quoted in the explanation.
+```
+You can run it as the system prompt like this:
+```bash
+llm -f cli.py --sf explain_code.txt
+```
+
+You can use the `llm fragments set` command to load a fragment and give it an alias for use in future queries:
+```bash
+llm fragments set cli cli.py
+# Then
+llm -f cli 'explain this code'
+```
+Use `llm fragments` to list all fragments that have been stored:
+```bash
+llm fragments
+```
+You can search by passing one or more `-q X` search strings. This will return results matching all of those strings, across the source, hash, aliases and content:
+```bash
+llm fragments -q pytest -q asyncio
+```
+
+The `llm fragments remove` command removes an alias. It does not delete the fragment record itself as those are linked to previous prompts and responses and cannot be deleted independently of them.
+```bash
+llm fragments remove cli
+```
 
 (usage-conversation)=
 ### Continuing a conversation
@@ -264,6 +430,8 @@ llm chat -t cheesecake
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -284,6 +452,8 @@ If your pasted text might itself contain a `!end` line, you can set a custom del
 Chatting with gpt-4
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
 > !multi custom-end
  Explain this error:
 
@@ -295,6 +465,19 @@ urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, 
 
  !end custom-end
 ```
+
+You can also use `!edit` to open your default editor and modify the prompt before sending it to the model.
+
+```
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> !edit
+```
+
+`llm chat` takes the same `--tool/-T` and `--functions` options as `llm prompt`. You can use this to start a chat with the specified {ref}`tools <usage-tools>` enabled.
 
 ## Listing available models
 
@@ -319,7 +502,10 @@ Add one or more `-q term` options to search for models matching all of those sea
 llm models -q gpt-4o
 llm models -q 4o -q mini
 ```
-
+Use one or more `-m` options to indicate specific models, either by their model ID or one of their aliases:
+```bash
+llm models -m gpt-4o -m gemini-1.5-pro-002
+```
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options
@@ -364,10 +550,15 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Options:
     temperature: float
@@ -380,9 +571,13 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -395,10 +590,15 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview
   Options:
     temperature: float
@@ -414,6 +614,10 @@ OpenAI Chat: gpt-4o-audio-preview
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -429,6 +633,10 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
   Options:
     temperature: float
@@ -444,6 +652,10 @@ OpenAI Chat: gpt-4o-audio-preview-2024-10-01
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini-audio-preview
   Options:
     temperature: float
@@ -459,6 +671,10 @@ OpenAI Chat: gpt-4o-mini-audio-preview
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Options:
     temperature: float
@@ -474,6 +690,73 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
     audio/mpeg, audio/wav
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1 (aliases: 4.1)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
   Options:
     temperature: float
@@ -487,6 +770,10 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
   Options:
     temperature: float
@@ -500,6 +787,10 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Options:
     temperature: float
@@ -513,6 +804,10 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-32k (aliases: 4-32k)
   Options:
     temperature: float
@@ -526,6 +821,10 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-1106-preview
   Options:
     temperature: float
@@ -539,6 +838,10 @@ OpenAI Chat: gpt-4-1106-preview
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-0125-preview
   Options:
     temperature: float
@@ -552,6 +855,10 @@ OpenAI Chat: gpt-4-0125-preview
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-turbo-2024-04-09
   Options:
     temperature: float
@@ -565,6 +872,10 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
   Options:
     temperature: float
@@ -578,6 +889,10 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4.5-preview-2025-02-27
   Options:
     temperature: float
@@ -590,10 +905,15 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
   Options:
     temperature: float
@@ -606,10 +926,15 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
     seed: int
     json_object: boolean
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1
   Options:
     temperature: float
@@ -623,9 +948,14 @@ OpenAI Chat: o1
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-2024-12-17
   Options:
     temperature: float
@@ -639,9 +969,14 @@ OpenAI Chat: o1-2024-12-17
     json_object: boolean
     reasoning_effort: str
   Attachment types:
-    image/gif, image/jpeg, image/png, image/webp
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-preview
   Options:
     temperature: float
@@ -655,6 +990,10 @@ OpenAI Chat: o1-preview
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o1-mini
   Options:
     temperature: float
@@ -668,6 +1007,10 @@ OpenAI Chat: o1-mini
     json_object: boolean
   Features:
   - streaming
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Chat: o3-mini
   Options:
     temperature: float
@@ -683,6 +1026,55 @@ OpenAI Chat: o3-mini
   Features:
   - streaming
   - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: o3
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: o4-mini
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
@@ -716,6 +1108,9 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Include the log probabilities of most likely N per token
   Features:
   - streaming
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 
 ```
 <!-- [[[end]]] -->
@@ -725,3 +1120,33 @@ When running a prompt you can pass the full model name or any of the aliases to 
 llm -m 4o \
   'As many names for cheesecakes as you can think of, with detailed descriptions'
 ```
+
+(usage-executing-default-options)=
+
+## Setting default options for models
+
+To configure a default option for a specific model, use the `llm models options set` command:
+```bash
+llm models options set gpt-4o temperature 0.5
+```
+This option will then be applied automatically any time you run a prompt through the `gpt-4o` model.
+
+Default options are stored in the `model_options.json` file in the LLM configuration directory.
+
+You can list all default options across all models using the `llm models options list` command:
+```bash
+llm models options list
+```
+Or show them for an individual model with `llm models options show <model_id>`:
+```bash
+llm models options show gpt-4o
+```
+To clear a default option, use the `llm models options clear` command:
+```bash
+llm models options clear gpt-4o temperature
+```
+Or clear all default options for a model like this:
+```bash
+llm models options clear gpt-4o
+```
+Default model options are respected by both the `llm prompt` and the `llm chat` commands. They will not be applied when you use LLM as a {ref}`Python library <python-api>`.

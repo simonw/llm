@@ -201,9 +201,58 @@ You can filter to logs just for a specific model (or model alias) using `-m/--mo
 llm logs -m chatgpt
 ```
 
+(logging-filter-fragments)=
+
+### Filtering by prompts that used specific fragments
+
+The `-f/--fragment X` option will filter for just responses that were created using the specified {ref}`fragment <usage-fragments>` hash or alias or URL or filename.
+
+Fragments are displayed in the logs as their hash ID. Add `-e/--expand` to display fragments as their full content - this option works for both the default Markdown and the `--json` mode:
+
+```bash
+llm logs -f https://llm.datasette.io/robots.txt --expand
+```
+You can display just the content for a specific fragment hash ID (or alias) using the `llm fragments show` command:
+
+```bash
+llm fragments show 993fd38d898d2b59fd2d16c811da5bdac658faa34f0f4d411edde7c17ebb0680
+```
+If you provide multiple fragments you will get back responses that used _all_ of those fragments.
+
+(logging-filter-tools)=
+
+### Filtering by prompts that used specific tools
+
+You can filter for responses that used tools from specific fragments with the `--tool/-T` option:
+
+```bash
+llm logs -T simple_eval
+```
+This will match responses that involved a _result_ from that tool. If the tool was not executed it will not be included in the filtered responses.
+
+Pass `--tool/-T` multiple times for responses that used all of the specified tools.
+
+Use the `llm logs --tools` flag to see _all_ responses that involved at least one tool result, including from `--functions`:
+
+```bash
+llm logs --tools
+```
+
+(logging-filter-schemas)=
+
+### Browsing data collected using schemas
+
+The `--schema X` option can be used to view responses that used the specified schema, using any of the {ref}`ways to specify a schema <schemas-specify>`:
+
+```bash
+llm logs --schema 'name, age int, bio'
+```
+
+This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
+
 (logging-datasette)=
 
-### Browsing logs using Datasette
+## Browsing logs using Datasette
 
 You can also use [Datasette](https://datasette.io/) to browse your logs like this:
 
@@ -211,9 +260,16 @@ You can also use [Datasette](https://datasette.io/) to browse your logs like thi
 datasette "$(llm logs path)"
 ```
 
-### Browsing data collected using schemas
+(logging-backup)=
 
-The `--schema X` option can be used to view responses that used the specified schema. This can be combined with `--data` and `--data-array` and `--data-key` to extract just the returned JSON data - consult the {ref}`schemas documentation <schemas-logs>` for details.
+## Backing up your database
+
+You can backup your logs to another file using the `llm logs backup` command:
+
+```bash
+llm logs backup /tmp/backup.db
+```
+This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
 (logging-sql-schema)=
 
@@ -236,7 +292,11 @@ def cleanup_sql(sql):
     return first_line + '(\n  ' + ',\n  '.join(columns) + '\n);'
 
 cog.out("```sql\n")
-for table in ("conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments"):
+for table in (
+    "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
+    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
+    "tool_responses", "tool_calls", "tool_results", "tool_instances"
+):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
     cog.out("\n")
@@ -267,7 +327,8 @@ CREATE TABLE "responses" (
   [input_tokens] INTEGER,
   [output_tokens] INTEGER,
   [token_details] TEXT,
-  [schema_id] TEXT REFERENCES [schemas]([id])
+  [schema_id] TEXT REFERENCES [schemas]([id]),
+  [resolved_model] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],
@@ -287,6 +348,71 @@ CREATE TABLE [prompt_attachments] (
   [order] INTEGER,
   PRIMARY KEY ([response_id],
   [attachment_id])
+);
+CREATE TABLE [fragments] (
+  [id] INTEGER PRIMARY KEY,
+  [hash] TEXT,
+  [content] TEXT,
+  [datetime_utc] TEXT,
+  [source] TEXT
+);
+CREATE TABLE [fragment_aliases] (
+  [alias] TEXT PRIMARY KEY,
+  [fragment_id] INTEGER REFERENCES [fragments]([id])
+);
+CREATE TABLE "prompt_fragments" (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_id],
+  [order])
+);
+CREATE TABLE "system_fragments" (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_id],
+  [order])
+);
+CREATE TABLE [tools] (
+  [id] INTEGER PRIMARY KEY,
+  [hash] TEXT,
+  [name] TEXT,
+  [description] TEXT,
+  [input_schema] TEXT,
+  [plugin] TEXT
+);
+CREATE TABLE [tool_responses] (
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [response_id] TEXT REFERENCES [responses]([id]),
+  PRIMARY KEY ([tool_id],
+  [response_id])
+);
+CREATE TABLE [tool_calls] (
+  [id] INTEGER PRIMARY KEY,
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [name] TEXT,
+  [arguments] TEXT,
+  [tool_call_id] TEXT
+);
+CREATE TABLE "tool_results" (
+  [id] INTEGER PRIMARY KEY,
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [name] TEXT,
+  [output] TEXT,
+  [tool_call_id] TEXT,
+  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
+  [exception] TEXT
+);
+CREATE TABLE [tool_instances] (
+  [id] INTEGER PRIMARY KEY,
+  [plugin] TEXT,
+  [name] TEXT,
+  [arguments] TEXT
 );
 ```
 <!-- [[[end]]] -->
