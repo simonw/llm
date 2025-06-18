@@ -1426,7 +1426,7 @@ from
     responses
 left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id{extra_where}
-order by responses.id desc{limit}
+order by {order_by}{limit}
 """
 LOGS_SQL_SEARCH = """
 select
@@ -1437,7 +1437,7 @@ left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id
 join responses_fts on responses_fts.rowid = responses.rowid
 where responses_fts match :query{extra_where}
-order by responses_fts.rank desc{limit}
+order by {order_by}{limit}
 """
 
 ATTACHMENTS_SQL = """
@@ -1505,6 +1505,9 @@ order by prompt_attachments."order"
     help="JSON schema used for multiple results",
 )
 @click.option(
+    "-l", "--latest", is_flag=True, help="Return latest results matching search query"
+)
+@click.option(
     "--data", is_flag=True, help="Output newline-delimited JSON data for schema"
 )
 @click.option("--data-array", is_flag=True, help="Output JSON array of data for schema")
@@ -1565,6 +1568,7 @@ def logs_list(
     any_tools,
     schema_input,
     schema_multi,
+    latest,
     data,
     data_array,
     data_key,
@@ -1638,8 +1642,11 @@ def logs_list(
             model_id = model
 
     sql = LOGS_SQL
+    order_by = "responses.id desc"
     if query:
         sql = LOGS_SQL_SEARCH
+        if not latest:
+            order_by = "responses_fts.rank desc"
 
     limit = ""
     if count is not None and count > 0:
@@ -1649,6 +1656,7 @@ def logs_list(
         "limit": limit,
         "columns": LOGS_COLUMNS,
         "extra_where": "",
+        "order_by": order_by,
     }
     where_bits = []
     sql_params = {
