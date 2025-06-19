@@ -17,6 +17,7 @@ With LLM you can:
 - {ref}`Store prompts and responses in SQLite <logging>`
 - {ref}`Generate and store embeddings <embeddings>`
 - {ref}`Extract structured content from text and images <schemas>`
+- {ref}`Grant models the ability to execute tools <tools>`
 - ... and much, much more
 
 ## Quick start
