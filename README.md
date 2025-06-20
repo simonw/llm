@@ -40,6 +40,7 @@ With LLM you can:
 - [Store prompts and responses in SQLite](https://llm.datasette.io/en/stable/logging.html#logging)
 - [Generate and store embeddings](https://llm.datasette.io/en/stable/embeddings/index.html#embeddings)
 - [Extract structured content from text and images](https://llm.datasette.io/en/stable/schemas.html#schemas)
+- [Grant models the ability to execute tools](https://llm.datasette.io/en/stable/tools.html#tools)
 - … and much, much more
 
 ## Quick start
