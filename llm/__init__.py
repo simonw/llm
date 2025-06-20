@@ -27,6 +27,14 @@ from .models import (
 )
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
+from .context import (
+    Context,
+    ContextItem,
+    ContextMetadata,
+    ContextProvider,
+    EmbeddingsContextProvider,
+    FragmentsContextProvider,
+)
 from .templates import Template
 from .plugins import pm, load_plugins
 import click
@@ -63,6 +71,12 @@ __all__ = [
     "ToolCall",
     "ToolOutput",
     "ToolResult",
+    "Context",
+    "ContextItem",
+    "ContextMetadata",
+    "ContextProvider",
+    "EmbeddingsContextProvider",
+    "FragmentsContextProvider",
     "user_dir",
     "schema_dsl",
 ]
@@ -212,6 +226,18 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
             impl.function(register=register)
 
     return tools
+
+
+def get_context_providers() -> List[ContextProvider]:
+    """Get context providers registered by plugins."""
+    load_plugins()
+    providers: List[ContextProvider] = []
+
+    def register(provider: ContextProvider) -> None:
+        providers.append(provider)
+
+    pm.hook.register_context_providers(register=register)
+    return providers
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
