@@ -192,6 +192,27 @@ async def test_async_toolbox():
     assert '"output": "This was async"' in output
 
 
+def test_toolbox_add_tool():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def original(self):
+            return "Original method"
+
+    def new_method():
+        return "New method"
+
+    tools = Tools()
+    tools.add_tool(new_method)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "New method"' in output
+
+
 @pytest.mark.vcr
 def test_conversation_with_tools(vcr):
     import llm
