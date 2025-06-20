@@ -2558,6 +2558,20 @@ def tools():
 )
 def tools_list(json_, python_tools):
     "List available tools that have been provided by plugins"
+
+    def introspect_tools(toolbox_class):
+        methods = []
+        for tool in toolbox_class.method_tools():
+            methods.append(
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "arguments": tool.input_schema,
+                    "implementation": tool.implementation,
+                }
+            )
+        return methods
+
     tools = get_tools()
     if python_tools:
         for code_or_path in python_tools:
@@ -2586,11 +2600,11 @@ def tools_list(json_, python_tools):
                     "name": name,
                     "tools": [
                         {
-                            "name": method["name"],
-                            "description": method["description"],
-                            "arguments": method["arguments"],
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "arguments": tool["arguments"],
                         }
-                        for method in tool.introspect_methods()
+                        for tool in introspect_tools(tool)
                     ],
                 }
             )
@@ -2617,22 +2631,20 @@ def tools_list(json_, python_tools):
                 click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
         for toolbox in toolbox_objects:
             click.echo(toolbox.name + ":\n")
-            for method in toolbox.introspect_methods():
+            for tool in toolbox.method_tools():
                 sig = (
-                    str(inspect.signature(method["implementation"]))
+                    str(inspect.signature(tool.implementation))
                     .replace("(self, ", "(")
                     .replace("(self)", "()")
                 )
                 click.echo(
                     "  {}{}\n".format(
-                        method["name"],
+                        tool.name,
                         sig,
                     )
                 )
-                if method["description"]:
-                    click.echo(
-                        textwrap.indent(method["description"].strip(), "    ") + "\n"
-                    )
+                if tool.description:
+                    click.echo(textwrap.indent(tool.description.strip(), "    ") + "\n")
 
 
 @cli.group(

@@ -185,9 +185,11 @@ def _get_arguments_input_schema(function, name):
 
 
 class Toolbox:
-    _blocked = ("method_tools", "introspect_methods", "methods")
     name: Optional[str] = None
     instance_id: Optional[int] = None
+    _blocked = ("tools", "add_tool", "method_tools", "___init_subclass__")
+    _extra_tools: List[Tool] = []
+    _config: Dict[str, Any] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -208,55 +210,48 @@ class Toolbox:
                 and sig.parameters[name].kind
                 not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
+            self._extra_tools = []
 
             original_init(self, *args, **kwargs)
 
         cls.__init__ = wrapped_init
 
     @classmethod
-    def methods(cls):
-        gathered = []
-        for name in dir(cls):
-            if name.startswith("_"):
+    def method_tools(cls) -> List[Tool]:
+        tools = []
+        for method_name in dir(cls):
+            if method_name.startswith("_") or method_name in cls._blocked:
                 continue
-            if name in cls._blocked:
-                continue
-            method = getattr(cls, name)
+            method = getattr(cls, method_name)
             if callable(method):
-                gathered.append(method)
-        return gathered
-
-    def method_tools(self):
-        "Returns a list of llm.Tool() for each method"
-        for method_name in dir(self):
-            if method_name.startswith("_") or method_name in self._blocked:
-                continue
-            method = getattr(self, method_name)
-            # The attribute must be a bound method, i.e. inspect.ismethod()
-            if callable(method) and inspect.ismethod(method):
                 tool = Tool.function(
                     method,
-                    name="{}_{}".format(self.__class__.__name__, method_name),
+                    name="{}_{}".format(cls.__name__, method_name),
                 )
+                tools.append(tool)
+        return tools
+
+    def tools(self) -> Iterable[Tool]:
+        "Returns an llm.Tool() for each class method, plus any extras registered with add_tool()"
+        # method_tools() returns unbound methods, we need bound methods here:
+        for name in dir(self):
+            if name.startswith("_") or name in self._blocked:
+                continue
+            attr = getattr(self, name)
+            if callable(attr):
+                tool = Tool.function(attr, name=f"{self.__class__.__name__}_{name}")
                 tool.plugin = getattr(self, "plugin", None)
                 yield tool
+        yield from self._extra_tools
 
-    @classmethod
-    def introspect_methods(cls):
-        methods = []
-        for method in cls.methods():
-            arguments = _get_arguments_input_schema(method, method.__name__)
-            methods.append(
-                {
-                    "name": method.__name__,
-                    "description": (
-                        method.__doc__.strip() if method.__doc__ is not None else None
-                    ),
-                    "arguments": _ensure_dict_schema(arguments),
-                    "implementation": method,
-                }
-            )
-        return methods
+    def add_tool(self, tool_or_function: Union[Tool, Callable[..., Any]]):
+        "Add a tool to this toolbox"
+        if isinstance(tool_or_function, Tool):
+            self._extra_tools.append(tool_or_function)
+        elif callable(tool_or_function):
+            self._extra_tools.append(Tool.function(tool_or_function))
+        else:
+            raise ValueError("Tool must be an instance of Tool or a callable function")
 
 
 @dataclass
@@ -358,7 +353,7 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
         if isinstance(tool, Tool):
             wrapped_tools.append(tool)
         elif isinstance(tool, Toolbox):
-            wrapped_tools.extend(tool.method_tools())
+            wrapped_tools.extend(tool.tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:
