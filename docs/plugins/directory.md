@@ -51,6 +51,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-tools-sqlite](https://github.com/simonw/llm-tools-sqlite)** can run read-only SQL queries against local SQLite databases.
 - **[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette)** can run SQL queries against a remote [Datasette](https://datasette.io/) instance.
 - **[llm-tools-exa](https://github.com/daturkel/llm-tools-exa)** by Dan Turkel can perform web searches and question-answering using [exa.ai](https://exa.ai/).
+- **[llm-tools-brave](https://github.com/statico/llm-tools-brave)** can perform web searches against the [Brave Search API](https://brave.com/search/api/).
 - **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
 
 ## Fragments and template loaders
