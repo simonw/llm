@@ -108,13 +108,13 @@ def register_tools(register):
 
 Tools can also be implemented as classes, as described in {ref}`Toolbox classes <python-api-toolbox>` in the Python API documentation.
 
-You can register classes like the `Memory` example from there by passing the class (_not_ an instance of the class) to `register()`:
+You can register classes like the `Memory` example {ref}`from here <python-api-toolbox>` by passing the class (_not_ an instance of the class) to `register()`:
 
 ```python
 import llm
 
 class Memory(llm.Toolbox):
-    ...
+    # Copy implementation from the Python API documentation
 
 @llm.hookimpl
 def register_tools(register):
