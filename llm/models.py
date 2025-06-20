@@ -144,7 +144,7 @@ class Tool:
         return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
     @classmethod
-    def function(cls, function, name=None):
+    def function(cls, function, name=None, description=None):
         """
         Turn a Python function into a Tool object by:
          - Extracting the function name
@@ -159,7 +159,7 @@ class Tool:
 
         return cls(
             name=name or function.__name__,
-            description=function.__doc__ or None,
+            description=description or function.__doc__ or None,
             input_schema=_get_arguments_input_schema(function, name),
             implementation=function,
         )
