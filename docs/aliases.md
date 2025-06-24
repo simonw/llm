@@ -100,6 +100,46 @@ The `llm aliases remove <alias>` command will remove the specified alias:
 llm aliases remove mini
 ```
 
+## Aliases with options
+
+You can save default prompt options with an alias. For example, to create an alias `4o-creative` that always uses `gpt-4o` with a high temperature, you can do this:
+
+```bash
+llm aliases set 4o-creative gpt-4o -o temperature 1.5
+```
+
+Then you can use this alias like so:
+
+```bash
+llm -m 4o-creative 'Write a creative story about a robot'
+```
+
+The model will be called with the `temperature` option set to `1.5`.
+
+If you specify options both in the alias and on the command line, the command-line options will take precedence.
+
+For example:
+
+```bash
+llm -m 4o-creative -o temperature 1.0 'Write a creative story about a robot'
+```
+
+This will override the alias temperature setting.
+
+### OpenRouter plugin example
+
+You can also create aliases for plugin models. Here is an example with openrouter provider configurations:
+
+```bash
+llm aliases set maverick-lowlatency openrouter/meta-llama/llama-4-maverick -o provider '{
+  "order": [
+    "Baseten", 
+    "Parasail"
+  ],
+"allow_fallbacks": false
+}'
+```
+
 ## Viewing the aliases file
 
 Aliases are stored in an `aliases.json` file in the LLM configuration directory.

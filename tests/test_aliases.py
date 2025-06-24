@@ -126,3 +126,63 @@ def test_cli_aliases_are_registered(user_path, args):
     assert result.exit_code == 0
     # Check for model line only, without keys, as --options is not used
     assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
+
+
+def test_set_alias_with_options():
+    """Test setting an alias with options"""
+    llm.set_alias_with_options("test-alias-options", "gpt-3.5-turbo", {"temperature": "0.5", "max_tokens": "100"})
+    
+    # Test that resolve_alias_options returns the correct data
+    alias_data = llm.resolve_alias_options("test-alias-options")
+    assert alias_data is not None
+    assert alias_data["model"] == "gpt-3.5-turbo"
+    assert alias_data["options"]["temperature"] == "0.5"
+    assert alias_data["options"]["max_tokens"] == "100"
+
+
+def test_resolve_alias_options_returns_none_for_regular_alias():
+    """Test that resolve_alias_options returns None for regular string aliases"""
+    llm.set_alias("test-regular-alias", "gpt-3.5-turbo")
+    alias_data = llm.resolve_alias_options("test-regular-alias")
+    assert alias_data is None
+
+
+def test_resolve_alias_options_returns_none_for_nonexistent_alias():
+    """Test that resolve_alias_options returns None for non-existent aliases"""
+    alias_data = llm.resolve_alias_options("nonexistent-alias")
+    assert alias_data is None
+
+
+def test_cli_aliases_set_with_options(user_path):
+    """Test setting an alias with options via CLI"""
+    # Should be no aliases.json at start
+    assert not (user_path / "aliases.json").exists()
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "aliases", "set", "test-cli-alias", "gpt-3.5-turbo", 
+        "-o", "temperature", "0.7", 
+        "-o", "max_tokens", "200"
+    ])
+    assert result.exit_code == 0
+    assert (user_path / "aliases.json").exists()
+    
+    # Check the content of the file
+    aliases_data = json.loads((user_path / "aliases.json").read_text("utf-8"))
+    assert "test-cli-alias" in aliases_data
+    assert aliases_data["test-cli-alias"]["model"] == "gpt-3.5-turbo"
+    assert aliases_data["test-cli-alias"]["options"]["temperature"] == "0.7"
+    assert aliases_data["test-cli-alias"]["options"]["max_tokens"] == "200"
+
+
+def test_cli_aliases_set_without_options_still_works(user_path):
+    """Test that setting an alias without options still works as before"""
+    # Should be no aliases.json at start
+    assert not (user_path / "aliases.json").exists()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "set", "test-simple-alias", "gpt-3.5-turbo"])
+    assert result.exit_code == 0
+    assert (user_path / "aliases.json").exists()
+    
+    # Check the content of the file - should be a simple string
+    aliases_data = json.loads((user_path / "aliases.json").read_text("utf-8"))
+    assert aliases_data["test-simple-alias"] == "gpt-3.5-turbo"

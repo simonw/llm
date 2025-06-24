@@ -36,6 +36,8 @@ from llm import (
     get_models_with_aliases,
     user_dir,
     set_alias,
+    set_alias_with_options,
+    resolve_alias_options,
     set_default_model,
     set_default_embedding_model,
     remove_alias,
@@ -742,6 +744,16 @@ def prompt(
         else:
             model_id = get_default_model()
 
+    # Resolve alias with options if applicable
+    alias_options = resolve_alias_options(model_id)
+    if alias_options:
+        model_id = alias_options["model"]
+        # Merge alias options with command-line options, giving priority to command-line
+        merged_options = alias_options.get("options", {}).copy()
+        if options:
+            merged_options.update(dict(options))
+        options = list(merged_options.items())
+
     # Now resolve the model
     try:
         if async_:
@@ -1069,6 +1081,16 @@ def chat(
             model_id = conversation.model.model_id
         else:
             model_id = get_default_model()
+
+    # Resolve alias with options if applicable
+    alias_options = resolve_alias_options(model_id)
+    if alias_options:
+        model_id = alias_options["model"]
+        # Merge alias options with command-line options, giving priority to command-line
+        merged_options = alias_options.get("options", {}).copy()
+        if options:
+            merged_options.update(dict(options))
+        options = list(merged_options.items())
 
     # Now resolve the model
     try:
@@ -2679,7 +2701,15 @@ def aliases_list(json_):
     multiple=True,
     help="Set alias for model matching these strings",
 )
-def aliases_set(alias, model_id, query):
+@click.option(
+    "options",
+    "-o",
+    "--option",
+    type=(str, str),
+    multiple=True,
+    help="Options to include with the alias",
+)
+def aliases_set(alias, model_id, query, options):
     """
     Set an alias for a model
 
@@ -2710,7 +2740,10 @@ def aliases_set(alias, model_id, query):
                 "No model found matching query: " + ", ".join(query)
             )
         model_id = found.model.model_id
-        set_alias(alias, model_id)
+        if options:
+            set_alias_with_options(alias, model_id, dict(options))
+        else:
+            set_alias(alias, model_id)
         click.echo(
             f"Alias '{alias}' set to model '{model_id}'",
             err=True,

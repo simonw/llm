@@ -4,67 +4,45 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
-    AsyncConversation,
-    AsyncKeyModel,
     AsyncModel,
     AsyncResponse,
     Attachment,
-    CancelToolCall,
     Conversation,
-    EmbeddingModel,
-    EmbeddingModelWithAliases,
-    KeyModel,
     Model,
     ModelWithAliases,
+    EmbeddingModel,
+    EmbeddingModelWithAliases,
     Options,
     Prompt,
     Response,
-    Tool,
-    Toolbox,
-    ToolCall,
-    ToolOutput,
-    ToolResult,
 )
-from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
 import click
-from typing import Any, Dict, List, Optional, Callable, Type, Union
-import inspect
+from typing import Dict, List, Optional
 import json
 import os
 import pathlib
 import struct
 
 __all__ = [
-    "AsyncConversation",
-    "AsyncKeyModel",
+    "hookimpl",
+    "get_async_model",
+    "get_model",
+    "get_key",
+    "user_dir",
     "AsyncResponse",
     "Attachment",
-    "CancelToolCall",
     "Collection",
     "Conversation",
-    "Fragment",
-    "get_async_model",
-    "get_key",
-    "get_model",
-    "hookimpl",
-    "KeyModel",
     "Model",
-    "ModelError",
-    "NeedsKeyException",
     "Options",
     "Prompt",
     "Response",
     "Template",
-    "Tool",
-    "Toolbox",
-    "ToolCall",
-    "ToolOutput",
-    "ToolResult",
-    "user_dir",
-    "schema_dsl",
+    "ModelError",
+    "NeedsKeyException",
 ]
 DEFAULT_MODEL = "gpt-4o-mini"
 
@@ -115,108 +93,6 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     pm.hook.register_models(register=register)
 
     return model_aliases
-
-
-def _get_loaders(hook_method) -> Dict[str, Callable]:
-    load_plugins()
-    loaders = {}
-
-    def register(prefix, loader):
-        suffix = 0
-        prefix_to_try = prefix
-        while prefix_to_try in loaders:
-            suffix += 1
-            prefix_to_try = f"{prefix}_{suffix}"
-        loaders[prefix_to_try] = loader
-
-    hook_method(register=register)
-    return loaders
-
-
-def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
-    """Get template loaders registered by plugins."""
-    return _get_loaders(pm.hook.register_template_loaders)
-
-
-def get_fragment_loaders() -> Dict[
-    str,
-    Callable[[str], Union[Fragment, Attachment, List[Union[Fragment, Attachment]]]],
-]:
-    """Get fragment loaders registered by plugins."""
-    return _get_loaders(pm.hook.register_fragment_loaders)
-
-
-def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
-    """Return all tools (llm.Tool and llm.Toolbox) registered by plugins."""
-    load_plugins()
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = {}
-
-    # Variable to track current plugin name
-    current_plugin_name = None
-
-    def register(
-        tool_or_function: Union[Tool, Type[Toolbox], Callable[..., Any]],
-        name: Optional[str] = None,
-    ) -> None:
-        tool: Union[Tool, Type[Toolbox], None] = None
-
-        # If it's a Toolbox class, set the plugin field on it
-        if inspect.isclass(tool_or_function):
-            if issubclass(tool_or_function, Toolbox):
-                tool = tool_or_function
-                if current_plugin_name:
-                    tool.plugin = current_plugin_name
-                tool.name = name or tool.__name__
-            else:
-                raise TypeError(
-                    "Toolbox classes must inherit from llm.Toolbox, {} does not.".format(
-                        tool_or_function.__name__
-                    )
-                )
-
-        # If it's already a Tool instance, use it directly
-        elif isinstance(tool_or_function, Tool):
-            tool = tool_or_function
-            if name:
-                tool.name = name
-            if current_plugin_name:
-                tool.plugin = current_plugin_name
-
-        # If it's a bare function, wrap it in a Tool
-        else:
-            tool = Tool.function(tool_or_function, name=name)
-            if current_plugin_name:
-                tool.plugin = current_plugin_name
-
-        # Get the name for the tool/toolbox
-        if tool:
-            # For Toolbox classes, use their name attribute or class name
-            if inspect.isclass(tool) and issubclass(tool, Toolbox):
-                prefix = name or getattr(tool, "name", tool.__name__) or ""
-            else:
-                prefix = name or tool.name or ""
-
-            suffix = 0
-            candidate = prefix
-
-            # Avoid name collisions
-            while candidate in tools:
-                suffix += 1
-                candidate = f"{prefix}_{suffix}"
-
-            tools[candidate] = tool
-
-    # Call each plugin's register_tools hook individually to track current_plugin_name
-    for plugin in pm.get_plugins():
-        current_plugin_name = pm.get_name(plugin)
-        hook_caller = pm.hook.register_tools
-        plugin_impls = [
-            impl for impl in hook_caller.get_hookimpls() if impl.plugin is plugin
-        ]
-        for impl in plugin_impls:
-            impl.function(register=register)
-
-    return tools
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
@@ -354,28 +230,15 @@ def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
 
 
 def get_key(
-    explicit_key: Optional[str] = None,
-    key_alias: Optional[str] = None,
-    env_var: Optional[str] = None,
-    *,
-    alias: Optional[str] = None,
-    env: Optional[str] = None,
-    input: Optional[str] = None,
+    explicit_key: Optional[str], key_alias: str, env_var: Optional[str] = None
 ) -> Optional[str]:
     """
-    Return an API key based on a hierarchy of potential sources. You should use the keyword arguments,
-    the positional arguments are here purely for backwards-compatibility with older code.
+    Return an API key based on a hierarchy of potential sources.
 
-    :param input: Input provided by the user. This may be the key, or an alias of a key in keys.json.
-    :param alias: The alias used to retrieve the key from the keys.json file.
-    :param env: Name of the environment variable to check for the key as a final fallback.
+    :param provided_key: A key provided by the user. This may be the key, or an alias of a key in keys.json.
+    :param key_alias: The alias used to retrieve the key from the keys.json file.
+    :param env_var: Name of the environment variable to check for the key.
     """
-    if alias:
-        key_alias = alias
-    if env:
-        env_var = env
-    if input:
-        explicit_key = input
     stored_keys = load_keys()
     # If user specified an alias, use the key stored for that alias
     if explicit_key in stored_keys:
