@@ -223,6 +223,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 * [Model aliases](https://llm.datasette.io/en/stable/aliases.html)
   * [Listing aliases](https://llm.datasette.io/en/stable/aliases.html#listing-aliases)
   * [Adding a new alias](https://llm.datasette.io/en/stable/aliases.html#adding-a-new-alias)
+  * [Alias with prompt options](https://llm.datasette.io/en/stable/aliases.html#aliases-with-options)
   * [Removing an alias](https://llm.datasette.io/en/stable/aliases.html#removing-an-alias)
   * [Viewing the aliases file](https://llm.datasette.io/en/stable/aliases.html#viewing-the-aliases-file)
 * [Embeddings](https://llm.datasette.io/en/stable/embeddings/index.html)

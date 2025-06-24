@@ -126,3 +126,156 @@ def test_cli_aliases_are_registered(user_path, args):
     assert result.exit_code == 0
     # Check for model line only, without keys, as --options is not used
     assert "gpt-3.5-turbo (aliases: 3.5, chatgpt, turbo)" in result.output
+
+
+def test_cli_aliases_set_with_options(user_path):
+    """Test setting aliases with options via CLI"""
+    runner = CliRunner()
+    
+    # Test setting alias with options
+    result = runner.invoke(cli, [
+        "aliases", "set", "test-alias", "mock", 
+        "-o", "temperature", "0.5",
+        "-o", "max_tokens", "100"
+    ])
+    assert result.exit_code == 0
+    
+    # Check that aliases.json contains the correct structure
+    aliases_file = user_path / "aliases.json"
+    assert aliases_file.exists()
+    aliases_data = json.loads(aliases_file.read_text("utf-8"))
+    
+    expected = {
+        "test-alias": {
+            "model": "mock",
+            "options": {
+                "temperature": "0.5",
+                "max_tokens": "100"
+            }
+        }
+    }
+    assert aliases_data == expected
+
+
+def test_cli_aliases_set_with_query_and_options(user_path):
+    """Test setting aliases with -q query and options"""
+    runner = CliRunner()
+    
+    # Test setting alias with query and options
+    result = runner.invoke(cli, [
+        "aliases", "set", "test-query-alias", 
+        "-q", "mock",
+        "-o", "temperature", "0.7"
+    ])
+    assert result.exit_code == 0
+    
+    # Check that aliases.json contains the correct structure
+    aliases_file = user_path / "aliases.json"
+    assert aliases_file.exists()
+    aliases_data = json.loads(aliases_file.read_text("utf-8"))
+    
+    expected = {
+        "test-query-alias": {
+            "model": "mock",
+            "options": {
+                "temperature": "0.7"
+            }
+        }
+    }
+    assert aliases_data == expected
+
+
+def test_set_alias_with_options_function(user_path):
+    """Test the set_alias_with_options function directly"""
+    import llm
+    
+    # Test the function directly
+    llm.set_alias_with_options("direct-test", "mock", {
+        "temperature": 0.3,
+        "max_tokens": 50
+    })
+    
+    # Check that aliases.json was created correctly
+    aliases_file = user_path / "aliases.json"
+    assert aliases_file.exists()
+    aliases_data = json.loads(aliases_file.read_text("utf-8"))
+    
+    expected = {
+        "direct-test": {
+            "model": "mock",
+            "options": {
+                "temperature": 0.3,
+                "max_tokens": 50
+            }
+        }
+    }
+    assert aliases_data == expected
+
+
+def test_resolve_alias_options_function(user_path):
+    """Test the resolve_alias_options function"""
+    import llm
+    
+    # First set an alias with options
+    llm.set_alias_with_options("resolve-test", "mock", {
+        "temperature": 0.8
+    })
+    
+    # Test resolving the alias
+    result = llm.resolve_alias_options("resolve-test")
+    expected = {
+        "model": "mock",
+        "options": {
+            "temperature": 0.8
+        }
+    }
+    assert result == expected
+    
+    # Test resolving a non-alias (should return None)
+    result = llm.resolve_alias_options("not-an-alias")
+    assert result is None
+
+
+def test_cli_aliases_list_with_options_flag(user_path):
+    """Test the --options flag for aliases list command"""
+    import llm
+    
+    # Set up aliases - one with options, one without
+    llm.set_alias("simple-alias", "mock")
+    llm.set_alias_with_options("opts-alias", "mock", {
+        "temperature": "0.5",
+        "max_tokens": "100"
+    })
+    
+    runner = CliRunner()
+    
+    # Test --options flag shows only aliases with options
+    result = runner.invoke(cli, ["aliases", "--options"])
+    assert result.exit_code == 0
+    assert "opts-alias: mock" in result.output
+    assert "temperature: 0.5" in result.output
+    assert "max_tokens: 100" in result.output
+    # Simple alias should NOT appear
+    assert "simple-alias" not in result.output
+    
+    # Test --options with --json
+    result = runner.invoke(cli, ["aliases", "--options", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "opts-alias" in data
+    assert data["opts-alias"]["model"] == "mock"
+    assert data["opts-alias"]["options"]["temperature"] == "0.5"
+    assert "simple-alias" not in data
+
+
+def test_cli_aliases_list_options_empty(user_path):
+    """Test --options flag when no aliases have options"""
+    import llm
+    
+    # Only set a simple alias without options
+    llm.set_alias("simple-only", "mock")
+    
+    runner = CliRunner()
+    result = runner.invoke(cli, ["aliases", "--options"])
+    assert result.exit_code == 0
+    assert "No aliases with options found" in result.output
