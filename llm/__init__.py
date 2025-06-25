@@ -97,7 +97,12 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     extra_model_aliases: Dict[str, list] = {}
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
-        for alias, model_id in configured_aliases.items():
+        for alias, model_id_or_config in configured_aliases.items():
+            # Handle both old format (string) and new format (dict with model and options)
+            if isinstance(model_id_or_config, dict) and "model" in model_id_or_config:
+                model_id = model_id_or_config["model"]
+            else:
+                model_id = model_id_or_config
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, async_model=None, aliases=None):
@@ -222,7 +227,12 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
     extra_model_aliases: Dict[str, list] = {}
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
-        for alias, model_id in configured_aliases.items():
+        for alias, model_id_or_config in configured_aliases.items():
+            # Handle both old format (string) and new format (dict with model and options)
+            if isinstance(model_id_or_config, dict) and "model" in model_id_or_config:
+                model_id = model_id_or_config["model"]
+            else:
+                model_id = model_id_or_config
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, aliases=None):
@@ -428,6 +438,65 @@ def set_alias(alias, model_id_or_alias):
             model_id = model_id_or_alias
     current[alias] = model_id
     path.write_text(json.dumps(current, indent=4) + "\n")
+
+
+def set_alias_with_options(alias, model_id_or_alias, options):
+    """
+    Set an alias to point to the specified model with default options.
+    """
+    path = user_dir() / "aliases.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("{}\n")
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        # We're going to write a valid JSON file in a moment:
+        current = {}
+    # Resolve model_id_or_alias to a model_id
+    try:
+        model = get_model(model_id_or_alias)
+        model_id = model.model_id
+    except UnknownModelError:
+        # Try to resolve it to an embedding model
+        try:
+            model = get_embedding_model(model_id_or_alias)
+            model_id = model.model_id
+        except UnknownModelError:
+            # Set the alias to the exact string they provided instead
+            model_id = model_id_or_alias
+    # Store as a dictionary with model and options
+    current[alias] = {
+        "model": model_id,
+        "options": options
+    }
+    path.write_text(json.dumps(current, indent=4) + "\n")
+
+
+def resolve_alias_options(alias_or_model_id):
+    """
+    Resolve an alias to its model and options, if it exists.
+    Returns None if not an alias, or a dict with 'model' and 'options' keys.
+    """
+    path = user_dir() / "aliases.json"
+    if not path.exists():
+        return None
+    try:
+        current = json.loads(path.read_text())
+    except json.decoder.JSONDecodeError:
+        return None
+    
+    if alias_or_model_id not in current:
+        return None
+    
+    alias_value = current[alias_or_model_id]
+    
+    # Check if it's the new format (dict with model and options)
+    if isinstance(alias_value, dict) and "model" in alias_value:
+        return alias_value
+    
+    # Otherwise it's the old format (just a string), not relevant for options
+    return None
 
 
 def remove_alias(alias):
