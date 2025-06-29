@@ -190,12 +190,7 @@ def register_models(register):
             kwargs["vision"] = True
         if extra_model.get("audio") is True:
             kwargs["audio"] = True
-        if extra_model.get("completion"):
-            klass = Completion
-        else:
-            klass = Chat
-        chat_model = klass(
-            model_id,
+        model_kwargs = dict(
             model_name=model_name,
             api_base=api_base,
             api_type=api_type,
@@ -205,14 +200,29 @@ def register_models(register):
             reasoning=reasoning,
             **kwargs,
         )
+        if extra_model.get("completion"):
+            chat_model = Completion(model_id, **model_kwargs)
+            async_chat_model = None
+        else:
+            chat_model = Chat(model_id, **model_kwargs)
+            async_chat_model = AsyncChat(model_id, **model_kwargs)
         if api_base:
             chat_model.needs_key = None
         if extra_model.get("api_key_name"):
             chat_model.needs_key = extra_model["api_key_name"]
-        register(
-            chat_model,
-            aliases=aliases,
-        )
+        if async_chat_model:
+            async_chat_model.needs_key = chat_model.needs_key
+        if async_chat_model:
+            register(
+                chat_model,
+                async_chat_model,
+                aliases=aliases,
+            )
+        else:
+            register(
+                chat_model,
+                aliases=aliases,
+            )
 
 
 @hookimpl
