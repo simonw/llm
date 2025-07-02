@@ -690,6 +690,8 @@ class Chat(_Shared, KeyModel):
                     usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        if tool_call.function.arguments is None:
+                            tool_call.function.arguments = ""
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
@@ -711,7 +713,7 @@ class Chat(_Shared, KeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments),
+                            arguments=json.loads(value.function.arguments or "{}"),
                         )
                     )
         else:
@@ -728,7 +730,7 @@ class Chat(_Shared, KeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments),
+                        arguments=json.loads(tool_call.function.arguments or "{}"),
                     )
                 )
             if completion.choices[0].message.content is not None:
@@ -774,6 +776,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        if tool_call.function.arguments is None:
+                            tool_call.function.arguments = ""
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
@@ -794,7 +798,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments),
+                            arguments=json.loads(value.function.arguments or "{}"),
                         )
                     )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
@@ -812,7 +816,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments),
+                        arguments=json.loads(tool_call.function.arguments or "{}"),
                     )
                 )
             if completion.choices[0].message.content is not None:
