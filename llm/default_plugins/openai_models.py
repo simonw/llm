@@ -1,6 +1,7 @@
 from llm import AsyncKeyModel, EmbeddingModel, KeyModel, hookimpl
 import llm
 from llm.utils import (
+    asyncify,
     dicts_to_table_string,
     remove_dict_none_values,
     logging_client,
@@ -753,7 +754,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
     ) -> AsyncGenerator[str, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
-        messages = self.build_messages(prompt, conversation)
+        messages = await asyncify(self.build_messages, prompt, conversation)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key, async_=True)
         usage = None

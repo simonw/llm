@@ -13,6 +13,7 @@ import os
 import threading
 import time
 from typing import Final
+import asyncio
 
 from ulid import ULID
 
@@ -734,3 +735,7 @@ def _fresh(ms: int) -> bytes:
     timestamp = int.to_bytes(ms, TIMESTAMP_LEN, "big")
     randomness = os.urandom(RANDOMNESS_LEN)
     return timestamp + randomness
+
+
+async def asyncify(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
