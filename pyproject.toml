@@ -68,6 +68,7 @@ test = [
     "types-PyYAML",
     "types-setuptools",
     "llm-echo==0.3a3",
+    "pyleak>=0.1.13",
 ]
 
 [build-system]
