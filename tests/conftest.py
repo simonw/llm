@@ -484,3 +484,10 @@ def extract_braces(s):
     if first != -1 and last != -1 and first < last:
         return s[first : last + 1]
     return None
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", 
+        "no_leaks: detect asyncio task leaks, thread leaks, and event loop blocking"
+    )
+    
