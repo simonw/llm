@@ -177,7 +177,12 @@ You can search the logs for a search term in the `prompt` or the `response` colu
 ```bash
 llm logs -q 'cheesecake'
 ```
-The most relevant terms will be shown at the bottom of the output.
+The most relevant results will be shown first.
+
+To switch to sorting with most recent first, add `-l/--latest`. This can be combined with `-n` to limit the number of results shown:
+```bash
+llm logs -q 'cheesecake' -l -n 3
+```
 
 (logging-filter-id)=
 

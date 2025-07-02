@@ -349,6 +349,7 @@ Options:
   --tools                     Filter for prompts with results from any tools
   --schema TEXT               JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
+  -l, --latest                Return latest results matching search query
   --data                      Output newline-delimited JSON data for schema
   --data-array                Output JSON array of data for schema
   --data-key TEXT             Return JSON objects from array in this key

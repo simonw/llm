@@ -300,6 +300,10 @@ def test_logs_filtered(user_path, model, path_option):
         # Model filter should work too
         ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
         ("llama", ["-m", "davinci2"], []),
+        # Adding -l/--latest should return latest first (order by id desc)
+        ("llama", [], ["doc1", "doc3"]),
+        ("llama", ["-l"], ["doc3", "doc1"]),
+        ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
 )
 def test_logs_search(user_path, query, extra_args, expected):
