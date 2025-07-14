@@ -436,7 +436,7 @@ class Conversation(_BaseConversation):
         before_call: Optional[BeforeCallSync] = None,
         after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
-        options: Optional[dict] = None,
+        **options,
     ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
         return ChainResponse(
