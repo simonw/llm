@@ -84,6 +84,19 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
 
+## Plugins not available via PyPI
+
+The following plugins can only be installed via their Git repository:
+```bash
+llm install git+https://github.com/user/repo
+```
+- **[llm-dialog](https://github.com/mlang/llm-dialog)** provides tools for interactive prompts and TUI dialogs.
+- **[llm-embed-proxy](https://github.com/mlang/llm-embed-proxy)** adds a `llm embed-proxy` command which launches a intercepting proxy for embedding visited pages and doing similarity search via a simple web UI.
+- **[llm-playwright](https://github.com/mlang/llm-playwright)** provides an experimental tool to browse the web via Playwright.
+- **[llm-sky](https://github.com/mlang/llm-sky)** provides tools to query celestial information, like weather, uv-index, sunrise and sunset, as well as METAR weather reports.
+- **[llm-tts](https://github.com/mlang/llm-tts)** adds a `llm tts` command for streaming playback of OpenAI text to speech APIs.
+- **[llm-wikimedia](https://github.com/mlang/llm-wikimedia)** provides tools and fragment loaders for fetching wikimedia articles like wikipedia and wiktionary.
+
 ## Just for fun
 
 - **[llm-markov](https://github.com/simonw/llm-markov)** adds a simple model that generates output using a [Markov chain](https://en.wikipedia.org/wiki/Markov_chain). This example is used in the tutorial [Writing a plugin to support a new model](https://llm.datasette.io/en/latest/plugins/tutorial-model-plugin.html).
