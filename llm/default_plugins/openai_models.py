@@ -693,9 +693,10 @@ class Chat(_Shared, KeyModel):
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
-                        tool_calls[
-                            index
-                        ].function.arguments += tool_call.function.arguments
+                        else:
+                            tool_calls[
+                                index
+                            ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
@@ -777,9 +778,10 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
-                        tool_calls[
-                            index
-                        ].function.arguments += tool_call.function.arguments
+                        else:
+                            tool_calls[
+                                index
+                            ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
