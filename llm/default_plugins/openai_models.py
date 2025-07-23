@@ -690,6 +690,8 @@ class Chat(_Shared, KeyModel):
                     usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        if tool_call.function.arguments is None:
+                            tool_call.function.arguments = ""
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
@@ -775,6 +777,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
+                        if tool_call.function.arguments is None:
+                            tool_call.function.arguments = ""
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
