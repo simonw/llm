@@ -34,3 +34,17 @@ def test_tools_streaming_variant_b():
     print(chain._responses)
 
     assert "".join(str(output)) == "The current version of *llm* is **{}**.".format(version("llm"))
+
+
+# This response contains streaming variant "c".
+@pytest.mark.vcr(record_mode="none")
+def test_tools_streaming_variant_c():
+    model = llm.get_model("gpt-4.1-mini")
+
+    chain = model.chain("What is the current llm version?", tools=[llm_version], key=API_KEY)
+
+    output = "".join(chain)
+
+    print(chain._responses)
+
+    assert "".join(str(output)) == "The installed version of LLM on this system is {}.".format(version("llm"))
