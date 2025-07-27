@@ -817,12 +817,16 @@ def prompt(
 
     if tool_implementations:
         prompt_method = conversation.chain
-        kwargs["chain_limit"] = chain_limit
+        kwargs = {
+            "chain_limit": chain_limit,
+            "tools": tool_implementations,
+        }
         if tools_debug:
             kwargs["after_call"] = _debug_tool_call
         if tools_approve:
             kwargs["before_call"] = _approve_tool_call
-        kwargs["tools"] = tool_implementations
+        if validated_options:
+            kwargs["options"] = validated_options
 
     try:
         if async_:
