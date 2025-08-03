@@ -20,6 +20,176 @@ import json
 import yaml
 
 
+OPENROUTER_MODELS_WITH_TOOLS = {
+    "aion-labs/aion-1.0",
+    "aion-labs/aion-1.0-mini",
+    "ai21/jamba-1.6-large",
+    "ai21/jamba-1.6-mini",
+    "amazon/nova-lite-v1",
+    "amazon/nova-micro-v1",
+    "amazon/nova-pro-v1",
+    "anthropic/claude-3.5-haiku",
+    "anthropic/claude-3.5-haiku-20241022",
+    "anthropic/claude-3.5-haiku:beta",
+    "anthropic/claude-3.5-sonnet",
+    "anthropic/claude-3.5-sonnet-20240620",
+    "anthropic/claude-3.5-sonnet-20240620:beta",
+    "anthropic/claude-3.5-sonnet:beta",
+    "anthropic/claude-3.7-sonnet",
+    "anthropic/claude-3.7-sonnet:beta",
+    "anthropic/claude-3.7-sonnet:thinking",
+    "anthropic/claude-opus-4",
+    "anthropic/claude-sonnet-4",
+    "cohere/command-a",
+    "cohere/command-r",
+    "cohere/command-r-03-2024",
+    "cohere/command-r-08-2024",
+    "cohere/command-r-plus",
+    "cohere/command-r-plus-04-2024",
+    "cohere/command-r-plus-08-2024",
+    "cohere/command-r7b-12-2024",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-chat-v3-0324",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-r1-0528",
+    "deepseek/deepseek-r1-distill-llama-70b",
+    "deepseek/deepseek-r1-distill-llama-70b:free",
+    "deepseek/deepseek-r1:free",
+    "google/gemini-1.5-pro",
+    "google/gemini-2.0-flash-001",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.0-flash-lite-001",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.5-flash-lite-preview-06-17",
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-pro-exp-03-25",
+    "google/gemini-2.5-pro-preview",
+    "google/gemini-2.5-pro-preview-05-06",
+    "google/gemini-2.5-pro-preview-06-05",
+    "google/gemini-flash-1.5",
+    "google/gemini-flash-1.5-8b",
+    "meta-llama/llama-3.1-405b-instruct",
+    "meta-llama/llama-3.1-405b-instruct:free",
+    "meta-llama/llama-3.1-70b-instruct",
+    "meta-llama/llama-3.1-8b-instruct",
+    "meta-llama/llama-3.2-11b-vision-instruct",
+    "meta-llama/llama-3.2-11b-vision-instruct:free",
+    "meta-llama/llama-3.2-3b-instruct",
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-3-70b-instruct",
+    "meta-llama/llama-3-8b-instruct",
+    "meta-llama/llama-4-maverick",
+    "meta-llama/llama-4-scout",
+    "microsoft/phi-3-medium-128k-instruct",
+    "microsoft/phi-3-mini-128k-instruct",
+    "microsoft/phi-3.5-mini-128k-instruct",
+    "minimax/minimax-m1",
+    "mistralai/codestral-2501",
+    "mistralai/codestral-2508",
+    "mistralai/devstral-medium",
+    "mistralai/devstral-small",
+    "mistralai/devstral-small-2505",
+    "mistralai/magistral-medium-2506",
+    "mistralai/magistral-medium-2506:thinking",
+    "mistralai/magistral-small-2506",
+    "mistralai/ministral-3b",
+    "mistralai/ministral-8b",
+    "mistralai/mistral-7b-instruct",
+    "mistralai/mistral-7b-instruct-v0.1",
+    "mistralai/mistral-7b-instruct-v0.3",
+    "mistralai/mistral-7b-instruct:free",
+    "mistralai/mistral-large",
+    "mistralai/mistral-large-2407",
+    "mistralai/mistral-large-2411",
+    "mistralai/mistral-medium-3",
+    "mistralai/mistral-nemo",
+    "mistralai/mistral-nemo:free",
+    "mistralai/mistral-small",
+    "mistralai/mistral-small-24b-instruct-2501",
+    "mistralai/mistral-small-3.1-24b-instruct",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
+    "mistralai/mistral-small-3.2-24b-instruct",
+    "mistralai/mistral-small-3.2-24b-instruct:free",
+    "mistralai/mistral-tiny",
+    "mistralai/mixtral-8x22b-instruct",
+    "mistralai/mixtral-8x7b-instruct",
+    "mistralai/pixtral-large-2411",
+    "nousresearch/hermes-3-llama-3.1-405b",
+    "nousresearch/hermes-3-llama-3.1-70b",
+    "nvidia/llama-3.1-nemotron-70b-instruct",
+    "openai/chatgpt-4o-latest",
+    "openai/codex-mini",
+    "openai/gpt-3.5-turbo",
+    "openai/gpt-3.5-turbo-0613",
+    "openai/gpt-3.5-turbo-16k",
+    "openai/gpt-4",
+    "openai/gpt-4-0314",
+    "openai/gpt-4-1106-preview",
+    "openai/gpt-4-turbo",
+    "openai/gpt-4-turbo-preview",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1-nano",
+    "openai/gpt-4o",
+    "openai/gpt-4o-2024-05-13",
+    "openai/gpt-4o-2024-08-06",
+    "openai/gpt-4o-2024-11-20",
+    "openai/gpt-4o-mini",
+    "openai/gpt-4o-mini-2024-07-18",
+    "openai/gpt-4o:extended",
+    "openai/o1",
+    "openai/o1-mini",
+    "openai/o1-mini-2024-09-12",
+    "openai/o1-pro",
+    "openai/o3",
+    "openai/o3-mini",
+    "openai/o3-mini-high",
+    "openai/o3-pro",
+    "openai/o4-mini",
+    "openai/o4-mini-high",
+    "openrouter/horizon-beta",
+    "perplexity/sonar-reasoning",
+    "perplexity/sonar-reasoning-pro",
+    "qwen/qwen-2.5-coder-32b-instruct",
+    "qwen/qwen-2.5-coder-32b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "qwen/qwen-2-72b-instruct",
+    "qwen/qwen-max",
+    "qwen/qwen-plus",
+    "qwen/qwen-turbo",
+    "qwen/qwen3-14b",
+    "qwen/qwen3-14b:free",
+    "qwen/qwen3-235b-a22b",
+    "qwen/qwen3-235b-a22b-07-25",
+    "qwen/qwen3-235b-a22b-thinking-2507",
+    "qwen/qwen3-235b-a22b:free",
+    "qwen/qwen3-30b-a3b",
+    "qwen/qwen3-30b-a3b-instruct-2507",
+    "qwen/qwen3-30b-a3b:free",
+    "qwen/qwen3-32b",
+    "qwen/qwen3-4b:free",
+    "qwen/qwen3-coder",
+    "qwen/qwen3-coder:free",
+    "qwen/qwq-32b",
+    "qwen/qwq-32b:free",
+    "rekaai/reka-flash-3",
+    "rekaai/reka-flash-3:free",
+    "x-ai/grok-2-1212",
+    "x-ai/grok-3",
+    "x-ai/grok-3-beta",
+    "x-ai/grok-3-mini",
+    "x-ai/grok-3-mini-beta",
+    "x-ai/grok-4",
+    "z-ai/glm-4.5",
+    "z-ai/glm-4-32b",
+}
+
+
 @hookimpl
 def register_models(register):
     # GPT-4o
@@ -480,6 +650,10 @@ class _Shared:
         self.supports_schema = supports_schema
         self.supports_tools = supports_tools
         self.model_name = model_name
+        if api_base and "openrouter.ai" in api_base:
+            self.supports_tools = (
+                self.model_name or self.model_id
+            ) in OPENROUTER_MODELS_WITH_TOOLS
         self.api_base = api_base
         self.api_type = api_type
         self.api_version = api_version
@@ -693,9 +867,10 @@ class Chat(_Shared, KeyModel):
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
-                        tool_calls[
-                            index
-                        ].function.arguments += tool_call.function.arguments
+                        else:
+                            tool_calls[
+                                index
+                            ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
@@ -777,9 +952,10 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
-                        tool_calls[
-                            index
-                        ].function.arguments += tool_call.function.arguments
+                        else:
+                            tool_calls[
+                                index
+                            ].function.arguments += tool_call.function.arguments
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
