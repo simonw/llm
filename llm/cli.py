@@ -777,7 +777,8 @@ def prompt(
         if key_ not in validated_options:
             validated_options[key_] = value
 
-    kwargs = {**validated_options}
+    kwargs = {}
+    kwargs["options"] = validated_options
 
     resolved_attachments = [*attachments, *attachment_types]
 
