@@ -2749,10 +2749,8 @@ def aliases_set(alias, model_id, query, options):
             err=True,
         )
     else:
-        if options:
-            set_alias_with_options(alias, model_id, dict(options))
-        else:
-            set_alias(alias, model_id)
+        set_alias(alias, model_id)
+
 
 @aliases.command(name="remove")
 @click.argument("alias")
