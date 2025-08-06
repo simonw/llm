@@ -1351,14 +1351,14 @@ def logs_path():
 @logs.command(name="status")
 def logs_status():
     "Show current status of database logging"
-    path = logs_db_path()
-    if not path.exists():
-        click.echo("No log database found at {}".format(path))
-        return
     if logs_on():
         click.echo("Logging is ON for all prompts".format())
     else:
         click.echo("Logging is OFF".format())
+    path = logs_db_path()
+    if not path.exists():
+        click.echo("No log database found at {}".format(path))
+        return
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo("Found log database at {}".format(path))
