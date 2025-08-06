@@ -9,6 +9,10 @@ Use the `llm install` command (a thin wrapper around `pip install`) to install p
 ```bash
 llm install llm-gpt4all
 ```
+If the plugin has not been uploaded to PyPI, you can also install from a Git repository:
+```bash
+llm install git+https://github.com/user/repo
+```
 Plugins can be uninstalled with `llm uninstall`:
 ```bash
 llm uninstall llm-gpt4all -y
