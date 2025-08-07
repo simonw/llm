@@ -2549,6 +2549,7 @@ def tools():
 
 
 @tools.command(name="list")
+@click.argument("tool_defs", nargs=-1)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
@@ -2556,7 +2557,7 @@ def tools():
     help="Python code block or file path defining functions to register as tools",
     multiple=True,
 )
-def tools_list(json_, python_tools):
+def tools_list(tool_defs, json_, python_tools):
     "List available tools that have been provided by plugins"
 
     def introspect_tools(toolbox_class):
@@ -2572,11 +2573,19 @@ def tools_list(json_, python_tools):
             )
         return methods
 
-    tools = get_tools()
-    if python_tools:
-        for code_or_path in python_tools:
-            for tool in _tools_from_code(code_or_path):
+    if tool_defs:
+        tools = {}
+        for tool in _gather_tools(tool_defs, python_tools):
+            if hasattr(tool, 'name'):
                 tools[tool.name] = tool
+            else:
+                tools[tool.__class__.__name__] = tool
+    else:
+        tools = get_tools()
+        if python_tools:
+            for code_or_path in python_tools:
+                for tool in _tools_from_code(code_or_path):
+                    tools[tool.name] = tool
 
     output_tools = []
     output_toolboxes = []
