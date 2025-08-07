@@ -640,7 +640,7 @@ Commands:
 (help-tools-list)=
 #### llm tools list --help
 ```
-Usage: llm tools list [OPTIONS]
+Usage: llm tools list [OPTIONS] [TOOL_DEFS]...
 
   List available tools that have been provided by plugins
 
