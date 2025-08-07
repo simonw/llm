@@ -22,6 +22,11 @@ import yaml
 
 @hookimpl
 def register_models(register):
+    # GPT-5
+    register(
+        Chat("gpt-5", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("gpt-5", vision=True, supports_schema=True, supports_tools=True),
+    )
     # GPT-4o
     register(
         Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
