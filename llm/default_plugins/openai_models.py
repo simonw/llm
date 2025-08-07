@@ -157,7 +157,7 @@ def register_models(register):
             supports_tools=True,
         ),
     )
-    # GPT-5
+    # GPT-5 - use the Responses API based implementations
     for model_id in (
         "gpt-5",
         "gpt-5-mini",
@@ -167,14 +167,14 @@ def register_models(register):
         "gpt-5-nano-2025-08-07",
     ):
         register(
-            Chat(
+            ChatResponses(
                 model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
-            AsyncChat(
+            AsyncChatResponses(
                 model_id,
                 vision=True,
                 reasoning=True,
@@ -759,6 +759,230 @@ class Chat(_Shared, KeyModel):
                 )
             if completion.choices[0].message.content is not None:
                 yield completion.choices[0].message.content
+        self.set_usage(response, usage)
+        response._prompt_json = redact_data({"messages": messages})
+
+
+class _SharedResponses(_Shared):
+    """
+    Base class for OpenAI models that use the Responses API instead of
+    the Chat Completions API. Shares most behavior with _Shared but
+    translates conversation messages into a single input string for
+    the Responses API.
+    """
+
+    def _messages_to_input(self, messages):
+        parts = []
+        for m in messages:
+            role = m.get("role")
+            content = m.get("content")
+            text = None
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                texts = []
+                for c in content:
+                    if isinstance(c, dict):
+                        if "text" in c and isinstance(c["text"], str):
+                            texts.append(c["text"])
+                if texts:
+                    text = "\n".join(texts)
+            if text is None:
+                # Fallback to JSON representation if we cannot easily extract text
+                try:
+                    text = json.dumps(content)
+                except Exception:
+                    text = ""
+            if role == "system":
+                parts.append(f"System: {text}")
+            elif role == "user":
+                parts.append(f"User: {text}")
+            elif role == "assistant":
+                # Include assistant prior messages to preserve context
+                parts.append(f"Assistant: {text}")
+            elif role == "tool":
+                parts.append(f"Tool: {text}")
+            else:
+                parts.append(str(text) if text is not None else "")
+        return "\n\n".join(p for p in parts if p)
+
+    def _extract_output_text(self, result):
+        # Try common attributes on Responses API objects
+        text = getattr(result, "output_text", None)
+        if text:
+            return text
+        # Try to drill into output content blocks
+        output = getattr(result, "output", None)
+        if output and isinstance(output, list):
+            texts = []
+            for block in output:
+                content = getattr(block, "content", None)
+                if isinstance(content, list):
+                    for item in content:
+                        if getattr(item, "type", None) in ("output_text", "text"):
+                            t = getattr(item, "text", None)
+                            if t:
+                                texts.append(t)
+            if texts:
+                return "".join(texts)
+        return None
+
+
+class ChatResponses(_SharedResponses, KeyModel):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    def execute(self, prompt, stream, response, conversation=None, key=None):
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        input_text = self._messages_to_input(messages)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client(key)
+        usage = None
+        if stream:
+            try:
+                with client.responses.stream(
+                    model=self.model_name or self.model_id,
+                    input=input_text,
+                    **kwargs,
+                ) as stream_resp:
+                    for event in stream_resp:
+                        t = getattr(event, "type", None)
+                        if t == "response.output_text.delta":
+                            delta = getattr(event, "delta", None)
+                            if delta:
+                                yield delta
+                    final = stream_resp.get_final_response()
+                    response.response_json = remove_dict_none_values(
+                        final.model_dump()
+                    )
+                    usage_obj = getattr(final, "usage", None)
+                    if usage_obj is not None:
+                        try:
+                            usage = usage_obj.model_dump()
+                        except Exception:
+                            usage = None
+            except Exception:
+                # Fallback to non-streaming if streaming is not available
+                result = client.responses.create(
+                    model=self.model_name or self.model_id,
+                    input=input_text,
+                    **kwargs,
+                )
+                response.response_json = remove_dict_none_values(result.model_dump())
+                text = self._extract_output_text(result)
+                if text is not None:
+                    yield text
+                usage_obj = getattr(result, "usage", None)
+                if usage_obj is not None:
+                    try:
+                        usage = usage_obj.model_dump()
+                    except Exception:
+                        usage = None
+        else:
+            result = client.responses.create(
+                model=self.model_name or self.model_id,
+                input=input_text,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(result.model_dump())
+            text = self._extract_output_text(result)
+            if text is not None:
+                yield text
+            usage_obj = getattr(result, "usage", None)
+            if usage_obj is not None:
+                try:
+                    usage = usage_obj.model_dump()
+                except Exception:
+                    usage = None
+        self.set_usage(response, usage)
+        response._prompt_json = redact_data({"messages": messages})
+
+
+class AsyncChatResponses(_SharedResponses, AsyncKeyModel):
+    needs_key = "openai"
+    key_env_var = "OPENAI_API_KEY"
+    default_max_tokens = None
+
+    class Options(SharedOptions):
+        json_object: Optional[bool] = Field(
+            description="Output a valid JSON object {...}. Prompt must mention JSON.",
+            default=None,
+        )
+
+    async def execute(
+        self, prompt, stream, response, conversation=None, key=None
+    ) -> AsyncGenerator[str, None]:
+        if prompt.system and not self.allows_system_prompt:
+            raise NotImplementedError("Model does not support system prompts")
+        messages = self.build_messages(prompt, conversation)
+        input_text = self._messages_to_input(messages)
+        kwargs = self.build_kwargs(prompt, stream)
+        client = self.get_client(key, async_=True)
+        usage = None
+        if stream:
+            try:
+                async with client.responses.stream(
+                    model=self.model_name or self.model_id,
+                    input=input_text,
+                    **kwargs,
+                ) as stream_resp:
+                    async for event in stream_resp:
+                        t = getattr(event, "type", None)
+                        if t == "response.output_text.delta":
+                            delta = getattr(event, "delta", None)
+                            if delta:
+                                yield delta
+                    final = await stream_resp.get_final_response()
+                    response.response_json = remove_dict_none_values(
+                        final.model_dump()
+                    )
+                    usage_obj = getattr(final, "usage", None)
+                    if usage_obj is not None:
+                        try:
+                            usage = usage_obj.model_dump()
+                        except Exception:
+                            usage = None
+            except Exception:
+                result = await client.responses.create(
+                    model=self.model_name or self.model_id,
+                    input=input_text,
+                    **kwargs,
+                )
+                response.response_json = remove_dict_none_values(result.model_dump())
+                text = self._extract_output_text(result)
+                if text is not None:
+                    yield text
+                usage_obj = getattr(result, "usage", None)
+                if usage_obj is not None:
+                    try:
+                        usage = usage_obj.model_dump()
+                    except Exception:
+                        usage = None
+        else:
+            result = await client.responses.create(
+                model=self.model_name or self.model_id,
+                input=input_text,
+                **kwargs,
+            )
+            response.response_json = remove_dict_none_values(result.model_dump())
+            text = self._extract_output_text(result)
+            if text is not None:
+                yield text
+            usage_obj = getattr(result, "usage", None)
+            if usage_obj is not None:
+                try:
+                    usage = usage_obj.model_dump()
+                except Exception:
+                    usage = None
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
