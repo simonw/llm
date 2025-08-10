@@ -23,9 +23,17 @@ import yaml
 @hookimpl
 def register_models(register):
     # GPT-5
+    for model_id in ("gpt-5", "gpt-5-mini", "gpt-5-nano"):
+        register(
+            Chat(model_id, vision=True, supports_schema=True, supports_tools=True, can_stream=True, reasoning=True),
+            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True, can_stream=True, reasoning=True),
+            aliases=(model_id.replace("gpt-", ""),),
+        )
+    # GPT-5 Chat
     register(
-        Chat("gpt-5", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat("gpt-5", vision=True, supports_schema=True, supports_tools=True),
+        Chat("gpt-5-chat-latest", vision=True, supports_schema=True, supports_tools=True, can_stream=True, reasoning=True),
+        AsyncChat("gpt-5-chat-latest", vision=True, supports_schema=True, supports_tools=True, can_stream=True, reasoning=True),
+        aliases=("gpt-5-chat", "5-chat"),
     )
     # GPT-4o
     register(
