@@ -1,6 +1,6 @@
 [project]
 name = "llm"
-version = "0.26"
+version = "0.27"
 description = "CLI utility and Python library for interacting with Large Language Models from organizations like OpenAI, Anthropic and Gemini plus local models installed on your own machine."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -18,6 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
     "Topic :: Utilities",

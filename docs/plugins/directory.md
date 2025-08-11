@@ -3,6 +3,7 @@
 
 The following plugins are available for LLM. Here's {ref}`how to install them <installing-plugins>`.
 
+(plugin-directory-local-models)=
 ## Local models
 
 These plugins all help you run LLMs directly on your own computer:
@@ -15,6 +16,7 @@ These plugins all help you run LLMs directly on your own computer:
 - **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)** adds support for various models released by the [GPT4All](https://gpt4all.io/) project that are optimized to run locally on your own machine. These models include versions of Vicuna, Orca, Falcon and MPT - here's [a full list of models](https://observablehq.com/@simonw/gpt4all-models).
 - **[llm-mpt30b](https://github.com/simonw/llm-mpt30b)** adds support for the [MPT-30B](https://huggingface.co/mosaicml/mpt-30b) local model.
 
+(plugin-directory-remote-apis)=
 ## Remote APIs
 
 These plugins can be used to interact with remotely hosted models via their API:
@@ -42,6 +44,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
+(plugin-directory-tools)=
 ## Tools
 
 The following plugins add new {ref}`tools <tools>` that can be used by models:
@@ -53,6 +56,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-tools-exa](https://github.com/daturkel/llm-tools-exa)** by Dan Turkel can perform web searches and question-answering using [exa.ai](https://exa.ai/).
 - **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
 
+(plugin-directory-loaders)=
 ## Fragments and template loaders
 
 {ref}`LLM 0.24 <v0_24>` introduced support for plugins that define `-f prefix:value` or `-t prefix:value` custom loaders for fragments and templates.
@@ -67,6 +71,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-fragments-site-text](https://github.com/daturkel/llm-fragments-site-text)** by Dan Turkel converts websites to markdown with [Trafilatura](https://trafilatura.readthedocs.io/en/latest/) to use as fragments: `llm -f site:https://example.com "summarize this"`.
 - **[llm-fragments-reader](https://github.com/simonw/llm-fragments-reader)** runs a URL theough the Jina Reader API: `llm -f 'reader:https://simonwillison.net/tags/jina/' summary`.
 
+(plugin-directory-embeddings)=
 ## Embedding models
 
 {ref}`Embedding models <embeddings>` are models that can be used to generate and store embedding vectors for text.
@@ -76,6 +81,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-embed-jina](https://github.com/simonw/llm-embed-jina)** provides Jina AI's [8K text embedding models](https://jina.ai/news/jina-ai-launches-worlds-first-open-source-8k-text-embedding-rivaling-openai/).
 - **[llm-embed-onnx](https://github.com/simonw/llm-embed-onnx)** provides seven embedding models that can be executed using the ONNX model framework.
 
+(plugin-directory-commands)=
 ## Extra commands
 
 - **[llm-cmd](https://github.com/simonw/llm-cmd)** accepts a prompt for a shell command, runs that prompt and populates the result in your shell so you can review it, edit it and then hit `<enter>` to execute or `ctrl+c` to cancel.
@@ -84,6 +90,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
 
+(plugin-directory-fun)=
 ## Just for fun
 
 - **[llm-markov](https://github.com/simonw/llm-markov)** adds a simple model that generates output using a [Markov chain](https://en.wikipedia.org/wiki/Markov_chain). This example is used in the tutorial [Writing a plugin to support a new model](https://llm.datasette.io/en/latest/plugins/tutorial-model-plugin.html).

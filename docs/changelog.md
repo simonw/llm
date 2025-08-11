@@ -1,5 +1,33 @@
 # Changelog
 
+(v0_27)=
+## 0.27 (2025-08-11)
+
+This release adds support for the new **GPT-5 family** of models from OpenAI. It also enhances tool calling in a number of ways, including allowing {ref}`templates <prompt-templates>` to bundle pre-configured tools.
+
+### New features
+
+- New models: `gpt-5`, `gpt-5-mini` and `gpt-5-nano`. [#1229](https://github.com/simonw/llm/issues/1229)
+- LLM {ref}`templates <prompt-templates>` can now include a list of tools. These can be named tools from plugins or arbitrary Python function blocks, see {ref}`Tools in templates <prompt-templates-tools>`. [#1009](https://github.com/simonw/llm/issues/1009)
+- Tools {ref}`can now return attachments <python-api-tools-attachments>`, for models that support features such as image input. [#1014](https://github.com/simonw/llm/issues/1014)
+- New methods on the `Toolbox` class: `.add_tool()`, `.prepare()` and `.prepare_async()`, described in {ref}`Dynamic toolboxes <python-api-tools-dynamic>`. [#1111](https://github.com/simonw/llm/issues/1111)
+- New `model.conversation(before_call=x, after_call=y)` attributes for registering callback functions to run before and after tool calls. See  {ref}`tool debugging hooks <python-api-tools-debug-hooks>` for details. [#1088](https://github.com/simonw/llm/issues/1088)
+- Some model providers can serve different models from the same configured URL - [llm-llama-server](https://github.com/simonw/llm-llama-server) for example. Plugins for these providers can now record the resolved model ID of the model that was used to the LLM logs using the `response.set_resolved_model(model_id)` method. [#1117](https://github.com/simonw/llm/issues/1117)
+- Raising `llm.CancelToolCall` now only cancels the current tool call, passing an error back to the model and allowing it to continue. [#1148](https://github.com/simonw/llm/issues/1148)
+- New `-l/--latest` option for `llm logs -q searchterm` for searching logs ordered by date (most recent first) instead of the default relevance search. [#1177](https://github.com/simonw/llm/issues/1177)
+
+### Bug fixes and documentation
+
+- The `register_embedding_models` hook is [now documented](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-embedding-models-register). [#1049](https://github.com/simonw/llm/issues/1049)
+- Show visible stack trace for `llm templates show invalid-template-name`. [#1053](https://github.com/simonw/llm/issues/1053)
+- Handle invalid tool names more gracefully in `llm chat`. [#1104](https://github.com/simonw/llm/issues/1104)
+- Add a {ref}`Tool plugins <plugin-directory-tools>` section to the plugin directory. [#1110](https://github.com/simonw/llm/issues/1110)
+- Error on `register(Klass)` if the passed class is not a subclass of `Toolbox`. [#1114](https://github.com/simonw/llm/issues/1114)
+- Add `-h` for `--help` for all `llm` CLI commands. [#1134](https://github.com/simonw/llm/issues/1134)
+- Add missing `dataclasses` to advanced model plugins docs. [#1137](https://github.com/simonw/llm/issues/1137)
+- Fixed a bug where `llm logs -T llm_version "version" --async` incorrectly recorded just one single log entry when it should have recorded two. [#1150](https://github.com/simonw/llm/issues/1150)
+- All extra OpenAI model keys in `extra-openai-models.yaml` are {ref}`now documented <openai-compatible-models>`. [#1228](https://github.com/simonw/llm/issues/1228)
+
 (v0_26)=
 ## 0.26 (2025-05-27)
 
