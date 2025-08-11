@@ -779,10 +779,7 @@ def test_register_toolbox(tmpdir, logs_db):
             ["-c", "list them again"],
         )
         assert result5.exit_code == 1
-        assert (
-            result5.output
-            == "Error: Toolbox tools (Filesystem) are not yet supported with llm -c\n"
-        )
+        assert "Error: Tool(s) Filesystem_list_files not found. Available tools:" in result5.output
 
         # Test the logging worked
         rows = list(logs_db.query(TOOL_RESULTS_SQL))
