@@ -192,7 +192,7 @@ class Toolbox:
         "tools",
         "add_tool",
         "method_tools",
-        "___init_subclass__",
+        "__init_subclass__",
         "prepare",
         "prepare_async",
     )
