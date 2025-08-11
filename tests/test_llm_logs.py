@@ -293,10 +293,15 @@ def test_logs_filtered(user_path, model, path_option):
     "query,extra_args,expected",
     (
         # With no search term order should be by datetime
-        ("", [], ["doc1", "doc2", "doc3"]),
+        ("", [], ["doc2", "doc3", "doc4"]),
         # With a search it's order by rank instead
         ("llama", [], ["doc1", "doc3"]),
         ("alpaca", [], ["doc2"]),
+        # With a search term containing special characters
+        ("search-term", [], ["doc4"]),
+        ("search?term", [], ["doc4"]),
+        ("search#term", [], ["doc4"]),
+        ("search\\#term", [], ["doc4"]),
         # Model filter should work too
         ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
         ("llama", ["-m", "davinci2"], []),
@@ -325,6 +330,7 @@ def test_logs_search(user_path, query, extra_args, expected):
     _insert("doc1", "llama")
     _insert("doc2", "alpaca")
     _insert("doc3", "llama llama")
+    _insert("doc4", "search-term search?term search#term search\\#term")
     runner = CliRunner()
     result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"] + extra_args)
     assert result.exit_code == 0
