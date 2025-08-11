@@ -1,6 +1,6 @@
 from importlib.metadata import version
 import llm
-from llm.tools import llm_time, llm_version
+from llm.tools import llm_version
 import os
 import pytest
 
@@ -12,16 +12,10 @@ API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_a():
     model = llm.get_model("gpt-4.1-mini")
-
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-
-    output = "".join(chain)
-
-    print(chain._responses)
-
-    assert "".join(str(output)) == "The current version of *llm* is **{}**.".format(
+    assert "".join(chain) == "The current version of *llm* is **{}**.".format(
         version("llm")
     )
 
@@ -30,16 +24,10 @@ def test_tools_streaming_variant_a():
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_b():
     model = llm.get_model("gpt-4.1-mini")
-
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-
-    output = "".join(chain)
-
-    print(chain._responses)
-
-    assert "".join(str(output)) == "The current version of *llm* is **{}**.".format(
+    assert "".join(chain) == "The current version of *llm* is **{}**.".format(
         version("llm")
     )
 
@@ -48,15 +36,9 @@ def test_tools_streaming_variant_b():
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_c():
     model = llm.get_model("gpt-4.1-mini")
-
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-
-    output = "".join(chain)
-
-    print(chain._responses)
-
     assert "".join(
-        str(output)
+        chain
     ) == "The installed version of LLM on this system is {}.".format(version("llm"))
