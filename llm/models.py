@@ -9,6 +9,7 @@ import httpx
 from itertools import islice
 import re
 import time
+from types import MethodType
 from typing import (
     Any,
     AsyncGenerator,
@@ -244,12 +245,20 @@ class Toolbox:
                 yield tool
         yield from self._extra_tools
 
-    def add_tool(self, tool_or_function: Union[Tool, Callable[..., Any]]):
+    def add_tool(
+        self, tool_or_function: Union[Tool, Callable[..., Any]], pass_self: bool = False
+    ):
         "Add a tool to this toolbox"
+
+        def _upgrade(fn):
+            if pass_self:
+                return MethodType(fn, self)
+            return fn
+
         if isinstance(tool_or_function, Tool):
             self._extra_tools.append(tool_or_function)
         elif callable(tool_or_function):
-            self._extra_tools.append(Tool.function(tool_or_function))
+            self._extra_tools.append(Tool.function(_upgrade(tool_or_function)))
         else:
             raise ValueError("Tool must be an instance of Tool or a callable function")
 

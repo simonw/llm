@@ -213,6 +213,30 @@ def test_toolbox_add_tool():
     assert '"output": "New method"' in output
 
 
+def test_toolbox_add_tool_with_pass_self():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def __init__(self, hotdog):
+            self.hotdog = hotdog
+
+        def original(self):
+            return "Original method"
+
+    def new_method(self):
+        return self.hotdog
+
+    tools = Tools("doghot")
+    tools.add_tool(new_method, pass_self=True)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "doghot"' in output
+
+
 @pytest.mark.vcr
 def test_conversation_with_tools(vcr):
     import llm

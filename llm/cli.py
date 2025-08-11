@@ -2576,7 +2576,7 @@ def tools_list(tool_defs, json_, python_tools):
     if tool_defs:
         tools = {}
         for tool in _gather_tools(tool_defs, python_tools):
-            if hasattr(tool, 'name'):
+            if hasattr(tool, "name"):
                 tools[tool.name] = tool
             else:
                 tools[tool.__class__.__name__] = tool
