@@ -208,14 +208,21 @@ def test_toolbox_add_tool():
     model = llm.get_model("echo")
 
     class Tools(llm.Toolbox):
+        def __init__(self):
+            self.prepared = False
+
         def original(self):
             return "Original method"
+
+        def prepare(self):
+            self.prepared = True
 
     def new_method():
         return "New method"
 
     tools = Tools()
     tools.add_tool(new_method)
+    assert not tools.prepared
 
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "new_method"}]}),
@@ -223,6 +230,7 @@ def test_toolbox_add_tool():
     )
     output = chain_response.text()
     assert '"output": "New method"' in output
+    assert tools.prepared
 
 
 def test_toolbox_add_tool_with_pass_self():

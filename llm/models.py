@@ -188,9 +188,18 @@ def _get_arguments_input_schema(function, name):
 class Toolbox:
     name: Optional[str] = None
     instance_id: Optional[int] = None
-    _blocked = ("tools", "add_tool", "method_tools", "___init_subclass__")
+    _blocked = (
+        "tools",
+        "add_tool",
+        "method_tools",
+        "___init_subclass__",
+        "prepare",
+        "prepare_async",
+    )
     _extra_tools: List[Tool] = []
     _config: Dict[str, Any] = {}
+    _prepared: bool = False
+    _async_prepared: bool = False
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -261,6 +270,13 @@ class Toolbox:
             self._extra_tools.append(Tool.function(_upgrade(tool_or_function)))
         else:
             raise ValueError("Tool must be an instance of Tool or a callable function")
+
+    def prepare(self):
+        """
+        Over-ride this to perform setup (and .add_tool() calls) before the toolbox is used.
+        Implement a similar prepare_async() method for async setup.
+        """
+        pass
 
     async def prepare_async(self):
         """
@@ -1018,8 +1034,20 @@ class Response(_BaseResponse):
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+
+        # Run prepare() on all Toolbox instances that need it
+        instances_to_prepare: list[Toolbox] = []
+        for tool_to_prep in tools_by_name.values():
+            inst = _get_instance(tool_to_prep.implementation)
+            if isinstance(inst, Toolbox) and not getattr(inst, "_prepared", False):
+                instances_to_prepare.append(inst)
+
+        for inst in instances_to_prepare:
+            inst.prepare()
+            inst._prepared = True
+
         for tool_call in self.tool_calls():
-            tool = tools_by_name.get(tool_call.name)
+            tool: Optional[Tool] = tools_by_name.get(tool_call.name)
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
             if before_call:
@@ -1205,10 +1233,10 @@ class AsyncResponse(_BaseResponse):
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
 
-        # Run async prepare_async on all Toolbox instances that need it
+        # Run async prepare_async() on all Toolbox instances that need it
         instances_to_prepare: list[Toolbox] = []
-        for tool in tools_by_name.values():
-            inst = _get_instance(tool.implementation)
+        for tool_to_prep in tools_by_name.values():
+            inst = _get_instance(tool_to_prep.implementation)
             if isinstance(inst, Toolbox) and not getattr(
                 inst, "_async_prepared", False
             ):
@@ -1222,7 +1250,7 @@ class AsyncResponse(_BaseResponse):
         async_tasks: List[asyncio.Task] = []
 
         for idx, tc in enumerate(tool_calls_list):
-            tool = tools_by_name.get(tc.name)
+            tool: Optional[Tool] = tools_by_name.get(tc.name)
             exception: Optional[Exception] = None
 
             if tool is None:
