@@ -1,3 +1,4 @@
+import sqlite_utils
 from .hookspecs import hookimpl
 from .errors import (
     ModelError,
@@ -399,6 +400,9 @@ def user_dir():
         path = pathlib.Path(click.get_app_dir("io.datasette.llm"))
     path.mkdir(exist_ok=True, parents=True)
     return path
+
+def get_default_embeddings_db() -> sqlite_utils.Database:
+    return sqlite_utils.Database(user_dir() / "embeddings.db")
 
 
 def set_alias(alias, model_id_or_alias):

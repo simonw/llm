@@ -22,6 +22,7 @@ from llm import (
     KeyModel,
     encode,
     get_async_model,
+    get_default_embeddings_db,
     get_default_model,
     get_default_embedding_model,
     get_embedding_models_with_aliases,
@@ -3037,11 +3038,11 @@ def embed(
         raise click.ClickException("Must provide collection when using --store")
 
     # Lazy load this because we do not need it for -c or -i versions
-    def get_db():
+    def get_db() -> sqlite_utils.Database:
         if database:
             return sqlite_utils.Database(database)
         else:
-            return sqlite_utils.Database(user_dir() / "embeddings.db")
+            return get_default_embeddings_db()
 
     collection_obj = None
     model_obj = None
@@ -3226,7 +3227,7 @@ def embed_multi(
     if database:
         db = sqlite_utils.Database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = get_default_embeddings_db()
 
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
@@ -3371,7 +3372,7 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
     if database:
         db = sqlite_utils.Database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = get_default_embeddings_db()
 
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
@@ -3494,8 +3495,11 @@ def collections_path():
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def embed_db_collections(database, json_):
     "View a list of collections"
-    database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    if database:
+        db = sqlite_utils.Database(str(database))
+    else:
+        db = get_default_embeddings_db()
+
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
     rows = db.query(
@@ -3541,8 +3545,11 @@ def collections_delete(collection, database):
     \b
         llm collections delete my-collection
     """
-    database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    if database:
+        db = sqlite_utils.Database(str(database))
+    else:
+        db = get_default_embeddings_db()
+
     try:
         collection_obj = Collection(collection, db, create=False)
     except Collection.DoesNotExist:
