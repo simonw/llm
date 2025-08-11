@@ -277,6 +277,31 @@ print(conversation.chain("Print current name", after_call=print).text())
 
 See the {ref}`register_tools() plugin hook documentation <plugin-hooks-register-tools>` for an example of this tool in action as a CLI plugin.
 
+(python-api-tools-dynamic)=
+#### Dynamic toolboxes
+
+Sometimes you may need to register additional tools against a toolbox after it has been created - for example if you are implementing an MCP plugin where the toolbox needs to consult the MCP server to discover what tools are available.
+
+You can use the `toolbox.add_tool(function_or_tool)` method to add a new tool to an existing toolbox.
+
+This can be passed a `llm.Tool` instance or a function that will be converted into a tool automatically.
+
+If you want your function to be able to access the toolbox instance itself as a `self` parameter, pass that function to `add_tool()` with the `pass_self=True` parameter:
+
+```python
+def my_function(self, arg1: str, arg2: int) -> str:
+    return f"Received {arg1} and {arg2} in {self}"
+
+toolbox.add_tool(my_function, pass_self=True)
+```
+Without `pass_self=True` the function will be called with only its declared arguments, with no `self` parameter.
+
+If your toolbox needs to run an additional command to figure out what it should register using `.add_tool()` you can implement a `prepare()` method on your toolbox class. This will be called once automatically when the toolbox is first used.
+
+In asynchronous contexts the alternative method `await toolbox.prepare_async()` method will be called before the toolbox is used. You can implement this method on your subclass and use it to run asynchronous operations that discover tools to be registered using `self.add_tool()`.
+
+If you want to prepare the class in this way such that it can be used in both synchronous and asynchronous contexts, implement both `prepare()` and `prepare_async()` methods.
+
 (python-api-schemas)=
 
 ### Schemas

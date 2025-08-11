@@ -31,7 +31,7 @@ Applications built on top of LLMs suffer from a class of attacks called [prompt 
 
 Be very careful about which tools you enable when you potentially might be exposed to untrusted sources of content - web pages, GitHub issues posted by other people, email and messages that have been sent to you that could come from an attacker.
 
-Watch out for the **lethal trifecta** of prompt injection exfiltration attacks. If your tool-enabled LLM has the following:
+Watch out for [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) of prompt injection exfiltration attacks. If your tool-enabled LLM has the following:
 
 - access to private data
 - exposure to malicious instructions
