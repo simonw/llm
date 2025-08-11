@@ -806,6 +806,32 @@ class _SharedResponses(_Shared):
                 parts.append(str(text) if text is not None else "")
         return "\n\n".join(p for p in parts if p)
 
+    def build_kwargs(self, prompt, stream):
+        # Start with shared kwargs then drop fields not supported by Responses API
+        kwargs = super().build_kwargs(prompt, stream)
+        # Responses API does not accept stream_options; streaming is controlled
+        # by using client.responses.stream(...)
+        kwargs.pop("stream_options", None)
+        return kwargs
+
+    def set_usage(self, response, usage):
+        if not usage:
+            return
+        # Support both Chat Completions and Responses API usage shapes
+        if "prompt_tokens" in usage and "completion_tokens" in usage:
+            input_tokens = usage.pop("prompt_tokens")
+            output_tokens = usage.pop("completion_tokens")
+            usage.pop("total_tokens", None)
+        elif "input_tokens" in usage and "output_tokens" in usage:
+            input_tokens = usage.pop("input_tokens")
+            output_tokens = usage.pop("output_tokens")
+            usage.pop("total_tokens", None)
+        else:
+            return
+        response.set_usage(
+            input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
+        )
+
     def _extract_output_text(self, result):
         # Try common attributes on Responses API objects
         text = getattr(result, "output_text", None)
