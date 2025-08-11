@@ -25,7 +25,7 @@ llm -f https://llm.datasette.io/robots.txt "Explain this robots.txt file in deta
 ```
 Here we are specifying a fragment using a URL. The contents of that URL will be included in the prompt that is sent to the model, prepended prior to the prompt text.
 
-The `-f` option can be used multiple times to combine together multiple fragments.
+The `-f` option can be used multiple times to combine together multiple fragments. The model will receive all the contents of the fragments, but not their titles. If you would like to tell the LLM the file names along with the content, use [files-to-prompt](https://github.com/simonw/files-to-prompt). files-to-prompt also supports the XML format preferred by Claude.
 
 Fragments can also be files on disk, for example:
 ```bash
