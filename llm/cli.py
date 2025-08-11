@@ -777,7 +777,7 @@ def prompt(
         if key_ not in validated_options:
             validated_options[key_] = value
 
-    kwargs = {**validated_options}
+    kwargs = {}
 
     resolved_attachments = [*attachments, *attachment_types]
 
@@ -817,12 +817,16 @@ def prompt(
 
     if tool_implementations:
         prompt_method = conversation.chain
+        kwargs["options"] = validated_options
         kwargs["chain_limit"] = chain_limit
         if tools_debug:
             kwargs["after_call"] = _debug_tool_call
         if tools_approve:
             kwargs["before_call"] = _approve_tool_call
         kwargs["tools"] = tool_implementations
+    else:
+        # Merge in options for the .prompt() methods
+        kwargs.update(validated_options)
 
     try:
         if async_:

@@ -304,6 +304,27 @@ def test_default_tool_llm_version():
     assert '"output": "{}"'.format(version("llm")) in result.output
 
 
+def test_cli_tools_with_options():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "mock",
+            "-o",
+            "max_tokens",
+            "10",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # It just needs not to crash
+    # https://github.com/simonw/llm/issues/1233
+
+
 def test_functions_tool_locals():
     # https://github.com/simonw/llm/issues/1107
     runner = CliRunner()

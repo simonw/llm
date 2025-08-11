@@ -52,6 +52,7 @@ class MockModel(llm.Model):
     model_id = "mock"
     attachment_types = {"image/png", "audio/wav"}
     supports_schema = True
+    supports_tools = True
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
