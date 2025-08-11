@@ -140,6 +140,15 @@ def test_templates_list(templates_path, args):
             },
             None,
         ),
+        # Model option using an enum: https://github.com/simonw/llm/issues/1237
+        (
+            ["-m", "gpt-5", "-o", "reasoning_effort", "minimal"],
+            {
+                "model": "gpt-5",
+                "options": {"reasoning_effort": "minimal"},
+            },
+            None,
+        ),
     ),
 )
 def test_templates_prompt_save(templates_path, args, expected, expected_error):

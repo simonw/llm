@@ -646,15 +646,17 @@ def prompt(
             # Need to validate and convert their types first
             model = get_model(model_id or get_default_model())
             try:
-                to_save["options"] = dict(
-                    (key, value)
-                    for key, value in model.Options(**dict(options))
-                    if value is not None
-                )
+                options_model = model.Options(**dict(options))
+                # Use model_dump(mode="json") so Enums become their .value strings
+                to_save["options"] = {
+                    k: v
+                    for k, v in options_model.model_dump(mode="json").items()
+                    if v is not None
+                }
             except pydantic.ValidationError as ex:
                 raise click.ClickException(render_errors(ex.errors()))
         path.write_text(
-            yaml.dump(
+            yaml.safe_dump(
                 to_save,
                 indent=4,
                 default_flow_style=False,
