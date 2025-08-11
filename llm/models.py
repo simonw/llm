@@ -262,6 +262,12 @@ class Toolbox:
         else:
             raise ValueError("Tool must be an instance of Tool or a callable function")
 
+    async def prepare_async(self):
+        """
+        Over-ride this to perform async setup (and .add_tool() calls) before the toolbox is used.
+        """
+        pass
+
 
 @dataclass
 class ToolCall:
@@ -1198,6 +1204,19 @@ class AsyncResponse(_BaseResponse):
     ) -> List[ToolResult]:
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+
+        # Run async prepare_async on all Toolbox instances that need it
+        instances_to_prepare: list[Toolbox] = []
+        for tool in tools_by_name.values():
+            inst = _get_instance(tool.implementation)
+            if isinstance(inst, Toolbox) and not getattr(
+                inst, "_async_prepared", False
+            ):
+                instances_to_prepare.append(inst)
+
+        for inst in instances_to_prepare:
+            await inst.prepare_async()
+            inst._async_prepared = True
 
         indexed_results: List[tuple[int, ToolResult]] = []
         async_tasks: List[asyncio.Task] = []
