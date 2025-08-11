@@ -55,7 +55,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"messages":[{"role":"user","content":"What is the current llm version?"},{"role":"assistant","content":""},{"role":"assistant","tool_calls":[{"type":"function","id":"0","function":{"name":"llm_version","arguments":"{}"}}]},{"role":"tool","tool_call_id":"0","content":"0.26"}],"model":"gpt-4.1-mini","stream":true,"stream_options":{"include_usage":true},"tools":[{"type":"function","function":{"name":"llm_version","description":"Return
+    body: '{"messages":[{"role":"user","content":"What is the current llm version?"},{"role":"assistant","content":""},{"role":"assistant","tool_calls":[{"type":"function","id":"0","function":{"name":"llm_version","arguments":"{}"}}]},{"role":"tool","tool_call_id":"0","content":"0.fixed-version"}],"model":"gpt-4.1-mini","stream":true,"stream_options":{"include_usage":true},"tools":[{"type":"function","function":{"name":"llm_version","description":"Return
       the installed version of llm","parameters":{"properties":{},"type":"object"}}}]}'
     headers:
       accept:
@@ -121,7 +121,7 @@ interactions:
         data: {"id":"gen-1753242300-j60LWi6MpN4lMZw1zTHK","provider":"Moonshot AI","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753242300,"choices":[{"index":0,"delta":{"role":"assistant","content":"."},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
 
 
-        data: {"id":"gen-1753242300-j60LWi6MpN4lMZw1zTHK","provider":"Moonshot AI","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753242300,"choices":[{"index":0,"delta":{"role":"assistant","content":"26"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
+        data: {"id":"gen-1753242300-j60LWi6MpN4lMZw1zTHK","provider":"Moonshot AI","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753242300,"choices":[{"index":0,"delta":{"role":"assistant","content":"fixed-version"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
 
 
         data: {"id":"gen-1753242300-j60LWi6MpN4lMZw1zTHK","provider":"Moonshot AI","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753242300,"choices":[{"index":0,"delta":{"role":"assistant","content":"**."},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}

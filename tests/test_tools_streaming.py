@@ -1,4 +1,3 @@
-from importlib.metadata import version
 import llm
 from llm.tools import llm_version
 import os
@@ -15,9 +14,7 @@ def test_tools_streaming_variant_a():
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-    assert "".join(chain) == "The current version of *llm* is **{}**.".format(
-        version("llm")
-    )
+    assert "".join(chain) == "The current version of *llm* is **0.fixed-version**."
 
 
 # This response contains streaming variant "b" where arguments="{}" is the first partial stream received.
@@ -27,9 +24,7 @@ def test_tools_streaming_variant_b():
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-    assert "".join(chain) == "The current version of *llm* is **{}**.".format(
-        version("llm")
-    )
+    assert "".join(chain) == "The current version of *llm* is **0.fixed-version**."
 
 
 # This response contains streaming variant "c".
@@ -39,6 +34,7 @@ def test_tools_streaming_variant_c():
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
-    assert "".join(
-        chain
-    ) == "The installed version of LLM on this system is {}.".format(version("llm"))
+    assert (
+        "".join(chain)
+        == "The installed version of LLM on this system is 0.fixed-version."
+    )
