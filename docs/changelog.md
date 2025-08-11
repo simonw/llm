@@ -18,6 +18,7 @@ This release adds support for the new **GPT-5 family** of models from OpenAI. It
 
 ### Bug fixes and documentation
 
+- Fix for various bugs with different formats of streaming function responses for OpenAI-compatible models. Thanks, [James Sanford](https://github.com/jamessanford). [#1218](https://github.com/simonw/llm/pull/1218)
 - The `register_embedding_models` hook is [now documented](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-embedding-models-register). [#1049](https://github.com/simonw/llm/issues/1049)
 - Show visible stack trace for `llm templates show invalid-template-name`. [#1053](https://github.com/simonw/llm/issues/1053)
 - Handle invalid tool names more gracefully in `llm chat`. [#1104](https://github.com/simonw/llm/issues/1104)
