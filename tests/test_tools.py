@@ -180,16 +180,81 @@ async def test_async_tools_run_tools_in_parallel():
 @pytest.mark.asyncio
 async def test_async_toolbox():
     class Tools(llm.Toolbox):
+        def __init__(self):
+            self.prepared = False
+
         async def go(self):
+            await asyncio.sleep(0)
             return "This was async"
+
+        async def prepare_async(self):
+            await asyncio.sleep(0)
+            self.prepared = True
+
+    instance = Tools()
+    assert instance.prepared is False
 
     model = llm.get_async_model("echo")
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "Tools_go"}]}),
-        tools=[Tools()],
+        tools=[instance],
     )
     output = await chain_response.text()
     assert '"output": "This was async"' in output
+    assert instance.prepared is True
+
+
+def test_toolbox_add_tool():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def __init__(self):
+            self.prepared = False
+
+        def original(self):
+            return "Original method"
+
+        def prepare(self):
+            self.prepared = True
+
+    def new_method():
+        return "New method"
+
+    tools = Tools()
+    tools.add_tool(new_method)
+    assert not tools.prepared
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "New method"' in output
+    assert tools.prepared
+
+
+def test_toolbox_add_tool_with_pass_self():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def __init__(self, hotdog):
+            self.hotdog = hotdog
+
+        def original(self):
+            return "Original method"
+
+    def new_method(self):
+        return self.hotdog
+
+    tools = Tools("doghot")
+    tools.add_tool(new_method, pass_self=True)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "doghot"' in output
 
 
 @pytest.mark.vcr

@@ -9,6 +9,7 @@ import httpx
 from itertools import islice
 import re
 import time
+from types import MethodType
 from typing import (
     Any,
     AsyncGenerator,
@@ -144,7 +145,7 @@ class Tool:
         return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
     @classmethod
-    def function(cls, function, name=None):
+    def function(cls, function, name=None, description=None):
         """
         Turn a Python function into a Tool object by:
          - Extracting the function name
@@ -159,7 +160,7 @@ class Tool:
 
         return cls(
             name=name or function.__name__,
-            description=function.__doc__ or None,
+            description=description or function.__doc__ or None,
             input_schema=_get_arguments_input_schema(function, name),
             implementation=function,
         )
@@ -185,9 +186,20 @@ def _get_arguments_input_schema(function, name):
 
 
 class Toolbox:
-    _blocked = ("method_tools", "introspect_methods", "methods")
     name: Optional[str] = None
     instance_id: Optional[int] = None
+    _blocked = (
+        "tools",
+        "add_tool",
+        "method_tools",
+        "__init_subclass__",
+        "prepare",
+        "prepare_async",
+    )
+    _extra_tools: List[Tool] = []
+    _config: Dict[str, Any] = {}
+    _prepared: bool = False
+    _async_prepared: bool = False
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -208,55 +220,69 @@ class Toolbox:
                 and sig.parameters[name].kind
                 not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
+            self._extra_tools = []
 
             original_init(self, *args, **kwargs)
 
         cls.__init__ = wrapped_init
 
     @classmethod
-    def methods(cls):
-        gathered = []
-        for name in dir(cls):
-            if name.startswith("_"):
+    def method_tools(cls) -> List[Tool]:
+        tools = []
+        for method_name in dir(cls):
+            if method_name.startswith("_") or method_name in cls._blocked:
                 continue
-            if name in cls._blocked:
-                continue
-            method = getattr(cls, name)
+            method = getattr(cls, method_name)
             if callable(method):
-                gathered.append(method)
-        return gathered
-
-    def method_tools(self):
-        "Returns a list of llm.Tool() for each method"
-        for method_name in dir(self):
-            if method_name.startswith("_") or method_name in self._blocked:
-                continue
-            method = getattr(self, method_name)
-            # The attribute must be a bound method, i.e. inspect.ismethod()
-            if callable(method) and inspect.ismethod(method):
                 tool = Tool.function(
                     method,
-                    name="{}_{}".format(self.__class__.__name__, method_name),
+                    name="{}_{}".format(cls.__name__, method_name),
                 )
+                tools.append(tool)
+        return tools
+
+    def tools(self) -> Iterable[Tool]:
+        "Returns an llm.Tool() for each class method, plus any extras registered with add_tool()"
+        # method_tools() returns unbound methods, we need bound methods here:
+        for name in dir(self):
+            if name.startswith("_") or name in self._blocked:
+                continue
+            attr = getattr(self, name)
+            if callable(attr):
+                tool = Tool.function(attr, name=f"{self.__class__.__name__}_{name}")
                 tool.plugin = getattr(self, "plugin", None)
                 yield tool
+        yield from self._extra_tools
 
-    @classmethod
-    def introspect_methods(cls):
-        methods = []
-        for method in cls.methods():
-            arguments = _get_arguments_input_schema(method, method.__name__)
-            methods.append(
-                {
-                    "name": method.__name__,
-                    "description": (
-                        method.__doc__.strip() if method.__doc__ is not None else None
-                    ),
-                    "arguments": _ensure_dict_schema(arguments),
-                    "implementation": method,
-                }
-            )
-        return methods
+    def add_tool(
+        self, tool_or_function: Union[Tool, Callable[..., Any]], pass_self: bool = False
+    ):
+        "Add a tool to this toolbox"
+
+        def _upgrade(fn):
+            if pass_self:
+                return MethodType(fn, self)
+            return fn
+
+        if isinstance(tool_or_function, Tool):
+            self._extra_tools.append(tool_or_function)
+        elif callable(tool_or_function):
+            self._extra_tools.append(Tool.function(_upgrade(tool_or_function)))
+        else:
+            raise ValueError("Tool must be an instance of Tool or a callable function")
+
+    def prepare(self):
+        """
+        Over-ride this to perform setup (and .add_tool() calls) before the toolbox is used.
+        Implement a similar prepare_async() method for async setup.
+        """
+        pass
+
+    async def prepare_async(self):
+        """
+        Over-ride this to perform async setup (and .add_tool() calls) before the toolbox is used.
+        """
+        pass
 
 
 @dataclass
@@ -358,7 +384,7 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
         if isinstance(tool, Tool):
             wrapped_tools.append(tool)
         elif isinstance(tool, Toolbox):
-            wrapped_tools.extend(tool.method_tools())
+            wrapped_tools.extend(tool.tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:
@@ -1008,8 +1034,20 @@ class Response(_BaseResponse):
     ) -> List[ToolResult]:
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+
+        # Run prepare() on all Toolbox instances that need it
+        instances_to_prepare: list[Toolbox] = []
+        for tool_to_prep in tools_by_name.values():
+            inst = _get_instance(tool_to_prep.implementation)
+            if isinstance(inst, Toolbox) and not getattr(inst, "_prepared", False):
+                instances_to_prepare.append(inst)
+
+        for inst in instances_to_prepare:
+            inst.prepare()
+            inst._prepared = True
+
         for tool_call in self.tool_calls():
-            tool = tools_by_name.get(tool_call.name)
+            tool: Optional[Tool] = tools_by_name.get(tool_call.name)
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
             if before_call:
@@ -1195,11 +1233,24 @@ class AsyncResponse(_BaseResponse):
         tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
 
+        # Run async prepare_async() on all Toolbox instances that need it
+        instances_to_prepare: list[Toolbox] = []
+        for tool_to_prep in tools_by_name.values():
+            inst = _get_instance(tool_to_prep.implementation)
+            if isinstance(inst, Toolbox) and not getattr(
+                inst, "_async_prepared", False
+            ):
+                instances_to_prepare.append(inst)
+
+        for inst in instances_to_prepare:
+            await inst.prepare_async()
+            inst._async_prepared = True
+
         indexed_results: List[tuple[int, ToolResult]] = []
         async_tasks: List[asyncio.Task] = []
 
         for idx, tc in enumerate(tool_calls_list):
-            tool = tools_by_name.get(tc.name)
+            tool: Optional[Tool] = tools_by_name.get(tc.name)
             exception: Optional[Exception] = None
 
             if tool is None:

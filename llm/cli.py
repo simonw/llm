@@ -2549,6 +2549,7 @@ def tools():
 
 
 @tools.command(name="list")
+@click.argument("tool_defs", nargs=-1)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "python_tools",
@@ -2556,13 +2557,35 @@ def tools():
     help="Python code block or file path defining functions to register as tools",
     multiple=True,
 )
-def tools_list(json_, python_tools):
+def tools_list(tool_defs, json_, python_tools):
     "List available tools that have been provided by plugins"
-    tools = get_tools()
-    if python_tools:
-        for code_or_path in python_tools:
-            for tool in _tools_from_code(code_or_path):
+
+    def introspect_tools(toolbox_class):
+        methods = []
+        for tool in toolbox_class.method_tools():
+            methods.append(
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "arguments": tool.input_schema,
+                    "implementation": tool.implementation,
+                }
+            )
+        return methods
+
+    if tool_defs:
+        tools = {}
+        for tool in _gather_tools(tool_defs, python_tools):
+            if hasattr(tool, "name"):
                 tools[tool.name] = tool
+            else:
+                tools[tool.__class__.__name__] = tool
+    else:
+        tools = get_tools()
+        if python_tools:
+            for code_or_path in python_tools:
+                for tool in _tools_from_code(code_or_path):
+                    tools[tool.name] = tool
 
     output_tools = []
     output_toolboxes = []
@@ -2586,11 +2609,11 @@ def tools_list(json_, python_tools):
                     "name": name,
                     "tools": [
                         {
-                            "name": method["name"],
-                            "description": method["description"],
-                            "arguments": method["arguments"],
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "arguments": tool["arguments"],
                         }
-                        for method in tool.introspect_methods()
+                        for tool in introspect_tools(tool)
                     ],
                 }
             )
@@ -2617,22 +2640,20 @@ def tools_list(json_, python_tools):
                 click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
         for toolbox in toolbox_objects:
             click.echo(toolbox.name + ":\n")
-            for method in toolbox.introspect_methods():
+            for tool in toolbox.method_tools():
                 sig = (
-                    str(inspect.signature(method["implementation"]))
+                    str(inspect.signature(tool.implementation))
                     .replace("(self, ", "(")
                     .replace("(self)", "()")
                 )
                 click.echo(
                     "  {}{}\n".format(
-                        method["name"],
+                        tool.name,
                         sig,
                     )
                 )
-                if method["description"]:
-                    click.echo(
-                        textwrap.indent(method["description"].strip(), "    ") + "\n"
-                    )
+                if tool.description:
+                    click.echo(textwrap.indent(tool.description.strip(), "    ") + "\n")
 
 
 @cli.group(
