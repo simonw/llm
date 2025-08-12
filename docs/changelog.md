@@ -1,5 +1,13 @@
 # Changelog
 
+(v0_27_1)=
+## 0.27.1 (2025-08-11)
+
+- `llm chat -t template` now correctly loads any tools that are included in that template. [#1239](https://github.com/simonw/llm/issues/1239)
+- Fixed a bug where `llm -m gpt5 -o reasoning_effort minimal --save gm` saved a template containing invalid YAML. [#1237](https://github.com/simonw/llm/issues/1237)
+- Fixed a bug where running `llm chat -t template` could cause prompts to be duplicated. [#1240](https://github.com/simonw/llm/issues/1240)
+- Less confusing error message if a requested toolbox class is unavailable. [#1238](https://github.com/simonw/llm/issues/1238)
+
 (v0_27)=
 ## 0.27 (2025-08-11)
 
