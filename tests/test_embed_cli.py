@@ -345,6 +345,38 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     assert ids == expected_ids
 
 
+def test_embed_multi_with_metadata(tmpdir):
+    """Test that embed-multi works with JSON files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    content = '[{"id": "1", "content": "An item", "metadata": {"key1": "value1", "key2": "value2"}}, {"id": "2", "content": "Another item", "metadata": {"key1": "value1", "key2": "value2"}}]'
+    
+    path = tmpdir / "metadata.json"
+    path.write_text(content, "utf-8")
+    
+    args = ["embed-multi", "metadata-test", "-d", str(db_path), "-m", "embed-demo", str(path), "--store"]
+    
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+    
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+    
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "An item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+    
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Another item"
+    assert json.loads(row2["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+
 def test_embed_multi_files_binary_store(tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]

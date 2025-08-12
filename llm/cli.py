@@ -3344,23 +3344,80 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
-            for row in rows:
+        def tuples_generator(rows_list) -> Iterable[Tuple[str, Union[bytes, str]]]:
+            for row in rows_list:
                 values = list(row.values())
                 id: str = prefix + str(values[0])
                 content: Optional[Union[bytes, str]] = None
                 if binary:
                     content = cast(bytes, values[1])
                 else:
-                    content = " ".join(v or "" for v in values[1:])
+                    # Skip metadata if it exists - only concatenate string/numeric values
+                    content_values = []
+                    for v in values[1:]:
+                        if isinstance(v, dict):
+                            continue  # Skip metadata dicts
+                        content_values.append(str(v) if v is not None else "")
+                    content = " ".join(content_values)
                 if prepend and isinstance(content, str):
                     content = prepend + content
                 yield id, content or ""
 
+        def tuples_with_metadata_generator(rows_list) -> Iterable[Tuple[str, Union[bytes, str], Optional[Dict[str, Any]]]]:
+            for row in rows_list:
+                values = list(row.values())
+                keys = list(row.keys())
+                id: str = prefix + str(values[0])
+                content: Optional[Union[bytes, str]] = None
+                metadata: Optional[Dict[str, Any]] = None
+                
+                # Extract metadata if present
+                if "metadata" in keys:
+                    metadata_value = row["metadata"]
+                    if isinstance(metadata_value, dict):
+                        metadata = metadata_value
+                
+                if binary:
+                    content = cast(bytes, values[1])
+                else:
+                    # Only concatenate non-metadata, non-id values
+                    content_values = []
+                    for i, v in enumerate(values[1:], 1):  # Start from index 1 (skip id)
+                        key = keys[i]
+                        if key == "metadata":
+                            continue  # Skip metadata field
+                        content_values.append(str(v) if v is not None else "")
+                    content = " ".join(content_values)
+                
+                if prepend and isinstance(content, str):
+                    content = prepend + content
+                yield id, content or "", metadata
+
+        # Check if any row has metadata to determine which method to use
+        has_metadata = False
+        first_row = None
+        
+        # Peek at the first row to determine if metadata exists
+        rows_list = list(rows)  # Convert to list so we can examine the first row
+        if rows_list:
+            first_row = rows_list[0]
+            has_metadata = isinstance(first_row, dict) and "metadata" in first_row
+        else:
+            # No rows to process
+            return
+
         embed_kwargs = {"store": store}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
-        collection_obj.embed_multi(tuples(), **embed_kwargs)
+        
+        if has_metadata:
+            collection_obj.embed_multi_with_metadata(
+                (tuples_with_metadata_generator(rows_list)), **embed_kwargs
+            )
+        else:
+            collection_obj.embed_multi(
+                (tuples_generator(rows_list)), **embed_kwargs
+            )
 
 
 @cli.command()
