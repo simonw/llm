@@ -779,7 +779,10 @@ def test_register_toolbox(tmpdir, logs_db):
             ["-c", "list them again"],
         )
         assert result5.exit_code == 1
-        assert "Error: Tool(s) Filesystem_list_files not found. Available tools:" in result5.output
+        assert (
+            "Error: Tool(s) Filesystem_list_files not found. Available tools:"
+            in result5.output
+        )
 
         # Test the logging worked
         rows = list(logs_db.query(TOOL_RESULTS_SQL))
