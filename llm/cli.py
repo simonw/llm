@@ -1197,16 +1197,19 @@ def chat(
                 continue
         if template_obj:
             try:
-                template_prompt, template_system = template_obj.evaluate(prompt, params)
+                # Mirror prompt() logic: only pass input if template uses it
+                uses_input = "input" in template_obj.vars()
+                input_ = prompt if uses_input else ""
+                template_prompt, template_system = template_obj.evaluate(input_, params)
             except Template.MissingVariables as ex:
                 raise click.ClickException(str(ex))
             if template_system and not system:
                 system = template_system
             if template_prompt:
-                new_prompt = template_prompt
-                if prompt:
-                    new_prompt += "\n" + prompt
-                prompt = new_prompt
+                if prompt and not uses_input:
+                    prompt = f"{template_prompt}\n{prompt}"
+                else:
+                    prompt = template_prompt
         if prompt.strip() in ("exit", "quit"):
             break
 
@@ -1221,9 +1224,9 @@ def chat(
             **kwargs,
         )
 
-        # System prompt only sent for the first message:
+        # System prompt and system fragments only sent for the first message
         system = None
-        system_fragments = []
+        argument_system_fragments = []
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
