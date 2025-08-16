@@ -1014,6 +1014,15 @@ def prompt(
     default=5,
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
+@click.option(
+    "last_messages",
+    "-l",
+    "--last-messages",
+    type=int,
+    is_flag=False,
+    flag_value=5,
+    help="Show last messages start of conversation, default 2, set 0 for unlimited",
+)
 def chat(
     system,
     model_id,
@@ -1032,6 +1041,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    last_messages,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1146,6 +1156,22 @@ def chat(
         raise click.ClickException(str(ex))
 
     click.echo("Chatting with {}".format(model.model_id))
+
+    if conversation and conversation.responses and last_messages and last_messages > 0:
+        click.echo("\n--- Conversation History (Last {} messages) ---".format(last_messages))
+
+        # Calculate the start index to get the last 'last_messages' turns
+        start_index = max(0, len(conversation.responses) - last_messages)
+
+        # Iterate over the relevant slice of conversation responses
+        for i, response_obj in enumerate(conversation.responses[start_index:]):
+            # Each response_obj is an llm.Response object, representing a turn
+            # It has 'prompt' for the user's message and 'response' for the AI's reply
+            click.echo(f"\nUser:\n{response_obj.prompt.prompt}")
+            click.echo(f"\nAI:\n{response_obj}")
+
+        click.echo("\n--- End History ---")
+
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
     click.echo("Type '!edit' to open your default editor and modify the prompt")
