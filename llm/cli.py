@@ -977,6 +977,8 @@ def prompt(
     help="Path to log database",
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
+@click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
+@click.option("--log", is_flag=True, help="Log prompt and response to the database")
 @click.option("--key", help="API key to use")
 @click.option(
     "tools",
@@ -1025,6 +1027,8 @@ def chat(
     param,
     options,
     no_stream,
+    no_log,
+    log,
     key,
     database,
     tools,
@@ -1036,6 +1040,9 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
+    if log and no_log:
+        raise click.ClickException("--log and --no-log are mutually exclusive")
+
     # Left and right arrow keys to move cursor:
     if sys.platform != "win32":
         readline.parse_and_bind("\\e[D: backward-char")
@@ -1234,7 +1241,9 @@ def chat(
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
-        response.log_to_db(db)
+
+        if (logs_on() or log) and not no_log:
+            response.log_to_db(db)
         print("")
 
 
