@@ -81,7 +81,7 @@ def test_chat_continue_with_bare_l(mock_model, populated_logs_db):
 
     result = runner.invoke(
         llm.cli.cli,
-        ["chat", "-m", "mock", "-c", "-l"], # -l defaults to 3 messages
+        ["chat", "-m", "mock", "-c", "--count"], # --count defaults to 3 messages
         input="New Prompt\nquit\n",
         catch_exceptions=False,
     )
@@ -152,7 +152,7 @@ def test_chat_continue_with_l_set_to_1(mock_model, populated_logs_db):
 
     result = runner.invoke(
         llm.cli.cli,
-        ["chat", "-m", "mock", "-c", "-l", "1"],
+        ["chat", "-m", "mock", "-c", "-n", "1"],
         input="New Prompt\nquit\n",
         catch_exceptions=False,
     )
@@ -189,7 +189,7 @@ def test_chat_continue_with_l_set_to_2(mock_model, populated_logs_db):
 
     result = runner.invoke(
         llm.cli.cli,
-        ["chat", "-m", "mock", "-c", "-l", "2"],
+        ["chat", "-m", "mock", "-c", "-n", "2"],
         input="New Prompt\nquit\n",
         catch_exceptions=False,
     )
@@ -239,7 +239,7 @@ def test_chat_continue_with_l_set_to_0(mock_model, populated_logs_db):
 
     result = runner.invoke(
         llm.cli.cli,
-        ["chat", "-m", "mock", "-c", "-l", "0"],
+        ["chat", "-m", "mock", "-c", "-n", "0"],
         input="New Prompt\nquit\n",
         catch_exceptions=False,
     )
@@ -288,7 +288,7 @@ def test_chat_l_without_c_is_ignored(mock_model, populated_logs_db):
 
     result = runner.invoke(
         llm.cli.cli,
-        ["chat", "-m", "mock", "-l", "1"], # -l specified, but -c omitted
+        ["chat", "-m", "mock", "-n", "1"], # -l specified, but -c omitted
         input="New Prompt\nquit\n",
         catch_exceptions=False,
     )

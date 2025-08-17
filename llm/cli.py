@@ -1015,13 +1015,12 @@ def prompt(
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
 @click.option(
-    "last_messages",
-    "-l",
-    "--last-messages",
+    "-n",
+    "--count",
     type=int,
     is_flag=False,
     flag_value=3,
-    help="Show last messages start of conversation, default 3, set 0 for unlimited",
+    help="Number of previous messages to show. Requires -c or --cid. Default 3, set 0 for unlimited",
 )
 def chat(
     system,
@@ -1041,7 +1040,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
-    last_messages,
+    count,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1157,22 +1156,21 @@ def chat(
 
     click.echo("Chatting with {}".format(model.model_id))
 
-    if conversation and conversation.responses and last_messages is not None:
-        if last_messages <= 0:
+    if conversation and conversation.responses and count is not None:
+        if count <= 0:
             history_label = "All Messages"
             start_index = 0
         else:
-            history_label = "Last {} Messages".format(last_messages)
-            start_index = max(0, len(conversation.responses) - last_messages)
+            history_label = "Last {} Messages".format(count)
+            # Calculate the start index to get the last 'count' turns
+            start_index = max(0, len(conversation.responses) - count)
 
         click.echo("\n--- Conversation History ({}) ---".format(history_label))
 
-        # Calculate the start index to get the last 'last_messages' turns
 
         # Iterate over the relevant slice of conversation responses
         for i, response_obj in enumerate(conversation.responses[start_index:]):
             # Each response_obj is an llm.Response object, representing a turn
-            # click.echo(f"\n# {response_obj._start_utcnow}  id: {response_obj.id}")
             click.echo(f"\n# {response_obj.datetime_utc()}  id: {response_obj.id}")
             click.echo(f"\n\n## Prompt\n{response_obj.prompt.prompt}")
             click.echo(f"\n\n## Response\n{response_obj}")
