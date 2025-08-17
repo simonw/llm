@@ -1020,8 +1020,8 @@ def prompt(
     "--last-messages",
     type=int,
     is_flag=False,
-    flag_value=5,
-    help="Show last messages start of conversation, default 2, set 0 for unlimited",
+    flag_value=3,
+    help="Show last messages start of conversation, default 3, set 0 for unlimited",
 )
 def chat(
     system,
@@ -1157,18 +1157,25 @@ def chat(
 
     click.echo("Chatting with {}".format(model.model_id))
 
-    if conversation and conversation.responses and last_messages and last_messages > 0:
-        click.echo("\n--- Conversation History (Last {} messages) ---".format(last_messages))
+    if conversation and conversation.responses and last_messages is not None:
+        if last_messages <= 0:
+            history_label = "All Messages"
+            start_index = 0
+        else:
+            history_label = "Last {} Messages".format(last_messages)
+            start_index = max(0, len(conversation.responses) - last_messages)
+
+        click.echo("\n--- Conversation History ({}) ---".format(history_label))
 
         # Calculate the start index to get the last 'last_messages' turns
-        start_index = max(0, len(conversation.responses) - last_messages)
 
         # Iterate over the relevant slice of conversation responses
         for i, response_obj in enumerate(conversation.responses[start_index:]):
             # Each response_obj is an llm.Response object, representing a turn
-            # It has 'prompt' for the user's message and 'response' for the AI's reply
-            click.echo(f"\nUser:\n{response_obj.prompt.prompt}")
-            click.echo(f"\nAI:\n{response_obj}")
+            # click.echo(f"\n# {response_obj._start_utcnow}  id: {response_obj.id}")
+            click.echo(f"\n# {response_obj.datetime_utc()}  id: {response_obj.id}")
+            click.echo(f"\n\n## Prompt\n{response_obj.prompt.prompt}")
+            click.echo(f"\n\n## Response\n{response_obj}")
 
         click.echo("\n--- End History ---")
 
