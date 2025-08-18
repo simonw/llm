@@ -18,6 +18,17 @@ Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>
 ```bash
 brew install llm
 ```
+Or for NixOS users, example for `configuration.nix` with OpenAI, Ollama and Anthropic plugins:
+```nix
+{ config, pkgs, ... }:
+{
+  environment.systemPackages = with pkgs; [
+    # other packages here
+    # ...
+    (python3.withPackages
+      (ps: with ps; [ llm llm-openai-plugin llm-ollama llm-anthropic ]))
+  ]
+}
 
 ## Upgrading to the latest version
 
