@@ -3216,7 +3216,7 @@ def embed_multi(
        - CSV/TSV: First column is ID, remaining columns concatenated as content
        - JSON: Array of objects with "id" field and content fields
        - JSONL: Newline-delimited JSON objects
-
+ 
     \b
        Examples:
          llm embed-multi docs input.csv
@@ -3238,11 +3238,15 @@ def embed_multi(
        - Each file becomes one embedding
        - Relative file paths become IDs
 
+
     \b
        Examples:
          llm embed-multi docs --files docs '**/*.md'
          llm embed-multi images --files photos '*.jpg' --binary
          llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
+         
+    When using JSON input, you can specify a "metadata" field in your objects
+    which will be stored with the embeddings.
     """
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
@@ -3344,23 +3348,34 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
+        def tuples() -> Iterable[Tuple[str, Union[bytes, str], Optional[Dict[str, Any]]]]:
             for row in rows:
                 values = list(row.values())
                 id: str = prefix + str(values[0])
                 content: Optional[Union[bytes, str]] = None
+                metadata = None
+                
+                # Check if there's a metadata field in the row (for JSON input)
+                if "metadata" in row and isinstance(row["metadata"], dict):
+                    metadata = row["metadata"]
+                
                 if binary:
                     content = cast(bytes, values[1])
                 else:
-                    content = " ".join(v or "" for v in values[1:])
+                    # Filter out metadata field if present
+                    content_values = [v for i, v in enumerate(values[1:]) 
+                                    if list(row.keys())[i+1] != "metadata"]
+                    content = " ".join(v or "" for v in content_values)
+                
                 if prepend and isinstance(content, str):
                     content = prepend + content
-                yield id, content or ""
+                
+                yield id, content or "", metadata
 
         embed_kwargs = {"store": store}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
-        collection_obj.embed_multi(tuples(), **embed_kwargs)
+        collection_obj.embed_multi_with_metadata(tuples(), **embed_kwargs)
 
 
 @cli.command()
