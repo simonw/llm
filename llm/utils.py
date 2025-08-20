@@ -348,7 +348,6 @@ def configure_http_logging():
     - LLM_OPENAI_SHOW_RESPONSES=1: Backward compatibility (INFO level)
     """
     import logging
-    import os
 
     config = _get_http_logging_config()
     if not config["enabled"]:

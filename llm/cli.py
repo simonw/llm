@@ -63,7 +63,6 @@ from .utils import (
     token_usage_string,
     truncate_string,
     configure_http_logging,
-    is_http_logging_enabled,
 )
 import base64
 import httpx
