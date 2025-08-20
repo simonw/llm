@@ -167,8 +167,7 @@ def create_http_client(
     """
     if native:
         # Use system certificates stores
-        ctx = 
-        .SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         verify = ctx
     elif cafile:
         ctx = ssl.create_default_context(cafile=cafile)
