@@ -63,9 +63,16 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
 
       llm prompt --help
 
+  Environment variables for HTTP debugging: - LLM_HTTP_LOGGING=1: Enable HTTP
+  request/response logging - LLM_HTTP_DEBUG=1: Enable verbose HTTP debugging -
+  LLM_OPENAI_SHOW_RESPONSES=1: Legacy OpenAI-only debugging
+
 Options:
-  --version   Show the version and exit.
-  -h, --help  Show this message and exit.
+  --version       Show the version and exit.
+  --http-logging  Enable HTTP request/response logging for debugging
+  --http-debug    Enable verbose HTTP debugging (includes connection details)
+  --no-color      Disable colored output in HTTP logging
+  -h, --help      Show this message and exit.
 
 Commands:
   prompt*       Execute a prompt

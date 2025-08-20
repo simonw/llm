@@ -3,6 +3,7 @@ import hashlib
 import httpx
 import itertools
 import json
+import logging
 import pathlib
 import puremagic
 import re
@@ -152,6 +153,259 @@ def logging_client() -> httpx.Client:
         transport=_LogTransport(httpx.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
+
+
+# --- Universal HTTP Logging System ---
+
+
+class HTTPColorFormatter(logging.Formatter):
+    """
+    Custom formatter for HTTP logging with colors and improved readability.
+    """
+
+    # ANSI color codes
+    COLORS = {
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
+        "CRITICAL": "\033[35m",  # Magenta
+        "RESET": "\033[0m",  # Reset
+        "BOLD": "\033[1m",  # Bold
+        "DIM": "\033[2m",  # Dim
+    }
+
+    # Logger-specific colors
+    LOGGER_COLORS = {
+        "httpx": "\033[94m",  # Light blue
+        "httpcore": "\033[90m",  # Dark gray
+        "openai": "\033[92m",  # Light green
+        "anthropic": "\033[95m",  # Light magenta
+        "llm.http": "\033[96m",  # Light cyan
+    }
+
+    def __init__(self, use_colors=True):
+        super().__init__()
+        self.use_colors = use_colors and self._supports_color()
+
+    def _supports_color(self):
+        """Check if the terminal supports color output."""
+        import os
+        import sys
+
+        # Check if we're in a terminal that supports colors
+        if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
+            # Check common environment variables
+            term = os.environ.get("TERM", "")
+            if "color" in term or term in ("xterm", "xterm-256color", "screen", "tmux"):
+                return True
+            # Check for NO_COLOR environment variable
+            if os.environ.get("NO_COLOR"):
+                return False
+            # Default to True for most terminals
+            return True
+        return False
+
+    def format(self, record):
+        if not self.use_colors:
+            return self._format_plain(record)
+
+        # Get colors
+        level_color = self.COLORS.get(record.levelname, "")
+        logger_color = self.LOGGER_COLORS.get(record.name.split(".")[0], "")
+        reset = self.COLORS["RESET"]
+        bold = self.COLORS["BOLD"]
+        dim = self.COLORS["DIM"]
+
+        # Format timestamp
+        timestamp = self.formatTime(record, "%H:%M:%S")
+
+        # Format logger name with color
+        logger_name = record.name
+        if logger_color:
+            logger_name = f"{logger_color}{logger_name}{reset}"
+
+        # Format level with color
+        level = record.levelname
+        if level_color:
+            level = f"{level_color}{bold}{level}{reset}"
+
+        # Format message with special handling for HTTP-specific content
+        message = record.getMessage()
+        message = self._colorize_message(message, record.name)
+
+        # Assemble final format
+        return f"{dim}[{timestamp}]{reset} {level} {logger_name} - {message}"
+
+    def _format_plain(self, record):
+        """Plain formatting without colors."""
+        timestamp = self.formatTime(record, "%H:%M:%S")
+        return f"[{timestamp}] {record.levelname} {record.name} - {record.getMessage()}"
+
+    def _colorize_message(self, message, logger_name):
+        """Add color highlights to HTTP-specific message content."""
+        if not self.use_colors:
+            return message
+
+        reset = self.COLORS["RESET"]
+
+        # Highlight HTTP methods
+        for method in ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]:
+            message = message.replace(
+                f" {method} ", f' {self.COLORS["BOLD"]}{method}{reset} '
+            )
+
+        # Highlight HTTP status codes
+        import re
+
+        # Success status codes (2xx) - green
+        message = re.sub(r"\b(2\d\d)\b", f'{self.COLORS["DEBUG"]}\\1{reset}', message)
+
+        # Client error status codes (4xx) - yellow
+        message = re.sub(r"\b(4\d\d)\b", f'{self.COLORS["WARNING"]}\\1{reset}', message)
+
+        # Server error status codes (5xx) - red
+        message = re.sub(r"\b(5\d\d)\b", f'{self.COLORS["ERROR"]}\\1{reset}', message)
+
+        # Highlight URLs
+        message = re.sub(
+            r'(https?://[^\s"]+)', f'{self.COLORS["DIM"]}\\1{reset}', message
+        )
+
+        # Highlight important headers
+        for header in ["Authorization", "Content-Type", "User-Agent"]:
+            message = message.replace(
+                f"'{header}'", f"'{self.COLORS['BOLD']}{header}{reset}'"
+            )
+            message = message.replace(
+                f'"{header}"', f'"{self.COLORS["BOLD"]}{header}{reset}"'
+            )
+
+        # Highlight connection events for httpcore
+        if "httpcore" in logger_name:
+            for event in [
+                "connect_tcp",
+                "start_tls",
+                "send_request",
+                "receive_response",
+            ]:
+                if event in message:
+                    message = message.replace(
+                        event, f'{self.COLORS["BOLD"]}{event}{reset}'
+                    )
+
+        return message
+
+
+def _get_http_logging_config():
+    """
+    Determine HTTP logging configuration from environment variables.
+
+    Returns:
+        dict: Configuration with 'enabled', 'level', 'format' and 'use_colors' keys
+    """
+    import os
+
+    # Check various environment variables for HTTP logging
+    enabled = bool(
+        os.environ.get("LLM_HTTP_LOGGING")
+        or os.environ.get("LLM_HTTP_DEBUG")
+        or os.environ.get("LLM_HTTP_VERBOSE")
+        or os.environ.get("LLM_OPENAI_SHOW_RESPONSES")  # Backward compatibility
+    )
+
+    if not enabled:
+        return {"enabled": False}
+
+    # Determine logging level
+    level = "INFO"
+    if os.environ.get("LLM_HTTP_DEBUG") or os.environ.get("LLM_HTTP_VERBOSE"):
+        level = "DEBUG"
+
+    return {
+        "enabled": True,
+        "level": level,
+        # Provide a standard logging format description for reference
+        "format": "%(name)s - %(levelname)s - %(message)s",
+        "use_colors": not os.environ.get("NO_COLOR"),
+    }
+
+
+def configure_http_logging():
+    """
+    Configure Python logging for HTTP requests across all providers.
+
+    This enables logging for:
+    - httpx: High-level HTTP client logs
+    - httpcore: Low-level HTTP connection logs
+    - openai: OpenAI SDK logs
+    - anthropic: Anthropic SDK logs
+
+    Environment variables:
+    - LLM_HTTP_LOGGING=1: Enable INFO-level HTTP logging
+    - LLM_HTTP_DEBUG=1: Enable DEBUG-level HTTP logging
+    - LLM_HTTP_VERBOSE=1: Enable DEBUG-level HTTP logging
+    - LLM_OPENAI_SHOW_RESPONSES=1: Backward compatibility (INFO level)
+    """
+    import logging
+    import os
+
+    config = _get_http_logging_config()
+    if not config["enabled"]:
+        return
+
+    # Create our custom formatter
+    formatter = HTTPColorFormatter(use_colors=config.get("use_colors", True))
+
+    # Configure root logger if not already configured
+    if not logging.getLogger().handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+        logging.getLogger().setLevel(logging.WARNING)  # Keep root logger quiet
+
+    # Set up HTTP-related loggers
+    log_level = getattr(logging, config["level"])
+
+    # Core HTTP libraries
+    logging.getLogger("httpx").setLevel(log_level)
+    logging.getLogger("httpcore").setLevel(log_level)
+
+    # Provider SDKs
+    logging.getLogger("openai").setLevel(log_level)
+    logging.getLogger("anthropic").setLevel(log_level)
+
+    # Additional useful loggers
+    if config["level"] == "DEBUG":
+        logging.getLogger("urllib3").setLevel(log_level)
+        logging.getLogger("requests").setLevel(log_level)
+
+    # Configure all HTTP loggers to use our custom formatter
+    http_loggers = ["httpx", "httpcore", "openai", "anthropic", "llm.http"]
+    if config["level"] == "DEBUG":
+        http_loggers.extend(["urllib3", "requests"])
+
+    for logger_name in http_loggers:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(log_level)
+
+        # If this logger doesn't have handlers, add our custom handler
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.propagate = False
+
+    # Log that HTTP logging is enabled
+    logging.getLogger("llm.http").info(
+        f"HTTP logging enabled at {config['level']} level"
+    )
+
+
+def is_http_logging_enabled() -> bool:
+    """Check if HTTP logging is enabled via environment variables."""
+    config = _get_http_logging_config()
+    return config["enabled"]
 
 
 def simplify_usage_dict(d):

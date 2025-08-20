@@ -3,6 +3,8 @@
 
 `llm` defaults to logging all prompts and responses to a SQLite database.
 
+For debugging HTTP requests/responses to providers (OpenAI, Anthropic, Gemini, etc.), see {ref}`HTTP Debugging and Logging <http-debugging>`.
+
 You can find the location of that database using the `llm logs path` command:
 
 ```bash
