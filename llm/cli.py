@@ -62,6 +62,8 @@ from .utils import (
     schema_summary,
     token_usage_string,
     truncate_string,
+    configure_http_logging,
+    is_http_logging_enabled,
 )
 import base64
 import httpx
@@ -315,7 +317,26 @@ def schema_option(fn):
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.version_option()
-def cli():
+@click.option(
+    "--http-logging",
+    is_flag=True,
+    help="Enable HTTP request/response logging for debugging",
+    envvar="LLM_HTTP_LOGGING",
+)
+@click.option(
+    "--http-debug",
+    is_flag=True,
+    help="Enable verbose HTTP debugging (includes connection details)",
+    envvar="LLM_HTTP_DEBUG",
+)
+@click.option(
+    "--no-color",
+    is_flag=True,
+    help="Disable colored output in HTTP logging",
+    envvar="NO_COLOR",
+)
+@click.pass_context
+def cli(ctx, http_logging, http_debug, no_color):
     """
     Access Large Language Models from the command-line
 
@@ -339,7 +360,25 @@ def cli():
     For a full list of prompting options run:
 
         llm prompt --help
+
+    Environment variables for HTTP debugging:
+    - LLM_HTTP_LOGGING=1: Enable HTTP request/response logging
+    - LLM_HTTP_DEBUG=1: Enable verbose HTTP debugging
+    - LLM_OPENAI_SHOW_RESPONSES=1: Legacy OpenAI-only debugging
     """
+    # Set environment variables if CLI flags are provided
+    if http_logging:
+        os.environ["LLM_HTTP_LOGGING"] = "1"
+    if http_debug:
+        os.environ["LLM_HTTP_DEBUG"] = "1"
+    if no_color:
+        os.environ["NO_COLOR"] = "1"
+
+    # Configure HTTP logging early in CLI initialization
+    configure_http_logging()
+
+    # Ensure context object exists for subcommands
+    ctx.ensure_object(dict)
 
 
 @cli.command(name="prompt")
