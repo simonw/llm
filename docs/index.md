@@ -121,6 +121,7 @@ embeddings/index
 plugins/index
 python-api
 logging
+http-debugging
 related-tools
 help
 contributing
