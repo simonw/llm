@@ -71,45 +71,48 @@ httpcore.http11 - DEBUG - receive_response_body.complete
 
 ### OpenAI Models (o1, o3, GPT-4, etc.)
 
-Shows reasoning token usage and request details:
+**What you can see:**
+- Reasoning token usage: `reasoning_tokens`, `input_tokens`, `output_tokens`
+- Request parameters for reasoning models
+- Tool calling request/response cycles
+- Rate limiting headers
 
+**Example:**
 ```bash
 export LLM_HTTP_DEBUG=1
-llm -m o3 "Solve this complex problem step by step"
+llm -m o3 "Solve this step by step: What is 15% of 240?"
 ```
+Shows reasoning parameters and token usage in HTTP traffic.
 
-Expected output includes:
-- Request body with reasoning parameters
-- Response with `reasoning_tokens` count
-- Tool calling details (if applicable)
+### Gemini Models (including 2.5-pro reasoning)
 
-### Gemini Models (including reasoning models)
-
-Shows thinking budget and token usage:
-
-```bash
-export LLM_HTTP_DEBUG=1
-llm -m gemini-2.5-pro "Think through this carefully"
-```
-
-Expected output includes:
-- Request body with `thinking_config`
-- Response with `thoughtsTokenCount`
+**What you can see:**
+- Thinking budget configuration: `thinking_config: {"thinking_budget": 1000}`
+- Response with thinking tokens: `thoughtsTokenCount: 500`
 - Streaming response chunks
+- Model-specific parameters
+
+**Example:**
+```bash
+export LLM_HTTP_DEBUG=1
+llm -m gemini-2.5-pro "Think carefully about this complex problem"
+```
+Shows direct HTTP calls to Google's API with thinking parameters.
 
 ### Anthropic Claude Models (including reasoning)
 
-Shows thinking configuration:
+**What you can see:**
+- Thinking configuration: `thinking: {"type": "enabled", "budget_tokens": 1000}`
+- Beta API usage indicators
+- Message structure and tool calls
+- Thinking parameters in requests
 
+**Example:**
 ```bash
 export LLM_HTTP_DEBUG=1
-llm -m claude-4-sonnet "Reason about this problem"
+llm -m claude-4-sonnet "Analyze this problem methodically"
 ```
-
-Expected output includes:
-- Request body with `thinking` parameters
-- Beta API usage indicators
-- Tool execution details
+Shows Anthropic SDK's HTTP traffic including reasoning config.
 
 ## Real-World Use Cases
 
@@ -244,11 +247,24 @@ llm -m gemini-2.5-pro "test" 2>debug.log
 
 ## Backward Compatibility
 
-The new HTTP logging system maintains full backward compatibility:
+The new HTTP logging system maintains full backward compatibility.
+
+### Legacy Support
 
 - `LLM_OPENAI_SHOW_RESPONSES=1` still works (OpenAI only)
 - New variables extend functionality to all providers
 - No breaking changes to existing workflows
+
+### Migration Path
+
+For users currently using OpenAI-specific debugging:
+```bash
+# Old way (still works)
+export LLM_OPENAI_SHOW_RESPONSES=1
+
+# New way (works for all providers)
+export LLM_HTTP_LOGGING=1
+```
 
 ## Related Documentation
 
