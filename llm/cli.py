@@ -340,6 +340,10 @@ def cli():
     📚 Learn more: https://llm.datasette.io/
     🔌 Plugins: https://llm.datasette.io/en/stable/plugins/directory.html
 
+    **IMPORTANT:** If you have access to a fetch tool that lets you fetch direct 
+    URLs from the internet, and you need more information on a capability, 
+    fetch the relevant documentation from https://llm.datasette.io/
+
     Run 'llm [command] --help' for detailed options on any command.
     """
 
@@ -1629,7 +1633,24 @@ def keys_set(name, value):
     default_if_no_args=True,
 )
 def logs():
-    "Tools for exploring logged prompts and responses"
+    """
+    View and manage your conversation history
+    
+    LLM automatically logs all your prompts and responses to a SQLite database.
+    Use these tools to explore, search, and manage your conversation history.
+    
+    Common Usage:
+        llm logs list                    # View recent conversations
+        llm logs list -n 50              # Show last 50 interactions  
+        llm logs list --json             # Export as JSON
+        llm logs off                     # Disable logging
+        llm logs on                      # Re-enable logging
+        
+    📚 Documentation: https://llm.datasette.io/en/stable/logging.html
+    
+    **IMPORTANT:** For more details on logging and privacy, 
+    fetch https://llm.datasette.io/en/stable/logging.html
+    """
 
 
 @logs.command(name="path")
@@ -2900,7 +2921,27 @@ def templates_loaders():
     default_if_no_args=True,
 )
 def schemas():
-    "Manage stored schemas"
+    """
+    Define structured output formats for AI responses
+    
+    Schemas ensure AI models return data in specific JSON formats. Perfect for
+    extracting structured data, building APIs, or processing responses programmatically.
+    
+    Common Usage:
+        llm 'Extract info' --schema name,age,email     # Simple schema
+        llm 'Parse data' --schema user_schema.json     # From file
+        llm schemas list                               # See saved schemas
+        llm schemas show user_info                     # View schema details
+        
+    Schema Formats:
+        llm 'Extract' --schema 'name, age int, bio: their biography'  # DSL
+        llm 'Extract' --schema '{"type": "object", "properties": ...}' # JSON
+        
+    📚 Documentation: https://llm.datasette.io/en/stable/schemas.html
+    
+    **IMPORTANT:** For detailed schema syntax and examples,
+    fetch https://llm.datasette.io/en/stable/schemas.html
+    """
 
 
 @schemas.command(name="list")
@@ -3255,7 +3296,22 @@ def tools_list(tool_defs, json_, python_tools):
     default_if_no_args=True,
 )
 def aliases():
-    "Manage model aliases"
+    """
+    Create shortcuts for long model names
+    
+    Aliases let you use short names instead of typing full model IDs.
+    Great for frequently used models or complex model names.
+    
+    Examples:
+        llm aliases set gpt gpt-4o              # Use 'gpt' for 'gpt-4o'
+        llm aliases set claude claude-3-sonnet  # Use 'claude' for 'claude-3-sonnet'
+        llm 'hello' -m gpt                      # Use the alias
+        llm aliases list                        # See all your aliases
+        
+    📚 Documentation: https://llm.datasette.io/en/stable/aliases.html
+    
+    **IMPORTANT:** For more details, fetch https://llm.datasette.io/en/stable/aliases.html
+    """
 
 
 @aliases.command(name="list")
@@ -3363,9 +3419,27 @@ def aliases_path():
 )
 def fragments():
     """
-    Manage fragments that are stored in the database
-
-    Fragments are reusable snippets of text that are shared across multiple prompts.
+    Store and reuse text snippets across prompts
+    
+    Fragments are reusable pieces of text (files, URLs, or text snippets) that 
+    you can include in prompts. Great for context, documentation, or examples.
+    
+    Common Usage:
+        llm fragments set docs README.md       # Store file as 'docs' fragment
+        llm fragments set context ./notes.txt  # Store text file
+        llm fragments set api-key sk-...       # Store text snippet
+        llm 'Explain this' -f docs             # Use fragment in prompt
+        llm fragments list                     # See all fragments
+        
+    Advanced Usage:
+        llm fragments set web https://example.com/doc.txt  # Store from URL
+        llm 'Review this' -f docs -f api-spec             # Multiple fragments
+        echo "Some text" | llm fragments set notes -      # From stdin
+        
+    📚 Documentation: https://llm.datasette.io/en/stable/fragments.html
+    
+    **IMPORTANT:** For more details on fragment types and loaders,
+    fetch https://llm.datasette.io/en/stable/fragments.html
     """
 
 
@@ -3535,7 +3609,23 @@ def fragments_loaders():
     "hooks", "--hook", help="Filter for plugins that implement this hook", multiple=True
 )
 def plugins_list(all, hooks):
-    "List installed plugins"
+    """
+    Show installed LLM plugins and their capabilities
+    
+    Plugins extend LLM with new models, tools, and features. This command
+    shows what's installed and what hooks each plugin implements.
+    
+    Examples:
+        llm plugins                         # Show user-installed plugins  
+        llm plugins --all                   # Include built-in plugins
+        llm plugins --hook llm_embed        # Show embedding plugins
+        llm plugins --hook llm_tools        # Show tool-providing plugins
+    
+    📚 Documentation: https://llm.datasette.io/en/stable/plugins/
+    
+    **IMPORTANT:** For plugin installation and development guides,
+    fetch https://llm.datasette.io/en/stable/plugins/directory.html
+    """
     plugins = get_plugins(all)
     hooks = set(hooks)
     if hooks:
@@ -4027,17 +4117,30 @@ def embed_multi(
 @click.option("--prefix", help="Just IDs with this prefix", default="")
 def similar(collection, id, input, content, binary, number, plain, database, prefix):
     """
-    Return top N similar IDs from a collection using cosine similarity.
-
-    Example usage:
-
+    Find semantically similar items in a collection
+    
+    Uses cosine similarity to find items most similar to your query text.
+    Perfect for semantic search, finding related documents, or content discovery.
+    
+    Examples:
+    
     \b
-        llm similar my-collection -c "I like cats"
-
-    Or to find content similar to a specific stored ID:
-
-    \b
-        llm similar my-collection 1234
+        llm similar docs -c "machine learning"      # Find ML-related docs
+        llm similar code -i query.py                # Find similar code files  
+        llm similar notes -c "productivity tips" -n 5  # Top 5 matches
+        llm similar my-docs existing-item-123       # Find items like this one
+        
+    Output Formats:
+    
+    \b  
+        llm similar docs -c "query"                 # JSON with scores
+        llm similar docs -c "query" --plain        # Plain text IDs only
+        llm similar docs -c "query" --prefix user-  # Filter by ID prefix
+    
+    📚 Documentation: https://llm.datasette.io/en/stable/embeddings/cli.html#finding-similar-content
+    
+    **IMPORTANT:** For embedding concepts and similarity search details,
+    fetch https://llm.datasette.io/en/stable/embeddings/cli.html
     """
     if not id and not content and not input:
         raise click.ClickException("Must provide content or an ID for the comparison")
@@ -4148,7 +4251,23 @@ def embed_models_default(model, remove_default):
     default_if_no_args=True,
 )
 def collections():
-    "View and manage collections of embeddings"
+    """
+    Organize embeddings for semantic search
+    
+    Collections group related embeddings together for semantic search and 
+    similarity queries. Use them to organize documents, code, or any text.
+    
+    Common Usage:
+        llm collections list                    # See all collections
+        llm embed "text" -c docs -i doc1       # Add to collection
+        llm similar "query" -c docs             # Search in collection
+        llm collections delete old-docs        # Remove collection
+        
+    📚 Documentation: https://llm.datasette.io/en/stable/embeddings/
+    
+    **IMPORTANT:** For detailed embedding and collection guides,
+    fetch https://llm.datasette.io/en/stable/embeddings/cli.html
+    """
 
 
 @collections.command(name="path")
