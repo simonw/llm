@@ -314,45 +314,59 @@ def cli():
     """
     Access Large Language Models from the command-line
 
-    Documentation: https://llm.datasette.io/
-
-    LLM can run models from many different providers. Consult the
-    plugin directory for a list of available models:
-
-    https://llm.datasette.io/en/stable/plugins/directory.html
-
-    To get started with OpenAI, obtain an API key from them and:
+    🚀 Quick Start:
 
     \b
-        $ llm keys set openai
-        Enter key: ...
+      llm 'What is the capital of France?'      # Basic prompt
+      llm chat                                  # Start conversation
+      llm 'Explain this code' -a script.py     # Analyze a file
+      llm models list                           # See available models
 
-    Then execute a prompt like this:
+    🔧 Common Tasks:
 
-        llm 'Five outrageous names for a pet pelican'
+    \b
+      • Chat: llm chat
+      • Analyze files: llm 'describe this' -a file.txt
+      • Use tools: llm 'search for Python tutorials' -T web_search
+      • Switch models: llm 'hello' -m claude-3-sonnet
+      • Templates: llm templates list
 
-    For a full list of prompting options run:
+    🔑 Setup (first time):
 
-        llm prompt --help
+    \b
+      llm keys set openai     # Add your API key
+      llm models list         # See what's available
+
+    📚 Learn more: https://llm.datasette.io/
+    🔌 Plugins: https://llm.datasette.io/en/stable/plugins/directory.html
+
+    Run 'llm [command] --help' for detailed options on any command.
     """
 
 
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
-@click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option(
+    "-s", "--system", 
+    help="System prompt to guide model behavior. Examples: 'You are a helpful code reviewer' | 'Respond in JSON format only' | 'Act as a technical writer'"
+)
+@click.option(
+    "model_id", "-m", "--model", 
+    help="Model to use (e.g., gpt-4o, claude-3-sonnet, gpt-4o-mini). Set LLM_MODEL env var for default. See 'llm models list' for all options.", 
+    envvar="LLM_MODEL"
+)
 @click.option(
     "-d",
     "--database",
     type=click.Path(readable=True, dir_okay=False),
-    help="Path to log database",
+    help="Custom SQLite database path for logging prompts/responses. Default: ~/.config/io.datasette.llm/logs.db",
 )
 @click.option(
     "queries",
     "-q",
     "--query",
     multiple=True,
-    help="Use first model matching these strings",
+    help="Search terms to find shortest matching model ID. Example: -q gpt-4o -q mini finds gpt-4o-mini",
 )
 @click.option(
     "attachments",
@@ -360,7 +374,7 @@ def cli():
     "--attachment",
     type=AttachmentType(),
     multiple=True,
-    help="Attachment path or URL or -",
+    help="Attach files (images, PDFs, text) or URLs. Use '-' for stdin. Example: -a image.jpg -a https://example.com/doc.pdf",
 )
 @click.option(
     "attachment_types",
@@ -369,19 +383,19 @@ def cli():
     type=(str, str),
     multiple=True,
     callback=attachment_types_callback,
-    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+    help="Attach file with explicit MIME type when auto-detection fails. Format: --at <file> <mimetype>. Example: --at data.bin application/octet-stream",
 )
 @click.option(
     "tools",
     "-T",
     "--tool",
     multiple=True,
-    help="Name of a tool to make available to the model",
+    help="Enable tools from plugins for the model to use. Example: -T web_search -T calculator. Use 'llm tools' to list available tools.",
 )
 @click.option(
     "python_tools",
     "--functions",
-    help="Python code block or file path defining functions to register as tools",
+    help="Python functions as tools. Pass code block or .py file path. Example: --functions 'def add(x, y): return x + y'",
     multiple=True,
 )
 @click.option(
@@ -389,7 +403,7 @@ def cli():
     "--td",
     "--tools-debug",
     is_flag=True,
-    help="Show full details of tool executions",
+    help="Show detailed tool execution logs including function calls and results. Set LLM_TOOLS_DEBUG=1 to enable globally.",
     envvar="LLM_TOOLS_DEBUG",
 )
 @click.option(
@@ -397,7 +411,7 @@ def cli():
     "--ta",
     "--tools-approve",
     is_flag=True,
-    help="Manually approve every tool execution",
+    help="Require manual approval before each tool execution for security. Useful when processing untrusted content.",
 )
 @click.option(
     "chain_limit",
@@ -405,7 +419,7 @@ def cli():
     "--chain-limit",
     type=int,
     default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+    help="Maximum chained tool calls allowed (default: 5). Set to 0 for unlimited. Prevents infinite tool loops.",
 )
 @click.option(
     "options",
@@ -413,63 +427,63 @@ def cli():
     "--option",
     type=(str, str),
     multiple=True,
-    help="key/value options for the model",
+    help="Model-specific options as key/value pairs. Example: -o temperature 0.7 -o max_tokens 1000. Use 'llm models --options' to see available options.",
 )
 @schema_option
 @click.option(
     "--schema-multi",
-    help="JSON schema to use for multiple results",
+    help="JSON schema for structured output containing multiple items. Converts single-item schema to array format automatically.",
 )
 @click.option(
     "fragments",
     "-f",
     "--fragment",
     multiple=True,
-    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+    help="Include saved text fragments by alias, URL, file path, or hash. Example: -f my-docs -f https://example.com/readme.txt. See 'llm fragments' command.",
 )
 @click.option(
     "system_fragments",
     "--sf",
     "--system-fragment",
     multiple=True,
-    help="Fragment to add to system prompt",
+    help="Include fragments as system prompt content instead of regular prompt. Useful for instructions and context.",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Use saved prompt template. Example: -t code-review -t summarize. See 'llm templates list' for available templates.")
 @click.option(
     "-p",
     "--param",
     multiple=True,
     type=(str, str),
-    help="Parameters for template",
+    help="Parameters for templates with variables. Example: -p language python -p style formal. Template must define these variables.",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
-@click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
-@click.option("--log", is_flag=True, help="Log prompt and response to the database")
+@click.option("--no-stream", is_flag=True, help="Wait for complete response instead of streaming tokens as they arrive. Useful for programmatic usage.")
+@click.option("-n", "--no-log", is_flag=True, help="Don't save this prompt/response to the database. Useful for sensitive content or testing.")
+@click.option("--log", is_flag=True, help="Force logging even if disabled globally with 'llm logs off'. Overrides --no-log.")
 @click.option(
     "_continue",
     "-c",
     "--continue",
     is_flag=True,
     flag_value=-1,
-    help="Continue the most recent conversation.",
+    help="Continue your most recent conversation with context. Model and options are inherited from original conversation.",
 )
 @click.option(
     "conversation_id",
     "--cid",
     "--conversation",
-    help="Continue the conversation with the given ID.",
+    help="Continue specific conversation by ID. Find IDs with 'llm logs list'. Example: --cid 01h53zma5txeby33t1kbe3xk8q",
 )
-@click.option("--key", help="API key to use")
-@click.option("--save", help="Save prompt with this template name")
-@click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
-@click.option("-u", "--usage", is_flag=True, help="Show token usage")
-@click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
+@click.option("--key", help="API key to use. Can be actual key or alias from 'llm keys list'. Overrides environment variables and stored keys.")
+@click.option("--save", help="Save this prompt as a reusable template. Example: --save code-reviewer saves current prompt, system, model, and options.")
+@click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously. Useful for batch processing or when response time isn't critical.")
+@click.option("-u", "--usage", is_flag=True, help="Display token usage statistics (input/output/total tokens) and estimated cost if available.")
+@click.option("-x", "--extract", is_flag=True, help="Extract and return only the first fenced code block from the response. Useful for code generation.")
 @click.option(
     "extract_last",
     "--xl",
     "--extract-last",
     is_flag=True,
-    help="Extract last fenced code block",
+    help="Extract and return only the last fenced code block from the response. Useful when model provides multiple code examples.",
 )
 def prompt(
     prompt,
@@ -504,31 +518,69 @@ def prompt(
     extract_last,
 ):
     """
-    Execute a prompt
+    Send a prompt to an AI model (default command)
 
-    Documentation: https://llm.datasette.io/en/stable/usage.html
+    This is the main way to interact with AI models. Just type your question 
+    or request and get an immediate response.
 
-    Examples:
-
-    \b
-        llm 'Capital of France?'
-        llm 'Capital of France?' -m gpt-4o
-        llm 'Capital of France?' -s 'answer in Spanish'
-
-    Multi-modal models can be called with attachments like this:
+    📝 Basic Usage:
 
     \b
-        llm 'Extract text from this image' -a image.jpg
-        llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
-        cat image | llm 'describe image' -a -
-        # With an explicit mimetype:
-        cat image | llm 'describe image' --at - image/jpeg
+        llm 'What is the capital of France?'
+        llm 'Write a Python function to reverse a string'
+        llm 'Explain quantum computing in simple terms'
+        echo "Hello world" | llm 'translate to Spanish'
 
-    The -x/--extract option returns just the content of the first ``` fenced code
-    block, if one is present. If none are present it returns the full response.
+    🎯 Choose Models:
 
     \b
-        llm 'JavaScript function for reversing a string' -x
+        llm 'Hello' -m gpt-4o                    # Use GPT-4o
+        llm 'Hello' -m claude-3-sonnet          # Use Claude 3 Sonnet
+        llm 'Hello' -q gpt-4o -q mini           # Find gpt-4o-mini automatically
+        export LLM_MODEL=claude-3-haiku         # Set default model
+        
+    🖼️  Analyze Files & Images:
+
+    \b
+        llm 'Explain this code' -a script.py
+        llm 'Describe this image' -a photo.jpg
+        llm 'What does this say?' -a document.pdf
+        cat data.json | llm 'summarize this data' -a -
+        
+    🔧 Advanced Features:
+
+    \b
+        llm 'Search for Python tutorials' -T web_search    # Use tools
+        llm --system 'You are a code reviewer' 'Review this:'
+        llm 'Create a README' -t documentation             # Use templates
+        llm 'Generate JSON' --schema user_schema.json      # Structured output
+        llm 'Calculate 2+2' --functions 'def add(x,y): return x+y'
+        
+    💬 Conversations:
+
+    \b
+        llm 'Hello'                   # Start new conversation
+        llm 'What did I just say?' -c # Continue last conversation
+        llm 'More details' --cid abc123  # Continue specific conversation
+        
+    💡 Pro Tips:
+
+    \b
+        llm 'Code for X' -x          # Extract just the code block
+        llm 'Debug this' --td        # Show tool execution details
+        llm 'Sensitive data' -n      # Don't log to database
+        llm 'Hot take' -o temperature 1.5  # Adjust model creativity
+        
+    📚 Documentation:
+    
+    \b
+        • Getting Started: https://llm.datasette.io/en/stable/usage.html
+        • Models: https://llm.datasette.io/en/stable/usage.html#listing-available-models  
+        • Attachments: https://llm.datasette.io/en/stable/usage.html#attachments
+        • Tools: https://llm.datasette.io/en/stable/tools.html
+        • Templates: https://llm.datasette.io/en/stable/templates.html
+        • Schemas: https://llm.datasette.io/en/stable/schemas.html
+        • Setup: https://llm.datasette.io/en/stable/setup.html
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
@@ -924,43 +976,50 @@ def prompt(
 
 
 @cli.command()
-@click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option(
+    "-s", "--system", 
+    help="System prompt to set the assistant's personality and behavior. Example: 'You are a helpful Python tutor' | 'Act as a technical writer'"
+)
+@click.option(
+    "model_id", "-m", "--model", 
+    help="Model for the chat session (e.g., gpt-4o, claude-3-sonnet). Defaults to your configured default model.", 
+    envvar="LLM_MODEL"
+)
 @click.option(
     "_continue",
     "-c",
     "--continue",
     is_flag=True,
     flag_value=-1,
-    help="Continue the most recent conversation.",
+    help="Resume your most recent conversation with full context. All previous messages are included in the session.",
 )
 @click.option(
     "conversation_id",
     "--cid",
     "--conversation",
-    help="Continue the conversation with the given ID.",
+    help="Continue a specific conversation by ID. Use 'llm logs list' to find conversation IDs.",
 )
 @click.option(
     "fragments",
     "-f",
     "--fragment",
     multiple=True,
-    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+    help="Include text fragments in the chat context. Can be aliases, URLs, file paths, or hashes. See 'llm fragments list'.",
 )
 @click.option(
     "system_fragments",
     "--sf",
     "--system-fragment",
     multiple=True,
-    help="Fragment to add to system prompt",
+    help="Include fragments as part of the system prompt for consistent context throughout the chat.",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Start chat using a saved template with predefined system prompt, model, and tools. See 'llm templates list'.")
 @click.option(
     "-p",
     "--param",
     multiple=True,
     type=(str, str),
-    help="Parameters for template",
+    help="Parameters for template variables. Example: -p language python -p difficulty beginner",
 )
 @click.option(
     "options",
@@ -968,27 +1027,27 @@ def prompt(
     "--option",
     type=(str, str),
     multiple=True,
-    help="key/value options for the model",
+    help="Model-specific options for the entire chat session. Example: -o temperature 0.7 -o max_tokens 2000",
 )
 @click.option(
     "-d",
     "--database",
     type=click.Path(readable=True, dir_okay=False),
-    help="Path to log database",
+    help="Custom database path for logging chat messages. Default: ~/.config/io.datasette.llm/logs.db",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
-@click.option("--key", help="API key to use")
+@click.option("--no-stream", is_flag=True, help="Wait for complete responses instead of streaming tokens. Better for slow connections.")
+@click.option("--key", help="API key to use for this chat session. Can be actual key or alias from 'llm keys list'.")
 @click.option(
     "tools",
     "-T",
     "--tool",
     multiple=True,
-    help="Name of a tool to make available to the model",
+    help="Enable tools for the chat session. The model can use these throughout the conversation. Example: -T web_search -T calculator",
 )
 @click.option(
     "python_tools",
     "--functions",
-    help="Python code block or file path defining functions to register as tools",
+    help="Python functions as tools for the chat. Pass code block or .py file path. Functions persist for the entire session.",
     multiple=True,
 )
 @click.option(
@@ -996,7 +1055,7 @@ def prompt(
     "--td",
     "--tools-debug",
     is_flag=True,
-    help="Show full details of tool executions",
+    help="Show detailed tool execution logs for every tool call during the chat. Useful for debugging tool issues.",
     envvar="LLM_TOOLS_DEBUG",
 )
 @click.option(
@@ -1004,7 +1063,7 @@ def prompt(
     "--ta",
     "--tools-approve",
     is_flag=True,
-    help="Manually approve every tool execution",
+    help="Require manual approval for each tool execution during chat. Important for security when using powerful tools.",
 )
 @click.option(
     "chain_limit",
@@ -1012,7 +1071,7 @@ def prompt(
     "--chain-limit",
     type=int,
     default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
+    help="Maximum number of consecutive tool calls allowed in a single response (default: 5). Set to 0 for unlimited.",
 )
 def chat(
     system,
@@ -1034,7 +1093,57 @@ def chat(
     chain_limit,
 ):
     """
-    Hold an ongoing chat with a model.
+    Start an interactive conversation with an AI model
+
+    Opens a persistent chat session for back-and-forth conversations. The model 
+    remembers the entire conversation context until you exit.
+
+    💬 Basic Usage:
+
+    \b
+        llm chat                              # Start with default model
+        llm chat -m gpt-4o                    # Choose specific model
+        llm chat -m claude-3-sonnet          # Use Claude
+        llm chat -s "You are a Python tutor" # Set personality
+
+    🔄 Continue Conversations:
+
+    \b
+        llm chat -c                          # Resume most recent conversation
+        llm chat --cid abc123               # Continue specific conversation
+        llm chat -t helpful-assistant       # Start from template
+
+    🛠️  Chat with Tools:
+
+    \b
+        llm chat -T web_search -T calculator  # Enable tools
+        llm chat --functions 'def hello(): return "Hi!"'  # Custom functions
+        llm chat -T datasette --td           # Debug tool calls
+
+    💡 Interactive Commands:
+
+    \b
+        Type your messages and press Enter
+        Use '!multi' for multi-line input, then '!end' to send
+        Use '!edit' to open your editor for longer prompts
+        Use '!fragment <name>' to include saved text fragments
+        Use 'exit' or 'quit' to end the session
+        Use Ctrl+C or Ctrl+D to force exit
+
+    🎯 Advanced Features:
+
+    \b
+        llm chat -o temperature 0.8          # Adjust creativity
+        llm chat --no-stream                 # Wait for full responses
+        llm chat -f context-docs             # Include fragment context
+
+    📚 Documentation:
+    
+    \b
+        • Chat Guide: https://llm.datasette.io/en/stable/usage.html#starting-an-interactive-chat
+        • Templates: https://llm.datasette.io/en/stable/templates.html
+        • Tools: https://llm.datasette.io/en/stable/tools.html
+        • Continuing Conversations: https://llm.datasette.io/en/stable/usage.html#continuing-a-conversation
     """
     # Left and right arrow keys to move cursor:
     if sys.platform != "win32":
@@ -1276,12 +1385,83 @@ def load_conversation(
     default_if_no_args=True,
 )
 def keys():
-    "Manage stored API keys for different models"
+    """
+    Securely store and manage API keys for AI services
+
+    Most AI models require API keys for access. Store them securely with LLM and
+    they'll be used automatically when you run prompts or start chats. Keys are
+    stored encrypted in your user directory.
+
+    🔑 Quick Setup:
+
+    \b
+        llm keys set openai         # Set up OpenAI/ChatGPT (most common)
+        llm keys set anthropic      # Set up Anthropic/Claude
+        llm keys set google         # Set up Google/Gemini
+        llm keys list               # See what keys you have stored
+
+    🛡️  Security Features:
+
+    \b
+        • Keys stored in secure user directory (not in project folders)  
+        • Never logged to databases or shown in help output
+        • Can use aliases for multiple keys per provider
+        • Environment variables supported as fallback
+
+    🎯 Advanced Usage:
+
+    \b
+        llm keys set work-openai    # Store multiple keys with custom names
+        llm keys set personal-openai
+        llm 'hello' --key work-openai  # Use specific key for a request
+        llm keys get openai         # Export key to environment variable
+
+    📂 Key Management:
+
+    \b
+        llm keys path               # Show where keys are stored
+        llm keys list               # List stored key names (not values)
+        llm keys get <name>         # Retrieve specific key value
+
+    📚 Documentation:
+    
+    \b
+        • API Key Setup: https://llm.datasette.io/en/stable/setup.html#api-key-management
+        • Security Guide: https://llm.datasette.io/en/stable/setup.html#keys-in-environment-variables
+        • Multiple Keys: https://llm.datasette.io/en/stable/setup.html#passing-keys-using-the-key-option
+    """
 
 
 @keys.command(name="list")
 def keys_list():
-    "List names of all stored keys"
+    """
+    List all stored API key names (without showing values)
+
+    Shows the names/aliases of all keys you've stored with 'llm keys set'.
+    The actual key values are never displayed for security.
+
+    📋 Example Output:
+    
+    \b
+        openai
+        anthropic
+        work-openai
+        personal-claude
+
+    💡 Use Case:
+    
+    \b
+        • Check what keys you have before using --key option
+        • See if you've set up keys for a particular service  
+        • Identify custom aliases you've created for different accounts
+
+    📚 Related Commands:
+    
+    \b
+        • llm keys set <name>       # Add a new key
+        • llm keys get <name>       # Get key value for export
+        • llm keys path             # Show where keys are stored
+    """
     path = user_dir() / "keys.json"
     if not path.exists():
         click.echo("No keys found")
@@ -1294,7 +1474,32 @@ def keys_list():
 
 @keys.command(name="path")
 def keys_path_command():
-    "Output the path to the keys.json file"
+    """
+    Show the file path where API keys are stored
+
+    Displays the full path to the keys.json file in your user directory.
+    Useful for backup, manual editing, or troubleshooting.
+
+    📁 Typical Locations:
+    
+    \b
+        • macOS: ~/Library/Application Support/io.datasette.llm/keys.json
+        • Linux: ~/.config/io.datasette.llm/keys.json  
+        • Windows: %APPDATA%\\io.datasette.llm\\keys.json
+
+    ⚠️  Security Note:
+    
+    \b
+        This file contains your actual API keys in JSON format.
+        Keep it secure and never share or commit it to version control.
+
+    💡 Common Uses:
+    
+    \b
+        • Backup your keys before system migration
+        • Set custom location with LLM_USER_PATH environment variable
+        • Verify keys file exists when troubleshooting authentication
+    """
     click.echo(user_dir() / "keys.json")
 
 
@@ -1302,12 +1507,44 @@ def keys_path_command():
 @click.argument("name")
 def keys_get(name):
     """
-    Return the value of a stored key
+    Retrieve the value of a stored API key
 
-    Example usage:
+    Outputs the actual key value to stdout, which is useful for exporting
+    to environment variables or using in scripts.
 
+    📋 Basic Usage:
+    
+    \b
+        llm keys get openai                    # Display OpenAI key
+        llm keys get work-anthropic            # Display custom key alias
+
+    🔧 Export to Environment:
+    
     \b
         export OPENAI_API_KEY=$(llm keys get openai)
+        export ANTHROPIC_API_KEY=$(llm keys get anthropic)
+
+    💡 Scripting Examples:
+    
+    \b
+        # Verify key is set before running commands
+        if llm keys get openai >/dev/null 2>&1; then
+            llm 'Hello world'
+        else
+            echo "Please set OpenAI key first: llm keys set openai"
+        fi
+
+    ⚠️  Security Note:
+    
+    \b
+        This command outputs your actual API key. Be careful when using
+        it in shared environments or log files that might be visible to others.
+
+    📚 Related:
+    
+    \b
+        • llm keys list                # See available key names
+        • llm keys set <name>          # Store a new key
     """
     path = user_dir() / "keys.json"
     if not path.exists():
@@ -1321,16 +1558,56 @@ def keys_get(name):
 
 @keys.command(name="set")
 @click.argument("name")
-@click.option("--value", prompt="Enter key", hide_input=True, help="Value to set")
+@click.option("--value", prompt="Enter key", hide_input=True, help="API key value (will be prompted securely if not provided)")
 def keys_set(name, value):
     """
-    Save a key in the keys.json file
+    Store an API key securely for future use
 
-    Example usage:
+    Prompts you to enter the API key securely (input is hidden) and stores it
+    in your user directory. The key will be automatically used for future requests.
 
+    🔑 Common Providers:
+    
     \b
-        $ llm keys set openai
-        Enter key: ...
+        llm keys set openai         # OpenAI/ChatGPT (get key from platform.openai.com)
+        llm keys set anthropic      # Anthropic/Claude (get key from console.anthropic.com)  
+        llm keys set google         # Google/Gemini (get key from ai.google.dev)
+
+    🏷️  Custom Key Names:
+    
+    \b
+        llm keys set work-openai    # Store multiple keys with descriptive names
+        llm keys set personal-gpt   # Organize by purpose or account
+        llm keys set client-claude  # Different keys for different projects
+
+    🛡️  Security Features:
+    
+    \b
+        • Key input is hidden (not echoed to terminal)
+        • Keys stored in user directory (not project directory)
+        • Secure file permissions applied automatically
+        • Never logged or displayed in help output
+
+    💡 Getting API Keys:
+    
+    \b
+        • OpenAI: Visit https://platform.openai.com/api-keys
+        • Anthropic: Visit https://console.anthropic.com/  
+        • Google: Visit https://ai.google.dev/
+        • Other providers: Check plugin documentation
+
+    📚 Next Steps:
+    
+    \b
+        After setting keys, you can use them immediately:
+        llm 'Hello world'                    # Uses default key
+        llm 'Hello' --key work-openai       # Uses specific key
+
+    📚 Documentation:
+    
+    \b
+        • Setup Guide: https://llm.datasette.io/en/stable/setup.html#saving-and-using-stored-keys
+        • Security: https://llm.datasette.io/en/stable/setup.html#keys-in-environment-variables
     """
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
     path = user_dir() / "keys.json"
@@ -2195,7 +2472,36 @@ def logs_list(
     default_if_no_args=True,
 )
 def models():
-    "Manage available models"
+    """
+    Discover and configure AI models
+
+    Manage the AI models available to LLM, including those from plugins.
+    This is where you discover what models you can use and configure them.
+
+    🔍 Common Commands:
+
+    \b
+        llm models list                    # Show all available models
+        llm models list --options          # Include model parameters
+        llm models list -q claude          # Search for Claude models
+        llm models default gpt-4o          # Set default model
+        llm models options set gpt-4o temperature 0.7  # Configure model
+
+    🎯 Find Specific Types:
+
+    \b
+        llm models list --tools            # Models that support tools
+        llm models list --schemas          # Models with structured output
+        llm models list -m gpt-4o -m claude-3-sonnet  # Specific models
+
+    📚 Documentation:
+    
+    \b
+        • Model Guide: https://llm.datasette.io/en/stable/usage.html#listing-available-models
+        • Model Options: https://llm.datasette.io/en/stable/usage.html#setting-default-options-for-models
+        • Plugin Models: https://llm.datasette.io/en/stable/other-models.html
+        • OpenAI Models: https://llm.datasette.io/en/stable/openai-models.html
+    """
 
 
 _type_lookup = {
@@ -2208,20 +2514,76 @@ _type_lookup = {
 
 @models.command(name="list")
 @click.option(
-    "--options", is_flag=True, help="Show options for each model, if available"
+    "--options", is_flag=True, 
+    help="Show detailed parameter options for each model including types, descriptions, and constraints. Useful for understanding what options you can pass with -o/--option."
 )
-@click.option("async_", "--async", is_flag=True, help="List async models")
-@click.option("--schemas", is_flag=True, help="List models that support schemas")
-@click.option("--tools", is_flag=True, help="List models that support tools")
+@click.option(
+    "async_", "--async", is_flag=True, 
+    help="Show only models that support async/batch processing. These models can handle multiple requests efficiently."
+)
+@click.option(
+    "--schemas", is_flag=True, 
+    help="Show only models that support structured JSON output via schemas. Use these for reliable data extraction and API responses."
+)
+@click.option(
+    "--tools", is_flag=True, 
+    help="Show only models that can call external tools/functions. These models can perform actions like web searches, calculations, and API calls."
+)
 @click.option(
     "-q",
     "--query",
     multiple=True,
-    help="Search for models matching these strings",
+    help="Search for models containing all specified terms in their ID or aliases. Example: -q gpt -q 4o finds gpt-4o models.",
 )
-@click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
+@click.option(
+    "model_ids", "-m", "--model", 
+    help="Show information for specific model IDs or aliases only. Example: -m gpt-4o -m claude-3-sonnet", 
+    multiple=True
+)
 def models_list(options, async_, schemas, tools, query, model_ids):
-    "List available models"
+    """
+    List all available AI models and their capabilities
+
+    This command shows every model you can use with LLM, including those from
+    installed plugins. Use filters to narrow down to models with specific features.
+
+    📋 Basic Usage:
+
+    \b
+        llm models list                    # Show all models
+        llm models list --options          # Include parameter details
+        llm models                         # Same as 'list' (default command)
+
+    🔍 Search and Filter:
+
+    \b
+        llm models list -q gpt             # Find GPT models
+        llm models list -q claude -q sonnet   # Find Claude Sonnet models
+        llm models list -m gpt-4o -m claude-3-haiku  # Specific models only
+
+    🎯 Filter by Capability:
+
+    \b
+        llm models list --tools            # Models that can use tools
+        llm models list --schemas          # Models with structured output
+        llm models list --async            # Models supporting batch processing
+
+    💡 Understanding Output:
+    
+    \b
+        • Model names show provider and capabilities
+        • Aliases are shorter names you can use with -m
+        • Options show available parameters for -o/--option
+        • Features list capabilities like streaming, tools, schemas
+        • Keys show which API key is required
+
+    📚 Related Documentation:
+    
+    \b
+        • Using Models: https://llm.datasette.io/en/stable/usage.html#listing-available-models
+        • Model Options: https://llm.datasette.io/en/stable/usage.html#model-options
+        • Installing Plugins: https://llm.datasette.io/en/stable/plugins/installing-plugins.html
+    """
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
@@ -2307,7 +2669,44 @@ def models_list(options, async_, schemas, tools, query, model_ids):
 @models.command(name="default")
 @click.argument("model", required=False)
 def models_default(model):
-    "Show or set the default model"
+    """
+    Show or set your default AI model
+
+    The default model is used automatically when you run 'llm prompt' or 'llm chat'
+    without specifying the -m/--model option. This saves you from having to type
+    the model name repeatedly.
+
+    📋 Usage:
+
+    \b
+        llm models default                    # Show current default model
+        llm models default gpt-4o            # Set GPT-4o as default
+        llm models default claude-3-sonnet   # Set Claude 3 Sonnet as default
+        llm models default 4o-mini           # Use alias (shorter name)
+
+    💡 How It Works:
+    
+    \b
+        • Set once, use everywhere: After setting a default, all your prompts use it
+        • Override when needed: Use -m to temporarily use a different model
+        • Per-session override: Set LLM_MODEL environment variable
+        • Template defaults: Templates can specify their own preferred model
+
+    🎯 Common Defaults:
+
+    \b
+        llm models default gpt-4o-mini       # Fast, cheap, good for most tasks
+        llm models default gpt-4o            # More capable, higher cost
+        llm models default claude-3-haiku    # Anthropic's fast model
+        llm models default claude-3-sonnet   # Anthropic's balanced model
+
+    📚 Related Documentation:
+    
+    \b
+        • Setup Guide: https://llm.datasette.io/en/stable/setup.html#setting-a-custom-default-model
+        • Model Comparison: https://llm.datasette.io/en/stable/openai-models.html
+        • Environment Variables: https://llm.datasette.io/en/stable/usage.html#model-options
+    """
     if not model:
         click.echo(get_default_model())
         return
@@ -2325,12 +2724,97 @@ def models_default(model):
     default_if_no_args=True,
 )
 def templates():
-    "Manage stored prompt templates"
+    """
+    Create and manage reusable prompt templates
+
+    Templates are saved prompts that can include system prompts, model preferences,
+    tools, and variable placeholders. Perfect for workflows you repeat often.
+
+    🎯 Quick Start:
+
+    \b
+        llm --save code-review --system 'You are a code reviewer'
+        llm templates list              # See all your templates  
+        llm -t code-review 'Review this function'  # Use template
+
+    📝 Creating Templates:
+
+    \b
+        llm templates edit review       # Create new template in editor
+        llm --save summarize --system 'Summarize this text'  # Save from prompt
+        llm -t summarize -p style formal  # Use with parameters
+
+    🔧 Template Features:
+
+    \b
+        • System prompts: Set model personality and behavior
+        • Variables: Use $variable for dynamic content  
+        • Default models: Specify preferred model per template
+        • Tools integration: Include tools in template definition
+        • Parameters: Accept user input with -p option
+
+    💡 Common Use Cases:
+
+    \b
+        • Code review: Consistent review criteria and tone
+        • Content writing: Brand voice and style guidelines  
+        • Data analysis: Standard analysis questions and format
+        • Translation: Specific language pairs and formality
+        • Documentation: Technical writing standards
+
+    📚 Documentation:
+    
+    \b
+        • Template Guide: https://llm.datasette.io/en/stable/templates.html
+        • Creating Templates: https://llm.datasette.io/en/stable/templates.html#getting-started-with-save
+        • Variables: https://llm.datasette.io/en/stable/templates.html#additional-template-variables
+        • YAML Format: https://llm.datasette.io/en/stable/templates.html#templates-as-yaml-files
+    """
 
 
 @templates.command(name="list")
 def templates_list():
-    "List available prompt templates"
+    """
+    Display all your saved prompt templates
+
+    Shows all templates you've created, including a preview of their system prompt
+    and regular prompt content. Templates are stored as YAML files that you can
+    edit directly or modify with the 'llm templates edit' command.
+
+    📋 Output Format:
+    
+    \b
+        template-name  : system: Your system prompt
+                        prompt: Your prompt text with $variables
+
+    💡 Understanding the Display:
+    
+    \b
+        • Left side shows the template name (use with -t option)
+        • System prompts define the model's behavior and personality  
+        • Regular prompts are the main instruction with optional variables
+        • Variables like $input are replaced when you use the template
+
+    🎯 Using Templates:
+    
+    \b
+        llm -t template-name 'your input here'     # Use template
+        llm -t template-name -p var1 value        # Pass parameters  
+        llm chat -t template-name                  # Start chat with template
+
+    📚 Related Commands:
+    
+    \b
+        • llm templates edit <name>       # Modify existing template
+        • llm templates path              # Show template directory
+        • llm --save <name>               # Create template from prompt
+
+    📚 Documentation:
+    
+    \b
+        • Template Usage: https://llm.datasette.io/en/stable/templates.html#using-a-template
+        • Creating Templates: https://llm.datasette.io/en/stable/templates.html#getting-started-with-save
+    """
     path = template_dir()
     pairs = []
     for file in path.glob("*.yaml"):
@@ -2558,20 +3042,116 @@ def schemas_dsl_debug(input, multi):
     default_if_no_args=True,
 )
 def tools():
-    "Manage tools that can be made available to LLMs"
+    """
+    Discover and manage tools that extend AI model capabilities
+
+    Tools allow AI models to take actions beyond just generating text. They can
+    perform web searches, calculations, file operations, API calls, and more.
+
+    ⚠️  Security Warning:
+    
+    \b
+        Tools can be dangerous! Only use tools from trusted sources and be
+        cautious with tools that have access to your system, data, or network.
+        Always review tool behavior before enabling them.
+
+    🔍 Discovery:
+
+    \b
+        llm tools list                    # See all available tools
+        llm tools list --json            # Get detailed tool information
+        llm install llm-tools-calculator # Install new tool plugins
+
+    🎯 Using Tools:
+
+    \b
+        llm 'What is 2+2?' -T calculator      # Simple calculation
+        llm 'Weather in Paris' -T weather    # Check weather (if installed)
+        llm 'Search for Python tutorials' -T web_search  # Web search
+        llm 'Calculate and search' -T calculator -T web_search  # Multiple tools
+
+    🔧 Custom Tools:
+
+    \b
+        llm --functions 'def add(x, y): return x+y' 'What is 5+7?'
+        llm --functions mytools.py 'Use my custom functions'
+
+    💡 Tool Features:
+
+    \b
+        • Plugin tools: Installed from the plugin directory
+        • Custom functions: Define Python functions inline or in files
+        • Toolboxes: Collections of related tools with shared configuration
+        • Debugging: Use --td flag to see detailed tool execution
+
+    📚 Documentation:
+    
+    \b
+        • Tools Guide: https://llm.datasette.io/en/stable/tools.html
+        • Security: https://llm.datasette.io/en/stable/tools.html#warning-tools-can-be-dangerous
+        • Plugin Directory: https://llm.datasette.io/en/stable/plugins/directory.html
+        • Custom Tools: https://llm.datasette.io/en/stable/usage.html#tools
+    """
 
 
 @tools.command(name="list")
 @click.argument("tool_defs", nargs=-1)
-@click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option("json_", "--json", is_flag=True, help="Output detailed tool information as structured JSON including parameters, descriptions, and metadata.")
 @click.option(
     "python_tools",
     "--functions",
-    help="Python code block or file path defining functions to register as tools",
+    help="Include custom Python functions as tools. Provide code block or .py file path. Functions are analyzed and shown alongside plugin tools.",
     multiple=True,
 )
 def tools_list(tool_defs, json_, python_tools):
-    "List available tools that have been provided by plugins"
+    """
+    List all available tools and their capabilities
+
+    Shows tools from installed plugins plus any custom Python functions you specify.
+    Each tool extends what AI models can do beyond generating text responses.
+
+    📋 Basic Usage:
+
+    \b
+        llm tools list                     # Show all plugin tools
+        llm tools                          # Same as above (default command)
+        llm tools list --json             # Get detailed JSON output
+
+    🔍 Understanding Tool Output:
+
+    \b
+        • Tool names: Use these with -T/--tool option
+        • Descriptions: What each tool does  
+        • Parameters: What inputs each tool expects
+        • Plugin info: Which plugin provides each tool
+
+    🔧 Include Custom Functions:
+
+    \b
+        llm tools list --functions 'def add(x, y): return x+y'
+        llm tools list --functions mytools.py    # Functions from file
+
+    💡 Tool Types:
+
+    \b
+        • Simple tools: Single-purpose functions (e.g., calculator, weather)
+        • Toolboxes: Collections of related tools with shared configuration
+        • Custom functions: Your own Python code as tools
+
+    🎯 Next Steps:
+
+    \b
+        After seeing available tools, use them in your prompts:
+        llm 'Calculate 15 * 23' -T calculator
+        llm 'Search for news about AI' -T web_search
+
+    📚 Documentation:
+    
+    \b
+        • Using Tools: https://llm.datasette.io/en/stable/usage.html#tools
+        • Plugin Directory: https://llm.datasette.io/en/stable/plugins/directory.html
+        • Custom Tools: https://llm.datasette.io/en/stable/tools.html#llm-s-implementation-of-tools
+    """
 
     def introspect_tools(toolbox_class):
         methods = []
@@ -3030,27 +3610,30 @@ def uninstall(packages, yes):
     "-i",
     "--input",
     type=click.Path(exists=True, readable=True, allow_dash=True),
-    help="File to embed",
+    help="Path to file to embed, or '-' for stdin. File content is read and converted to embeddings for similarity search.",
 )
 @click.option(
-    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+    "-m", "--model", 
+    help="Embedding model to use (e.g., 3-small, 3-large, sentence-transformers/all-MiniLM-L6-v2). Set LLM_EMBEDDING_MODEL env var for default.", 
+    envvar="LLM_EMBEDDING_MODEL"
 )
-@click.option("--store", is_flag=True, help="Store the text itself in the database")
+@click.option("--store", is_flag=True, help="Store the original text content in the database alongside embeddings. Useful for retrieval and display later.")
 @click.option(
     "-d",
     "--database",
     type=click.Path(file_okay=True, allow_dash=False, dir_okay=False, writable=True),
     envvar="LLM_EMBEDDINGS_DB",
+    help="Custom SQLite database path for storing embeddings. Default: ~/.config/io.datasette.llm/embeddings.db",
 )
 @click.option(
     "-c",
     "--content",
-    help="Content to embed",
+    help="Text content to embed directly (alternative to reading from file). Use quotes for multi-word content.",
 )
-@click.option("--binary", is_flag=True, help="Treat input as binary data")
+@click.option("--binary", is_flag=True, help="Treat input as binary data (for image embeddings with CLIP-like models). Changes how file content is processed.")
 @click.option(
     "--metadata",
-    help="JSON object metadata to store",
+    help="JSON metadata to store with the embedding. Example: '{\"source\": \"docs\", \"category\": \"tutorial\"}'. Useful for filtering and organization.",
     callback=json_validator("metadata"),
 )
 @click.option(
@@ -3058,12 +3641,69 @@ def uninstall(packages, yes):
     "-f",
     "--format",
     type=click.Choice(["json", "blob", "base64", "hex"]),
-    help="Output format",
+    help="Output format for embeddings. 'json' is human-readable arrays, 'base64'/'hex' are compact encoded formats.",
 )
 def embed(
     collection, id, input, model, store, database, content, binary, metadata, format_
 ):
-    """Embed text and store or return the result"""
+    """
+    Convert text into numerical embeddings for semantic search and similarity
+
+    Embeddings are high-dimensional vectors that capture the semantic meaning
+    of text. Use them to build search systems, find similar documents, or
+    cluster content by meaning rather than exact keywords.
+
+    📊 Quick Embedding:
+
+    \b
+        llm embed -c "Hello world"                # Get raw embedding vector
+        llm embed -c "Hello world" -m 3-small    # Use specific model
+        echo "Hello world" | llm embed -i -      # From stdin
+
+    🗃️ Store in Collections:
+
+    \b
+        llm embed docs doc1 -c "API documentation"     # Store with ID
+        llm embed docs doc2 -i readme.txt --store      # Store file with content
+        llm embed docs doc3 -c "Tutorial" --metadata '{"type": "guide"}'
+
+    🔍 Search Collections:
+
+    \b
+        llm similar docs -c "how to use API"      # Find similar documents
+        llm collections list                      # See all collections
+
+    🎯 Advanced Usage:
+
+    \b
+        llm embed docs batch -i folder/ -m sentence-transformers/all-MiniLM-L6-v2
+        llm embed -c "text" -f base64            # Compact output format
+        llm embed photos img1 -i photo.jpg --binary -m clip  # Image embeddings
+
+    💡 Understanding Output:
+
+    \b
+        • No collection: Prints embedding vector to stdout
+        • With collection: Stores in database for later search
+        • --store flag: Saves original text for retrieval
+        • --metadata: Add structured data for filtering
+
+    🗂️ Collection Management:
+
+    \b
+        • Collections group related embeddings with same model
+        • Each embedding needs unique ID within collection
+        • Use descriptive IDs for easier management
+        • Metadata helps organize and filter results
+
+    📚 Documentation:
+    
+    \b
+        • Embeddings Guide: https://llm.datasette.io/en/stable/embeddings/cli.html#llm-embed
+        • Models: https://llm.datasette.io/en/stable/embeddings/cli.html#llm-embed-models
+        • Collections: https://llm.datasette.io/en/stable/embeddings/cli.html#storing-embeddings-in-sqlite
+        • Similarity Search: https://llm.datasette.io/en/stable/embeddings/cli.html#llm-similar
+    """
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
 
