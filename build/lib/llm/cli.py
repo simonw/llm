@@ -4374,8 +4374,6 @@ def embed_models():
 
     Lists and configures models that generate embeddings for semantic search.
 
-    Defaults to list — `llm embed-models` equals `llm embed-models list`.
-
     📚 Documentation: https://llm.datasette.io/en/stable/embeddings/cli.html#llm-embed-models
     """
 
@@ -4447,8 +4445,6 @@ def collections():
     
     Collections group related embeddings together for semantic search and 
     similarity queries. Use them to organize documents, code, or any text.
-    
-    Defaults to list — `llm collections` equals `llm collections list`.
     
     Common Usage:
         llm collections list                    # See all collections
@@ -4561,8 +4557,6 @@ def options():
     Manage default options for models
 
     Set, list, show and clear default options (like temperature) per model.
-
-    Defaults to list — `llm models options` equals `llm models options list`.
 
     📚 Documentation: https://llm.datasette.io/en/stable/usage.html#setting-default-options-for-models
     """
