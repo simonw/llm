@@ -1070,23 +1070,25 @@ def prompt_multi(
         if async_model:
             async def inner():
                 response = model.prompt(system=system, prompt=p, schema=schema, **kwargs)
-                return await response.text()
+                return response
             response = asyncio.run(inner())
         else:
             response = model.prompt(system=system, prompt=p, schema=schema, **kwargs)
         # Log responses to the database
         if (logs_on() or log) and not no_log:
+            db = sqlite_utils.Database(log_path)
             # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
             if isinstance(response, AsyncResponse):
                 response = asyncio.run(response.to_sync_response())
             # At this point ALL forms should have a log_to_db() method that works:
+            response.log_to_db(db)
         return response.text()
 
-    reponses = prompts.map(process_row_prompt)
+    responses = prompts.map(process_row_prompt)
 
     results = pd.DataFrame({
         "prompt": prompts,
-        "response": reponses
+        "response": responses
     })
 
     if result_file:
