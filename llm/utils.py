@@ -384,14 +384,13 @@ def configure_http_logging():
     if config["level"] == "DEBUG":
         http_loggers.extend(["urllib3", "requests"])
 
-    for logger_name in http_loggers:
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(log_level)
-
-        # If this logger doesn't have handlers, add our custom handler
-        if not logger.handlers:
+        # Replace NullHandlers with our custom handler
+        if all(isinstance(h, logging.NullHandler) for h in logger.handlers):
+            logger.handlers.clear()
             handler = logging.StreamHandler()
             handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.propagate = False
             logger.addHandler(handler)
             logger.propagate = False
 
