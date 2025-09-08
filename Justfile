@@ -21,7 +21,7 @@
   echo "  mypy"
   pipenv run mypy llm
   echo "  ruff"
-  pipenv run ruff .
+  pipenv run ruff check .
 
 # Run mypy
 @mypy:
@@ -29,7 +29,7 @@
 
 # Rebuild docs with cog
 @cog:
-  pipenv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md
+  pipenv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
 
 # Serve live docs on localhost:8000
 @docs: cog
@@ -42,7 +42,7 @@
 
 # Run automatic fixes
 @fix: cog
-  pipenv run ruff . --fix
+  pipenv run ruff check . --fix
   pipenv run black .
 
 # Push commit if tests pass

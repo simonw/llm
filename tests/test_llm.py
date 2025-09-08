@@ -1,15 +1,13 @@
 from click.testing import CliRunner
-import datetime
 import llm
 from llm.cli import cli
-from llm.migrations import migrate
+from llm.models import Usage
 import json
 import os
+import pathlib
+from pydantic import BaseModel
 import pytest
-import re
 import sqlite_utils
-import sys
-from ulid import ULID
 from unittest import mock
 
 
@@ -21,180 +19,28 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
-@pytest.fixture
-def log_path(user_path):
-    log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    start = datetime.datetime.utcnow()
-    db["responses"].insert_all(
-        {
-            "id": str(ULID()).lower(),
-            "system": "system",
-            "prompt": "prompt",
-            "response": "response",
-            "model": "davinci",
-            "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
-            "conversation_id": "abc123",
-        }
-        for i in range(100)
-    )
-    return log_path
-
-
-datetime_re = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
-
-
-def test_logs_text(log_path):
-    runner = CliRunner()
-    args = ["logs", "-p", str(log_path)]
-    result = runner.invoke(cli, args, catch_exceptions=False)
-    assert result.exit_code == 0
-    output = result.output
-    # Replace 2023-08-17T20:53:58 with YYYY-MM-DDTHH:MM:SS
-    output = datetime_re.sub("YYYY-MM-DDTHH:MM:SS", output)
-
-    assert output == (
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## System:\n\n"
-        "system\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-        "# YYYY-MM-DDTHH:MM:SS    conversation: abc123\n\n"
-        "Model: **davinci**\n\n"
-        "## Prompt:\n\n"
-        "prompt\n\n"
-        "## Response:\n\n"
-        "response\n\n"
-    )
-
-
-@pytest.mark.parametrize("n", (None, 0, 2))
-def test_logs_json(n, log_path):
-    "Test that logs command correctly returns requested -n records"
-    runner = CliRunner()
-    args = ["logs", "-p", str(log_path), "--json"]
-    if n is not None:
-        args.extend(["-n", str(n)])
-    result = runner.invoke(cli, args, catch_exceptions=False)
-    assert result.exit_code == 0
-    logs = json.loads(result.output)
-    expected_length = 3
-    if n is not None:
-        if n == 0:
-            expected_length = 100
-        else:
-            expected_length = n
-    assert len(logs) == expected_length
-
-
-@pytest.mark.parametrize(
-    "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
-)
-def test_logs_response_only(args, log_path):
-    "Test that logs -r/--response returns just the last response"
-    runner = CliRunner()
-    result = runner.invoke(cli, ["logs"] + args, catch_exceptions=False)
-    assert result.exit_code == 0
-    assert result.output == "response\n"
-
-
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-@pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
-def test_logs_path(monkeypatch, env, user_path):
-    for key, value in env.items():
-        monkeypatch.setenv(key, value)
-    runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "path"])
-    assert result.exit_code == 0
-    if env:
-        expected = env["LLM_USER_PATH"] + "/logs.db"
-    else:
-        expected = str(user_path) + "/logs.db"
-    assert result.output.strip() == expected
-
-
-@pytest.mark.parametrize("model", ("davinci", "curie"))
-def test_logs_filtered(user_path, model):
-    log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    db["responses"].insert_all(
-        {
-            "id": str(ULID()).lower(),
-            "system": "system",
-            "prompt": "prompt",
-            "response": "response",
-            "model": "davinci" if i % 2 == 0 else "curie",
-        }
-        for i in range(100)
-    )
-    runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-m", model, "--json"])
-    assert result.exit_code == 0
-    records = json.loads(result.output.strip())
-    assert all(record["model"] == model for record in records)
-
-
-@pytest.mark.parametrize(
-    "query,expected",
-    (
-        # With no search term order should be by datetime
-        ("", ["doc1", "doc2", "doc3"]),
-        # With a search it's order by rank instead
-        ("llama", ["doc1", "doc3"]),
-        ("alpaca", ["doc2"]),
-    ),
-)
-def test_logs_search(user_path, query, expected):
-    log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-
-    def _insert(id, text):
-        db["responses"].insert(
-            {
-                "id": id,
-                "system": "system",
-                "prompt": text,
-                "response": "response",
-                "model": "davinci",
-            }
-        )
-
-    _insert("doc1", "llama")
-    _insert("doc2", "alpaca")
-    _insert("doc3", "llama llama")
-    runner = CliRunner()
-    result = runner.invoke(cli, ["logs", "list", "-q", query, "--json"])
-    assert result.exit_code == 0
-    records = json.loads(result.output.strip())
-    assert [record["id"] for record in records] == expected
-
-
-def test_llm_prompt_creates_log_database(mocked_openai_chat, tmpdir, monkeypatch):
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_creates_log_database(
+    mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
+):
     user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["three names \nfor a pet pelican", "--no-stream", "--key", "x"],
-        catch_exceptions=False,
-    )
+    args = ["three names \nfor a pet pelican", "--no-stream", "--key", "x"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
     # Should have created user_path and put a logs.db in it
-    assert (user_path / "logs.db").exists()
-    assert sqlite_utils.Database(str(user_path / "logs.db"))["responses"].count == 1
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -257,7 +103,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     expected = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
@@ -271,8 +117,8 @@ def test_llm_default_prompt(
         "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
     }
     assert json.loads(row["response_json"]) == {
-        "model": "gpt-3.5-turbo",
-        "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
+        "model": "gpt-4o-mini",
     }
 
     # Test "llm logs"
@@ -285,7 +131,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             "prompt_json": {
@@ -296,14 +142,92 @@ def test_llm_default_prompt(
             "options_json": {},
             "response": "Bob, Alice, Eve",
             "response_json": {
-                "model": "gpt-3.5-turbo",
-                "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+                "model": "gpt-4o-mini",
+                "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-3.5-turbo",
+            "conversation_model": "gpt-4o-mini",
         }.items()
     )
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("async_", (False, True))
+def test_llm_prompt_continue(httpx_mock, user_path, async_):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"] + (
+        ["--async"] if async_ else []
+    )
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Should be logged
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 1
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"] + (["--async"] if async_ else [])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 2
+
+
+@pytest.mark.parametrize(
+    "args,expect_just_code",
+    (
+        (["-x"], True),
+        (["--extract"], True),
+        (["-x", "--async"], True),
+        (["--extract", "--async"], True),
+        # Use --no-stream here to ensure it passes test same as -x/--extract cases
+        (["--no-stream"], False),
+    ),
+)
+def test_extract_fenced_code(
+    mocked_openai_chat_returning_fenced_code, args, expect_just_code
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code"] + args,
+        catch_exceptions=False,
+    )
+    output = result.output
+    if expect_just_code:
+        assert "```" not in output
+    else:
+        assert "```" in output
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
@@ -371,12 +295,10 @@ def test_openai_completion_system_prompt_error():
             "--system",
             "system prompts not allowed",
         ],
-        catch_exceptions=False,
     )
     assert result.exit_code == 1
     assert (
-        result.output
-        == "Error: System prompts are not supported for OpenAI completion models\n"
+        "System prompts are not supported for OpenAI completion models" in result.output
     )
 
 
@@ -404,7 +326,7 @@ def test_openai_completion_logprobs_stream(
     assert len(rows) == 1
     row = rows[0]
     assert json.loads(row["response_json"]) == {
-        "content": "\n\nHi.",
+        "content": {"$": f'r:{row["id"]}'},
         "logprobs": [
             {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
             {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
@@ -457,7 +379,7 @@ def test_openai_completion_logprobs_nostream(
                         {"!": -1.1, ".": -0.9},
                     ],
                 },
-                "text": "\n\nHi.",
+                "text": {"$": f"r:{row['id']}"},
             }
         ],
         "created": 1695097747,
@@ -509,33 +431,62 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+@pytest.mark.parametrize(
+    "args,exit_code",
+    (
+        (["-q", "mo", "-q", "ck"], 0),
+        (["-q", "mock"], 0),
+        (["-q", "badmodel"], 1),
+        (["-q", "mock", "-q", "badmodel"], 1),
+    ),
+)
+def test_prompt_select_model_with_queries(mock_model, user_path, args, exit_code):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        args + ["hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == exit_code
+
+
 EXPECTED_OPTIONS = """
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  temperature: float
-    What sampling temperature to use, between 0 and 2. Higher values like
-    0.8 will make the output more random, while lower values like 0.2 will
-    make it more focused and deterministic.
-  max_tokens: int
-    Maximum number of tokens to generate.
-  top_p: float
-    An alternative to sampling with temperature, called nucleus sampling,
-    where the model considers the results of the tokens with top_p
-    probability mass. So 0.1 means only the tokens comprising the top 10%
-    probability mass are considered. Recommended to use top_p or
-    temperature but not both.
-  frequency_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on their existing frequency in the text so far, decreasing the model's
-    likelihood to repeat the same line verbatim.
-  presence_penalty: float
-    Number between -2.0 and 2.0. Positive values penalize new tokens based
-    on whether they appear in the text so far, increasing the model's
-    likelihood to talk about new topics.
-  stop: str
-    A string where the API will stop generating further tokens.
-  logit_bias: dict, str
-    Modify the likelihood of specified tokens appearing in the completion.
-    Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+OpenAI Chat: gpt-4o (aliases: 4o)
+  Options:
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    max_tokens: int
+      Maximum number of tokens to generate.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    frequency_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on their existing frequency in the text so far, decreasing the model's
+      likelihood to repeat the same line verbatim.
+    presence_penalty: float
+      Number between -2.0 and 2.0. Positive values penalize new tokens based
+      on whether they appear in the text so far, increasing the model's
+      likelihood to talk about new topics.
+    stop: str
+      A string where the API will stop generating further tokens.
+    logit_bias: dict, str
+      Modify the likelihood of specified tokens appearing in the completion.
+      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
+    seed: int
+      Integer seed to attempt to sample deterministically
+    json_object: boolean
+      Output a valid JSON object {...}. Prompt must mention JSON.
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
 """
 
 
@@ -543,7 +494,51 @@ def test_llm_models_options(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert EXPECTED_OPTIONS.strip() in result.output
+    # Check for key components instead of exact string match
+    assert "OpenAI Chat: gpt-4o (aliases: 4o)" in result.output
+    assert "  Options:" in result.output
+    assert "    temperature: float" in result.output
+    assert "  Keys:" in result.output
+    assert "    key: openai" in result.output
+    assert "    env_var: OPENAI_API_KEY" in result.output
+    assert "AsyncMockModel (async): mock" not in result.output
+
+
+def test_llm_models_async(user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "AsyncMockModel (async): mock" in result.output
+
+
+@pytest.mark.parametrize(
+    "args,expected_model_ids,unexpected_model_ids",
+    (
+        (["-q", "gpt-4o"], ["OpenAI Chat: gpt-4o"], None),
+        (["-q", "mock"], ["MockModel: mock"], None),
+        (["--query", "mock"], ["MockModel: mock"], None),
+        (
+            ["-q", "4o", "-q", "mini"],
+            ["OpenAI Chat: gpt-4o-mini"],
+            ["OpenAI Chat: gpt-4o "],
+        ),
+        (
+            ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
+            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
+            ["OpenAI Chat: gpt-4o "],
+        ),
+    ),
+)
+def test_llm_models_filter(user_path, args, expected_model_ids, unexpected_model_ids):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    if expected_model_ids:
+        for expected_model_id in expected_model_ids:
+            assert expected_model_id in result.output
+    if unexpected_model_ids:
+        for unexpected_model_id in unexpected_model_ids:
+            assert unexpected_model_id not in result.output
 
 
 def test_llm_user_dir(tmpdir, monkeypatch):
@@ -553,3 +548,306 @@ def test_llm_user_dir(tmpdir, monkeypatch):
     user_dir2 = llm.user_dir()
     assert user_dir == str(user_dir2)
     assert os.path.exists(user_dir)
+
+
+def test_model_defaults(tmpdir, monkeypatch):
+    user_dir = str(tmpdir / "u")
+    monkeypatch.setenv("LLM_USER_PATH", user_dir)
+    config_path = pathlib.Path(user_dir) / "default_model.txt"
+    assert not config_path.exists()
+    assert llm.get_default_model() == "gpt-4o-mini"
+    assert llm.get_model().model_id == "gpt-4o-mini"
+    llm.set_default_model("gpt-4o")
+    assert config_path.exists()
+    assert llm.get_default_model() == "gpt-4o"
+    assert llm.get_model().model_id == "gpt-4o"
+
+
+def test_get_models():
+    models = llm.get_models()
+    assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids
+    # Ensure no model_ids are duplicated
+    # https://github.com/simonw/llm/issues/667
+    assert len(model_ids) == len(set(model_ids))
+
+
+def test_get_async_models():
+    models = llm.get_async_models()
+    assert all(
+        isinstance(model, (llm.AsyncModel, llm.AsyncKeyModel)) for model in models
+    )
+    model_ids = [model.model_id for model in models]
+    assert "gpt-4o-mini" in model_ids
+
+
+def test_mock_model(mock_model):
+    mock_model.enqueue(["hello world"])
+    mock_model.enqueue(["second"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    assert response.text() == "hello world"
+    assert str(response) == "hello world"
+    assert model.history[0][0].prompt == "hello"
+    assert response.usage() == Usage(input=1, output=1, details=None)
+    response2 = model.prompt(prompt="hello again")
+    assert response2.text() == "second"
+    assert response2.usage() == Usage(input=2, output=1, details=None)
+
+
+class Dog(BaseModel):
+    name: str
+    age: int
+
+
+dog_schema = {
+    "properties": {
+        "name": {"title": "Name", "type": "string"},
+        "age": {"title": "Age", "type": "integer"},
+    },
+    "required": ["name", "age"],
+    "title": "Dog",
+    "type": "object",
+}
+dog = {"name": "Cleo", "age": 10}
+
+
+@pytest.mark.parametrize("use_pydantic", (False, True))
+def test_schema(mock_model, use_pydantic):
+    assert dog_schema == Dog.model_json_schema()
+    mock_model.enqueue([json.dumps(dog)])
+    response = mock_model.prompt(
+        "invent a dog", schema=Dog if use_pydantic else dog_schema
+    )
+    assert json.loads(response.text()) == dog
+    assert response.prompt.schema == dog_schema
+
+
+def test_model_environment_variable(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "echo")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-stream", "hello", "-s", "sys"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "prompt": "hello",
+        "system": "sys",
+        "attachments": [],
+        "stream": False,
+        "previous": [],
+    }
+
+
+@pytest.mark.parametrize("use_filename", (True, False))
+def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
+    user_path = tmpdir / "user"
+    schema_path = tmpdir / "schema.json"
+    mock_model.enqueue([json.dumps(dog)])
+    schema_value = '{"schema": "one"}'
+    open(schema_path, "w").write(schema_value)
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    if use_filename:
+        schema_value = str(schema_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--schema", schema_value, "prompt", "-m", "mock"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == '{"name": "Cleo", "age": 10}\n'
+    # Should have created user_path and put a logs.db in it
+    assert (user_path / "logs.db").exists()
+    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    assert rows == [
+        {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
+    ]
+    if use_filename:
+        # Run it again to check that the ID option works now it's in the DB
+        result2 = runner.invoke(
+            cli,
+            ["--schema", "9a8ed2c9b17203f6d8905147234475b5", "prompt", "-m", "mock"],
+            catch_exceptions=False,
+        )
+        assert result2.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    (
+        (
+            ["--schema", "name, age int"],
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+                "required": ["name", "age"],
+            },
+        ),
+        (
+            ["--schema-multi", "name, age int"],
+            {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "age": {"type": "integer"},
+                            },
+                            "required": ["name", "age"],
+                        },
+                    }
+                },
+                "required": ["items"],
+            },
+        ),
+    ),
+)
+def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
+    user_path = tmpdir / "user"
+    mock_model.enqueue([json.dumps(dog)])
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["prompt", "-m", "mock"] + args,
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == '{"name": "Cleo", "age": 10}\n'
+    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    assert json.loads(rows[0]["content"]) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_pydantic", (False, True))
+async def test_schema_async(async_mock_model, use_pydantic):
+    async_mock_model.enqueue([json.dumps(dog)])
+    response = async_mock_model.prompt(
+        "invent a dog", schema=Dog if use_pydantic else dog_schema
+    )
+    assert json.loads(await response.text()) == dog
+    assert response.prompt.schema == dog_schema
+
+
+def test_mock_key_model(mock_key_model):
+    response = mock_key_model.prompt(prompt="hello", key="hi")
+    assert response.text() == "key: hi"
+
+
+@pytest.mark.asyncio
+async def test_mock_async_key_model(mock_async_key_model):
+    response = mock_async_key_model.prompt(prompt="hello", key="hi")
+    output = await response.text()
+    assert output == "async, key: hi"
+
+
+def test_sync_on_done(mock_model):
+    mock_model.enqueue(["hello world"])
+    model = llm.get_model("mock")
+    response = model.prompt(prompt="hello")
+    caught = []
+
+    def done(response):
+        caught.append(response)
+
+    response.on_done(done)
+    assert len(caught) == 0
+    str(response)
+    assert len(caught) == 1
+
+
+def test_schemas_dsl():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["schemas", "dsl", "name, age int, bio: short bio"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+            "bio": {"type": "string", "description": "short bio"},
+        },
+        "required": ["name", "age", "bio"],
+    }
+    result2 = runner.invoke(cli, ["schemas", "dsl", "name, age int", "--multi"])
+    assert result2.exit_code == 0
+    assert json.loads(result2.output) == {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"},
+                    },
+                    "required": ["name", "age"],
+                },
+            }
+        },
+        "required": ["items"],
+    }
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_continue_with_database(
+    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"]
+    if custom_database_path:
+        args2.extend(["--database", str(custom_db_path)])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 2

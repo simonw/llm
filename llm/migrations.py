@@ -13,7 +13,10 @@ def migrate(db):
         if name not in already_applied:
             fn(db)
             db["_llm_migrations"].insert(
-                {"name": name, "applied_at": str(datetime.datetime.utcnow())}
+                {
+                    "name": name,
+                    "applied_at": str(datetime.datetime.now(datetime.timezone.utc)),
+                }
             )
             already_applied.add(name)
 
@@ -201,3 +204,217 @@ def m010_create_new_log_tables(db):
 @migration
 def m011_fts_for_responses(db):
     db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+
+
+@migration
+def m012_attachments_tables(db):
+    db["attachments"].create(
+        {
+            "id": str,
+            "type": str,
+            "path": str,
+            "url": str,
+            "content": bytes,
+        },
+        pk="id",
+    )
+    db["prompt_attachments"].create(
+        {
+            "response_id": str,
+            "attachment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+        pk=("response_id", "attachment_id"),
+    )
+
+
+@migration
+def m013_usage(db):
+    db["responses"].add_column("input_tokens", int)
+    db["responses"].add_column("output_tokens", int)
+    db["responses"].add_column("token_details", str)
+
+
+@migration
+def m014_schemas(db):
+    db["schemas"].create(
+        {
+            "id": str,
+            "content": str,
+        },
+        pk="id",
+    )
+    db["responses"].add_column("schema_id", str, fk="schemas", fk_col="id")
+    # Clean up SQL create table indentation
+    db["responses"].transform()
+    # These changes may have dropped the FTS configuration, fix that
+    db["responses"].enable_fts(
+        ["prompt", "response"], create_triggers=True, replace=True
+    )
+
+
+@migration
+def m015_fragments_tables(db):
+    db["fragments"].create(
+        {
+            "id": int,
+            "hash": str,
+            "content": str,
+            "datetime_utc": str,
+            "source": str,
+        },
+        pk="id",
+    )
+    db["fragments"].create_index(["hash"], unique=True)
+    db["fragment_aliases"].create(
+        {
+            "alias": str,
+            "fragment_id": int,
+        },
+        foreign_keys=(("fragment_id", "fragments", "id"),),
+        pk="alias",
+    )
+    db["prompt_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": int,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )
+    db["system_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": int,
+            "order": int,
+        },
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+        pk=("response_id", "fragment_id"),
+    )
+
+
+@migration
+def m016_fragments_table_pks(db):
+    # The same fragment can be attached to a response multiple times
+    # https://github.com/simonw/llm/issues/863#issuecomment-2781720064
+    db["prompt_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+    db["system_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+
+
+@migration
+def m017_tools_tables(db):
+    db["tools"].create(
+        {
+            "id": int,
+            "hash": str,
+            "name": str,
+            "description": str,
+            "input_schema": str,
+        },
+        pk="id",
+    )
+    db["tools"].create_index(["hash"], unique=True)
+    # Many-to-many relationship between tools and responses
+    db["tool_responses"].create(
+        {
+            "tool_id": int,
+            "response_id": str,
+        },
+        foreign_keys=(
+            ("tool_id", "tools", "id"),
+            ("response_id", "responses", "id"),
+        ),
+        pk=("tool_id", "response_id"),
+    )
+    # tool_calls and tool_results are one-to-many against responses
+    db["tool_calls"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "arguments": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+    db["tool_results"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "output": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+
+
+@migration
+def m017_tools_plugin(db):
+    db["tools"].add_column("plugin")
+
+
+@migration
+def m018_tool_instances(db):
+    # Used to track instances of Toolbox classes that may be
+    # used multiple times by different tools
+    db["tool_instances"].create(
+        {
+            "id": int,
+            "plugin": str,
+            "name": str,
+            "arguments": str,
+        },
+        pk="id",
+    )
+    # We record which instance was used only on the results
+    db["tool_results"].add_column("instance_id", fk="tool_instances")
+
+
+@migration
+def m019_resolved_model(db):
+    # For models like gemini-1.5-flash-latest where we wish to record
+    # the resolved model name in addition to the alias
+    db["responses"].add_column("resolved_model", str)
+
+
+@migration
+def m020_tool_results_attachments(db):
+    db["tool_results_attachments"].create(
+        {
+            "tool_result_id": int,
+            "attachment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("tool_result_id", "tool_results", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+        pk=("tool_result_id", "attachment_id"),
+    )
+
+
+@migration
+def m021_tool_results_exception(db):
+    db["tool_results"].add_column("exception", str)

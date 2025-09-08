@@ -43,9 +43,16 @@ If the `api_base` is set, the existing configured `openai` API key will not be s
 
 You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
 
-Add `completion: true` if the model is a completion model that uses a `/completion` as opposed to a `/completion/chat` endpoint.
+Other keys you can use here:
 
-Having configured the model like this, run `llm models` to check that it installed correctly. You can then run prompts against it like so:
+- `completion: true` for completion models that should use the `/completion` endpoint as opposed to `/completion/chat`
+- `supports_tools: true` for models that support tool calling
+- `can_stream: false` to disable streaming mode for models that cannot stream
+- `supports_schema: true` for models that support JSON structured schema output
+- `vision: true` for models that can accept images as input
+- `audio: true` for models that accept audio attachments
+
+Having configured the model like this, run `llm models --options -m MODEL_ID` to check that it installed correctly. You can then run prompts against it like so:
 
 ```bash
 llm -m orca-openai-compat 'What is the capital of France?'

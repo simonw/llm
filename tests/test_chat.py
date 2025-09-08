@@ -1,20 +1,11 @@
 from click.testing import CliRunner
-import llm.cli
 from unittest.mock import ANY
+import json
+import llm.cli
 import pytest
+import sqlite_utils
 import sys
-
-
-def test_mock_model(mock_model):
-    mock_model.enqueue(["hello world"])
-    mock_model.enqueue(["second"])
-    model = llm.get_model("mock")
-    response = model.prompt(prompt="hello")
-    assert response.text() == "hello world"
-    assert str(response) == "hello world"
-    assert model.history[0][0].prompt == "hello"
-    response2 = model.prompt(prompt="hello again")
-    assert response2.text() == "second"
+import textwrap
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -23,13 +14,18 @@ def test_chat_basic(mock_model, logs_db):
     mock_model.enqueue(["one world"])
     mock_model.enqueue(["one again"])
     result = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock"], input="Hi\nHi two\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nHi two\nquit\n",
+        catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
+        "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Hi"
         "\none world"
         "\n> Hi two"
@@ -50,6 +46,7 @@ def test_chat_basic(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
             "prompt_json": None,
@@ -59,10 +56,15 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
         },
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi two",
             "system": None,
             "prompt_json": None,
@@ -72,18 +74,27 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 2,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
         },
     ]
     # Now continue that conversation
     mock_model.enqueue(["continued"])
     result2 = runner.invoke(
-        llm.cli.cli, ["chat", "-m", "mock", "-c"], input="Continue\nquit\n"
+        llm.cli.cli,
+        ["chat", "-m", "mock", "-c"],
+        input="Continue\nquit\n",
+        catch_exceptions=False,
     )
     assert result2.exit_code == 0
     assert result2.output == (
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
+        "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Continue"
         "\ncontinued"
         "\n> quit"
@@ -101,6 +112,7 @@ def test_chat_basic(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Continue",
             "system": None,
             "prompt_json": None,
@@ -110,6 +122,10 @@ def test_chat_basic(mock_model, logs_db):
             "conversation_id": conversation_id,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
         }
     ]
 
@@ -128,6 +144,8 @@ def test_chat_system(mock_model, logs_db):
         "Chatting with mock"
         "\nType 'exit' or 'quit' to exit"
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
+        "\nType '!edit' to open your default editor and modify the prompt"
+        "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         "\n> Hi"
         "\nI am mean"
         "\n> quit"
@@ -138,6 +156,7 @@ def test_chat_system(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": "You are mean",
             "prompt_json": None,
@@ -147,18 +166,32 @@ def test_chat_system(mock_model, logs_db):
             "conversation_id": ANY,
             "duration_ms": ANY,
             "datetime_utc": ANY,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
         }
     ]
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-def test_chat_options(mock_model, logs_db):
+def test_chat_options(mock_model, logs_db, user_path):
+    options_path = user_path / "model_options.json"
+    options_path.write_text(json.dumps({"mock": {"max_tokens": "5"}}), "utf-8")
+
     runner = CliRunner()
-    mock_model.enqueue(["Some text"])
+    mock_model.enqueue(["Default options response"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nquit\n",
+    )
+    assert result.exit_code == 0
+    mock_model.enqueue(["Override options response"])
     result = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "mock", "--option", "max_tokens", "10"],
-        input="Hi\nquit\n",
+        input="Hi with override\nquit\n",
     )
     assert result.exit_code == 0
     responses = list(logs_db["responses"].rows)
@@ -166,16 +199,39 @@ def test_chat_options(mock_model, logs_db):
         {
             "id": ANY,
             "model": "mock",
+            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
             "prompt_json": None,
-            "options_json": '{"max_tokens": 10}',
-            "response": "Some text",
+            "options_json": '{"max_tokens": 5}',
+            "response": "Default options response",
             "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": 0,
+            "duration_ms": ANY,
             "datetime_utc": ANY,
-        }
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
+        },
+        {
+            "id": ANY,
+            "model": "mock",
+            "resolved_model": None,
+            "prompt": "Hi with override",
+            "system": None,
+            "prompt_json": None,
+            "options_json": '{"max_tokens": 10}',
+            "response": "Override options response",
+            "response_json": None,
+            "conversation_id": ANY,
+            "duration_ms": ANY,
+            "datetime_utc": ANY,
+            "input_tokens": 3,
+            "output_tokens": 1,
+            "token_details": None,
+            "schema_id": None,
+        },
     ]
 
 
@@ -221,3 +277,114 @@ def test_chat_multi(mock_model, logs_db, input, expected):
     assert result.exit_code == 0
     rows = list(logs_db["responses"].rows_where(select="prompt, response"))
     assert rows == expected
+
+
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path):
+    user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    runner = CliRunner()
+    args = ["chat", "-m", "mock"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(
+        llm.cli.cli,
+        args,
+        catch_exceptions=False,
+        input="Hi\nHi two\nquit\n",
+    )
+    assert result.exit_code == 0
+    # Should have created user_path and put a logs.db in it
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_tools(logs_db):
+    runner = CliRunner()
+    functions = textwrap.dedent(
+        """
+    def upper(text: str) -> str:
+        "Convert text to upper case"
+        return text.upper()                         
+    """
+    )
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "echo", "--functions", functions],
+        input="\n".join(
+            [
+                json.dumps(
+                    {
+                        "prompt": "Convert hello to uppercase",
+                        "tool_calls": [
+                            {"name": "upper", "arguments": {"text": "hello"}}
+                        ],
+                    }
+                ),
+                "quit",
+            ]
+        ),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == (
+        "Chatting with echo\n"
+        "Type 'exit' or 'quit' to exit\n"
+        "Type '!multi' to enter multiple lines, then '!end' to finish\n"
+        "Type '!edit' to open your default editor and modify the prompt\n"
+        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments\n"
+        '> {"prompt": "Convert hello to uppercase", "tool_calls": [{"name": "upper", '
+        '"arguments": {"text": "hello"}}]}\n'
+        "{\n"
+        '  "prompt": "Convert hello to uppercase",\n'
+        '  "system": "",\n'
+        '  "attachments": [],\n'
+        '  "stream": true,\n'
+        '  "previous": []\n'
+        "}{\n"
+        '  "prompt": "",\n'
+        '  "system": "",\n'
+        '  "attachments": [],\n'
+        '  "stream": true,\n'
+        '  "previous": [\n'
+        "    {\n"
+        '      "prompt": "{\\"prompt\\": \\"Convert hello to uppercase\\", '
+        '\\"tool_calls\\": [{\\"name\\": \\"upper\\", \\"arguments\\": {\\"text\\": '
+        '\\"hello\\"}}]}"\n'
+        "    }\n"
+        "  ],\n"
+        '  "tool_results": [\n'
+        "    {\n"
+        '      "name": "upper",\n'
+        '      "output": "HELLO",\n'
+        '      "tool_call_id": null\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "> quit\n"
+    )
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_fragments(tmpdir):
+    path1 = str(tmpdir / "frag1.txt")
+    path2 = str(tmpdir / "frag2.txt")
+    with open(path1, "w") as fp:
+        fp.write("one")
+    with open(path2, "w") as fp:
+        fp.write("two")
+    runner = CliRunner()
+    output = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "echo", "-f", path1],
+        input=("hi\n!fragment {}\nquit\n".format(path2)),
+    ).output
+    assert '"prompt": "one' in output
+    assert '"prompt": "two"' in output

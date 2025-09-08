@@ -2,6 +2,7 @@ import pytest
 import sqlite_utils
 import json
 import llm
+import llm_echo
 from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
@@ -31,8 +32,8 @@ def user_path_with_embeddings(user_path):
     path = str(user_path / "embeddings.db")
     db = sqlite_utils.Database(path)
     collection = llm.Collection("demo", db, model_id="embed-demo")
-    collection.embed("1", "hello world")
-    collection.embed("2", "goodbye world")
+    collection.embed("1", "hello world", store=True)
+    collection.embed("2", "goodbye world", store=True)
 
 
 @pytest.fixture
@@ -49,6 +50,9 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
+    attachment_types = {"image/png", "audio/wav"}
+    supports_schema = True
+    supports_tools = True
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
@@ -58,6 +62,7 @@ class MockModel(llm.Model):
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -65,13 +70,69 @@ class MockModel(llm.Model):
 
     def execute(self, prompt, stream, response, conversation):
         self.history.append((prompt, stream, response, conversation))
+        gathered = []
         while True:
             try:
                 messages = self._queue.pop(0)
-                yield from messages
+                for message in messages:
+                    gathered.append(message)
+                    yield message
                 break
             except IndexError:
                 break
+        response.set_usage(
+            input=len((prompt.prompt or "").split()), output=len(gathered)
+        )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
+
+
+class MockKeyModel(llm.KeyModel):
+    model_id = "mock_key"
+    needs_key = "mock"
+
+    def execute(self, prompt, stream, response, conversation, key):
+        return [f"key: {key}"]
+
+
+class MockAsyncKeyModel(llm.AsyncKeyModel):
+    model_id = "mock_key"
+    needs_key = "mock"
+
+    async def execute(self, prompt, stream, response, conversation, key):
+        yield f"async, key: {key}"
+
+
+class AsyncMockModel(llm.AsyncModel):
+    model_id = "mock"
+    supports_schema = True
+
+    def __init__(self):
+        self.history = []
+        self._queue = []
+        self.resolved_model_name = None
+
+    def enqueue(self, messages):
+        assert isinstance(messages, list)
+        self._queue.append(messages)
+
+    async def execute(self, prompt, stream, response, conversation):
+        self.history.append((prompt, stream, response, conversation))
+        gathered = []
+        while True:
+            try:
+                messages = self._queue.pop(0)
+                for message in messages:
+                    gathered.append(message)
+                    yield message
+                break
+            except IndexError:
+                break
+        response.set_usage(
+            input=len((prompt.prompt or "").split()), output=len(gathered)
+        )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class EmbedDemo(llm.EmbeddingModel):
@@ -117,8 +178,23 @@ def mock_model():
     return MockModel()
 
 
+@pytest.fixture
+def async_mock_model():
+    return AsyncMockModel()
+
+
+@pytest.fixture
+def mock_key_model():
+    return MockKeyModel()
+
+
+@pytest.fixture
+def mock_async_key_model():
+    return MockAsyncKeyModel()
+
+
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo, mock_model):
+def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
     class MockModelsPlugin:
         __name__ = "MockModelsPlugin"
 
@@ -130,7 +206,7 @@ def register_embed_demo_model(embed_demo, mock_model):
 
         @llm.hookimpl
         def register_models(self, register):
-            register(mock_model)
+            register(mock_model, async_model=async_mock_model)
 
     pm.register(MockModelsPlugin(), name="undo-mock-models-plugin")
     try:
@@ -139,15 +215,52 @@ def register_embed_demo_model(embed_demo, mock_model):
         pm.unregister(name="undo-mock-models-plugin")
 
 
+@pytest.fixture(autouse=True)
+def register_echo_model():
+    class EchoModelPlugin:
+        __name__ = "EchoModelPlugin"
+
+        @llm.hookimpl
+        def register_models(self, register):
+            register(llm_echo.Echo(), llm_echo.EchoAsync())
+
+    pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
+    try:
+        yield
+    finally:
+        pm.unregister(name="undo-EchoModelPlugin")
+
+
 @pytest.fixture
 def mocked_openai_chat(httpx_mock):
     httpx_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "usage": {},
             "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    return httpx_mock
+
+
+@pytest.fixture
+def mocked_openai_chat_returning_fenced_code(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": "Code:\n\n````javascript\nfunction foo() {\n  return 'bar';\n}\n````\nDone.",
+                    }
+                }
+            ],
         },
         headers={"Content-Type": "application/json"},
     )
@@ -359,3 +472,16 @@ def collection():
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"filter_headers": ["Authorization"]}
+
+
+def extract_braces(s):
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and first < last:
+        return s[first : last + 1]
+    return None

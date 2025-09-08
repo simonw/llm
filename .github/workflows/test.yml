@@ -11,8 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
-        pydantic: ["==1.10.2", ">=2.0.0"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -24,10 +23,9 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -e '.[test]'
-        pip install 'pydantic${{ matrix.pydantic }}'
     - name: Run tests
       run: |
-        pytest
+        python -m pytest -vv
     - name: Check if cog needs to be run
       if: matrix.os != 'windows-latest'
       run: |
@@ -45,9 +43,18 @@ jobs:
     - name: Run ruff
       if: matrix.os != 'windows-latest'
       run: |
-        ruff .
+        ruff check .
+    - name: Check it builds
+      run: |
+        python -m build
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |
         llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh
+    - name: Upload artifact of builds
+      if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-${{ matrix.os }}-${{ matrix.python-version }}
+        path: dist/*

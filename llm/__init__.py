@@ -4,40 +4,69 @@ from .errors import (
     NeedsKeyException,
 )
 from .models import (
+    AsyncConversation,
+    AsyncKeyModel,
+    AsyncModel,
+    AsyncResponse,
+    Attachment,
+    CancelToolCall,
     Conversation,
-    Model,
-    ModelWithAliases,
     EmbeddingModel,
     EmbeddingModelWithAliases,
+    KeyModel,
+    Model,
+    ModelWithAliases,
     Options,
     Prompt,
     Response,
+    Tool,
+    Toolbox,
+    ToolCall,
+    ToolOutput,
+    ToolResult,
 )
+from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
-from .plugins import pm
+from .plugins import pm, load_plugins
 import click
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Type, Union
+import inspect
 import json
 import os
 import pathlib
 import struct
 
 __all__ = [
-    "hookimpl",
-    "get_model",
-    "get_key",
-    "user_dir",
+    "AsyncConversation",
+    "AsyncKeyModel",
+    "AsyncResponse",
+    "Attachment",
+    "CancelToolCall",
     "Collection",
     "Conversation",
+    "Fragment",
+    "get_async_model",
+    "get_key",
+    "get_model",
+    "hookimpl",
+    "KeyModel",
     "Model",
+    "ModelError",
+    "NeedsKeyException",
     "Options",
     "Prompt",
     "Response",
     "Template",
-    "ModelError",
-    "NeedsKeyException",
+    "Tool",
+    "Toolbox",
+    "ToolCall",
+    "ToolOutput",
+    "ToolResult",
+    "user_dir",
+    "schema_dsl",
 ]
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def get_plugins(all=False):
@@ -71,15 +100,118 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
         for alias, model_id in configured_aliases.items():
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
-    def register(model, aliases=None):
+    def register(model, async_model=None, aliases=None):
         alias_list = list(aliases or [])
         if model.model_id in extra_model_aliases:
             alias_list.extend(extra_model_aliases[model.model_id])
-        model_aliases.append(ModelWithAliases(model, alias_list))
+        model_aliases.append(ModelWithAliases(model, async_model, alias_list))
 
+    load_plugins()
     pm.hook.register_models(register=register)
 
     return model_aliases
+
+
+def _get_loaders(hook_method) -> Dict[str, Callable]:
+    load_plugins()
+    loaders = {}
+
+    def register(prefix, loader):
+        suffix = 0
+        prefix_to_try = prefix
+        while prefix_to_try in loaders:
+            suffix += 1
+            prefix_to_try = f"{prefix}_{suffix}"
+        loaders[prefix_to_try] = loader
+
+    hook_method(register=register)
+    return loaders
+
+
+def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
+    """Get template loaders registered by plugins."""
+    return _get_loaders(pm.hook.register_template_loaders)
+
+
+def get_fragment_loaders() -> Dict[
+    str,
+    Callable[[str], Union[Fragment, Attachment, List[Union[Fragment, Attachment]]]],
+]:
+    """Get fragment loaders registered by plugins."""
+    return _get_loaders(pm.hook.register_fragment_loaders)
+
+
+def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
+    """Return all tools (llm.Tool and llm.Toolbox) registered by plugins."""
+    load_plugins()
+    tools: Dict[str, Union[Tool, Type[Toolbox]]] = {}
+
+    # Variable to track current plugin name
+    current_plugin_name = None
+
+    def register(
+        tool_or_function: Union[Tool, Type[Toolbox], Callable[..., Any]],
+        name: Optional[str] = None,
+    ) -> None:
+        tool: Union[Tool, Type[Toolbox], None] = None
+
+        # If it's a Toolbox class, set the plugin field on it
+        if inspect.isclass(tool_or_function):
+            if issubclass(tool_or_function, Toolbox):
+                tool = tool_or_function
+                if current_plugin_name:
+                    tool.plugin = current_plugin_name
+                tool.name = name or tool.__name__
+            else:
+                raise TypeError(
+                    "Toolbox classes must inherit from llm.Toolbox, {} does not.".format(
+                        tool_or_function.__name__
+                    )
+                )
+
+        # If it's already a Tool instance, use it directly
+        elif isinstance(tool_or_function, Tool):
+            tool = tool_or_function
+            if name:
+                tool.name = name
+            if current_plugin_name:
+                tool.plugin = current_plugin_name
+
+        # If it's a bare function, wrap it in a Tool
+        else:
+            tool = Tool.function(tool_or_function, name=name)
+            if current_plugin_name:
+                tool.plugin = current_plugin_name
+
+        # Get the name for the tool/toolbox
+        if tool:
+            # For Toolbox classes, use their name attribute or class name
+            if inspect.isclass(tool) and issubclass(tool, Toolbox):
+                prefix = name or getattr(tool, "name", tool.__name__) or ""
+            else:
+                prefix = name or tool.name or ""
+
+            suffix = 0
+            candidate = prefix
+
+            # Avoid name collisions
+            while candidate in tools:
+                suffix += 1
+                candidate = f"{prefix}_{suffix}"
+
+            tools[candidate] = tool
+
+    # Call each plugin's register_tools hook individually to track current_plugin_name
+    for plugin in pm.get_plugins():
+        current_plugin_name = pm.get_name(plugin)
+        hook_caller = pm.hook.register_tools
+        plugin_impls = [
+            impl for impl in hook_caller.get_hookimpls() if impl.plugin is plugin
+        ]
+        for impl in plugin_impls:
+            impl.function(register=register)
+
+    return tools
 
 
 def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
@@ -99,6 +231,7 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
             alias_list.extend(extra_model_aliases[model.model_id])
         model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
 
     return model_aliases
@@ -110,6 +243,7 @@ def get_embedding_models():
     def register(model, aliases=None):
         models.append(model)
 
+    load_plugins()
     pm.hook.register_embedding_models(register=register)
     return models
 
@@ -131,12 +265,25 @@ def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
     return model_aliases
 
 
+def get_async_model_aliases() -> Dict[str, AsyncModel]:
+    async_model_aliases = {}
+    for model_with_aliases in get_models_with_aliases():
+        if model_with_aliases.async_model:
+            for alias in model_with_aliases.aliases:
+                async_model_aliases[alias] = model_with_aliases.async_model
+            async_model_aliases[model_with_aliases.model.model_id] = (
+                model_with_aliases.async_model
+            )
+    return async_model_aliases
+
+
 def get_model_aliases() -> Dict[str, Model]:
     model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
-        for alias in model_with_aliases.aliases:
-            model_aliases[alias] = model_with_aliases.model
-        model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
+        if model_with_aliases.model:
+            for alias in model_with_aliases.aliases:
+                model_aliases[alias] = model_with_aliases.model
+            model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
     return model_aliases
 
 
@@ -144,24 +291,81 @@ class UnknownModelError(KeyError):
     pass
 
 
-def get_model(name):
-    aliases = get_model_aliases()
+def get_models() -> List[Model]:
+    "Get all registered models"
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.model for mwa in models_with_aliases if mwa.model]
+
+
+def get_async_models() -> List[AsyncModel]:
+    "Get all registered async models"
+    models_with_aliases = get_models_with_aliases()
+    return [mwa.async_model for mwa in models_with_aliases if mwa.async_model]
+
+
+def get_async_model(name: Optional[str] = None) -> AsyncModel:
+    "Get an async model by name or alias"
+    aliases = get_async_model_aliases()
+    name = name or get_default_model()
     try:
         return aliases[name]
     except KeyError:
-        raise UnknownModelError("Unknown model: " + name)
+        # Does a sync model exist?
+        sync_model = None
+        try:
+            sync_model = get_model(name, _skip_async=True)
+        except UnknownModelError:
+            pass
+        if sync_model:
+            raise UnknownModelError("Unknown async model (sync model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
+
+
+def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
+    "Get a model by name or alias"
+    aliases = get_model_aliases()
+    name = name or get_default_model()
+    try:
+        return aliases[name]
+    except KeyError:
+        # Does an async model exist?
+        if _skip_async:
+            raise UnknownModelError("Unknown model: " + name)
+        async_model = None
+        try:
+            async_model = get_async_model(name)
+        except UnknownModelError:
+            pass
+        if async_model:
+            raise UnknownModelError("Unknown model (async model exists): " + name)
+        else:
+            raise UnknownModelError("Unknown model: " + name)
 
 
 def get_key(
-    explicit_key: Optional[str], key_alias: str, env_var: Optional[str] = None
+    explicit_key: Optional[str] = None,
+    key_alias: Optional[str] = None,
+    env_var: Optional[str] = None,
+    *,
+    alias: Optional[str] = None,
+    env: Optional[str] = None,
+    input: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Return an API key based on a hierarchy of potential sources.
+    Return an API key based on a hierarchy of potential sources. You should use the keyword arguments,
+    the positional arguments are here purely for backwards-compatibility with older code.
 
-    :param provided_key: A key provided by the user. This may be the key, or an alias of a key in keys.json.
-    :param key_alias: The alias used to retrieve the key from the keys.json file.
-    :param env_var: Name of the environment variable to check for the key.
+    :param input: Input provided by the user. This may be the key, or an alias of a key in keys.json.
+    :param alias: The alias used to retrieve the key from the keys.json file.
+    :param env: Name of the environment variable to check for the key as a final fallback.
     """
+    if alias:
+        key_alias = alias
+    if env:
+        env_var = env
+    if input:
+        explicit_key = input
     stored_keys = load_keys()
     # If user specified an alias, use the key stored for that alias
     if explicit_key in stored_keys:
@@ -256,3 +460,27 @@ def cosine_similarity(a, b):
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b)
+
+
+def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    path = user_dir() / filename
+    if path.exists():
+        return path.read_text().strip()
+    else:
+        return default
+
+
+def set_default_model(model, filename="default_model.txt"):
+    path = user_dir() / filename
+    if model is None and path.exists():
+        path.unlink()
+    else:
+        path.write_text(model)
+
+
+def get_default_embedding_model():
+    return get_default_model("default_embedding_model.txt", None)
+
+
+def set_default_embedding_model(model):
+    set_default_model(model, "default_embedding_model.txt")

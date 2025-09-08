@@ -76,8 +76,8 @@ def test_embed_errors(args, expected_error):
         (None, None),
         ('{"foo": "bar"}', None),
         ('{"foo": [1, 2, 3]}', None),
-        ("[1, 2, 3]", "Metadata must be a JSON object"),  # Must be a dictionary
-        ('{"foo": "incomplete}', "Metadata must be valid JSON"),
+        ("[1, 2, 3]", "metadata must be a JSON object"),  # Must be a dictionary
+        ('{"foo": "incomplete}', "metadata must be valid JSON"),
     ),
 )
 def test_embed_store(user_path, metadata, metadata_error):
@@ -211,9 +211,21 @@ def test_similar_by_id_cli(user_path_with_embeddings):
     assert json.loads(result.output) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
+
+
+@pytest.mark.parametrize("option", ("-p", "--plain"))
+def test_similar_by_id_cli_output_plain(user_path_with_embeddings, option):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["similar", "demo", "1", option], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    # Replace score with a placeholder
+    output = result.output.split("(")[0] + "(score)" + result.output.split(")")[1]
+    assert output == "2 (score)\n\n  goodbye world\n\n"
 
 
 @pytest.mark.parametrize("scenario", ("argument", "file", "stdin"))
@@ -237,19 +249,56 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
     assert json.loads(lines[0]) == {
         "id": "1",
         "score": pytest.approx(0.9999999999999999),
-        "content": None,
+        "content": "hello world",
         "metadata": None,
     }
     assert json.loads(lines[1]) == {
         "id": "2",
         "score": pytest.approx(0.9863939238321437),
-        "content": None,
+        "content": "goodbye world",
         "metadata": None,
     }
 
 
+@pytest.mark.parametrize(
+    "prefix,expected_result",
+    (
+        (
+            1,
+            {
+                "id": "1",
+                "score": pytest.approx(0.7071067811865475),
+                "content": "hello world",
+                "metadata": None,
+            },
+        ),
+        (
+            2,
+            {
+                "id": "2",
+                "score": pytest.approx(0.8137334712067349),
+                "content": "goodbye world",
+                "metadata": None,
+            },
+        ),
+    ),
+)
+def test_similar_by_content_prefixed(
+    user_path_with_embeddings, prefix, expected_result
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["similar", "demo", "-c", "world", "--prefix", prefix, "-n", "1"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output) == expected_result
+
+
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
 @pytest.mark.parametrize(
     "filename,content",
     (
@@ -265,7 +314,7 @@ def test_similar_by_content_cli(tmpdir, user_path_with_embeddings, scenario):
         ),
     ),
 )
-def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
+def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, content):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "phrases", "-d", str(db_path), "-m", "embed-demo"]
     input = None
@@ -278,6 +327,8 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, filename, content):
         args.append(str(path))
     if prefix:
         args.extend(("--prefix", prefix))
+    if prepend:
+        args.extend(("--prepend", prepend))
     # Auto-detection can't detect JSON-nl, so make that explicit
     if filename.endswith(".jsonl"):
         args.extend(("--format", "nl"))
@@ -325,7 +376,8 @@ def test_embed_multi_files_binary_store(tmpdir):
 
 @pytest.mark.parametrize("use_other_db", (True, False))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
-def test_embed_multi_sql(tmpdir, use_other_db, prefix):
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
+def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
     db_path = str(tmpdir / "embeddings.db")
     db = sqlite_utils.Database(db_path)
     extra_args = []
@@ -336,6 +388,8 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
 
     if prefix:
         extra_args.extend(("--prefix", prefix))
+    if prepend:
+        extra_args.extend(("--prepend", prepend))
 
     db["content"].insert_all(
         [
@@ -365,8 +419,14 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix):
     assert embeddings_db["embeddings"].count == 2
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     assert rows == [
-        {"id": (prefix or "") + "1", "content": "cli Command line interface"},
-        {"id": (prefix or "") + "2", "content": "sql Structured query language"},
+        {
+            "id": (prefix or "") + "1",
+            "content": (prepend or "") + "cli Command line interface",
+        },
+        {
+            "id": (prefix or "") + "2",
+            "content": (prepend or "") + "sql Structured query language",
+        },
     ]
 
 
@@ -425,7 +485,8 @@ def multi_files(tmpdir):
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("scenario", ("single", "multi"))
-def test_embed_multi_files(multi_files, scenario):
+@pytest.mark.parametrize("prepend", (None, "search_document: "))
+def test_embed_multi_files(multi_files, scenario, prepend):
     db_path, files = multi_files
     for filename, content in (
         ("file1.txt", b"hello world"),
@@ -440,17 +501,23 @@ def test_embed_multi_files(multi_files, scenario):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
 
+    extra_args = []
+
+    if prepend:
+        extra_args.extend(("--prepend", prepend))
     if scenario == "single":
-        extra_args = ["--files", str(files), "**/*.txt"]
+        extra_args.extend(["--files", str(files), "**/*.txt"])
     else:
-        extra_args = [
-            "--files",
-            str(files / "nested" / "more"),
-            "**/*.ini",
-            "--files",
-            str(files / "nested"),
-            "*.txt",
-        ]
+        extra_args.extend(
+            [
+                "--files",
+                str(files / "nested" / "more"),
+                "**/*.ini",
+                "--files",
+                str(files / "nested"),
+                "*.txt",
+            ]
+        )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -471,17 +538,20 @@ def test_embed_multi_files(multi_files, scenario):
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     if scenario == "single":
         assert rows == [
-            {"id": "file1.txt", "content": "hello world"},
-            {"id": "file2.txt", "content": "goodbye world"},
-            {"id": "nested/more/three.txt", "content": "three"},
-            {"id": "nested/one.txt", "content": "one"},
-            {"id": "nested/two.txt", "content": "two"},
+            {"id": "file1.txt", "content": (prepend or "") + "hello world"},
+            {"id": "file2.txt", "content": (prepend or "") + "goodbye world"},
+            {"id": "nested/more/three.txt", "content": (prepend or "") + "three"},
+            {"id": "nested/one.txt", "content": (prepend or "") + "one"},
+            {"id": "nested/two.txt", "content": (prepend or "") + "two"},
         ]
     else:
         assert rows == [
-            {"id": "ignored.ini", "content": "Has weird \x96 character"},
-            {"id": "one.txt", "content": "one"},
-            {"id": "two.txt", "content": "two"},
+            {
+                "id": "ignored.ini",
+                "content": (prepend or "") + "Has weird \x96 character",
+            },
+            {"id": "one.txt", "content": (prepend or "") + "one"},
+            {"id": "two.txt", "content": (prepend or "") + "two"},
         ]
 
 
@@ -554,7 +624,7 @@ def test_default_embedding_model():
     assert result2.exit_code == 0
     result3 = runner.invoke(cli, ["embed-models", "default"])
     assert result3.exit_code == 0
-    assert result3.output == "ada-002\n"
+    assert result3.output == "text-embedding-ada-002\n"
     result4 = runner.invoke(cli, ["embed-models", "default", "--remove-default"])
     assert result4.exit_code == 0
     result5 = runner.invoke(cli, ["embed-models", "default"])
@@ -566,6 +636,20 @@ def test_default_embedding_model():
     result7 = runner.invoke(cli, ["embed", "-c", "hello world"])
     assert result7.exit_code == 0
     assert result7.output == "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"
+
+
+@pytest.mark.parametrize(
+    "args,expected_model_id",
+    (
+        (["-q", "text-embedding-3-large"], "text-embedding-3-large"),
+        (["-q", "text", "-q", "3"], "text-embedding-3-large"),
+    ),
+)
+def test_llm_embed_models_query(user_path, args, expected_model_id):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed-models"] + args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert expected_model_id in result.output
 
 
 @pytest.mark.parametrize("default_is_set", (False, True))

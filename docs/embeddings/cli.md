@@ -31,6 +31,13 @@ The `llm embed` command returns a JSON array of floating point numbers directly 
 ```
 You can omit the `-m/--model` option if you set a {ref}`default embedding model <embeddings-cli-embed-models-default>`.
 
+You can also set the `LLM_EMBEDDING_MODEL` environment variable to set a default model for all `llm embed` commands in the current shell session:
+
+```bash
+export LLM_EMBEDDING_MODEL=3-small
+llm embed -c 'This is some content'
+```
+
 LLM also offers a binary storage format for embeddings, described in {ref}`embeddings storage format <embeddings-storage>`.
 
 You can output embeddings using that format as raw bytes using `--format blob`, or in hexadecimal using `--format hex`, or in Base64 using `--format base64`:
@@ -148,7 +155,10 @@ All three mechanisms support these options:
 - `-d database.db` to specify a different database file to store the embeddings in
 - `--store` to store the original content in the embeddings table in addition to the embedding vector
 - `--prefix` to prepend a prefix to the stored ID of each item
+- `--prepend` to prepend a string to the content before embedding 
 - `--batch-size SIZE` to process embeddings in batches of the specified size
+
+The `--prepend` option is useful for embedding models that require you to prepend a special token to the content before embedding it. [nomic-embed-text-v2-moe](https://huggingface.co/nomic-ai/nomic-embed-text-v2-moe) for example requires documents to be prepended `'search_document: '` and search queries to be prepended `'search_query: '`.
 
 (embeddings-cli-embed-multi-csv-etc)=
 ### Embedding data from a CSV, TSV or JSON file
@@ -322,7 +332,7 @@ llm embed-multi photos \
 (embeddings-cli-similar)=
 ## llm similar
 
-The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID.
+The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID, based on [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity).
 
 This currently uses a slow brute-force approach which does not scale well to large collections. See [issue 216](https://github.com/simonw/llm/issues/216) for plans to add a more scalable approach via vector indexes provided by plugins.
 
@@ -334,6 +344,14 @@ llm similar quotations -c 'computer science'
 This embeds the provided string and returns a newline-delimited list of JSON objects like this:
 ```json
 {"id": "philkarlton-1", "score": 0.8323904531677017, "content": null, "metadata": null}
+```
+Use `-p/--plain` to get back results in plain text instead of JSON:
+```bash
+llm similar quotations -c 'computer science' -p
+```
+Example output:
+```
+philkarlton-1 (0.8323904531677017)
 ```
 You can compare against text stored in a file using `-i filename`:
 ```bash
@@ -348,6 +366,12 @@ When using a model like CLIP, you can find images similar to an input image usin
 llm similar photos -i image.jpg --binary
 ```
 
+You can filter results to only show IDs that begin with a specific prefix using --prefix:
+
+```bash
+llm similar quotations --prefix 'movies/' -c 'star wars'
+```
+
 (embeddings-cli-embed-models)=
 ## llm embed-models
 
@@ -358,8 +382,14 @@ llm embed-models
 ```
 The output should look something like this:
 ```
-3-small (aliases: ada)
-sentence-transformers/all-MiniLM-L6-v2 (aliases: all-MiniLM-L6-v2)
+OpenAIEmbeddingModel: text-embedding-ada-002 (aliases: ada, ada-002)
+OpenAIEmbeddingModel: text-embedding-3-small (aliases: 3-small)
+OpenAIEmbeddingModel: text-embedding-3-large (aliases: 3-large)
+...
+```
+Add `-q` one or more times to search for models matching those terms:
+```bash
+llm embed-models -q 3-small
 ```
 
 (embeddings-cli-embed-models-default)=
