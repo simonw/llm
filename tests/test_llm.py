@@ -887,7 +887,6 @@ def test_llm_prompt_multi(tmpdir, async_mock_model):
         ],
         catch_exceptions=True,
     )
-    breakpoint()
     assert result.exit_code == 0
 
     results = pd.read_parquet(result_path)
