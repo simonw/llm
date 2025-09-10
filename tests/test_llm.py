@@ -9,6 +9,8 @@ from pydantic import BaseModel
 import pytest
 import sqlite_utils
 from unittest import mock
+import bodo
+import bodo.pandas as pd
 
 
 def test_version():
@@ -851,3 +853,42 @@ def test_llm_prompt_continue_with_database(
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
     assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_llm_prompt_multi(tmpdir, async_mock_model):
+    # Disable parallel processing in bodo for this test
+    # so we can use mock_model
+    bodo.dataframe_library_run_parallel = False
+    
+    test_csv_path = str(pathlib.Path(tmpdir, "test.csv"))
+    result_path = str(pathlib.Path(tmpdir, "results.pq"))
+    prompts = pd.DataFrame({
+        "promptx": ["test1", "test2", "test3"],
+    })
+    prompts.to_csv(test_csv_path, index=False)
+    # Needs an extra one for typing
+    async_mock_model.enqueue(["test1_resp"])
+
+    async_mock_model.enqueue(["test1_resp"])
+    async_mock_model.enqueue(["test2_resp"])
+    async_mock_model.enqueue(["test3_resp"])
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "prompt_multi",
+            test_csv_path,
+            "-m",
+            "mock",
+            "-s",
+            "You are a helpful assistant.",
+            "-c", "promptx", "-r", result_path
+        ],
+        catch_exceptions=True,
+    )
+    assert result.exit_code == 0
+
+    results = pd.read_parquet(result_path)
+    assert list(results["prompt"]) == ["test1", "test2", "test3"]
+    assert list(results["response"]) == ["test1_resp", "test2_resp", "test3_resp"]
