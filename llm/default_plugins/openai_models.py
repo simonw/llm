@@ -438,6 +438,12 @@ class ReasoningEffortEnum(str, Enum):
     high = "high"
 
 
+class VerbosityEnum(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class OptionsForReasoning(SharedOptions):
     json_object: Optional[bool] = Field(
         description="Output a valid JSON object {...}. Prompt must mention JSON.",
@@ -448,6 +454,14 @@ class OptionsForReasoning(SharedOptions):
             "Constraints effort on reasoning for reasoning models. Currently supported "
             "values are low, medium, and high. Reducing reasoning effort can result in "
             "faster responses and fewer tokens used on reasoning in a response."
+        ),
+        default=None,
+    )
+    verbosity: Optional[VerbosityEnum] = Field(
+        description=(
+            "Controls the verbosity of the model's response. Currently supported "
+            "values are low, medium, and high. Low verbosity produces more concise "
+            "responses, while high verbosity provides more detailed explanations."
         ),
         default=None,
     )
