@@ -52,7 +52,7 @@ jobs:
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |
-        uv run llm install llm-cluster llm-mistral
+        llm install llm-cluster llm-mistral
         ./tests/test-llm-load-plugins.sh
     - name: Upload artifact of builds
       if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
