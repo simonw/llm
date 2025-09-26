@@ -17,19 +17,20 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Install dependencies
         run: |
-          pip install -e '.[test]'
-          pip install -r docs/requirements.txt
+          uv sync --extra test
+          uv pip install -r docs/requirements.txt
 
       - name: Run cog
         run: |
-          cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
+          uv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
 
       - name: Check for changes
         id: check-changes
