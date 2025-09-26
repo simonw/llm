@@ -5,6 +5,11 @@ from dataclasses import asdict
 import io
 import json
 import os
+
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
+
 from llm import (
     Attachment,
     AsyncConversation,
@@ -471,6 +476,7 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option("--render", is_flag=True, help="Render for terminal")
 def prompt(
     prompt,
     system,
@@ -502,6 +508,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    render,
 ):
     """
     Execute a prompt
@@ -830,41 +837,44 @@ def prompt(
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
 
+    console = Console()
+
     try:
         if async_:
 
             async def inner():
+                response = prompt_method(
+                    prompt,
+                    attachments=resolved_attachments,
+                    system=system,
+                    schema=schema,
+                    fragments=resolved_fragments,
+                    system_fragments=resolved_system_fragments,
+                    **kwargs,
+                )
+
                 if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
-                    print("")
+                    accumulated_text = ""
+                    with Live(accumulated_text, console=console, refresh_per_second=10) as live:
+                        async for chunk in response:
+                            accumulated_text += chunk
+
+                            if render:
+                                display_content = Markdown(accumulated_text)
+                            else:
+                                display_content = accumulated_text
+
+                            live.update(display_content)
                 else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     text = await response.text()
                     if extract or extract_last:
-                        text = (
-                            extract_fenced_code_block(text, last=extract_last) or text
-                        )
-                    print(text)
+                        text = extract_fenced_code_block(text, last=extract_last) or text
+                    if render:
+                        text = Markdown(text)
+                    console.print(text)
+                
                 return response
+
 
             response = asyncio.run(inner())
         else:
@@ -877,16 +887,28 @@ def prompt(
                 system_fragments=resolved_system_fragments,
                 **kwargs,
             )
+
+
+
             if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
-                print("")
+                accumulated_text = ""
+                with Live(accumulated_text, console=console, refresh_per_second=10) as live:
+                    for chunk in response:
+                        accumulated_text += chunk
+
+                        if render:
+                            display_content = Markdown(accumulated_text)
+                        else:
+                            display_content = accumulated_text
+
+                        live.update(display_content)
             else:
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+                if render:
+                    text = Markdown(text)
+                console.print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))

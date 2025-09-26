@@ -39,6 +39,7 @@ dependencies = [
     "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
+    "rich"
 ]
 
 [project.urls]
