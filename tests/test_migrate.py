@@ -22,6 +22,10 @@ EXPECTED = {
     "output_tokens": int,
     "token_details": str,
     "schema_id": str,
+    "parent_response_id": str,
+    "prompt_hash": str,
+    "response_hash": str,
+    "path_hash": str,
 }
 
 

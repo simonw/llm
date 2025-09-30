@@ -418,3 +418,30 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_parent_response_id(db):
+    """Add parent_response_id to enable tree-structured conversations"""
+    db["responses"].add_column("parent_response_id", str, fk="responses", fk_col="id")
+    # Clean up SQL and ensure FTS triggers are maintained
+    db["responses"].transform()
+    # Re-enable FTS configuration with triggers
+    db["responses"].enable_fts(
+        ["prompt", "response"], create_triggers=True, replace=True
+    )
+
+
+@migration
+def m023_response_hashing(db):
+    """Add hash columns for efficient message matching in tree conversations"""
+    db["responses"].add_column("prompt_hash", str)
+    db["responses"].add_column("response_hash", str)
+    db["responses"].add_column("path_hash", str)
+
+    # Create indexes for efficient lookups
+    db["responses"].create_index(["prompt_hash"], if_not_exists=True)
+    db["responses"].create_index(["path_hash"], if_not_exists=True)
+    db["responses"].create_index(
+        ["conversation_id", "parent_response_id", "prompt_hash"], if_not_exists=True
+    )
