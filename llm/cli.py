@@ -904,10 +904,18 @@ def prompt(
         else:
             responses = [response]
         for response_object in responses:
-            # Show token usage to stderr in yellow
+            # Show token usage to stderr in yellow (with cost if available)
+            usage_str = token_usage_string(
+                response_object.input_tokens,
+                response_object.output_tokens,
+                response_object.token_details,
+                model_id=response_object.resolved_model
+                or response_object.model.model_id,
+                datetime_utc=response_object.datetime_utc(),
+            )
             click.echo(
                 click.style(
-                    "Token usage: {}".format(response_object.token_usage()),
+                    "Token usage: {}".format(usage_str),
                     fg="yellow",
                     bold=True,
                 ),
@@ -2180,10 +2188,18 @@ def logs_list(
             if response:
                 click.echo("{}\n".format(response))
             if usage:
+                from datetime import datetime as dt
+
                 token_usage = token_usage_string(
                     row["input_tokens"],
                     row["output_tokens"],
                     json.loads(row["token_details"]) if row["token_details"] else None,
+                    model_id=row.get("resolved_model") or row["model"],
+                    datetime_utc=(
+                        dt.fromisoformat(row["datetime_utc"])
+                        if row.get("datetime_utc")
+                        else None
+                    ),
                 )
                 if token_usage:
                     click.echo("## Token usage\n\n{}\n".format(token_usage))

@@ -25,6 +25,12 @@ from .models import (
     ToolOutput,
     ToolResult,
 )
+from .costs import (
+    Cost,
+    CostEstimator,
+    AsyncCostEstimator,
+    PriceInfo,
+)
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
@@ -39,12 +45,15 @@ import struct
 
 __all__ = [
     "AsyncConversation",
+    "AsyncCostEstimator",
     "AsyncKeyModel",
     "AsyncResponse",
     "Attachment",
     "CancelToolCall",
     "Collection",
     "Conversation",
+    "Cost",
+    "CostEstimator",
     "Fragment",
     "get_async_model",
     "get_key",
@@ -55,6 +64,7 @@ __all__ = [
     "ModelError",
     "NeedsKeyException",
     "Options",
+    "PriceInfo",
     "Prompt",
     "Response",
     "Template",

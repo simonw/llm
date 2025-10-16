@@ -169,7 +169,28 @@ def simplify_usage_dict(d):
     return remove_empty_and_zero(d) or {}
 
 
-def token_usage_string(input_tokens, output_tokens, token_details) -> str:
+def token_usage_string(
+    input_tokens,
+    output_tokens,
+    token_details,
+    model_id=None,
+    datetime_utc=None,
+    show_cost=True,
+) -> str:
+    """
+    Format token usage string with optional cost information.
+
+    Args:
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        token_details: Optional dict with additional token details
+        model_id: Optional model ID for cost calculation
+        datetime_utc: Optional datetime for historical pricing
+        show_cost: Whether to include cost (default True)
+
+    Returns:
+        Formatted usage string like "10 input, 5 output, Cost: $0.000450"
+    """
     bits = []
     if input_tokens is not None:
         bits.append(f"{format(input_tokens, ',')} input")
@@ -177,6 +198,49 @@ def token_usage_string(input_tokens, output_tokens, token_details) -> str:
         bits.append(f"{format(output_tokens, ',')} output")
     if token_details:
         bits.append(json.dumps(token_details))
+
+    # Add cost estimate if model_id provided
+    if show_cost and model_id:
+        try:
+            from .costs import get_default_estimator
+
+            estimator = get_default_estimator()
+
+            # Extract cached tokens from token_details
+            cached_tokens = None
+            if token_details:
+                cached_tokens = (
+                    token_details.get("cache_read_input_tokens")
+                    or token_details.get("cached_tokens")
+                    or None
+                )
+
+            cost = estimator.calculate_cost(
+                model_id=model_id,
+                input_tokens=input_tokens or 0,
+                output_tokens=output_tokens or 0,
+                cached_tokens=cached_tokens,
+                date=datetime_utc,
+            )
+
+            if cost:
+                cost_str = f"${cost.total_cost:.6f}"
+                if cost.cached_cost > 0:
+                    cost_str += (
+                        f" (${cost.input_cost:.6f} input, "
+                        f"${cost.output_cost:.6f} output, "
+                        f"${cost.cached_cost:.6f} cached)"
+                    )
+                else:
+                    cost_str += (
+                        f" (${cost.input_cost:.6f} input, "
+                        f"${cost.output_cost:.6f} output)"
+                    )
+                bits.append(f"Cost: {cost_str}")
+        except Exception:
+            # Silently skip cost on any error (network, missing pricing, etc.)
+            pass
+
     return ", ".join(bits)
 
 

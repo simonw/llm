@@ -1015,6 +1015,51 @@ class Response(_BaseResponse):
     def __str__(self) -> str:
         return self.text()
 
+    def _get_cached_tokens(self) -> Optional[int]:
+        """Extract cached token count from token_details if available."""
+        if self.token_details:
+            # Anthropic's prompt caching format
+            cached = self.token_details.get("cache_read_input_tokens")
+            if cached:
+                return cached
+            # Generic cached tokens key
+            cached = self.token_details.get("cached_tokens")
+            if cached:
+                return cached
+        return None
+
+    def cost(self, estimator: Optional["CostEstimator"] = None) -> Optional["Cost"]:
+        """
+        Calculate cost for this response.
+
+        Fetches pricing data on first use and caches it in user_dir().
+        May block briefly on first call if pricing data needs to be fetched.
+
+        Args:
+            estimator: Optional custom CostEstimator instance
+
+        Returns:
+            Cost object if pricing available, None otherwise
+
+        Example:
+            >>> response = model.prompt("Hello")
+            >>> cost = response.cost()
+            >>> if cost:
+            ...     print(f"Total: ${cost.total_cost:.6f}")
+        """
+        if estimator is None:
+            from .costs import get_default_estimator
+
+            estimator = get_default_estimator()
+
+        return estimator.calculate_cost(
+            model_id=self.resolved_model or self.model.model_id,
+            input_tokens=self.input_tokens or 0,
+            output_tokens=self.output_tokens or 0,
+            cached_tokens=self._get_cached_tokens(),
+            date=self.datetime_utc(),
+        )
+
     def _force(self):
         if not self._done:
             list(self)
@@ -1464,6 +1509,51 @@ class AsyncResponse(_BaseResponse):
     async def datetime_utc(self) -> str:
         await self._force()
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
+
+    def _get_cached_tokens(self) -> Optional[int]:
+        """Extract cached token count from token_details if available."""
+        if self.token_details:
+            cached = self.token_details.get("cache_read_input_tokens")
+            if cached:
+                return cached
+            cached = self.token_details.get("cached_tokens")
+            if cached:
+                return cached
+        return None
+
+    async def cost(
+        self, estimator: Optional["AsyncCostEstimator"] = None
+    ) -> Optional["Cost"]:
+        """
+        Calculate cost for this response (async).
+
+        Fetches pricing data on first use and caches it in user_dir().
+        Uses async I/O for network requests and file operations.
+
+        Args:
+            estimator: Optional custom AsyncCostEstimator instance
+
+        Returns:
+            Cost object if pricing available, None otherwise
+
+        Example:
+            >>> response = await model.prompt("Hello")
+            >>> cost = await response.cost()
+            >>> if cost:
+            ...     print(f"Total: ${cost.total_cost:.6f}")
+        """
+        if estimator is None:
+            from .costs import get_async_estimator
+
+            estimator = await get_async_estimator()
+
+        return await estimator.calculate_cost(
+            model_id=self.resolved_model or self.model.model_id,
+            input_tokens=self.input_tokens or 0,
+            output_tokens=self.output_tokens or 0,
+            cached_tokens=self._get_cached_tokens(),
+            date=self.datetime_utc(),
+        )
 
     async def usage(self) -> Usage:
         await self._force()
