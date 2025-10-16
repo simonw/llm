@@ -1,0 +1,774 @@
+{
+  "prices": [
+    {
+      "id": "amazon-nova-lite",
+      "vendor": "amazon",
+      "name": "Amazon Nova Lite",
+      "input": 0.06,
+      "output": 0.24,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "amazon-nova-micro",
+      "vendor": "amazon",
+      "name": "Amazon Nova Micro",
+      "input": 0.035,
+      "output": 0.14,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "amazon-nova-premier",
+      "vendor": "amazon",
+      "name": "Amazon Nova Premier",
+      "input": 2.5,
+      "output": 12.5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "amazon-nova-pro",
+      "vendor": "amazon",
+      "name": "Amazon Nova Pro",
+      "input": 0.8,
+      "output": 3.2,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-3-haiku",
+      "vendor": "anthropic",
+      "name": "Claude 3 Haiku",
+      "input": 0.25,
+      "output": 1.25,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-3-opus",
+      "vendor": "anthropic",
+      "name": "Claude 3 Opus",
+      "input": 15,
+      "output": 75,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-3.5-haiku",
+      "vendor": "anthropic",
+      "name": "Claude 3.5 Haiku",
+      "input": 0.8,
+      "output": 4,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-3.5-sonnet",
+      "vendor": "anthropic",
+      "name": "Claude 3.5 Sonnet",
+      "input": 3,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-3.7-sonnet",
+      "vendor": "anthropic",
+      "name": "Claude 3.7 Sonnet",
+      "input": 3,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-4.5-haiku",
+      "vendor": "anthropic",
+      "name": "Claude 4.5 Haiku",
+      "input": 1,
+      "output": 5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-opus-4",
+      "vendor": "anthropic",
+      "name": "Claude Opus 4 and 4.1",
+      "input": 15,
+      "output": 75,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-sonnet-4.5",
+      "vendor": "anthropic",
+      "name": "Claude Sonnet 4 and 4.5 ≤200k",
+      "input": 3,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "claude-sonnet-4.5-200k",
+      "vendor": "anthropic",
+      "name": "Claude Sonnet 4 and 4.5 >200k",
+      "input": 6,
+      "output": 22.5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "deepseek-chat",
+      "vendor": "deepseek",
+      "name": "DeepSeek Chat",
+      "input": 0.27,
+      "output": 1.1,
+      "input_cached": null,
+      "from_date": "2025-02-08",
+      "to_date": null
+    },
+    {
+      "id": "deepseek-chat",
+      "vendor": "deepseek",
+      "name": "DeepSeek Chat",
+      "input": 0.14,
+      "output": 0.28,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": "2025-02-08"
+    },
+    {
+      "id": "deepseek-reasoner",
+      "vendor": "deepseek",
+      "name": "DeepSeek Reasoner",
+      "input": 0.55,
+      "output": 2.19,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-flash",
+      "vendor": "google",
+      "name": "Gemini 1.5 Flash ≤128k",
+      "input": 0.075,
+      "output": 0.3,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-flash-128k",
+      "vendor": "google",
+      "name": "Gemini 1.5 Flash >128k",
+      "input": 0.15,
+      "output": 0.6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-flash-8b",
+      "vendor": "google",
+      "name": "Gemini 1.5 Flash-8B ≤128k",
+      "input": 0.0375,
+      "output": 0.15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-flash-8b-128k",
+      "vendor": "google",
+      "name": "Gemini 1.5 Flash-8B >128k",
+      "input": 0.075,
+      "output": 0.3,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-pro",
+      "vendor": "google",
+      "name": "Gemini 1.5 Pro ≤128k",
+      "input": 1.25,
+      "output": 5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-1.5-pro-128k",
+      "vendor": "google",
+      "name": "Gemini 1.5 Pro >128k",
+      "input": 2.5,
+      "output": 10,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "vendor": "google",
+      "name": "Gemini 2.0 Flash",
+      "input": 0.1,
+      "output": 0.4,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.0-flash-lite",
+      "vendor": "google",
+      "name": "Gemini 2.0 Flash Lite",
+      "input": 0.075,
+      "output": 0.3,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "vendor": "google",
+      "name": "Gemini 2.5 Flash",
+      "input": 0.15,
+      "output": 0.6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "vendor": "google",
+      "name": "Gemini 2.5 Flash-Lite",
+      "input": 0.1,
+      "output": 0.4,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-flash-preview",
+      "vendor": "google",
+      "name": "Gemini 2.5 Flash Preview",
+      "input": 0.15,
+      "output": 0.6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-flash-preview-thinking",
+      "vendor": "google",
+      "name": "Gemini 2.5 Flash Preview Thinking",
+      "input": 0.15,
+      "output": 3.5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-flash-thinking",
+      "vendor": "google",
+      "name": "Gemini 2.5 Flash Thinking",
+      "input": 0.15,
+      "output": 3.5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "vendor": "google",
+      "name": "Gemini 2.5 Pro ≤200k",
+      "input": 1.25,
+      "output": 10,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-pro--200k",
+      "vendor": "google",
+      "name": "Gemini 2.5 Pro >200k",
+      "input": 2.5,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-pro-preview-03-25",
+      "vendor": "google",
+      "name": "Gemini 2.5 Pro Preview ≤200k",
+      "input": 1.25,
+      "output": 10,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gemini-2.5-pro-preview-03-25-200k",
+      "vendor": "google",
+      "name": "Gemini 2.5 Pro Preview >200k",
+      "input": 2.5,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "codestral-latest",
+      "vendor": "mistral",
+      "name": "Codestral",
+      "input": 0.3,
+      "output": 0.9,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "magistral-medium-latest",
+      "vendor": "mistral",
+      "name": "Magistral Medium",
+      "input": 2,
+      "output": 5,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "ministral-3b-latest",
+      "vendor": "mistral",
+      "name": "Ministral 3B 24.10",
+      "input": 0.04,
+      "output": 0.04,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "ministral-8b-latest",
+      "vendor": "mistral",
+      "name": "Ministral 8B 24.10",
+      "input": 0.1,
+      "output": 0.1,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "mistral-large-latest",
+      "vendor": "mistral",
+      "name": "Mistral Large 24.11",
+      "input": 2,
+      "output": 6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "mistral-medium-2505",
+      "vendor": "mistral",
+      "name": "Mistral Medium 3",
+      "input": 0.4,
+      "output": 2,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "mistral-nemo",
+      "vendor": "mistral",
+      "name": "Mistral NeMo",
+      "input": 0.15,
+      "output": 0.15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "mistral-saba-latest",
+      "vendor": "mistral",
+      "name": "Mistral Saba",
+      "input": 0.2,
+      "output": 0.6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "mistral-small-latest",
+      "vendor": "mistral",
+      "name": "Mistral Small 3.1",
+      "input": 0.1,
+      "output": 0.3,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "open-mistral-7b",
+      "vendor": "mistral",
+      "name": "Mistral 7B",
+      "input": 0.25,
+      "output": 0.25,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "open-mixtral-8x22b",
+      "vendor": "mistral",
+      "name": "Mixtral 8x22B",
+      "input": 2,
+      "output": 6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "open-mixtral-8x7b",
+      "vendor": "mistral",
+      "name": "Mixtral 8x7B",
+      "input": 0.7,
+      "output": 0.7,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "pixtral-12b",
+      "vendor": "mistral",
+      "name": "Pixtral 12B",
+      "input": 0.15,
+      "output": 0.15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "pixtral-large-latest",
+      "vendor": "mistral",
+      "name": "Pixtral Large",
+      "input": 2,
+      "output": 6,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "chatgpt-4o-latest",
+      "vendor": "openai",
+      "name": "ChatGPT 4o Latest",
+      "input": 5,
+      "output": 15,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4.1",
+      "vendor": "openai",
+      "name": "GPT-4.1",
+      "input": 2,
+      "output": 8,
+      "input_cached": 0.5,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4.1-mini",
+      "vendor": "openai",
+      "name": "GPT-4.1 Mini",
+      "input": 0.4,
+      "output": 1.6,
+      "input_cached": 0.1,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "vendor": "openai",
+      "name": "GPT-4.1 Nano",
+      "input": 0.1,
+      "output": 0.4,
+      "input_cached": 0.025,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4.5",
+      "vendor": "openai",
+      "name": "GPT-4.5",
+      "input": 75,
+      "output": 150,
+      "input_cached": 37.5,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4o",
+      "vendor": "openai",
+      "name": "GPT-4o",
+      "input": 2.5,
+      "output": 10,
+      "input_cached": 1.25,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-4o-mini",
+      "vendor": "openai",
+      "name": "GPT-4o Mini",
+      "input": 0.15,
+      "output": 0.6,
+      "input_cached": 0.075,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-5",
+      "vendor": "openai",
+      "name": "GPT-5",
+      "input": 1.25,
+      "output": 10,
+      "input_cached": 0.125,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-5-mini",
+      "vendor": "openai",
+      "name": "GPT-5 Mini",
+      "input": 0.25,
+      "output": 2,
+      "input_cached": 0.025,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-5-nano",
+      "vendor": "openai",
+      "name": "GPT-5 Nano",
+      "input": 0.05,
+      "output": 0.4,
+      "input_cached": 0.005,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-5-pro",
+      "vendor": "openai",
+      "name": "GPT-5 Pro",
+      "input": 15,
+      "output": 120,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-image-1",
+      "vendor": "openai",
+      "name": "gpt-image-1 (image gen)",
+      "input": 10,
+      "output": 40,
+      "input_cached": 1.25,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "gpt-image-1-mini",
+      "vendor": "openai",
+      "name": "gpt-image-1-mini (image gen)",
+      "input": 2,
+      "output": 8,
+      "input_cached": 0.2,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o1-mini",
+      "vendor": "openai",
+      "name": "o1-mini",
+      "input": 1.1,
+      "output": 4.4,
+      "input_cached": 0.55,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o1-preview",
+      "vendor": "openai",
+      "name": "o1 and o1-preview",
+      "input": 15,
+      "output": 60,
+      "input_cached": 7.5,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o1-pro",
+      "vendor": "openai",
+      "name": "o1 Pro",
+      "input": 150,
+      "output": 600,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o3",
+      "vendor": "openai",
+      "name": "o3",
+      "input": 10,
+      "output": 40,
+      "input_cached": 0.5,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o3-mini",
+      "vendor": "openai",
+      "name": "o3-mini",
+      "input": 1.1,
+      "output": 4.4,
+      "input_cached": 0.55,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o3-pro",
+      "vendor": "openai",
+      "name": "o3 Pro",
+      "input": 20,
+      "output": 80,
+      "input_cached": null,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "o4-mini",
+      "vendor": "openai",
+      "name": "o4-mini",
+      "input": 1.1,
+      "output": 4.4,
+      "input_cached": 0.275,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-3",
+      "vendor": "xai",
+      "name": "Grok 3",
+      "input": 3,
+      "output": 15,
+      "input_cached": 0.75,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-3-mini",
+      "vendor": "xai",
+      "name": "Grok 3 Mini",
+      "input": 0.3,
+      "output": 0.5,
+      "input_cached": 0.075,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4",
+      "vendor": "xai",
+      "name": "Grok 4 ≤128k",
+      "input": 3,
+      "output": 15,
+      "input_cached": 0.75,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-128k",
+      "vendor": "xai",
+      "name": "Grok 4 >128k",
+      "input": 6,
+      "output": 30,
+      "input_cached": 0.75,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-fast",
+      "vendor": "xai",
+      "name": "Grok 4 Fast",
+      "input": 0.2,
+      "output": 0.5,
+      "input_cached": 0.05,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-fast",
+      "vendor": "xai",
+      "name": "Grok 4 Fast ≤128k",
+      "input": 0.2,
+      "output": 0.5,
+      "input_cached": 0.05,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-fast-128k",
+      "vendor": "xai",
+      "name": "Grok 4 Fast >128k",
+      "input": 0.4,
+      "output": 1.0,
+      "input_cached": 0.05,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-fast-reasoning",
+      "vendor": "xai",
+      "name": "Grok 4 Fast Reasoning ≤128k",
+      "input": 0.2,
+      "output": 0.5,
+      "input_cached": 0.05,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-4-fast-reasoning-128k",
+      "vendor": "xai",
+      "name": "Grok 4 Fast Reasoning >128k",
+      "input": 0.4,
+      "output": 1.0,
+      "input_cached": 0.05,
+      "from_date": null,
+      "to_date": null
+    },
+    {
+      "id": "grok-code-fast-1",
+      "vendor": "xai",
+      "name": "Grok Code Fast 1",
+      "input": 0.2,
+      "output": 1.5,
+      "input_cached": 0.02,
+      "from_date": null,
+      "to_date": null
+    }
+  ]
+}
