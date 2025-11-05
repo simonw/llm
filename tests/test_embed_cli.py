@@ -349,32 +349,133 @@ def test_embed_multi_with_metadata(tmpdir):
     """Test that embed-multi works with JSON files containing metadata."""
     db_path = tmpdir / "embeddings.db"
     content = '[{"id": "1", "content": "An item", "metadata": {"key1": "value1", "key2": "value2"}}, {"id": "2", "content": "Another item", "metadata": {"key1": "value1", "key2": "value2"}}]'
-    
+
     path = tmpdir / "metadata.json"
     path.write_text(content, "utf-8")
-    
-    args = ["embed-multi", "metadata-test", "-d", str(db_path), "-m", "embed-demo", str(path), "--store"]
-    
+
+    args = [
+        "embed-multi",
+        "metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
     runner = CliRunner()
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
-    
+
     # Check that everything was embedded correctly with metadata
     db = sqlite_utils.Database(str(db_path))
     assert db["embeddings"].count == 2
-    
+
     rows = list(db["embeddings"].rows)
     assert len(rows) == 2
-    
+
     # Check first row
     row1 = [row for row in rows if row["id"] == "1"][0]
     assert row1["content"] == "An item"
     assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
-    
+
     # Check second row
     row2 = [row for row in rows if row["id"] == "2"][0]
     assert row2["content"] == "Another item"
     assert json.loads(row2["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+
+def test_embed_multi_with_metadata_csv(tmpdir):
+    """Test that embed-multi works with CSV files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    # CSV with metadata column containing JSON-encoded strings
+    content = """id,content,metadata
+1,First CSV item,"{""key1"": ""value1"", ""key2"": ""value2""}"
+2,Second CSV item,"{""key1"": ""valueA"", ""key2"": ""valueB""}"
+"""
+
+    path = tmpdir / "metadata.csv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "csv-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First CSV item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second CSV item"
+    assert json.loads(row2["metadata"]) == {"key1": "valueA", "key2": "valueB"}
+
+
+def test_embed_multi_with_metadata_tsv(tmpdir):
+    """Test that embed-multi works with TSV files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    # TSV with metadata column containing JSON-encoded strings
+    content = """id\tcontent\tmetadata
+1\tFirst TSV item\t{"key1": "value1", "key2": "value2"}
+2\tSecond TSV item\t{"key1": "valueA", "key2": "valueB"}
+"""
+
+    path = tmpdir / "metadata.tsv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "tsv-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--format",
+        "tsv",
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First TSV item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second TSV item"
+    assert json.loads(row2["metadata"]) == {"key1": "valueA", "key2": "valueB"}
 
 
 def test_embed_multi_files_binary_store(tmpdir):
