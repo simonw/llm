@@ -3213,9 +3213,11 @@ def embed_multi(
 
     \b
     1. A CSV, TSV, JSON or JSONL file:
+       - Format auto-detected from file extension (.csv, .tsv, .json, .jsonl)
        - CSV/TSV: First column is ID, remaining columns concatenated as content
        - JSON: Array of objects with "id" field and content fields
        - JSONL: Newline-delimited JSON objects
+       - Optional "metadata" column: JSON-encoded dict stored separately, not in content
 
     \b
        Examples:
@@ -3227,6 +3229,7 @@ def embed_multi(
     2. A SQL query against a SQLite database:
        - First column returned is used as ID
        - Other columns concatenated to form content
+       - Optional "metadata" column: JSON-encoded dict stored separately
 
     \b
        Examples:
@@ -3320,9 +3323,23 @@ def embed_multi(
         count_sql = "select count(*) as c from ({})".format(sql)
         expected_length = next(db.query(count_sql))["c"]
     else:
+        # Auto-detect format from file extension if not explicitly provided
+        detected_format = format
+        if not detected_format and input_path and input_path != "-":
+            ext = pathlib.Path(input_path).suffix.lower()
+            if ext == ".tsv":
+                detected_format = "tsv"
+            elif ext == ".csv":
+                detected_format = "csv"
+            elif ext == ".json":
+                detected_format = "json"
+            elif ext in (".jsonl", ".ndjson"):
+                detected_format = "nl"
 
         def load_rows(fp):
-            return rows_from_file(fp, Format[format.upper()] if format else None)[0]
+            return rows_from_file(
+                fp, Format[detected_format.upper()] if detected_format else None
+            )[0]
 
         try:
             if input_path != "-":
