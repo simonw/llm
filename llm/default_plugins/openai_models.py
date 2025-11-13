@@ -182,6 +182,28 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
+    # GPT-5.1
+    for model_id in (
+        "gpt-5.1",
+        "gpt-5.1-chat-latest",
+    ):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
