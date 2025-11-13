@@ -1,8 +1,13 @@
+import time
+import random
 from click.testing import CliRunner
+import httpx
 from llm.cli import cli
 import pytest
 import sqlite_utils
 
+from llm.default_plugins.openai_models import AsyncChat
+from llm.models import Attachment
 
 @pytest.fixture
 def mocked_models(httpx_mock):
@@ -199,3 +204,66 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     assert db["responses"].count == 1
     row = next(db["responses"].rows)
     assert row["response"] == "Ho ho ho"
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_leaks
+async def test_async_chat_with_attachment_non_blocking(httpx_mock):
+    def head_response_with_delay(request: httpx.Request):
+        # assume 300-500ms to do the head request
+        time.sleep(random.uniform(0.3, 0.5))
+        return httpx.Response(
+            status_code=200,
+            content=b"",
+            headers={"Content-Type": "image/png"},
+        )
+
+    httpx_mock.add_callback(
+        head_response_with_delay,
+        method="HEAD",
+        url="https://www.example.com/example.png",
+        is_reusable=True,
+    )
+
+    httpx_mock.add_response(
+        method="POST",
+        # chat completion request
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "id": "chatcmpl-AQT9a30kxEaM1bqxRPepQsPlCyGJh",
+            "object": "chat.completion",
+            "created": 1730871958,
+            "model": "gpt-4.1-2025-04-14",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "It's a dummy example image",
+                        "refusal": None,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 2000,
+                "total_tokens": 12,
+            },
+            "system_fingerprint": "fp_49254d0e9b",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    model = AsyncChat(
+        model_id="gpt-4.1-2025-04-14",
+        api_base="https://api.openai.com/v1",
+        key="x",
+    )
+    conversation = model.conversation()
+    await conversation.prompt(
+        prompt="What is this image?",
+        attachments=[Attachment(url="https://www.example.com/example.png")],
+        stream=False,
+    )
+    assert await conversation.responses[0].text() == "It's a dummy example image"
