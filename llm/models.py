@@ -1090,7 +1090,7 @@ class Response(_BaseResponse):
             exception = None
 
             try:
-                if asyncio.iscoroutinefunction(tool.implementation):
+                if inspect.iscoroutinefunction(tool.implementation):
                     result = asyncio.run(tool.implementation(**tool_call.arguments))
                 else:
                     result = tool.implementation(**tool_call.arguments)
