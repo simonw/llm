@@ -4027,7 +4027,11 @@ def _gather_tools(
         tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
     ]
     if bad_tools:
-        raise click.ClickException("Tool(s) {} not found. Available tools: {}".format(", ".join(bad_tools), ", ".join(registered_tools.keys())))
+        raise click.ClickException(
+            "Tool(s) {} not found. Available tools: {}".format(
+                ", ".join(bad_tools), ", ".join(registered_tools.keys())
+            )
+        )
     for tool_spec in tool_specs:
         if not tool_spec[0].isupper():
             # It's a function
