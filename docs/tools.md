@@ -74,6 +74,8 @@ The Python API can accept functions directly. The command-line interface has two
 
 You can use tools {ref}`with the LLM command-line tool <usage-tools>` or {ref}`with the Python API <python-api-tools>`.
 
+When using {ref}`llm chat <usage-chat>`, you can also add tools dynamically during a conversation using the `!tool` command.
+
 (tools-default)=
 
 ## Default tools
