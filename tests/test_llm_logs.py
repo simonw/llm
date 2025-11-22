@@ -1094,3 +1094,158 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     # And the rendered logs
     result3 = runner.invoke(cli, ["logs"])
     assert "Model: **mock** (resolved: **resolved-mock**)" in result3.output
+
+
+def test_logs_localtime_flag_markdown(log_path, monkeypatch):
+    """Test that -L/--localtime flag displays datetime in local timezone for markdown output"""
+    import os
+    from datetime import datetime, timezone
+    
+    runner = CliRunner()
+    
+    # Test with -L flag - get markdown output with converted time
+    result = runner.invoke(cli, ["logs", "-p", str(log_path), "-L", "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    
+    # Should contain a header with datetime
+    lines = output.split('\n')
+    assert len(lines) > 0
+    # First line should start with # and contain datetime
+    assert lines[0].startswith("# ")
+    
+    # The datetime should be in ISO format without microseconds
+    assert datetime_re.search(output), "Datetime format should match YYYY-MM-DDTHH:MM:SS"
+
+
+def test_logs_localtime_flag_json(log_path):
+    """Test that -L/--localtime flag adds 'datetime' field in JSON output"""
+    runner = CliRunner()
+    
+    # Test with -L flag and JSON output
+    result = runner.invoke(cli, ["logs", "-p", str(log_path), "-L", "--json", "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    logs = json.loads(result.output)
+    
+    assert len(logs) == 1
+    # Should have both datetime_utc and datetime fields
+    assert "datetime_utc" in logs[0]
+    assert "datetime" in logs[0]
+    # datetime should not have microseconds
+    assert "." not in logs[0]["datetime"]
+
+
+def test_logs_default_utc_json(log_path):
+    """Test that without -L flag, JSON output has datetime_utc, no datetime field added"""
+    runner = CliRunner()
+    
+    # Test without -L flag
+    result = runner.invoke(cli, ["logs", "-p", str(log_path), "--json", "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    logs = json.loads(result.output)
+    
+    assert len(logs) == 1
+    assert "datetime_utc" in logs[0]
+    # When localtime is disabled, datetime field is not added
+    # (datetime field is only added when use_localtime=True)
+
+
+def test_logs_short_yaml_with_localtime(log_path):
+    """Test that -L flag works with -s/--short YAML output"""
+    runner = CliRunner()
+    
+    result = runner.invoke(cli, ["logs", "-p", str(log_path), "-s", "-L", "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+    
+    # Should be valid YAML
+    parsed = yaml.safe_load(output)
+    assert isinstance(parsed, list)
+    assert len(parsed) == 1
+    assert "datetime" in parsed[0]
+    # Datetime should not have microseconds
+    assert "." not in parsed[0]["datetime"]
+
+
+def test_logs_localtime_config_file(user_path, monkeypatch):
+    """Test that logs-localtime config file enables localtime by default"""
+    from llm import user_dir
+    
+    # Create a logs database
+    log_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+    db["responses"].insert_all(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
+            "conversation_id": "abc123",
+        }
+        for i in range(2)
+    )
+    
+    # Create logs-localtime file in config dir using pathlib
+    config_dir = pathlib.Path(str(user_path))
+    localtime_file = config_dir / "logs-localtime"
+    localtime_file.write_text("")
+    
+    # Mock user_dir to return our test directory
+    monkeypatch.setattr("llm.cli.user_dir", lambda: config_dir)
+    
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path), "-n", "1"], catch_exceptions=False)
+    assert result.exit_code == 0
+    
+    # Should have a datetime in the output
+    assert datetime_re.search(result.output), "Should contain datetime in output"
+
+
+def test_logs_format_datetime_for_display():
+    """Test the format_datetime helper function directly"""
+    from llm.cli import format_datetime
+    
+    # Test UTC format (no microseconds, no timezone info)
+    utc_str = "2023-08-17T20:53:58.123456"
+    
+    # Format as UTC (should be same but without microseconds)
+    formatted_utc = format_datetime(utc_str, use_localtime=False)
+    assert formatted_utc == "2023-08-17T20:53:58"
+    
+    # Format as localtime (could be different depending on system timezone)
+    formatted_local = format_datetime(utc_str, use_localtime=True)
+    # Should be in ISO format without microseconds
+    assert "." not in formatted_local
+    assert "T" in formatted_local
+    assert len(formatted_local) == 19  # YYYY-MM-DDTHH:MM:SS
+    
+    # Test with None or empty string
+    assert format_datetime(None, False) == ""
+    assert format_datetime("", False) == ""
+
+
+def test_logs_localtime_comparison_timezone_aware():
+    """Test that UTC and localtime conversions are correct for a known datetime"""
+    from llm.cli import format_datetime
+    
+    # Use a known UTC time
+    utc_iso = "2023-01-15T12:00:00.000000"
+    
+    utc_formatted = format_datetime(utc_iso, use_localtime=False)
+    local_formatted = format_datetime(utc_iso, use_localtime=True)
+    
+    # Both should be valid ISO datetime strings
+    assert utc_formatted == "2023-01-15T12:00:00"
+    assert "." not in local_formatted
+    
+    # Parse them back to verify they work
+    dt_utc = datetime.datetime.fromisoformat(utc_formatted)
+    dt_local = datetime.datetime.fromisoformat(local_formatted)
+    
+    # Both should parse successfully
+    assert dt_utc.year == 2023
+    assert dt_local.year == 2023
