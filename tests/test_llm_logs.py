@@ -89,6 +89,124 @@ datetime_re = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 id_re = re.compile(r"id: \w+")
 
 
+@pytest.mark.parametrize(
+    "nc",
+    (None, 0, 1, 2),
+)
+def test_logs_conv_count(nc):
+    """Test that --nc returns all responses from N unique conversations"""
+    from llm.utils import monotonic_ulid
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        # Create a database with multiple conversations
+        log_path = "test_logs.db"
+        db = sqlite_utils.Database(log_path)
+        migrate(db)
+        start = datetime.datetime.now(datetime.timezone.utc)
+
+        # Create 3 conversations with varying numbers of responses
+        # Conversation 1: 2 responses
+        # Conversation 2: 3 responses  
+        # Conversation 3: 1 response
+        response_count = 0
+        for conv_id in ["conv1", "conv2", "conv3"]:
+            responses_in_conv = 2 if conv_id == "conv1" else (3 if conv_id == "conv2" else 1)
+            for i in range(responses_in_conv):
+                db["responses"].insert(
+                    {
+                        "id": str(monotonic_ulid()).lower(),
+                        "system": f"system-{conv_id}-{i}",
+                        "prompt": f"prompt-{conv_id}-{i}",
+                        "response": f"response-{conv_id}-{i}",
+                        "model": "davinci",
+                        "datetime_utc": (start + datetime.timedelta(seconds=response_count)).isoformat(),
+                        "conversation_id": conv_id,
+                        "input_tokens": 2,
+                        "output_tokens": 5,
+                    }
+                )
+                response_count += 1
+
+        # Test without --nc (default should be 3 responses)
+        if nc is None:
+            result = runner.invoke(cli, ["logs", "-p", str(log_path), "--json"], catch_exceptions=False)
+            assert result.exit_code == 0
+            logs = json.loads(result.output)
+            assert len(logs) == 3
+            return
+
+        # Test with --nc 0 (should be same as no limit)
+        if nc == 0:
+            result = runner.invoke(cli, ["logs", "-p", str(log_path), "--nc", "0", "--json"], catch_exceptions=False)
+            assert result.exit_code == 0
+            logs = json.loads(result.output)
+            assert len(logs) == 6  # All 6 responses
+            return
+
+        # Test with --nc 1 (should get all responses from latest conversation only)
+        if nc == 1:
+            result = runner.invoke(cli, ["logs", "-p", str(log_path), "--nc", "1", "--json"], catch_exceptions=False)
+            assert result.exit_code == 0
+            logs = json.loads(result.output)
+            # conv3 is the latest (most recent response), has 1 response
+            assert len(logs) == 1
+            assert logs[0]["conversation_id"] == "conv3"
+            return
+
+        # Test with --nc 2 (should get all responses from 2 latest conversations)
+        if nc == 2:
+            result = runner.invoke(cli, ["logs", "-p", str(log_path), "--nc", "2", "--json"], catch_exceptions=False)
+            assert result.exit_code == 0
+            logs = json.loads(result.output)
+            # conv2 (3 responses) and conv3 (1 response) are the 2 latest = 4 responses total
+            assert len(logs) == 4
+            conv_ids = {log["conversation_id"] for log in logs}
+            assert conv_ids == {"conv2", "conv3"}
+            return
+
+
+def test_logs_conv_count_mutually_exclusive():
+    """Test that --nc and -n cannot be used together"""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        log_path = "test_logs.db"
+        db = sqlite_utils.Database(log_path)
+        migrate(db)
+        db["responses"].insert({
+            "id": "test1",
+            "prompt": "test",
+            "response": "test",
+            "model": "test",
+        })
+
+        # Test --nc and -n together
+        result = runner.invoke(cli, ["logs", "-p", str(log_path), "--nc", "1", "-n", "5"], catch_exceptions=False)
+        assert result.exit_code != 0
+        assert "Cannot use both" in result.output
+
+
+def test_logs_conv_count_with_conversation_id():
+    """Test that --nc and --conversation cannot be used together"""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        log_path = "test_logs.db"
+        db = sqlite_utils.Database(log_path)
+        migrate(db)
+        db["responses"].insert({
+            "id": "test1",
+            "prompt": "test",
+            "response": "test",
+            "model": "test",
+            "conversation_id": "conv1",
+        })
+
+        # Test --nc and --conversation together
+        result = runner.invoke(cli, ["logs", "-p", str(log_path), "--nc", "1", "--conversation", "conv1"], catch_exceptions=False)
+        assert result.exit_code != 0
+        assert "Cannot use both" in result.output
+
+
 @pytest.mark.parametrize("usage", (False, True))
 def test_logs_text(log_path, usage):
     runner = CliRunner()
