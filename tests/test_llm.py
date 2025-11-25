@@ -851,3 +851,9 @@ def test_llm_prompt_continue_with_database(
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
     assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+
+def test_default_exports():
+    "Check key exports in the llm __all__ list"
+    for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
+        assert name in llm.__all__, f"{name} not in llm.__all__"

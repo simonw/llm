@@ -40,6 +40,7 @@ import struct
 __all__ = [
     "AsyncConversation",
     "AsyncKeyModel",
+    "AsyncModel",
     "AsyncResponse",
     "Attachment",
     "CancelToolCall",
