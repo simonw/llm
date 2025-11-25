@@ -673,8 +673,12 @@ def prompt(
             template_obj = load_template(template)
         except LoadTemplateError as ex:
             raise click.ClickException(str(ex))
-        extract = template_obj.extract
-        extract_last = template_obj.extract_last
+        extract = template_obj.extract if template_obj.extract is not None else extract
+        extract_last = (
+            template_obj.extract_last
+            if template_obj.extract_last is not None
+            else extract_last
+        )
         # Combine with template fragments/system_fragments
         if template_obj.fragments:
             fragments = [*template_obj.fragments, *fragments]
