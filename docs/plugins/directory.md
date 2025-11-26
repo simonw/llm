@@ -54,6 +54,8 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-tools-sqlite](https://github.com/simonw/llm-tools-sqlite)** can run read-only SQL queries against local SQLite databases.
 - **[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette)** can run SQL queries against a remote [Datasette](https://datasette.io/) instance.
 - **[llm-tools-exa](https://github.com/daturkel/llm-tools-exa)** by Dan Turkel can perform web searches and question-answering using [exa.ai](https://exa.ai/).
+- **[llm-tools-patch](https://github.com/dannyob/llm-tools-patch)** by Danny O'Brien can read, write, and modify text files.
+- **[llm-tools-todo](https://github.com/dannyob/llm-tools-todo)** by Danny O'Brien can maintain a todo list to help an llm session keep track of pending tasks.
 - **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
 
 (plugin-directory-loaders)=
