@@ -121,7 +121,13 @@ def resolve_fragments(
     resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
-            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            from importlib.metadata import version
+
+            llm_version = version("llm")
+            headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
+            client = httpx.Client(
+                follow_redirects=True, max_redirects=3, headers=headers
+            )
             response = client.get(fragment)
             response.raise_for_status()
             resolved.append(Fragment(response.text, fragment))
