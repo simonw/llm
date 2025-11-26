@@ -2,6 +2,7 @@ import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
+import datetime
 import io
 import json
 import os
@@ -1346,6 +1347,46 @@ def keys_set(name, value):
     path.write_text(json.dumps(current, indent=2) + "\n")
 
 
+def localtime_enabled_in_userdir():
+    """Check if logs-localtime file exists in user config dir."""
+    return (user_dir() / "logs-localtime").exists()
+
+
+def format_datetime(dt_str, use_localtime):
+    """
+    Convert UTC datetime string to display format.
+    
+    Args:
+        dt_str: ISO format datetime string (assumed to be UTC)
+        use_localtime: If True, convert to local timezone; if False, keep as UTC
+    
+    Returns:
+        Formatted datetime string without microseconds
+    """
+    if not dt_str:
+        return ""
+    
+    try:
+        # Parse the ISO string - it's in UTC
+        dt_utc = datetime.datetime.fromisoformat(dt_str)
+        
+        # Ensure it's marked as UTC
+        if dt_utc.tzinfo is None:
+            dt_utc = dt_utc.replace(tzinfo=datetime.timezone.utc)
+        
+        # Convert to local timezone if requested
+        if use_localtime:
+            dt_display = dt_utc.astimezone()
+        else:
+            dt_display = dt_utc
+        
+        # Return formatted without microseconds
+        return dt_display.strftime("%Y-%m-%dT%H:%M:%S")
+    except (ValueError, TypeError):
+        # Fall back to returning the original string, removing microseconds
+        return dt_str.split(".")[0] if dt_str else ""
+
+
 @cli.group(
     cls=DefaultGroup,
     default="list",
@@ -1478,6 +1519,14 @@ order by prompt_attachments."order"
     help="Number of entries to show - defaults to 3, use 0 for all",
 )
 @click.option(
+    "--nc",
+    "--conv-count",
+    "conv_count",
+    type=int,
+    default=None,
+    help="Number of unique conversations to show - all responses from each",
+)
+@click.option(
     "-p",
     "--path",
     type=click.Path(readable=True, exists=True, dir_okay=False),
@@ -1570,8 +1619,16 @@ order by prompt_attachments."order"
     is_flag=True,
     help="Expand fragments to show their content",
 )
+@click.option(
+    "-L",
+    "--localtime",
+    is_flag=True,
+    default=None,
+    help="Display datetimes in localtime tz (default: utc), also check logs-localtime file in userdir",
+)
 def logs_list(
     count,
+    conv_count,
     path,
     database,
     model,
@@ -1598,8 +1655,15 @@ def logs_list(
     id_gte,
     json_output,
     expand,
+    localtime,
 ):
     "Show logged prompts and their responses"
+    # Resolve localtime flag: explicit flag takes precedence, else check config file
+    if localtime is None:
+        use_localtime = localtime_enabled_in_userdir()
+    else:
+        use_localtime = localtime
+    
     if database and not path:
         path = database
     path = pathlib.Path(path or logs_db_path())
@@ -1624,7 +1688,14 @@ def logs_list(
         )
         raise click.ClickException("Cannot use --short and {} together".format(invalid))
 
-    if response and not current_conversation and not conversation_id:
+    # Validate mutually exclusive options
+    if count is not None and conv_count is not None:
+        raise click.ClickException("Cannot use both -n/--count and --nc/--conv-count together")
+
+    if conv_count is not None and conversation_id:
+        raise click.ClickException("Cannot use both --nc/--conv-count and --conversation/--cid together")
+
+    if response and not current_conversation and not conversation_id and conv_count is None:
         current_conversation = True
 
     if current_conversation:
@@ -1638,8 +1709,8 @@ def logs_list(
             # No conversations yet
             raise click.ClickException("No conversations found")
 
-    # For --conversation set limit 0, if not explicitly set
-    if count is None:
+    # Set defaults for count and conv_count
+    if count is None and conv_count is None:
         if conversation_id:
             count = 0
         else:
@@ -1679,6 +1750,32 @@ def logs_list(
         "id_gt": id_gt,
         "id_gte": id_gte,
     }
+
+    # Handle --nc (conv_count) option
+    if conv_count is not None and conv_count > 0:
+        # Use a CTE to get the last N conversations, then join to get all their responses
+        cte = f"""
+with recent_conversations as (
+    select
+        conversation_id,
+        max(id) as last_response_id
+    from responses
+    where conversation_id is not null
+    group by conversation_id
+    order by last_response_id desc
+    limit {conv_count}
+)
+select
+{LOGS_COLUMNS}
+from
+    responses
+left join schemas on responses.schema_id = schemas.id
+left join conversations on responses.conversation_id = conversations.id
+join recent_conversations rc on responses.conversation_id = rc.conversation_id{{extra_where}}
+order by {{order_by}}"""
+        sql_format["cte"] = cte
+        # We need a different base SQL that uses the CTE
+        sql = cte
     if model_id:
         where_bits.append("responses.model = :model")
     if conversation_id:
@@ -1956,6 +2053,9 @@ def logs_list(
                 {k: v for k, v in attachment.items() if k != "response_id"}
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
+            # Add datetime field in appropriate timezone
+            if use_localtime and "datetime_utc" in row:
+                row["datetime"] = format_datetime(row["datetime_utc"], True)
         output = json.dumps(list(rows), indent=2)
     elif extract or extract_last:
         # Extract and return first code block
@@ -2005,7 +2105,7 @@ def logs_list(
                 attachments = attachments_by_id.get(row["id"])
                 obj = {
                     "model": row["model"],
-                    "datetime": row["datetime_utc"].split(".")[0],
+                    "datetime": format_datetime(row["datetime_utc"], use_localtime),
                     "conversation": cid,
                 }
                 if row["tool_calls"]:
@@ -2051,7 +2151,7 @@ def logs_list(
             # Not short, output Markdown
             click.echo(
                 "# {}{}\n{}".format(
-                    row["datetime_utc"].split(".")[0],
+                    format_datetime(row["datetime_utc"], use_localtime),
                     (
                         "    conversation: {} id: {}".format(
                             row["conversation_id"], row["id"]
