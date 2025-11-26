@@ -2,6 +2,7 @@ import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
+from importlib.metadata import version
 import io
 import json
 import os
@@ -121,8 +122,6 @@ def resolve_fragments(
     resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
-            from importlib.metadata import version
-
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
             client = httpx.Client(
