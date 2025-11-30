@@ -203,6 +203,34 @@ def process_fragments_in_chat(
     return "\n".join(prompt_lines), fragments, attachments
 
 
+def process_tools_in_chat(prompt: str) -> tuple[str, list[str]]:
+    """
+    Process any !tool commands in a chat prompt and return the modified prompt plus resolved tools.
+    """
+    new_tools = []
+    prompt_lines = []
+    for line in prompt.splitlines():
+        if line.startswith("!tool "):
+            new_tools.append(line.removeprefix("!tool "))
+        else:
+            prompt_lines.append(line)
+
+    return "\n".join(prompt_lines), new_tools
+
+
+def update_tools(current_tools: list[Tool], new_tools: list[Tool]) -> list[Tool]:
+    """
+    Update a list of tools with new, potentially overlapping tools, removing duplicates.
+    """
+    final_tools = []
+    new_tool_names = {tool.name for tool in new_tools}
+    for tool in current_tools:
+        if tool.name not in new_tool_names:
+            final_tools.append(tool)
+    final_tools += new_tools
+    return final_tools
+
+
 class AttachmentError(Exception):
     """Exception raised for errors in attachment resolution."""
 
@@ -1157,6 +1185,7 @@ def chat(
     click.echo(
         "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
     )
+    click.echo("Type '!tool <my_tool>' to add a tool to the conversation")
     in_multi = False
 
     accumulated = []
@@ -1188,6 +1217,20 @@ def chat(
             prompt = edited_prompt.strip()
         if prompt.strip().startswith("!fragment "):
             prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+        if prompt.strip().startswith("!tool "):
+            prompt, tools = process_tools_in_chat(prompt)
+            try:
+                tool_functions = _gather_tools(tools, [])
+                kwargs["tools"] = update_tools(kwargs.get("tools", []), tool_functions)
+            except click.ClickException as e:
+                if "not yet supported with llm -c" in str(e):
+                    click.echo(f"Warning: {e}. Ignoring this tool", err=True)
+                elif "not found" in str(e):
+                    click.echo(f"Warning: {e}", err=True)
+                else:
+                    raise
+            if prompt == "":
+                continue
 
         if in_multi:
             if prompt.strip() == end_token:
