@@ -343,7 +343,7 @@ def cli():
 
 
 @cli.command(name="prompt")
-@click.argument("prompt", required=False)
+@click.argument("prompt", nargs=-1, required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -569,19 +569,17 @@ def prompt(
     def read_prompt():
         nonlocal prompt, schema
 
-        # Is there extra prompt available on stdin?
-        stdin_prompt = None
-        if not sys.stdin.isatty():
-            stdin_prompt = sys.stdin.read()
+        bits = []
 
-        if stdin_prompt:
-            bits = [stdin_prompt]
-            if prompt:
-                bits.append(prompt)
-            prompt = " ".join(bits)
+        # Is there extra prompt available on stdin?
+        if not sys.stdin.isatty():
+            bits.append(sys.stdin.read())
+
+        # Populate prompt from command line arguments
+        bits.extend(prompt)
 
         if (
-            prompt is None
+            not bits
             and not save
             and sys.stdin.isatty()
             and not attachments
@@ -590,8 +588,9 @@ def prompt(
             and not fragments
         ):
             # Hang waiting for input to stdin (unless --save)
-            prompt = sys.stdin.read()
-        return prompt
+            bits.append(sys.stdin.read())
+
+        return " ".join(bits)
 
     if save:
         # We are saving their prompt/system/etc to a new template
