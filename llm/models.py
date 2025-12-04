@@ -7,6 +7,7 @@ from .errors import NeedsKeyException
 import hashlib
 import httpx
 from itertools import islice
+from pathlib import Path
 import re
 import time
 from types import MethodType
@@ -63,7 +64,7 @@ class Attachment:
             if self.content:
                 self._id = hashlib.sha256(self.content).hexdigest()
             elif self.path:
-                self._id = hashlib.sha256(open(self.path, "rb").read()).hexdigest()
+                self._id = hashlib.sha256(Path(self.path).read_bytes()).hexdigest()
             else:
                 self._id = hashlib.sha256(
                     json.dumps({"url": self.url}).encode("utf-8")
@@ -88,7 +89,7 @@ class Attachment:
         content = self.content
         if not content:
             if self.path:
-                content = open(self.path, "rb").read()
+                content = Path(self.path).read_bytes()
             elif self.url:
                 response = httpx.get(self.url)
                 response.raise_for_status()
