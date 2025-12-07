@@ -1,4 +1,14 @@
-from llm import AsyncKeyModel, EmbeddingModel, KeyModel, hookimpl
+from llm import (
+    AsyncConversation,
+    AsyncKeyModel,
+    AsyncResponse,
+    Conversation,
+    EmbeddingModel,
+    KeyModel,
+    Prompt,
+    Response,
+    hookimpl,
+)
 import llm
 from llm.utils import (
     dicts_to_table_string,
@@ -716,7 +726,14 @@ class Chat(_Shared, KeyModel):
             default=None,
         )
 
-    def execute(self, prompt, stream, response, conversation=None, key=None):
+    def execute(
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: Response,
+        conversation: Optional[Conversation] = None,
+        key: Optional[str] = None,
+    ) -> Iterator[str]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -800,7 +817,12 @@ class AsyncChat(_Shared, AsyncKeyModel):
         )
 
     async def execute(
-        self, prompt, stream, response, conversation=None, key=None
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: AsyncResponse,
+        conversation: Optional[AsyncConversation] = None,
+        key: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
@@ -890,7 +912,14 @@ class Completion(Chat):
     def __str__(self):
         return "OpenAI Completion: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None, key=None):
+    def execute(
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: Response,
+        conversation: Optional[Conversation] = None,
+        key: Optional[str] = None,
+    ) -> Iterator[str]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
