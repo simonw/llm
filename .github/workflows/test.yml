@@ -18,35 +18,37 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: pip
-        cache-dependency-path: setup.py
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
     - name: Install dependencies
       run: |
-        pip install -e '.[test]'
+        uv sync --extra test
+        uv pip install -r docs/requirements.txt
     - name: Run tests
       run: |
-        python -m pytest -vv
+         uv run python -m pytest -vv
     - name: Check if cog needs to be run
       if: matrix.os != 'windows-latest'
       run: |
-        cog --check \
+        uv run cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
           docs/**/*.md docs/*.md
     - name: Run Black
       if: matrix.os != 'windows-latest'
       run: |
-        black --check .
+        uv run black --check .
     - name: Run mypy
       if: matrix.os != 'windows-latest'
       run: |
-        mypy llm
+        uv run mypy llm
     - name: Run ruff
       if: matrix.os != 'windows-latest'
       run: |
-        ruff check .
+        uv run ruff check .
     - name: Check it builds
       run: |
-        python -m build
+        uv build
     - name: Run test-llm-load-plugins.sh
       if: matrix.os != 'windows-latest'
       run: |
