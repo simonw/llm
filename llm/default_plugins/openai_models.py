@@ -571,7 +571,7 @@ class _Shared:
                 }
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "OpenAI Chat: {}".format(self.model_id)
 
     def build_messages(self, prompt, conversation):
@@ -909,7 +909,7 @@ class Completion(Chat):
         super().__init__(*args, **kwargs)
         self.default_max_tokens = default_max_tokens
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "OpenAI Completion: {}".format(self.model_id)
 
     def execute(
