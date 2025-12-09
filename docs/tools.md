@@ -58,7 +58,7 @@ Tool call: llm_version({})
 
 The installed version of the LLM is 0.26a0.
 ```
-Further tools can be installed using plugins, or you can use the `llm --functions` option to pass tools implemented as PYthon functions directly, as {ref}`described here <usage-tools>`.
+Further tools can be installed using plugins, or you can use the `llm --functions` option to pass tools implemented as Python functions directly, as {ref}`described here <usage-tools>`.
 
 (tools-implementation)=
 
