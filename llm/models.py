@@ -33,6 +33,7 @@ from .utils import (
     mimetype_from_string,
     token_usage_string,
     monotonic_ulid,
+    Fragment,
 )
 from abc import ABC, abstractmethod
 import inspect
@@ -325,10 +326,10 @@ class CancelToolCall(Exception):
 class Prompt:
     _prompt: Optional[str]
     model: "Model"
-    fragments: Optional[List[str]]
+    fragments: Optional[List[Union[str, Fragment]]]
     attachments: Optional[List[Attachment]]
     _system: Optional[str]
-    system_fragments: Optional[List[str]]
+    system_fragments: Optional[List[Union[str, Fragment]]]
     prompt_json: Optional[str]
     schema: Optional[Union[Dict, type[BaseModel]]]
     tools: List[Tool]
@@ -416,13 +417,13 @@ class Conversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -1799,10 +1800,10 @@ class _Model(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -1908,13 +1909,13 @@ class _AsyncModel(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
