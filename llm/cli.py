@@ -1224,10 +1224,8 @@ def chat(
 
         response = conversation.chain(
             prompt,
-            fragments=[str(fragment) for fragment in fragments],
-            system_fragments=[
-                str(system_fragment) for system_fragment in argument_system_fragments
-            ],
+            fragments=fragments,
+            system_fragments=argument_system_fragments,
             attachments=attachments,
             system=system,
             **kwargs,
