@@ -25,7 +25,7 @@ import os
 
 from pydantic import field_validator, Field
 
-from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
+from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
@@ -947,7 +947,7 @@ class Completion(Chat):
         if conversation is not None:
             for prev_response in conversation.responses:
                 messages.append(prev_response.prompt.prompt)
-                messages.append(prev_response.text())
+                messages.append(cast(Response, prev_response).text())
         messages.append(prompt.prompt)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
