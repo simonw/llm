@@ -30,7 +30,7 @@ from importlib.metadata import version
 llm_version = version("llm")
 cog.out(f'The URL will be fetched with the user-agent `llm/{llm_version} (https://llm.datasette.io/)`.')
 ]]]-->
-The URL will be fetched with the user-agent `llm/0.26 (https://llm.datasette.io/)`.
+The URL will be fetched with the user-agent `llm/0.27.1 (https://llm.datasette.io/)`.
 <!--[[[end]]]-->
 
 The `-f` option can be used multiple times to combine together multiple fragments.
