@@ -22,7 +22,7 @@ jobs:
         cache-dependency-path: setup.py
     - name: Install dependencies
       run: |
-        pip install -e '.[test]'
+        pip install . --group dev
     - name: Run tests
       run: |
         python -m pytest -vv

@@ -24,8 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e '.[test]'
-          pip install -r docs/requirements.txt
+          pip install . --group dev
 
       - name: Run cog
         run: |

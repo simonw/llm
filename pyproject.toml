@@ -41,18 +41,8 @@ dependencies = [
     "puremagic",
 ]
 
-[project.urls]
-Homepage = "https://github.com/simonw/llm"
-Documentation = "https://llm.datasette.io/"
-Issues = "https://github.com/simonw/llm/issues"
-CI = "https://github.com/simonw/llm/actions"
-Changelog = "https://github.com/simonw/llm/releases"
-
-[project.scripts]
-llm = "llm.cli:cli"
-
-[project.optional-dependencies]
-test = [
+[dependency-groups]
+dev = [
     "build",
     "click<8.2.0", # https://github.com/simonw/llm/issues/1024
     "pytest",
@@ -69,7 +59,24 @@ test = [
     "types-PyYAML",
     "types-setuptools",
     "llm-echo==0.3a3",
+    # docs
+    "sphinx==7.2.6",
+    "furo==2023.9.10",
+    "sphinx-autobuild",
+    "sphinx-copybutton",
+    "sphinx-markdown-builder==0.6.8",
+    "myst-parser",
 ]
+
+[project.urls]
+Homepage = "https://github.com/simonw/llm"
+Documentation = "https://llm.datasette.io/"
+Issues = "https://github.com/simonw/llm/issues"
+CI = "https://github.com/simonw/llm/actions"
+Changelog = "https://github.com/simonw/llm/releases"
+
+[project.scripts]
+llm = "llm.cli:cli"
 
 [build-system]
 requires = ["setuptools"]
