@@ -203,6 +203,25 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
+    # GPT-5.2
+    for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+        # "gpt-5.2-pro" is Responses API only
 
     # The -instruct completion model
     register(
