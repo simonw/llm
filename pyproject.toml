@@ -7,18 +7,18 @@ authors = [
     { name = "Simon Willison" },
 ]
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
     "Topic :: Utilities",
@@ -41,18 +41,8 @@ dependencies = [
     "puremagic",
 ]
 
-[project.urls]
-Homepage = "https://github.com/simonw/llm"
-Documentation = "https://llm.datasette.io/"
-Issues = "https://github.com/simonw/llm/issues"
-CI = "https://github.com/simonw/llm/actions"
-Changelog = "https://github.com/simonw/llm/releases"
-
-[project.scripts]
-llm = "llm.cli:cli"
-
-[project.optional-dependencies]
-test = [
+[dependency-groups]
+dev = [
     "build",
     "click<8.2.0", # https://github.com/simonw/llm/issues/1024
     "pytest",
@@ -69,7 +59,24 @@ test = [
     "types-PyYAML",
     "types-setuptools",
     "llm-echo==0.3a3",
+    # docs
+    "sphinx==7.2.6",
+    "furo==2023.9.10",
+    "sphinx-autobuild",
+    "sphinx-copybutton",
+    "sphinx-markdown-builder==0.6.8",
+    "myst-parser",
 ]
+
+[project.urls]
+Homepage = "https://github.com/simonw/llm"
+Documentation = "https://llm.datasette.io/"
+Issues = "https://github.com/simonw/llm/issues"
+CI = "https://github.com/simonw/llm/actions"
+Changelog = "https://github.com/simonw/llm/releases"
+
+[project.scripts]
+llm = "llm.cli:cli"
 
 [build-system]
 requires = ["setuptools"]
