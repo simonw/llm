@@ -648,7 +648,8 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
     schema_value = '{"schema": "one"}'
-    open(schema_path, "w").write(schema_value)
+    with open(schema_path, "w") as f:
+        f.write(schema_value)
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     if use_filename:
         schema_value = str(schema_path)

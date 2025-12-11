@@ -11,7 +11,8 @@ import textwrap
 def test_fragments_set_show_remove(user_path):
     runner = CliRunner()
     with runner.isolated_filesystem():
-        open("fragment1.txt", "w").write("Hello fragment 1")
+        with open("fragment1.txt", "w") as f:
+            f.write("Hello fragment 1")
 
         # llm fragments --aliases should return nothing
         assert runner.invoke(cli, ["fragments", "list", "--aliases"]).output == ""
@@ -70,7 +71,8 @@ def test_fragments_list(user_path):
     runner = CliRunner()
     with runner.isolated_filesystem():
         # This is just to create the database schema
-        open("fragment1.txt", "w").write("1")
+        with open("fragment1.txt", "w") as f:
+            f.write("1")
         assert (
             runner.invoke(cli, ["fragments", "set", "f1", "fragment1.txt"]).exit_code
             == 0
