@@ -60,6 +60,7 @@ To release a new version:
 
 1. Update `docs/changelog.md` with the new changes.
 2. Update the version number in `pyproject.toml`
-3. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
-4. Wait for the package to push to PyPI and then...
-5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
+3. Run `just cog` to update `docs/fragments.md` with the new version number.
+4. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
+5. Wait for the package to push to PyPI and then...
+6. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
