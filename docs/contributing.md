@@ -1,3 +1,4 @@
+(contributing)=
 # Contributing
 
 To contribute to this tool, first checkout the code. Then run the tests with `uv run`:

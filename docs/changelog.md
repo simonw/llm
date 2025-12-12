@@ -1,5 +1,17 @@
 # Changelog
 
+(v0_28)=
+## 0.28 (2025-12-12)
+
+- New OpenAI models: `gpt-5.1`, `gpt-5.1-chat-latest`, `gpt-5.2` and `gpt-5.2-chat-latest`. [#1300](https://github.com/simonw/llm/issues/1300), [#1317](https://github.com/simonw/llm/issues/1317)
+- LLM now requires Python 3.10 or higher. Python 3.14 is now covered by the tests.
+- When fetching URLs as fragments using `llm -f URL`, the request now includes a custom user-agent header: `llm/VERSION (https://llm.datasette.io/)`. [#1309](https://github.com/simonw/llm/issues/1309)
+- Fixed a bug where fragments were not correctly registered with their source when using `llm chat`. Thanks, [Giuseppe Rota](https://github.com/grota). [#1316](https://github.com/simonw/llm/pull/1316)
+- Fixed some file descriptor leak warnings. Thanks, [Eric Bloch](https://github.com/eedeebee). [#1313](https://github.com/simonw/llm/issues/1313)
+- Fixed a deprecation warning for `asyncio.iscoroutinefunction`.
+- Type annotations for the OpenAI Chat, AsyncChat and Completion `execute()` methods. Thanks, [Arjan Mossel](https://github.com/ar-jan). [#1315](https://github.com/simonw/llm/pull/1315)
+- The project now uses `uv` and dependency groups for development. See the updated {ref}`contributing documentation <contributing>`. [#1318](https://github.com/simonw/llm/issues/1318)
+
 (v0_27_1)=
 ## 0.27.1 (2025-08-11)
 
