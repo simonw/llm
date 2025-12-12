@@ -53,14 +53,29 @@ class Template(BaseModel):
         else:
             prompt = self.interpolate(self.prompt, params)
             system = self.interpolate(self.system, params)
+
+        # Interpolate fragments
+        if self.fragments:
+            self.fragments = [interpolated for fragment in self.fragments if (interpolated := self.interpolate(fragment, params)) is not None]
+        if self.system_fragments:
+            self.system_fragments = [interpolated for fragment in self.system_fragments if (interpolated := self.interpolate(fragment, params)) is not None]
+
         return prompt, system
 
     def vars(self) -> set:
         all_vars = set()
+        # Check prompt and system
         for text in [self.prompt, self.system]:
             if not text:
                 continue
             all_vars.update(self.extract_vars(string.Template(text)))
+        # Check fragments and system_fragments
+        for fragment_list in [self.fragments, self.system_fragments]:
+            if not fragment_list:
+                continue
+            for fragment in fragment_list:
+                if fragment:
+                    all_vars.update(self.extract_vars(string.Template(fragment)))
         return all_vars
 
     @classmethod

@@ -680,11 +680,6 @@ def prompt(
             raise click.ClickException(str(ex))
         extract = template_obj.extract
         extract_last = template_obj.extract_last
-        # Combine with template fragments/system_fragments
-        if template_obj.fragments:
-            fragments = [*template_obj.fragments, *fragments]
-        if template_obj.system_fragments:
-            system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
         if template_obj.tools:
@@ -716,6 +711,12 @@ def prompt(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+        # Combine with template fragments/system_fragments AFTER evaluation
+        # so that any variables in the fragments have been interpolated
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
         # Merge in any attachments
         if template_obj.attachments:
             attachments = [
