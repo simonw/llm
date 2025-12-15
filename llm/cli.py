@@ -1071,6 +1071,15 @@ def chat(
             template_obj = load_template(template)
         except LoadTemplateError as ex:
             raise click.ClickException(str(ex))
+        # Combine with template fragments/system_fragments
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
+        if template_obj.tools:
+            tools = [*template_obj.tools, *tools]
+        if template_obj.functions and template_obj._functions_is_trusted:
+            python_tools = [template_obj.functions, *python_tools]
         if model_id is None and template_obj.model:
             model_id = template_obj.model
         if template_obj.tools:
