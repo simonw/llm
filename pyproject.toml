@@ -35,8 +35,6 @@ dependencies = [
     "PyYAML",
     "pluggy",
     "python-ulid",
-    "setuptools",
-    "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
 ]
