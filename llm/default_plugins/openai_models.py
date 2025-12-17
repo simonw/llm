@@ -487,6 +487,7 @@ class ReasoningEffortEnum(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
+    xhigh = "xhigh"
 
 
 class OptionsForReasoning(SharedOptions):
@@ -497,8 +498,9 @@ class OptionsForReasoning(SharedOptions):
     reasoning_effort: Optional[ReasoningEffortEnum] = Field(
         description=(
             "Constraints effort on reasoning for reasoning models. Currently supported "
-            "values are low, medium, and high. Reducing reasoning effort can result in "
-            "faster responses and fewer tokens used on reasoning in a response."
+            "values are `low`, `medium`, `high`, and, for some models, `xhigh`. Reducing "
+            "reasoning effort can result in faster responses and fewer tokens used on "
+            "reasoning in a response."
         ),
         default=None,
     )
