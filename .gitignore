@@ -10,3 +10,5 @@ venv
 .idea/
 .vscode/
 uv.lock
+build/
+dist/
