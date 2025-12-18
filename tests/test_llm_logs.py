@@ -136,6 +136,42 @@ def test_logs_text(log_path, usage):
     assert output == expected
 
 
+def test_logs_text_with_options(user_path):
+    """Test that ## Options section appears when options_json is set"""
+    log_path = str(user_path / "logs_with_options.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+
+    # Create response with options
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": start.isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "options_json": json.dumps(
+                {"thinking_level": "high", "media_resolution": "low"}
+            ),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+
+    # Verify ## Options section is present
+    assert "## Options\n\n" in output
+    assert "- thinking_level: high" in output
+    assert "- media_resolution: low" in output
+
+
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs_json(n, log_path):
     "Test that logs command correctly returns requested -n records"

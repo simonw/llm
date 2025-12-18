@@ -2083,6 +2083,15 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
+            if row["options_json"]:
+                options = row["options_json"]
+                if isinstance(options, str):
+                    options = json.loads(options)
+                if options:
+                    options_text = "\n".join(
+                        "- {}: {}".format(key, value) for key, value in options.items()
+                    )
+                    click.echo("\n## Options\n\n{}".format(options_text))
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))
