@@ -1370,3 +1370,16 @@ Or clear all default options for a model like this:
 llm models options clear gpt-4o
 ```
 Default model options are respected by both the `llm prompt` and the `llm chat` commands. They will not be applied when you use LLM as a {ref}`Python library <python-api>`.
+
+### Output JSON log instead of response
+
+The `--json` flag can be used to output the response and its metadata as a JSON object:
+
+```bash
+llm "say hello" --json
+```
+
+```bash
+llm "say hello" -s "be brief" --json | jq -r '.[].conversation_id'
+```
+Result: `01kcw9re59ejhjpg7w32881zy2`
