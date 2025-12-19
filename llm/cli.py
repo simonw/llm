@@ -476,7 +476,15 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "json_output",
+    "--json",
+    is_flag=True,
+    help="Output response as JSON including conversation_id",
+)
+@click.pass_context
 def prompt(
+    ctx,
     prompt,
     system,
     model_id,
@@ -507,6 +515,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    json_output,
 ):
     """
     Execute a prompt
@@ -849,10 +858,15 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
-                    print("")
+                    if not json_output:
+                        async for chunk in response:
+                            print(chunk, end="")
+                            sys.stdout.flush()
+                        print("")
+                    else:
+                        # Consume the response without printing
+                        async for _ in response:
+                            pass
                 else:
                     response = prompt_method(
                         prompt,
@@ -868,7 +882,8 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
-                    print(text)
+                    if not json_output:
+                        print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -884,14 +899,17 @@ def prompt(
             )
             if should_stream:
                 for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
-                print("")
+                    if not json_output:
+                        print(chunk, end="")
+                        sys.stdout.flush()
+                if not json_output:
+                    print("")
             else:
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+                if not json_output:
+                    print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -920,12 +938,33 @@ def prompt(
             )
 
     # Log responses to the database
-    if (logs_on() or log) and not no_log:
+    should_log = (logs_on() or log or json_output) and not no_log
+    if should_log:
         # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
         if isinstance(response, AsyncResponse):
             response = asyncio.run(response.to_sync_response())
         # At this point ALL forms should have a log_to_db() method that works:
         response.log_to_db(db)
+
+    # Output JSON if requested, reusing logs_list command
+    if json_output:
+        if not should_log:
+            raise click.ClickException(
+                "Cannot use --json with --no-log as the response must be logged to output JSON"
+            )
+        # Get response IDs to filter
+        if isinstance(response, ChainResponse):
+            response_ids = [resp.id for resp in response._responses]
+        else:
+            response_ids = [response.id]
+        # Invoke logs_list with the first response ID as lower bound
+        ctx.invoke(
+            logs_list,
+            count=len(response_ids),
+            database=str(log_path),
+            id_gte=response_ids[0],
+            json_output=True,
+        )
 
 
 @cli.command()

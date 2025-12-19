@@ -171,6 +171,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Starting an interactive chat](https://llm.datasette.io/en/stable/usage.html#starting-an-interactive-chat)
   * [Listing available models](https://llm.datasette.io/en/stable/usage.html#listing-available-models)
   * [Setting default options for models](https://llm.datasette.io/en/stable/usage.html#setting-default-options-for-models)
+    * [Output JSON log instead of response](https://llm.datasette.io/en/stable/usage.html#output-json-log-instead-of-response)
 * [OpenAI models](https://llm.datasette.io/en/stable/openai-models.html)
   * [Configuration](https://llm.datasette.io/en/stable/openai-models.html#configuration)
   * [OpenAI language models](https://llm.datasette.io/en/stable/openai-models.html#openai-language-models)
