@@ -546,3 +546,42 @@ def test_tools_in_templates(
     finally:
         after()
         pm.unregister(name="greetings-plugin")
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_extract_last_flag_with_templates(templates_path, mocked_openai_chat):
+    """Test that --xl flag works with templates - issue #1296"""
+    # Create a template without extract_last set
+    (templates_path / "code-template.yaml").write_text(
+        "prompt: 'Write Python code for $input'", "utf-8"
+    )
+    runner = CliRunner()
+    # Test with --xl flag
+    result = runner.invoke(
+        cli,
+        ["--no-stream", "-t", "code-template", "hello world", "--xl"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # The output should be extracted code, not the full response
+    # Check that mocked response extraction was applied
+    assert "```" not in result.output.strip()
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_extract_last_in_template_with_cli_flag(templates_path, mocked_openai_chat):
+    """Test that CLI --xl flag works even when template has extract_last: false"""
+    # Create a template with extract_last explicitly set to false
+    (templates_path / "no-extract-template.yaml").write_text(
+        "prompt: 'Write Python code for $input'\nextract_last: false", "utf-8"
+    )
+    runner = CliRunner()
+    # Test with --xl flag - should override template setting
+    result = runner.invoke(
+        cli,
+        ["--no-stream", "-t", "no-extract-template", "hello world", "--xl"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # The output should be extracted code since CLI flag should take precedence
+    assert "```" not in result.output.strip()
