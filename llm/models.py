@@ -1625,6 +1625,7 @@ class ChainResponse(_BaseChainResponse):
                         tool_results=tool_results,
                         options=self.prompt.options,
                         attachments=attachments,
+                        schema=current_response.prompt.schema,
                     ),
                     self.model,
                     stream=self.stream,
@@ -1681,6 +1682,7 @@ class AsyncChainResponse(_BaseChainResponse):
                     tool_results=tool_results,
                     options=self.prompt.options,
                     attachments=attachments,
+                    schema=current_response.prompt.schema,
                 )
                 current_response = AsyncResponse(
                     prompt,
