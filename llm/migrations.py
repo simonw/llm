@@ -418,3 +418,8 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_first_token_ms(db):
+    db["responses"].add_column("first_token_ms", int)

@@ -17,6 +17,7 @@ EXPECTED = {
     "response_json": str,
     "conversation_id": str,
     "duration_ms": int,
+    "first_token_ms": int,
     "datetime_utc": str,
     "input_tokens": int,
     "output_tokens": int,

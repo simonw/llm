@@ -664,6 +664,7 @@ class _BaseResponse:
         self.attachments: List[Attachment] = []
         self._start: Optional[float] = None
         self._end: Optional[float] = None
+        self._first_token: Optional[float] = None
         self._start_utcnow: Optional[datetime.datetime] = None
         self.input_tokens: Optional[int] = None
         self.output_tokens: Optional[int] = None
@@ -808,6 +809,26 @@ class _BaseResponse:
             self.input_tokens, self.output_tokens, self.token_details
         )
 
+    def first_token_ms(self) -> Optional[int]:
+        if self._first_token is None or self._start is None:
+            return None
+        return int((self._first_token - self._start) * 1000)
+
+    def tokens_per_second(self) -> Dict[str, Optional[float]]:
+        result: Dict[str, Optional[float]] = {"input": None, "output": None}
+        first_token_ms = self.first_token_ms()
+        if first_token_ms and first_token_ms > 0 and self.input_tokens:
+            result["input"] = self.input_tokens / (first_token_ms / 1000)
+        if (
+            self._start is not None
+            and self._end is not None
+            and self._first_token is not None
+        ):
+            generation_time_s = self._end - self._first_token
+            if generation_time_s > 0 and self.output_tokens:
+                result["output"] = self.output_tokens / generation_time_s
+        return result
+
     def log_to_db(self, db):
         conversation = self.conversation
         if not conversation:
@@ -880,6 +901,7 @@ class _BaseResponse:
             "response_json": condense_json(json_data, replacements),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
+            "first_token_ms": self.first_token_ms(),
             "datetime_utc": self.datetime_utc(),
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
@@ -1168,6 +1190,8 @@ class Response(_BaseResponse):
                 conversation=self.conversation,
             ):
                 assert chunk is not None
+                if self.stream and self._first_token is None:
+                    self._first_token = time.monotonic()
                 yield chunk
                 self._chunks.append(chunk)
         elif isinstance(self.model, KeyModel):
@@ -1179,6 +1203,8 @@ class Response(_BaseResponse):
                 key=self.model.get_key(self._key),
             ):
                 assert chunk is not None
+                if self.stream and self._first_token is None:
+                    self._first_token = time.monotonic()
                 yield chunk
                 self._chunks.append(chunk)
         else:
@@ -1417,6 +1443,8 @@ class AsyncResponse(_BaseResponse):
         try:
             chunk = await self._generator.__anext__()
             assert chunk is not None
+            if self.stream and self._first_token is None:
+                self._first_token = time.monotonic()
             self._chunks.append(chunk)
             return chunk
         except StopAsyncIteration:

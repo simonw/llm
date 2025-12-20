@@ -918,6 +918,22 @@ def prompt(
                 ),
                 err=True,
             )
+            # Show tokens per second if available
+            tps = response_object.tokens_per_second()
+            tps_parts = []
+            if tps["input"]:
+                tps_parts.append("input: {:.1f} tok/s".format(tps["input"]))
+            if tps["output"]:
+                tps_parts.append("output: {:.1f} tok/s".format(tps["output"]))
+            if tps_parts:
+                click.echo(
+                    click.style(
+                        "Speed: {}".format(", ".join(tps_parts)),
+                        fg="yellow",
+                        bold=True,
+                    ),
+                    err=True,
+                )
 
     # Log responses to the database
     if (logs_on() or log) and not no_log:
@@ -1427,6 +1443,7 @@ LOGS_COLUMNS = """    responses.id,
     responses.response_json,
     responses.conversation_id,
     responses.duration_ms,
+    responses.first_token_ms,
     responses.datetime_utc,
     responses.input_tokens,
     responses.output_tokens,
@@ -2199,6 +2216,25 @@ def logs_list(
                 )
                 if token_usage:
                     click.echo("## Token usage\n\n{}\n".format(token_usage))
+                # Show tokens per second if available
+                first_token_ms = row.get("first_token_ms")
+                duration_ms = row.get("duration_ms")
+                if (
+                    first_token_ms
+                    and duration_ms
+                    and row["input_tokens"]
+                    and row["output_tokens"]
+                ):
+                    tps_parts = []
+                    if first_token_ms > 0:
+                        input_tps = row["input_tokens"] / (first_token_ms / 1000)
+                        tps_parts.append("input: {:.1f} tok/s".format(input_tps))
+                    generation_ms = duration_ms - first_token_ms
+                    if generation_ms > 0:
+                        output_tps = row["output_tokens"] / (generation_ms / 1000)
+                        tps_parts.append("output: {:.1f} tok/s".format(output_tps))
+                    if tps_parts:
+                        click.echo("## Speed\n\n{}\n".format(", ".join(tps_parts)))
 
 
 @cli.group(
