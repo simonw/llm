@@ -41,6 +41,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-deepseek](https://github.com/abrasumente233/llm-deepseek)** adds support for the [DeepSeek](https://deepseek.com)'s DeepSeek-Chat and DeepSeek-Coder models.
 - **[llm-lambda-labs](https://github.com/simonw/llm-lambda-labs)** provides access to models hosted by [Lambda Labs](https://docs.lambdalabs.com/public-cloud/lambda-chat-api/), including the Nous Hermes 3 series.
 - **[llm-venice](https://github.com/ar-jan/llm-venice)** provides access to uncensored models hosted by privacy-focused [Venice AI](https://docs.venice.ai/), including Llama 3.1 405B.
+- **[llm-watsonx](https://github.com/h0rv/llm-watsonx)** adds support for the [IBM watsonx.ai](https://www.ibm.com/products/watsonx-ai) models.
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
@@ -80,6 +81,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-clip](https://github.com/simonw/llm-clip)** provides the [CLIP](https://openai.com/research/clip) model, which can be used to embed images and text in the same vector space, enabling text search against images. See [Build an image search engine with llm-clip](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/) for more on this plugin.
 - **[llm-embed-jina](https://github.com/simonw/llm-embed-jina)** provides Jina AI's [8K text embedding models](https://jina.ai/news/jina-ai-launches-worlds-first-open-source-8k-text-embedding-rivaling-openai/).
 - **[llm-embed-onnx](https://github.com/simonw/llm-embed-onnx)** provides seven embedding models that can be executed using the ONNX model framework.
+- **[llm-watsonx](https://github.com/h0rv/llm-watsonx)** adds support for the [IBM watsonx.ai](https://www.ibm.com/products/watsonx-ai) embedding models.
 
 (plugin-directory-commands)=
 ## Extra commands
