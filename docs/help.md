@@ -152,6 +152,7 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  --render                        Render for terminal
   -h, --help                      Show this message and exit.
 ```
 
