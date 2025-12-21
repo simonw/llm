@@ -3932,12 +3932,12 @@ def load_template(name: str) -> Template:
             raise LoadTemplateError("Could not load template {}: {}".format(name, ex))
 
     # Try local file
-    if potential_path.exists():
+    if potential_path.is_file():
         path = potential_path
     else:
         # Look for template in template_dir()
         path = template_dir() / f"{name}.yaml"
-    if not path.exists():
+    if not path.is_file():
         raise LoadTemplateError(f"Invalid template: {name}")
     content = path.read_text()
     template_obj = _parse_yaml_template(name, content)
