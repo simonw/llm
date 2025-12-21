@@ -3008,7 +3008,12 @@ def display_truncated(text):
     is_flag=True,
     help="Include pre-release and development versions",
 )
-def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
+@click.option(
+    "--user",
+    is_flag=True,
+    help="Install to the Python user install directory for your platform.",
+)
+def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre, user):
     """Install packages from PyPI into the same environment as LLM"""
     args = ["pip", "install"]
     if upgrade:
@@ -3021,6 +3026,8 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
         args += ["--no-cache-dir"]
     if pre:
         args += ["--pre"]
+    if user:
+        args += ["--user"]
     args += list(packages)
     sys.argv = args
     run_module("pip", run_name="__main__")
