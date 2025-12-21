@@ -345,6 +345,306 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     assert ids == expected_ids
 
 
+def test_embed_multi_with_metadata(tmpdir):
+    """Test that embed-multi works with JSON files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    content = '[{"id": "1", "content": "An item", "metadata": {"key1": "value1", "key2": "value2"}}, {"id": "2", "content": "Another item", "metadata": {"key1": "value1", "key2": "value2"}}]'
+
+    path = tmpdir / "metadata.json"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "An item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Another item"
+    assert json.loads(row2["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+
+def test_embed_multi_with_metadata_csv(tmpdir):
+    """Test that embed-multi works with CSV files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    # CSV with metadata column containing JSON-encoded strings
+    content = """id,content,metadata
+1,First CSV item,"{""key1"": ""value1"", ""key2"": ""value2""}"
+2,Second CSV item,"{""key1"": ""valueA"", ""key2"": ""valueB""}"
+"""
+
+    path = tmpdir / "metadata.csv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "csv-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First CSV item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second CSV item"
+    assert json.loads(row2["metadata"]) == {"key1": "valueA", "key2": "valueB"}
+
+
+def test_embed_multi_with_metadata_tsv(tmpdir):
+    """Test that embed-multi works with TSV files containing metadata."""
+    db_path = tmpdir / "embeddings.db"
+    # TSV with metadata column containing JSON-encoded strings
+    content = """id\tcontent\tmetadata
+1\tFirst TSV item\t{"key1": "value1", "key2": "value2"}
+2\tSecond TSV item\t{"key1": "valueA", "key2": "valueB"}
+"""
+
+    path = tmpdir / "metadata.tsv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "tsv-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--format",
+        "tsv",
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First TSV item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second TSV item"
+    assert json.loads(row2["metadata"]) == {"key1": "valueA", "key2": "valueB"}
+
+
+def test_embed_multi_tsv_autodetect(tmpdir):
+    """Test that TSV files are auto-detected by file extension without --format flag."""
+    db_path = tmpdir / "embeddings.db"
+    # TSV file without explicit --format tsv flag
+    content = """id\tcontent\tmetadata
+1\tFirst TSV item\t{"key1": "value1", "key2": "value2"}
+2\tSecond TSV item\t{"key1": "valueA", "key2": "valueB"}
+"""
+
+    path = tmpdir / "autodetect.tsv"
+    path.write_text(content, "utf-8")
+
+    # Note: NO --format flag, should auto-detect from .tsv extension
+    args = [
+        "embed-multi",
+        "tsv-autodetect-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that everything was embedded correctly with metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check first row
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First TSV item"
+    assert json.loads(row1["metadata"]) == {"key1": "value1", "key2": "value2"}
+
+    # Check second row
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second TSV item"
+    assert json.loads(row2["metadata"]) == {"key1": "valueA", "key2": "valueB"}
+
+
+def test_embed_multi_with_invalid_json_metadata_csv(tmpdir):
+    """Test that embed-multi gracefully handles invalid JSON in metadata column."""
+    db_path = tmpdir / "embeddings.db"
+    # CSV with invalid JSON in metadata column - should fall back to no metadata
+    content = """id,content,metadata
+1,First item,not valid json
+2,Second item,{broken json}
+"""
+
+    path = tmpdir / "invalid_metadata.csv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "invalid-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    # Check that items were embedded without metadata (fallback behavior)
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Content should be embedded with metadata column excluded (even though invalid)
+    # The "metadata" column is special - it's always excluded from concatenation
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First item"
+
+
+def test_embed_multi_with_non_dict_json_metadata(tmpdir):
+    """Test that embed-multi ignores metadata that parses as non-dict JSON."""
+    db_path = tmpdir / "embeddings.db"
+    # JSON with metadata as array/string/number instead of dict
+    content = '[{"id": "1", "content": "Item one", "metadata": [1, 2, 3]}, {"id": "2", "content": "Item two", "metadata": "just a string"}]'
+
+    path = tmpdir / "non_dict_metadata.json"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "non-dict-metadata-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+
+    # Should fall back to regular embed_multi without metadata
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    # Neither should have metadata stored separately
+    for row in rows:
+        # Content should exclude the non-dict metadata (dicts are skipped)
+        if row["id"] == "1":
+            assert "Item one" in row["content"]
+        elif row["id"] == "2":
+            assert "Item two" in row["content"]
+
+
+def test_embed_multi_csv_multiple_columns_with_metadata(tmpdir):
+    """Test that multiple content columns are concatenated correctly when metadata is present."""
+    db_path = tmpdir / "embeddings.db"
+    # CSV with multiple content columns plus metadata
+    content = """id,title,description,tags,metadata
+1,First Title,First description,tag1 tag2,"{""category"": ""tech"", ""priority"": ""high""}"
+2,Second Title,Second description,tag3 tag4,"{""category"": ""news"", ""priority"": ""low""}"
+"""
+
+    path = tmpdir / "multi_column_metadata.csv"
+    path.write_text(content, "utf-8")
+
+    args = [
+        "embed-multi",
+        "multi-column-test",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        str(path),
+        "--store",
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    db = sqlite_utils.Database(str(db_path))
+    assert db["embeddings"].count == 2
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+
+    # Check that content columns are concatenated but metadata is stored separately
+    row1 = [row for row in rows if row["id"] == "1"][0]
+    assert row1["content"] == "First Title First description tag1 tag2"
+    assert json.loads(row1["metadata"]) == {"category": "tech", "priority": "high"}
+
+    row2 = [row for row in rows if row["id"] == "2"][0]
+    assert row2["content"] == "Second Title Second description tag3 tag4"
+    assert json.loads(row2["metadata"]) == {"category": "news", "priority": "low"}
+
+
 def test_embed_multi_files_binary_store(tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]

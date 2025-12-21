@@ -3225,9 +3225,11 @@ def embed_multi(
 
     \b
     1. A CSV, TSV, JSON or JSONL file:
+       - Format auto-detected from file extension (.csv, .tsv, .json, .jsonl)
        - CSV/TSV: First column is ID, remaining columns concatenated as content
        - JSON: Array of objects with "id" field and content fields
        - JSONL: Newline-delimited JSON objects
+       - Optional "metadata" column: JSON-encoded dict stored separately, not in content
 
     \b
        Examples:
@@ -3239,6 +3241,7 @@ def embed_multi(
     2. A SQL query against a SQLite database:
        - First column returned is used as ID
        - Other columns concatenated to form content
+       - Optional "metadata" column: JSON-encoded dict stored separately
 
     \b
        Examples:
@@ -3332,9 +3335,23 @@ def embed_multi(
         count_sql = "select count(*) as c from ({})".format(sql)
         expected_length = next(db.query(count_sql))["c"]
     else:
+        # Auto-detect format from file extension if not explicitly provided
+        detected_format = format
+        if not detected_format and input_path and input_path != "-":
+            ext = pathlib.Path(input_path).suffix.lower()
+            if ext == ".tsv":
+                detected_format = "tsv"
+            elif ext == ".csv":
+                detected_format = "csv"
+            elif ext == ".json":
+                detected_format = "json"
+            elif ext in (".jsonl", ".ndjson"):
+                detected_format = "nl"
 
         def load_rows(fp):
-            return rows_from_file(fp, Format[format.upper()] if format else None)[0]
+            return rows_from_file(
+                fp, Format[detected_format.upper()] if detected_format else None
+            )[0]
 
         try:
             if input_path != "-":
@@ -3356,23 +3373,109 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples() -> Iterable[Tuple[str, Union[bytes, str]]]:
-            for row in rows:
+        def tuples_generator(rows_list) -> Iterable[Tuple[str, Union[bytes, str]]]:
+            for row in rows_list:
                 values = list(row.values())
+                keys = list(row.keys())
                 id: str = prefix + str(values[0])
                 content: Optional[Union[bytes, str]] = None
                 if binary:
                     content = cast(bytes, values[1])
                 else:
-                    content = " ".join(v or "" for v in values[1:])
+                    # Skip metadata field if it exists - only concatenate content values
+                    content_values = []
+                    for i, v in enumerate(
+                        values[1:], 1
+                    ):  # Start from index 1 (skip id)
+                        key = keys[i]
+                        if key == "metadata":
+                            continue  # Skip metadata field
+                        if isinstance(v, dict):
+                            continue  # Skip any dict values
+                        content_values.append(str(v) if v is not None else "")
+                    content = " ".join(content_values)
                 if prepend and isinstance(content, str):
                     content = prepend + content
                 yield id, content or ""
 
+        def tuples_with_metadata_generator(
+            rows_list,
+        ) -> Iterable[Tuple[str, Union[bytes, str], Optional[Dict[str, Any]]]]:
+            for row in rows_list:
+                values = list(row.values())
+                keys = list(row.keys())
+                id: str = prefix + str(values[0])
+                content: Optional[Union[bytes, str]] = None
+                metadata: Optional[Dict[str, Any]] = None
+
+                # Extract metadata if present
+                if "metadata" in keys:
+                    metadata_value = row["metadata"]
+                    if isinstance(metadata_value, dict):
+                        # JSON input provides metadata as dict
+                        metadata = metadata_value
+                    elif isinstance(metadata_value, str):
+                        # CSV/TSV input provides metadata as JSON-encoded string
+                        try:
+                            parsed = json.loads(metadata_value)
+                            if isinstance(parsed, dict):
+                                metadata = parsed
+                        except (json.JSONDecodeError, TypeError):
+                            # If parsing fails, treat metadata as None
+                            pass
+
+                if binary:
+                    content = cast(bytes, values[1])
+                else:
+                    # Only concatenate non-metadata, non-id values
+                    content_values = []
+                    for i, v in enumerate(
+                        values[1:], 1
+                    ):  # Start from index 1 (skip id)
+                        key = keys[i]
+                        if key == "metadata":
+                            continue  # Skip metadata field
+                        content_values.append(str(v) if v is not None else "")
+                    content = " ".join(content_values)
+
+                if prepend and isinstance(content, str):
+                    content = prepend + content
+                yield id, content or "", metadata
+
+        # Check if any row has metadata to determine which method to use
+        has_metadata = False
+        first_row = None
+
+        # Peek at the first row to determine if metadata exists
+        rows_list = list(rows)  # Convert to list so we can examine the first row
+        if rows_list:
+            first_row = rows_list[0]
+            if isinstance(first_row, dict) and "metadata" in first_row:
+                metadata_value = first_row["metadata"]
+                # Check if it's a dict (JSON) or a parseable JSON string (CSV/TSV)
+                if isinstance(metadata_value, dict):
+                    has_metadata = True
+                elif isinstance(metadata_value, str):
+                    try:
+                        parsed = json.loads(metadata_value)
+                        if isinstance(parsed, dict):
+                            has_metadata = True
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        else:
+            # No rows to process
+            return
+
         embed_kwargs = {"store": store}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
-        collection_obj.embed_multi(tuples(), **embed_kwargs)
+
+        if has_metadata:
+            collection_obj.embed_multi_with_metadata(
+                (tuples_with_metadata_generator(rows_list)), **embed_kwargs
+            )
+        else:
+            collection_obj.embed_multi((tuples_generator(rows_list)), **embed_kwargs)
 
 
 @cli.command()
