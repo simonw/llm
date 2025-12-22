@@ -32,23 +32,26 @@ import yaml
 
 @hookimpl
 def register_models(register):
+    """
+    Register OpenAI Chat Completion API models.
+
+    These are available with the openai/chat/ prefix for testing and comparison
+    with the Responses API models (which are the defaults).
+
+    Example: llm -m openai/chat/gpt-4.1-mini "hello"
+    """
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
-        aliases=("4o",),
+        Chat("openai/chat/gpt-4o", model_name="gpt-4o", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("openai/chat/gpt-4o", model_name="gpt-4o", vision=True, supports_schema=True, supports_tools=True),
     )
     register(
-        Chat("chatgpt-4o-latest", vision=True),
-        AsyncChat("chatgpt-4o-latest", vision=True),
-        aliases=("chatgpt-4o",),
+        Chat("openai/chat/chatgpt-4o-latest", model_name="chatgpt-4o-latest", vision=True),
+        AsyncChat("openai/chat/chatgpt-4o-latest", model_name="chatgpt-4o-latest", vision=True),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat(
-            "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
-        ),
-        aliases=("4o-mini",),
+        Chat("openai/chat/gpt-4o-mini", model_name="gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("openai/chat/gpt-4o-mini", model_name="gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
     )
     for audio_model_id in (
         "gpt-4o-audio-preview",
@@ -58,63 +61,81 @@ def register_models(register):
         "gpt-4o-mini-audio-preview-2024-12-17",
     ):
         register(
-            Chat(audio_model_id, audio=True),
-            AsyncChat(audio_model_id, audio=True),
+            Chat(f"openai/chat/{audio_model_id}", model_name=audio_model_id, audio=True),
+            AsyncChat(f"openai/chat/{audio_model_id}", model_name=audio_model_id, audio=True),
         )
     # GPT-4.1
     for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
         register(
-            Chat(model_id, vision=True, supports_schema=True, supports_tools=True),
-            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True),
-            aliases=(model_id.replace("gpt-", ""),),
+            Chat(f"openai/chat/{model_id}", model_name=model_id, vision=True, supports_schema=True, supports_tools=True),
+            AsyncChat(f"openai/chat/{model_id}", model_name=model_id, vision=True, supports_schema=True, supports_tools=True),
         )
     # 3.5 and 4
     register(
-        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+        Chat("openai/chat/gpt-3.5-turbo", model_name="gpt-3.5-turbo"),
+        AsyncChat("openai/chat/gpt-3.5-turbo", model_name="gpt-3.5-turbo"),
+        aliases=("3.5", "chatgpt"),
     )
     register(
-        Chat("gpt-3.5-turbo-16k"),
-        AsyncChat("gpt-3.5-turbo-16k"),
+        Chat("openai/chat/gpt-3.5-turbo-16k", model_name="gpt-3.5-turbo-16k"),
+        AsyncChat("openai/chat/gpt-3.5-turbo-16k", model_name="gpt-3.5-turbo-16k"),
         aliases=("chatgpt-16k", "3.5-16k"),
     )
-    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
-    register(Chat("gpt-4-32k"), AsyncChat("gpt-4-32k"), aliases=("4-32k",))
-    # GPT-4 Turbo models
-    register(Chat("gpt-4-1106-preview"), AsyncChat("gpt-4-1106-preview"))
-    register(Chat("gpt-4-0125-preview"), AsyncChat("gpt-4-0125-preview"))
-    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
     register(
-        Chat("gpt-4-turbo"),
-        AsyncChat("gpt-4-turbo"),
+        Chat("openai/chat/gpt-4", model_name="gpt-4"),
+        AsyncChat("openai/chat/gpt-4", model_name="gpt-4"),
+        aliases=("4", "gpt4"),
+    )
+    register(
+        Chat("openai/chat/gpt-4-32k", model_name="gpt-4-32k"),
+        AsyncChat("openai/chat/gpt-4-32k", model_name="gpt-4-32k"),
+        aliases=("4-32k",),
+    )
+    # GPT-4 Turbo models
+    register(
+        Chat("openai/chat/gpt-4-1106-preview", model_name="gpt-4-1106-preview"),
+        AsyncChat("openai/chat/gpt-4-1106-preview", model_name="gpt-4-1106-preview"),
+    )
+    register(
+        Chat("openai/chat/gpt-4-0125-preview", model_name="gpt-4-0125-preview"),
+        AsyncChat("openai/chat/gpt-4-0125-preview", model_name="gpt-4-0125-preview"),
+    )
+    register(
+        Chat("openai/chat/gpt-4-turbo-2024-04-09", model_name="gpt-4-turbo-2024-04-09"),
+        AsyncChat("openai/chat/gpt-4-turbo-2024-04-09", model_name="gpt-4-turbo-2024-04-09"),
+    )
+    register(
+        Chat("openai/chat/gpt-4-turbo", model_name="gpt-4-turbo"),
+        AsyncChat("openai/chat/gpt-4-turbo", model_name="gpt-4-turbo"),
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
     )
     # GPT-4.5
     register(
         Chat(
-            "gpt-4.5-preview-2025-02-27",
+            "openai/chat/gpt-4.5-preview-2025-02-27",
+            model_name="gpt-4.5-preview-2025-02-27",
             vision=True,
             supports_schema=True,
             supports_tools=True,
         ),
         AsyncChat(
-            "gpt-4.5-preview-2025-02-27",
+            "openai/chat/gpt-4.5-preview-2025-02-27",
+            model_name="gpt-4.5-preview-2025-02-27",
             vision=True,
             supports_schema=True,
             supports_tools=True,
         ),
     )
     register(
-        Chat("gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat(
-            "gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True
-        ),
-        aliases=("gpt-4.5",),
+        Chat("openai/chat/gpt-4.5-preview", model_name="gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
+        AsyncChat("openai/chat/gpt-4.5-preview", model_name="gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
     )
     # o1
     for model_id in ("o1", "o1-2024-12-17"):
         register(
             Chat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 can_stream=False,
                 reasoning=True,
@@ -122,7 +143,8 @@ def register_models(register):
                 supports_tools=True,
             ),
             AsyncChat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 can_stream=False,
                 reasoning=True,
@@ -132,35 +154,37 @@ def register_models(register):
         )
 
     register(
-        Chat("o1-preview", allows_system_prompt=False),
-        AsyncChat("o1-preview", allows_system_prompt=False),
+        Chat("openai/chat/o1-preview", model_name="o1-preview", allows_system_prompt=False),
+        AsyncChat("openai/chat/o1-preview", model_name="o1-preview", allows_system_prompt=False),
     )
     register(
-        Chat("o1-mini", allows_system_prompt=False),
-        AsyncChat("o1-mini", allows_system_prompt=False),
+        Chat("openai/chat/o1-mini", model_name="o1-mini", allows_system_prompt=False),
+        AsyncChat("openai/chat/o1-mini", model_name="o1-mini", allows_system_prompt=False),
     )
     register(
-        Chat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
-        AsyncChat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        Chat("openai/chat/o3-mini", model_name="o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        AsyncChat("openai/chat/o3-mini", model_name="o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
     )
     register(
         Chat(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "openai/chat/o3", model_name="o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
         ),
         AsyncChat(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "openai/chat/o3", model_name="o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
         ),
     )
     register(
         Chat(
-            "o4-mini",
+            "openai/chat/o4-mini",
+            model_name="o4-mini",
             vision=True,
             reasoning=True,
             supports_schema=True,
             supports_tools=True,
         ),
         AsyncChat(
-            "o4-mini",
+            "openai/chat/o4-mini",
+            model_name="o4-mini",
             vision=True,
             reasoning=True,
             supports_schema=True,
@@ -178,14 +202,16 @@ def register_models(register):
     ):
         register(
             Chat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
             AsyncChat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
@@ -199,14 +225,16 @@ def register_models(register):
     ):
         register(
             Chat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
             AsyncChat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
@@ -217,14 +245,16 @@ def register_models(register):
     for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
         register(
             Chat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
             AsyncChat(
-                model_id,
+                f"openai/chat/{model_id}",
+                model_name=model_id,
                 vision=True,
                 reasoning=True,
                 supports_schema=True,
@@ -233,9 +263,9 @@ def register_models(register):
         )
         # "gpt-5.2-pro" is Responses API only
 
-    # The -instruct completion model
+    # The -instruct completion model (Chat Completions API only)
     register(
-        Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
+        Completion("openai/chat/gpt-3.5-turbo-instruct", model_name="gpt-3.5-turbo-instruct", default_max_tokens=256),
         aliases=("3.5-instruct", "chatgpt-instruct"),
     )
 
@@ -591,7 +621,7 @@ class _Shared:
             )
 
     def __str__(self) -> str:
-        return "OpenAI Chat: {}".format(self.model_id)
+        return "OpenAI Chat: {}".format(self.model_id.replace("openai/chat/", ""))
 
     def build_messages(self, prompt, conversation):
         messages = []

@@ -6,6 +6,7 @@ import sys
 from . import hookspecs
 
 DEFAULT_PLUGINS = (
+    "llm.default_plugins.openai_responses",
     "llm.default_plugins.openai_models",
     "llm.default_plugins.default_tools",
 )
