@@ -137,7 +137,7 @@ def test_fragment_url_user_agent(mocked_openai_chat, user_path):
         text="Hello from URL",
     )
     runner = CliRunner()
-    result = runner.invoke(cli, ["prompt", "-f", "https://example.com/fragment.txt"])
+    result = runner.invoke(cli, ["prompt", "-m", "openai/chat/gpt-4o-mini", "-f", "https://example.com/fragment.txt"])
     assert result.exit_code == 0
 
     # Verify the User-Agent header was sent for the fragment URL request

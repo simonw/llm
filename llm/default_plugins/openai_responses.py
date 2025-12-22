@@ -31,17 +31,17 @@ def register_models(register):
     register(
         ResponsesModel("gpt-4o", vision=True),
         AsyncResponsesModel("gpt-4o", vision=True),
-        aliases=("4o",),
+        aliases=("gpt-4o", "4o"),
     )
     register(
         ResponsesModel("chatgpt-4o-latest", vision=True),
         AsyncResponsesModel("chatgpt-4o-latest", vision=True),
-        aliases=("chatgpt-4o",),
+        aliases=("chatgpt-4o-latest", "chatgpt-4o"),
     )
     register(
         ResponsesModel("gpt-4o-mini", vision=True),
         AsyncResponsesModel("gpt-4o-mini", vision=True),
-        aliases=("4o-mini",),
+        aliases=("gpt-4o-mini", "4o-mini"),
     )
 
     # GPT-4.1 models
@@ -49,14 +49,14 @@ def register_models(register):
         register(
             ResponsesModel(model_id, vision=True),
             AsyncResponsesModel(model_id, vision=True),
-            aliases=(model_id.replace("gpt-", ""),),
+            aliases=(model_id, model_id.replace("gpt-", "")),
         )
 
     # GPT-4.5 models
     register(
         ResponsesModel("gpt-4.5-preview", vision=True),
         AsyncResponsesModel("gpt-4.5-preview", vision=True),
-        aliases=("gpt-4.5",),
+        aliases=("gpt-4.5-preview", "gpt-4.5"),
     )
     register(
         ResponsesModel("gpt-4.5-preview-2025-02-27", vision=True),
@@ -97,11 +97,20 @@ def register_models(register):
         AsyncResponsesModel("o4-mini", vision=True, reasoning=True),
     )
 
-    # GPT-5 models
+    # GPT-5 models - main models with aliases
+    for model_id, model_aliases in (
+        ("gpt-5", ("gpt-5", "5")),
+        ("gpt-5-mini", ("gpt-5-mini", "5-mini")),
+        ("gpt-5-nano", ("gpt-5-nano", "5-nano")),
+    ):
+        register(
+            ResponsesModel(model_id, vision=True, reasoning=True),
+            AsyncResponsesModel(model_id, vision=True, reasoning=True),
+            aliases=model_aliases,
+        )
+
+    # GPT-5 models - dated and variant models without aliases
     for model_id in (
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
         "gpt-5-2025-08-07",
         "gpt-5-mini-2025-08-07",
         "gpt-5-nano-2025-08-07",
@@ -127,6 +136,7 @@ class ImageDetailEnum(str, Enum):
 
 
 class ReasoningEffortEnum(str, Enum):
+    minimal = "minimal"
     low = "low"
     medium = "medium"
     high = "high"

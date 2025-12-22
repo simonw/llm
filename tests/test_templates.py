@@ -85,7 +85,7 @@ def test_templates_list(templates_path, args):
 @pytest.mark.parametrize(
     "args,expected,expected_error",
     (
-        (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
+        (["-m", "gpt4", "hello"], {"model": "openai/chat/gpt-4", "prompt": "hello"}, None),
         (["hello $foo"], {"prompt": "hello $foo"}, None),
         (["--system", "system"], {"system": "system"}, None),
         (["-t", "template"], None, "--save cannot be used with --template"),
@@ -144,7 +144,7 @@ def test_templates_list(templates_path, args):
         (
             ["-m", "gpt-5", "-o", "reasoning_effort", "minimal"],
             {
-                "model": "gpt-5",
+                "model": "openai/gpt-5",
                 "options": {"reasoning_effort": "minimal"},
             },
             None,
@@ -199,14 +199,14 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "'Summarize this: $input'",
             "Input text",
-            [],
+            ["-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,
             None,
         ),
         (
-            "prompt: 'Summarize this: $input'\nmodel: gpt-4",
+            "prompt: 'Summarize this: $input'\nmodel: openai/chat/gpt-4",
             "Input text",
             [],
             "gpt-4",
@@ -227,7 +227,7 @@ def test_templates_error_on_missing_schema(templates_path):
         pytest.param(
             "boo",
             "Input text",
-            ["-s", "custom system"],
+            ["-s", "custom system", "-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             [
                 {"role": "system", "content": "custom system"},
@@ -251,7 +251,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Say $hello'",
             "Input text",
-            ["-p", "hello", "Blah"],
+            ["-p", "hello", "Blah", "-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             "Say Blah\nInput text",
             None,
@@ -260,7 +260,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Say pelican'",
             "",
-            [],
+            ["-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             "Say pelican",
             None,
@@ -270,7 +270,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "system: 'Summarize this'",
             "Input text",
-            [],
+            ["-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             [
                 {"content": "Summarize this", "role": "system"},
@@ -283,7 +283,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
             "Input text",
-            [],
+            ["-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,
@@ -293,7 +293,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
             "Input text",
-            ["-o", "temperature", "0.7"],
+            ["-o", "temperature", "0.7", "-m", "openai/chat/gpt-4o-mini"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,
