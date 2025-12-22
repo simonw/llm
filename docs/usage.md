@@ -1331,7 +1331,7 @@ OpenAI Completion: openai/chat/gpt-3.5-turbo-instruct (aliases: 3.5-instruct, ch
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4o (aliases: 4o)
+OpenAI: openai/gpt-4o (aliases: gpt-4o, 4o)
   Options:
     max_output_tokens: int
       An upper bound for the number of tokens that can be generated for a
@@ -1368,7 +1368,7 @@ OpenAI: openai/gpt-4o (aliases: 4o)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/chatgpt-4o-latest (aliases: chatgpt-4o)
+OpenAI: openai/chatgpt-4o-latest (aliases: chatgpt-4o-latest, chatgpt-4o)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1386,7 +1386,7 @@ OpenAI: openai/chatgpt-4o-latest (aliases: chatgpt-4o)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4o-mini (aliases: 4o-mini)
+OpenAI: openai/gpt-4o-mini (aliases: gpt-4o-mini, 4o-mini)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1404,7 +1404,7 @@ OpenAI: openai/gpt-4o-mini (aliases: 4o-mini)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4.1 (aliases: 4.1)
+OpenAI: openai/gpt-4.1 (aliases: gpt-4.1, 4.1)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1422,7 +1422,7 @@ OpenAI: openai/gpt-4.1 (aliases: 4.1)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4.1-mini (aliases: 4.1-mini)
+OpenAI: openai/gpt-4.1-mini (aliases: gpt-4.1-mini, 4.1-mini)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1440,7 +1440,7 @@ OpenAI: openai/gpt-4.1-mini (aliases: 4.1-mini)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4.1-nano (aliases: 4.1-nano)
+OpenAI: openai/gpt-4.1-nano (aliases: gpt-4.1-nano, 4.1-nano)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1458,7 +1458,7 @@ OpenAI: openai/gpt-4.1-nano (aliases: 4.1-nano)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-4.5-preview (aliases: gpt-4.5)
+OpenAI: openai/gpt-4.5-preview (aliases: gpt-4.5-preview, gpt-4.5)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1618,7 +1618,7 @@ OpenAI: openai/o4-mini
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-5
+OpenAI: openai/gpt-5 (aliases: gpt-5, 5)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1637,7 +1637,7 @@ OpenAI: openai/gpt-5
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-5-mini
+OpenAI: openai/gpt-5-mini (aliases: gpt-5-mini, 5-mini)
   Options:
     max_output_tokens: int
     temperature: float
@@ -1656,7 +1656,7 @@ OpenAI: openai/gpt-5-mini
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI: openai/gpt-5-nano
+OpenAI: openai/gpt-5-nano (aliases: gpt-5-nano, 5-nano)
   Options:
     max_output_tokens: int
     temperature: float

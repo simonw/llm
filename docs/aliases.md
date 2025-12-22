@@ -31,13 +31,26 @@ gpt-4-turbo-preview : openai/chat/gpt-4-turbo
 4t                  : openai/chat/gpt-4-turbo
 3.5-instruct        : openai/chat/gpt-3.5-turbo-instruct
 chatgpt-instruct    : openai/chat/gpt-3.5-turbo-instruct
+gpt-4o              : openai/gpt-4o
 4o                  : openai/gpt-4o
+chatgpt-4o-latest   : openai/chatgpt-4o-latest
 chatgpt-4o          : openai/chatgpt-4o-latest
+gpt-4o-mini         : openai/gpt-4o-mini
 4o-mini             : openai/gpt-4o-mini
+gpt-4.1             : openai/gpt-4.1
 4.1                 : openai/gpt-4.1
+gpt-4.1-mini        : openai/gpt-4.1-mini
 4.1-mini            : openai/gpt-4.1-mini
+gpt-4.1-nano        : openai/gpt-4.1-nano
 4.1-nano            : openai/gpt-4.1-nano
+gpt-4.5-preview     : openai/gpt-4.5-preview
 gpt-4.5             : openai/gpt-4.5-preview
+gpt-5               : openai/gpt-5
+5                   : openai/gpt-5
+gpt-5-mini          : openai/gpt-5-mini
+5-mini              : openai/gpt-5-mini
+gpt-5-nano          : openai/gpt-5-nano
+5-nano              : openai/gpt-5-nano
 ada                 : text-embedding-ada-002 (embedding)
 ada-002             : text-embedding-ada-002 (embedding)
 3-small             : text-embedding-3-small (embedding)
