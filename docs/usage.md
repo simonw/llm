@@ -518,7 +518,7 @@ result = CliRunner().invoke(cli, ["models", "list", "--options"])
 cog.out("```\n{}\n```".format(result.output))
 ]]] -->
 ```
-OpenAI Chat: gpt-4o (aliases: 4o)
+OpenAI Chat: gpt-4o
   Options:
     temperature: float
       What sampling temperature to use, between 0 and 2. Higher values like
@@ -559,7 +559,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
+OpenAI Chat: chatgpt-4o-latest
   Options:
     temperature: float
     max_tokens: int
@@ -578,7 +578,7 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
+OpenAI Chat: gpt-4o-mini
   Options:
     temperature: float
     max_tokens: int
@@ -694,7 +694,7 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.1 (aliases: 4.1)
+OpenAI Chat: gpt-4.1
   Options:
     temperature: float
     max_tokens: int
@@ -715,7 +715,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
+OpenAI Chat: gpt-4.1-mini
   Options:
     temperature: float
     max_tokens: int
@@ -736,7 +736,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
+OpenAI Chat: gpt-4.1-nano
   Options:
     temperature: float
     max_tokens: int
@@ -914,7 +914,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
+OpenAI Chat: gpt-4.5-preview
   Options:
     temperature: float
     max_tokens: int
@@ -1295,7 +1295,7 @@ OpenAI Chat: gpt-5.2-chat-latest
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
+OpenAI Completion: openai/chat/gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
   Options:
     temperature: float
       What sampling temperature to use, between 0 and 2. Higher values like
@@ -1328,6 +1328,464 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
       Include the log probabilities of most likely N per token
   Features:
   - streaming
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4o (aliases: 4o)
+  Options:
+    max_output_tokens: int
+      An upper bound for the number of tokens that can be generated for a
+      response, including visible output tokens and reasoning tokens.
+    temperature: float
+      What sampling temperature to use, between 0 and 2. Higher values like
+      0.8 will make the output more random, while lower values like 0.2 will
+      make it more focused and deterministic.
+    top_p: float
+      An alternative to sampling with temperature, called nucleus sampling,
+      where the model considers the results of the tokens with top_p
+      probability mass. So 0.1 means only the tokens comprising the top 10%
+      probability mass are considered. Recommended to use top_p or
+      temperature but not both.
+    store: boolean
+      Whether to store the generated model response for later retrieval via
+      API.
+    truncation: str
+      The truncation strategy to use for the model response. If 'auto' and
+      the context of this response and previous ones exceeds the model's
+      context window size, the model will truncate the response to fit the
+      context window by dropping input items in the middle of the
+      conversation.
+    image_detail: str
+      low = fixed tokens per image. high = more tokens for larger images.
+      auto = model decides. Default is low.
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/chatgpt-4o-latest (aliases: chatgpt-4o)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4o-mini (aliases: 4o-mini)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4.1 (aliases: 4.1)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4.1-mini (aliases: 4.1-mini)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4.1-nano (aliases: 4.1-nano)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4.5-preview (aliases: gpt-4.5)
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-4.5-preview-2025-02-27
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o1
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o1-pro
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o1-mini
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    reasoning_effort: str
+  Features:
+  - streaming
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o3-mini
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    reasoning_effort: str
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o3
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o3-pro
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/o4-mini
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-mini
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-nano
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-2025-08-07
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-mini-2025-08-07
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-nano-2025-08-07
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-codex
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-pro
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI: openai/gpt-5-pro-2025-10-06
+  Options:
+    max_output_tokens: int
+    temperature: float
+    top_p: float
+    store: boolean
+    truncation: str
+    image_detail: str
+    reasoning_effort: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
