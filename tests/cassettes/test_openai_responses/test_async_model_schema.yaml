@@ -1,0 +1,565 @@
+interactions:
+- request:
+    body: '{"input":[{"role":"user","content":"invent a dog"}],"model":"gpt-4o-mini","stream":true,"text":{"format":{"type":"json_schema","name":"output","schema":{"properties":{"name":{"title":"Name","type":"string"},"age":{"title":"Age","type":"integer"},"bio":{"title":"Bio","type":"string"}},"required":["name","age","bio"],"title":"Dog","type":"object","additionalProperties":false}}}}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '379'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - AsyncOpenAI/Python 1.67.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.67.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.10.10
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: 'event: response.created
+
+        data: {"type":"response.created","response":{"id":"resp_67ddd7f6f6a881918cdf6876fbf2097c07bf1c8f22578532","object":"response","created_at":1742591990,"status":"in_progress","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"json_schema","description":null,"name":"output","schema":{"properties":{"name":{"title":"Name","type":"string"},"age":{"title":"Age","type":"integer"},"bio":{"title":"Bio","type":"string"}},"required":["name","age","bio"],"title":"Dog","type":"object","additionalProperties":false},"strict":true}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.in_progress
+
+        data: {"type":"response.in_progress","response":{"id":"resp_67ddd7f6f6a881918cdf6876fbf2097c07bf1c8f22578532","object":"response","created_at":1742591990,"status":"in_progress","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"json_schema","description":null,"name":"output","schema":{"properties":{"name":{"title":"Name","type":"string"},"age":{"title":"Age","type":"integer"},"bio":{"title":"Bio","type":"string"}},"required":["name","age","bio"],"title":"Dog","type":"object","additionalProperties":false},"strict":true}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.output_item.added
+
+        data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","status":"in_progress","role":"assistant","content":[]}}
+
+
+        event: response.content_part.added
+
+        data: {"type":"response.content_part.added","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"{\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"name"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"\":\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"B"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ark"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ley"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"\",\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"age"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"\":"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"5"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":",\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"bio"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"\":\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"B"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ark"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ley"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        is"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        a"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        playful"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        and"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        friendly"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        Golden"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        Retriever"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        mix"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        with"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        a"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        love"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        for"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        adventure"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"."}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        He"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        enjoys"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        playing"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        fetch"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        at"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        the"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        park"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":","}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        spl"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ashing"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        in"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        lakes"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":","}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        and"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        cudd"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ling"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        on"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        the"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        couch"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        after"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        a"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        long"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        day"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        of"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        exploring"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"."}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        With"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        a"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        fluffy"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        coat"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        and"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        a"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        wag"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ging"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        tail"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":","}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        Bark"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"ley"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        brings"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        joy"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        to"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        everyone"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        he"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"
+        meets"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":".\""}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"delta":"}"}
+
+
+        event: response.output_text.done
+
+        data: {"type":"response.output_text.done","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"text":"{\"name\":\"Barkley\",\"age\":5,\"bio\":\"Barkley
+        is a playful and friendly Golden Retriever mix with a love for adventure.
+        He enjoys playing fetch at the park, splashing in lakes, and cuddling on the
+        couch after a long day of exploring. With a fluffy coat and a wagging tail,
+        Barkley brings joy to everyone he meets.\"}"}
+
+
+        event: response.content_part.done
+
+        data: {"type":"response.content_part.done","item_id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","output_index":0,"content_index":0,"part":{"type":"output_text","text":"{\"name\":\"Barkley\",\"age\":5,\"bio\":\"Barkley
+        is a playful and friendly Golden Retriever mix with a love for adventure.
+        He enjoys playing fetch at the park, splashing in lakes, and cuddling on the
+        couch after a long day of exploring. With a fluffy coat and a wagging tail,
+        Barkley brings joy to everyone he meets.\"}","annotations":[]}}
+
+
+        event: response.output_item.done
+
+        data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","status":"completed","role":"assistant","content":[{"type":"output_text","text":"{\"name\":\"Barkley\",\"age\":5,\"bio\":\"Barkley
+        is a playful and friendly Golden Retriever mix with a love for adventure.
+        He enjoys playing fetch at the park, splashing in lakes, and cuddling on the
+        couch after a long day of exploring. With a fluffy coat and a wagging tail,
+        Barkley brings joy to everyone he meets.\"}","annotations":[]}]}}
+
+
+        event: response.completed
+
+        data: {"type":"response.completed","response":{"id":"resp_67ddd7f6f6a881918cdf6876fbf2097c07bf1c8f22578532","object":"response","created_at":1742591990,"status":"completed","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[{"type":"message","id":"msg_67ddd7fc968c8191b7ba2cad5eaea52e07bf1c8f22578532","status":"completed","role":"assistant","content":[{"type":"output_text","text":"{\"name\":\"Barkley\",\"age\":5,\"bio\":\"Barkley
+        is a playful and friendly Golden Retriever mix with a love for adventure.
+        He enjoys playing fetch at the park, splashing in lakes, and cuddling on the
+        couch after a long day of exploring. With a fluffy coat and a wagging tail,
+        Barkley brings joy to everyone he meets.\"}","annotations":[]}]}],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"json_schema","description":null,"name":"output","schema":{"properties":{"name":{"title":"Name","type":"string"},"age":{"title":"Age","type":"integer"},"bio":{"title":"Bio","type":"string"}},"required":["name","age","bio"],"title":"Dog","type":"object","additionalProperties":false},"strict":true}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":80,"input_tokens_details":{"cached_tokens":0},"output_tokens":77,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":157},"user":null,"metadata":{}}}
+
+
+        '
+    headers:
+      CF-RAY:
+      - 92407d66f85bef7a-LAX
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Fri, 21 Mar 2025 21:19:51 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=ks9L9dEbYo19I3dtV0nUD1QRP5cAA5_ZXCtpYN8q9aA-1742591991-1.0.1.1-perU9MNN0xC0nKlby8AvBOH0ACsXks.I6aX5lgVDOqnK67_yNGreTFj.b1gRbE7nTMR4QkkK8NKPWPVi0sgVB9P3YXYO02RxdiMtxkGqjXc;
+        path=/; expires=Fri, 21-Mar-25 21:49:51 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=Oorza5tjN2FHeueESQS51lXRixeD2cBIM_rEsyU6qhc-1742591991069-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '91'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_afd822727ebab9f0fc5242b8b0c35fb7
+    status:
+      code: 200
+      message: OK
+version: 1

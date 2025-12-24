@@ -9,7 +9,7 @@ import json
     (
         (
             ["gpt-4o-mini", "temperature", "0.5"],
-            {"gpt-4o-mini": {"temperature": "0.5"}},
+            {"openai/gpt-4o-mini": {"temperature": "0.5"}},
             None,
         ),
         (
@@ -42,7 +42,7 @@ def test_set_model_default_options(user_path, args, expected_options, expected_e
 def test_model_options_list_and_show(user_path):
     (user_path / "model_options.json").write_text(
         json.dumps(
-            {"gpt-4o-mini": {"temperature": 0.5}, "gpt-4o": {"temperature": 0.7}}
+            {"openai/gpt-4o-mini": {"temperature": 0.5}, "openai/gpt-4o": {"temperature": 0.7}}
         ),
         "utf-8",
     )
@@ -51,7 +51,7 @@ def test_model_options_list_and_show(user_path):
     assert result.exit_code == 0
     assert (
         result.output
-        == "gpt-4o-mini:\n  temperature: 0.5\ngpt-4o:\n  temperature: 0.7\n"
+        == "openai/gpt-4o-mini:\n  temperature: 0.5\nopenai/gpt-4o:\n  temperature: 0.7\n"
     )
     result = runner.invoke(cli, ["models", "options", "show", "gpt-4o-mini"])
     assert result.exit_code == 0
@@ -63,8 +63,8 @@ def test_model_options_clear(user_path):
     path.write_text(
         json.dumps(
             {
-                "gpt-4o-mini": {"temperature": 0.5},
-                "gpt-4o": {"temperature": 0.7, "top_p": 0.9},
+                "openai/gpt-4o-mini": {"temperature": 0.5},
+                "openai/gpt-4o": {"temperature": 0.7, "top_p": 0.9},
             }
         ),
         "utf-8",
@@ -78,7 +78,7 @@ def test_model_options_clear(user_path):
     result2 = runner.invoke(cli, ["models", "options", "clear", "gpt-4o", "top_p"])
     assert result2.exit_code == 0
     data = json.loads(path.read_text("utf-8"))
-    assert data == {"gpt-4o": {"temperature": 0.7}}
+    assert data == {"openai/gpt-4o": {"temperature": 0.7}}
 
 
 def test_prompt_uses_model_options(user_path):

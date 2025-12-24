@@ -17,7 +17,7 @@ API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 @pytest.mark.vcr
 def test_tool_use_basic(vcr):
-    model = llm.get_model("gpt-4o-mini")
+    model = llm.get_model("openai/chat/gpt-4o-mini")
 
     def multiply(a: int, b: int) -> int:
         """Multiply two numbers."""
@@ -72,7 +72,7 @@ def test_tool_use_basic(vcr):
 
 @pytest.mark.vcr
 def test_tool_use_chain_of_two_calls(vcr):
-    model = llm.get_model("gpt-4o-mini")
+    model = llm.get_model("openai/chat/gpt-4o-mini")
 
     def lookup_population(country: str) -> int:
         "Returns the current population of the specified fictional country"
