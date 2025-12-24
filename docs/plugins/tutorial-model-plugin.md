@@ -248,6 +248,7 @@ The `prompt` argument is a `Prompt` object that contains the text that the user 
 `response` is the `Response` object that is being created by the model. This is provided so you can write additional information to `response.response_json`, which may be logged to the database.
 
 `conversation` is the `Conversation` that the prompt is a part of - or `None` if no conversation was provided. Some models may use `conversation.responses` to access previous prompts and responses in the conversation and use them to construct a call to the LLM that includes previous context.
+Plugins can also supply additional context using the {ref}`context-providers` system.
 
 (tutorial-model-plugin-logging)=
 

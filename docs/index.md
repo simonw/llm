@@ -117,6 +117,7 @@ schemas
 templates
 fragments
 aliases
+context-providers
 embeddings/index
 plugins/index
 python-api

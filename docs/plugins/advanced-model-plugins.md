@@ -239,6 +239,7 @@ As you can see, it uses `attachment.url` if that is available and otherwise fall
 ### Attachments from previous conversations
 
 Models that implement the ability to continue a conversation can reconstruct the previous message JSON using the `response.attachments` attribute.
+For more ways to persist and retrieve conversation history see {ref}`context-providers`.
 
 Here's how the OpenAI plugin does that:
 
