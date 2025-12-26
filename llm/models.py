@@ -767,6 +767,7 @@ class _BaseResponse:
         )
         prompt_json = json.loads(row["prompt_json"] or "null")
         response.id = row["id"]
+        response._start_utcnow = datetime.datetime.fromisoformat(row["datetime_utc"])
         response._prompt_json = prompt_json
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
@@ -1143,7 +1144,9 @@ class Response(_BaseResponse):
 
     def datetime_utc(self) -> str:
         self._force()
-        return self._start_utcnow.isoformat() if self._start_utcnow else ""
+        if self._start_utcnow:
+            return self._start_utcnow.strftime("%Y-%m-%dT%H:%M:%S")
+        return ""
 
     def usage(self) -> Usage:
         self._force()
