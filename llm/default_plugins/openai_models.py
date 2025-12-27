@@ -254,6 +254,7 @@ def register_models(register):
         api_version = extra_model.get("api_version")
         api_engine = extra_model.get("api_engine")
         headers = extra_model.get("headers")
+        query = extra_model.get("query")
         reasoning = extra_model.get("reasoning")
         kwargs = {}
         if extra_model.get("can_stream") is False:
@@ -278,6 +279,7 @@ def register_models(register):
             api_version=api_version,
             api_engine=api_engine,
             headers=headers,
+            query=query,
             reasoning=reasoning,
             **kwargs,
         )
@@ -544,6 +546,7 @@ class _Shared:
         api_version=None,
         api_engine=None,
         headers=None,
+        query=None,
         can_stream=True,
         vision=False,
         audio=False,
@@ -562,6 +565,7 @@ class _Shared:
         self.api_version = api_version
         self.api_engine = api_engine
         self.headers = headers
+        self.query = query
         self.can_stream = can_stream
         self.vision = vision
         self.allows_system_prompt = allows_system_prompt
@@ -698,6 +702,8 @@ class _Shared:
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["default_headers"] = self.headers
+        if self.query:
+            kwargs["default_query"] = self.query
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
         if async_:

@@ -75,3 +75,16 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+### Extra HTTP query
+
+Some providers may require the setting of additional HTTP query. You can set those using the `query:` key like this:
+
+```yaml
+- model_id: claude
+  model_name: anthropic/claude-2
+  api_base: "https://example.com/api/v1"
+  api_key_name: example
+  query:
+    example_query: "test"
+```
