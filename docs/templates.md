@@ -112,13 +112,11 @@ llm templates edit summarize
 ```
 This will open the system default editor.
 
-:::{tip}
-You can control which editor will be used here using the `EDITOR` environment variable - for example, to use VS Code:
+**Tip:** You can control which editor will be used here using the `EDITOR` environment variable - for example, to use VS Code:
 ```bash
 export EDITOR="code -w"
 ```
 Add that to your `~/.zshrc` or `~/.bashrc` file depending on which shell you use (`zsh` is the default on macOS since macOS Catalina in 2019).
-:::
 
 You can create or edit template files directly in the templates directory. The location of this directory is shown by the `llm templates path` command:
 ```bash

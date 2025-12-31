@@ -20,14 +20,11 @@ A tool is effectively a function that the model can request to be executed. Here
 
 This sequence can run several times in a loop, allowing the LLM to access data, act on that data and then pass that data off to other tools for further processing.
 
-:::{admonition} Tools can be dangerous
-:class: danger
-
 (tools-warning)=
 
 ## Warning: Tools can be dangerous
 
-Applications built on top of LLMs suffer from a class of attacks called [prompt injection](https://simonwillison.net/tags/prompt-injection/) attacks. These occur when a malicious third party injects content into the LLM which causes it to take tool-based actions that act against the interests of the user of that application.
+**Danger:** Applications built on top of LLMs suffer from a class of attacks called [prompt injection](https://simonwillison.net/tags/prompt-injection/) attacks. These occur when a malicious third party injects content into the LLM which causes it to take tool-based actions that act against the interests of the user of that application.
 
 Be very careful about which tools you enable when you potentially might be exposed to untrusted sources of content - web pages, GitHub issues posted by other people, email and messages that have been sent to you that could come from an attacker.
 
@@ -38,7 +35,6 @@ Watch out for [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-le
 - the ability to exfiltrate information
 
 Anyone who can feed malicious instructions into your LLM - by leaving them on a web page it visits, or sending an email to an inbox that it monitors - could be able to trick your LLM into using other tools to access your private information and then exfiltrate (pass out) that data to somewhere the attacker can see it.
-:::
 
 (tools-trying-out)=
 
