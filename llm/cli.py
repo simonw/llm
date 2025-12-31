@@ -342,10 +342,44 @@ def cli():
     """
 
 
+def complete_model(ctx: click.Context, param: click.Parameter, incomplete: str):
+    from click.shell_completion import CompletionItem
+
+    return [CompletionItem(alias) for alias in get_model_aliases().keys() if alias.startswith(incomplete)]
+
+def complete_embedding_model(ctx: click.Context, param: click.Parameter, incomplete: str):
+    from click.shell_completion import CompletionItem
+
+    return [CompletionItem(alias) for alias in get_embedding_model_aliases().keys() if alias.startswith(incomplete)]
+
+def complete_option(ctx: click.Context, param: click.Parameter, incomplete):
+    from click.shell_completion import CompletionItem
+
+    # This function is actually hit for the option 'value' as well.
+    # But there's no way to tell without patching click.
+
+    try:
+        model_id = ctx.params["model_id"]
+        model = get_model(model_id or get_default_model())
+    except (AttributeError, UnknownModelError):
+        return []
+    options = model.Options.model_json_schema()["properties"].keys()
+    return [CompletionItem(option) for option in options if option.startswith(incomplete)]
+
+class TemplateType(click.ParamType):
+    name = "template"
+
+    def shell_complete(self, ctx, param, incomplete):
+        from click.shell_completion import CompletionItem
+
+        path = template_dir()
+        return [CompletionItem(file.stem) for file in path.glob(incomplete + "*.yaml")]
+
+
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL", shell_complete=complete_model)
 @click.option(
     "-d",
     "--database",
@@ -419,6 +453,7 @@ def cli():
     type=(str, str),
     multiple=True,
     help="key/value options for the model",
+    shell_complete=complete_option,
 )
 @schema_option
 @click.option(
@@ -439,7 +474,7 @@ def cli():
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Template to use", type=TemplateType())
 @click.option(
     "-p",
     "--param",
@@ -930,7 +965,7 @@ def prompt(
 
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
-@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
+@click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL", shell_complete=complete_model)
 @click.option(
     "_continue",
     "-c",
@@ -959,7 +994,7 @@ def prompt(
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option("-t", "--template", help="Template to use", type=TemplateType())
 @click.option(
     "-p",
     "--param",
@@ -974,6 +1009,7 @@ def prompt(
     type=(str, str),
     multiple=True,
     help="key/value options for the model",
+    shell_complete=complete_option,
 )
 @click.option(
     "-d",
@@ -2372,7 +2408,7 @@ def templates_list():
 
 
 @templates.command(name="show")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_show(name):
     "Show the specified prompt template"
     try:
@@ -2389,7 +2425,7 @@ def templates_show(name):
 
 
 @templates.command(name="edit")
-@click.argument("name")
+@click.argument("name", type=TemplateType())
 def templates_edit(name):
     "Edit the specified prompt template using the default $EDITOR"
     # First ensure it exists
@@ -3045,7 +3081,8 @@ def uninstall(packages, yes):
     help="File to embed",
 )
 @click.option(
-    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL",
+    shell_complete=complete_embedding_model
 )
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
@@ -3189,7 +3226,8 @@ def embed(
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option(
-    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL",
+    shell_complete=complete_embedding_model
 )
 @click.option(
     "--prepend",
