@@ -520,6 +520,59 @@ def test_tool_errors(async_):
     ) in log_text_result.output
 
 
+def test_schema_propagates_through_tool_chain():
+    """Test that schema is propagated through tool chains."""
+    model = llm.get_model("echo")
+    model.supports_schema = True
+
+    def get_dog() -> str:
+        return "Cleo is 10 years old"
+
+    dog_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "get_dog"}]}),
+        tools=[get_dog],
+        schema=dog_schema,
+    )
+    _ = chain_response.text()
+
+    assert len(chain_response._responses) == 2
+    first, second = chain_response._responses
+    assert first.prompt.schema == dog_schema
+    assert second.prompt.schema == dog_schema
+
+
+@pytest.mark.asyncio
+async def test_schema_propagates_through_tool_chain_async():
+    """Test schema propagation through tool chains for async models."""
+    model = llm.get_async_model("echo")
+    model.supports_schema = True
+
+    async def get_dog() -> str:
+        return "Cleo is 10 years old"
+
+    dog_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "get_dog"}]}),
+        tools=[get_dog],
+        schema=dog_schema,
+    )
+    _ = await chain_response.text()
+
+    assert len(chain_response._responses) == 2
+    first, second = chain_response._responses
+    assert first.prompt.schema == dog_schema
+    assert second.prompt.schema == dog_schema
+
+
 def test_chain_sync_cancel_only_first_of_two():
     model = llm.get_model("echo")
 
