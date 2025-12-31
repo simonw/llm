@@ -528,7 +528,10 @@ def test_schema_propagates_through_tool_chain():
     def get_dog() -> str:
         return "Cleo is 10 years old"
 
-    dog_schema = {"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}
+    dog_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
 
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "get_dog"}]}),
@@ -552,7 +555,10 @@ async def test_schema_propagates_through_tool_chain_async():
     async def get_dog() -> str:
         return "Cleo is 10 years old"
 
-    dog_schema = {"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}
+    dog_schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    }
 
     chain_response = model.chain(
         json.dumps({"tool_calls": [{"name": "get_dog"}]}),
