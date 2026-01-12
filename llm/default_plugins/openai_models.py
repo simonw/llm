@@ -680,6 +680,12 @@ class _Shared:
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
 
+    def _headers_include_auth(self):
+        """Check if custom headers include an authorization header (case-insensitive)."""
+        if not self.headers:
+            return False
+        return any(key.lower() == "authorization" for key in self.headers)
+
     def get_client(self, key, *, async_=False):
         kwargs = {}
         if self.api_base:
@@ -692,9 +698,10 @@ class _Shared:
             kwargs["engine"] = self.api_engine
         if self.needs_key:
             kwargs["api_key"] = self.get_key(key)
-        else:
+        elif not self._headers_include_auth():
             # OpenAI-compatible models don't need a key, but the
-            # openai client library requires one
+            # openai client library requires one - unless custom
+            # headers already provide authorization
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["default_headers"] = self.headers

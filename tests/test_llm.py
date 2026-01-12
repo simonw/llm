@@ -431,6 +431,44 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+EXTRA_MODELS_YAML_WITH_AUTH = """
+- model_id: custom-auth-model
+  model_name: my-model
+  api_base: "http://custom-auth.localhost"
+  headers:
+    authorization: "Basic dXNlcjpwYXNzd29yZA=="
+"""
+
+
+def test_openai_custom_auth_headers(httpx_mock, user_path):
+    """Test that custom authorization headers are used instead of DUMMY_KEY."""
+    httpx_mock.add_response(
+        method="POST",
+        url="http://custom-auth.localhost/chat/completions",
+        json={
+            "model": "my-model",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+            "choices": [{"message": {"content": "Authenticated response"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    # Write the configuration file with custom auth header
+    config_path = user_path / "extra-openai-models.yaml"
+    config_path.write_text(EXTRA_MODELS_YAML_WITH_AUTH, "utf-8")
+    # Run the prompt
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-stream", "--model", "custom-auth-model", "test prompt"]
+    )
+    assert result.exit_code == 0
+    assert result.output == "Authenticated response\n"
+    # Check that the custom authorization header was sent, not DUMMY_KEY
+    last_request = httpx_mock.get_requests()[-1]
+    auth_header = last_request.headers.get("authorization")
+    assert auth_header == "Basic dXNlcjpwYXNzd29yZA=="
+    assert "Bearer DUMMY_KEY" not in str(last_request.headers)
+
+
 @pytest.mark.parametrize(
     "args,exit_code",
     (
