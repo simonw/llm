@@ -1,7 +1,7 @@
 """
 Tests for llm/responses.py - OpenResponses API client implementation.
 
-Using TDD approach: these tests are written first, then implementation follows.
+Tests for the OpenResponses API client.
 """
 
 import json
@@ -9,7 +9,6 @@ import pytest
 from unittest.mock import MagicMock
 from pytest_httpx import IteratorStream
 
-# These imports will fail until we implement the module
 from llm.responses import (
     # Pydantic models
     ResponseResource,
@@ -17,14 +16,11 @@ from llm.responses import (
     OutputItem,
     OutputTextContent,
     # Streaming events
-    ResponseStreamEvent,
     ResponseCreatedEvent,
     ResponseCompletedEvent,
     ResponseOutputTextDeltaEvent,
     ResponseFunctionCallArgumentsDeltaEvent,
     ResponseFunctionCallArgumentsDoneEvent,
-    ResponseOutputItemAddedEvent,
-    ResponseOutputItemDoneEvent,
     # Error classes
     ResponsesAPIError,
     ResponsesAuthenticationError,
@@ -38,9 +34,7 @@ from llm.responses import (
 )
 
 
-# ============================================================================
 # Test fixtures
-# ============================================================================
 
 
 @pytest.fixture
@@ -244,9 +238,7 @@ def make_sse_stream(events):
         yield f"data: {json.dumps(event)}\n\n".encode("utf-8")
 
 
-# ============================================================================
 # Test Pydantic Models
-# ============================================================================
 
 
 class TestPydanticModels:
@@ -315,9 +307,7 @@ class TestPydanticModels:
         assert response.usage.output_tokens == 5
 
 
-# ============================================================================
 # Test Streaming Event Models
-# ============================================================================
 
 
 class TestStreamingEvents:
@@ -369,9 +359,7 @@ class TestStreamingEvents:
         assert isinstance(event, ResponseCompletedEvent)
 
 
-# ============================================================================
 # Test Function Call Events
-# ============================================================================
 
 
 class TestFunctionCallEvents:
@@ -405,9 +393,7 @@ class TestFunctionCallEvents:
         assert event.arguments == '{"name": "test"}'
 
 
-# ============================================================================
 # Test Error Classes
-# ============================================================================
 
 
 class TestErrorClasses:
@@ -438,9 +424,7 @@ class TestErrorClasses:
         assert error.status_code == 400
 
 
-# ============================================================================
 # Test Sync Model
-# ============================================================================
 
 
 class TestResponsesModel:
@@ -501,7 +485,15 @@ class TestResponsesModel:
         mock_response.response_json = None
 
         # Execute
-        chunks = list(model.execute(prompt, stream=False, response=mock_response, conversation=None, key="test-key"))
+        chunks = list(
+            model.execute(
+                prompt,
+                stream=False,
+                response=mock_response,
+                conversation=None,
+                key="test-key",
+            )
+        )
 
         assert chunks == ["Hello, world!"]
 
@@ -520,7 +512,15 @@ class TestResponsesModel:
         mock_response = MagicMock()
         mock_response.response_json = None
 
-        chunks = list(model.execute(prompt, stream=True, response=mock_response, conversation=None, key="test-key"))
+        chunks = list(
+            model.execute(
+                prompt,
+                stream=True,
+                response=mock_response,
+                conversation=None,
+                key="test-key",
+            )
+        )
 
         # Should yield the text deltas
         assert chunks == ["Hello", ", world!"]
@@ -540,7 +540,15 @@ class TestResponsesModel:
         mock_response = MagicMock()
         mock_response.response_json = None
 
-        list(model.execute(prompt, stream=False, response=mock_response, conversation=None, key="test-key"))
+        list(
+            model.execute(
+                prompt,
+                stream=False,
+                response=mock_response,
+                conversation=None,
+                key="test-key",
+            )
+        )
 
         # Check that set_usage was called
         mock_response.set_usage.assert_called()
@@ -552,7 +560,9 @@ class TestResponsesModel:
             method="POST",
             url="https://api.openai.com/v1/responses",
             status_code=401,
-            json={"error": {"message": "Invalid API key", "type": "authentication_error"}},
+            json={
+                "error": {"message": "Invalid API key", "type": "authentication_error"}
+            },
             headers={"Content-Type": "application/json"},
         )
         return httpx_mock
@@ -572,12 +582,18 @@ class TestResponsesModel:
         mock_response = MagicMock()
 
         with pytest.raises(ResponsesAuthenticationError):
-            list(model.execute(prompt, stream=False, response=mock_response, conversation=None, key="bad-key"))
+            list(
+                model.execute(
+                    prompt,
+                    stream=False,
+                    response=mock_response,
+                    conversation=None,
+                    key="bad-key",
+                )
+            )
 
 
-# ============================================================================
 # Test Async Model
-# ============================================================================
 
 
 class TestAsyncResponsesModel:
@@ -616,7 +632,9 @@ class TestAsyncResponsesModel:
         return httpx_mock
 
     @pytest.mark.asyncio
-    async def test_async_execute_non_streaming(self, mocked_async_non_streaming_response):
+    async def test_async_execute_non_streaming(
+        self, mocked_async_non_streaming_response
+    ):
         """Test async non-streaming execution."""
         model = AsyncResponsesModel(model_id="gpt-4o")
 
@@ -632,7 +650,13 @@ class TestAsyncResponsesModel:
         mock_response.response_json = None
 
         chunks = []
-        async for chunk in model.execute(prompt, stream=False, response=mock_response, conversation=None, key="test-key"):
+        async for chunk in model.execute(
+            prompt,
+            stream=False,
+            response=mock_response,
+            conversation=None,
+            key="test-key",
+        ):
             chunks.append(chunk)
 
         assert chunks == ["Hello, world!"]
@@ -654,15 +678,19 @@ class TestAsyncResponsesModel:
         mock_response.response_json = None
 
         chunks = []
-        async for chunk in model.execute(prompt, stream=True, response=mock_response, conversation=None, key="test-key"):
+        async for chunk in model.execute(
+            prompt,
+            stream=True,
+            response=mock_response,
+            conversation=None,
+            key="test-key",
+        ):
             chunks.append(chunk)
 
         assert chunks == ["Hello", ", world!"]
 
 
-# ============================================================================
 # Test Tool Calls
-# ============================================================================
 
 
 class TestToolCalls:
@@ -851,7 +879,15 @@ class TestToolCalls:
         mock_response.response_json = None
 
         # Consume all chunks
-        chunks = list(model.execute(prompt, stream=True, response=mock_response, conversation=None, key="test-key"))
+        chunks = list(
+            model.execute(
+                prompt,
+                stream=True,
+                response=mock_response,
+                conversation=None,
+                key="test-key",
+            )
+        )
 
         # Tool calls don't yield text, so chunks should be empty
         assert chunks == []
@@ -860,9 +896,7 @@ class TestToolCalls:
         mock_response.add_tool_call.assert_called()
 
 
-# ============================================================================
 # Test Options
-# ============================================================================
 
 
 class TestModelOptions:
@@ -887,9 +921,7 @@ class TestModelOptions:
         assert options.top_p == 0.9
 
 
-# ============================================================================
 # Test Conversation/Multi-turn
-# ============================================================================
 
 
 class TestConversation:
@@ -914,9 +946,7 @@ class TestConversation:
         assert input_items[0]["role"] == "user"
 
 
-# ============================================================================
 # Test SSE Parser
-# ============================================================================
 
 
 class TestSSEParser:

@@ -16,18 +16,21 @@ from typing import (
     List,
     Optional,
     Union,
+    cast,
 )
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm import AsyncKeyModel, KeyModel, Prompt
-from llm.models import AsyncConversation, AsyncResponse, Conversation, Response, _Options
-
-
-# ============================================================================
-# Error Classes
-# ============================================================================
+from llm.models import (
+    AsyncConversation,
+    AsyncResponse,
+    Conversation,
+    Response,
+    ToolCall,
+    _Options,
+)
 
 
 class ResponsesAPIError(Exception):
@@ -59,11 +62,6 @@ class ResponsesInvalidRequestError(ResponsesAPIError):
         super().__init__(message, status_code=400)
 
 
-# ============================================================================
-# Pydantic Models - Usage
-# ============================================================================
-
-
 class InputTokensDetails(BaseModel):
     """Details about input token usage."""
 
@@ -86,11 +84,6 @@ class Usage(BaseModel):
     output_tokens_details: Optional[OutputTokensDetails] = None
 
 
-# ============================================================================
-# Pydantic Models - Content
-# ============================================================================
-
-
 class OutputTextContent(BaseModel):
     """Text content in an output message."""
 
@@ -110,11 +103,6 @@ class FunctionCallContent(BaseModel):
     arguments: str = ""
 
 
-# ============================================================================
-# Pydantic Models - Output Items
-# ============================================================================
-
-
 class OutputItem(BaseModel):
     """An output item from the model (message or function call)."""
 
@@ -125,15 +113,9 @@ class OutputItem(BaseModel):
     status: Optional[str] = None
     role: Optional[str] = None
     content: Optional[List[Any]] = None
-    # For function calls
     call_id: Optional[str] = None
     name: Optional[str] = None
     arguments: Optional[str] = None
-
-
-# ============================================================================
-# Pydantic Models - Text Format
-# ============================================================================
 
 
 class TextFormat(BaseModel):
@@ -148,11 +130,6 @@ class TextField(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     format: Optional[TextFormat] = None
-
-
-# ============================================================================
-# Pydantic Models - Response Resource
-# ============================================================================
 
 
 class ResponseResource(BaseModel):
@@ -199,11 +176,6 @@ class ResponseResource(BaseModel):
     prompt_cache_retention: Optional[str] = None
     conversation: Optional[Any] = None
     billing: Optional[Any] = None
-
-
-# ============================================================================
-# Pydantic Models - Streaming Events
-# ============================================================================
 
 
 class ResponseStreamEvent(BaseModel):
@@ -320,12 +292,6 @@ class ResponseFunctionCallArgumentsDoneEvent(ResponseStreamEvent):
     arguments: str
 
 
-# ============================================================================
-# SSE Parser
-# ============================================================================
-
-
-# Map event types to their Pydantic models
 EVENT_TYPE_MAP = {
     "response.created": ResponseCreatedEvent,
     "response.in_progress": ResponseInProgressEvent,
@@ -357,36 +323,25 @@ def parse_sse_event(line: str) -> Optional[ResponseStreamEvent]:
     """
     line = line.strip()
 
-    # Empty lines
     if not line:
         return None
 
-    # Comment lines
     if line.startswith(":"):
         return None
 
-    # Data lines
     if line.startswith("data:"):
         data = line[5:].strip()
 
-        # [DONE] marker
         if data == "[DONE]":
             return None
 
-        # Parse JSON
         event_data = json.loads(data)
         event_type = event_data.get("type", "")
 
-        # Get the appropriate event class
         event_class = EVENT_TYPE_MAP.get(event_type, ResponseStreamEvent)
         return event_class(**event_data)
 
     return None
-
-
-# ============================================================================
-# Model Options
-# ============================================================================
 
 
 class ResponsesOptions(_Options):
@@ -423,23 +378,14 @@ class ResponsesOptions(_Options):
     )
 
 
-# ============================================================================
-# Shared Implementation
-# ============================================================================
-
-
 class _SharedResponses:
     """Shared implementation for sync and async responses models."""
 
     model_id: str
     api_base: str
-    needs_key: str = "openresponses"
-    key_env_var: str = "OPENRESPONSES_API_KEY"
     can_stream: bool = True
     supports_schema: bool = False
     supports_tools: bool = True
-
-    Options = ResponsesOptions
 
     def __init__(
         self,
@@ -466,74 +412,90 @@ class _SharedResponses:
             "stream": stream,
         }
 
-        # Build input from prompt
         input_items = []
 
-        # Add system message if present
         if prompt.system:
-            input_items.append({
-                "type": "message",
-                "role": "developer",
-                "content": [{"type": "input_text", "text": prompt.system}],
-            })
+            input_items.append(
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [{"type": "input_text", "text": prompt.system}],
+                }
+            )
 
-        # Add conversation history if present
         if conversation is not None:
             for prev_response in conversation.responses:
-                # Add user message
                 if prev_response.prompt.prompt:
-                    input_items.append({
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": prev_response.prompt.prompt}],
-                    })
-                # Add assistant response
-                response_text = prev_response.text()
+                    input_items.append(
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": prev_response.prompt.prompt,
+                                }
+                            ],
+                        }
+                    )
+                resp = cast(Response, prev_response)
+                response_text = resp.text()
                 if response_text:
-                    input_items.append({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": response_text}],
-                    })
+                    input_items.append(
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": response_text}],
+                        }
+                    )
 
-        # Add current user message
         if prompt.prompt:
-            input_items.append({
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": prompt.prompt}],
-            })
+            input_items.append(
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt.prompt}],
+                }
+            )
 
         if input_items:
             body["input"] = input_items
 
-        # Add options
         options = prompt.options
         if options:
             if hasattr(options, "temperature") and options.temperature is not None:
                 body["temperature"] = options.temperature
-            if hasattr(options, "max_output_tokens") and options.max_output_tokens is not None:
+            if (
+                hasattr(options, "max_output_tokens")
+                and options.max_output_tokens is not None
+            ):
                 body["max_output_tokens"] = options.max_output_tokens
             if hasattr(options, "top_p") and options.top_p is not None:
                 body["top_p"] = options.top_p
-            if hasattr(options, "frequency_penalty") and options.frequency_penalty is not None:
+            if (
+                hasattr(options, "frequency_penalty")
+                and options.frequency_penalty is not None
+            ):
                 body["frequency_penalty"] = options.frequency_penalty
-            if hasattr(options, "presence_penalty") and options.presence_penalty is not None:
+            if (
+                hasattr(options, "presence_penalty")
+                and options.presence_penalty is not None
+            ):
                 body["presence_penalty"] = options.presence_penalty
 
-        # Add tools if present
         if prompt.tools:
             tools = []
             for tool in prompt.tools:
-                tools.append({
-                    "type": "function",
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                })
+                tools.append(
+                    {
+                        "type": "function",
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.input_schema,
+                    }
+                )
             body["tools"] = tools
 
-        # Add schema if present (for structured output)
         if prompt.schema:
             schema_dict = prompt.schema
             if hasattr(prompt.schema, "model_json_schema"):
@@ -559,26 +521,25 @@ class _SharedResponses:
             role = msg.get("role", "user")
             content = msg.get("content", "")
 
-            # Map roles
             if role == "system":
                 role = "developer"
-            elif role == "assistant":
-                content_type = "output_text"
-            else:
-                content_type = "input_text"
 
             if role == "assistant":
-                input_items.append({
-                    "type": "message",
-                    "role": role,
-                    "content": [{"type": "output_text", "text": content}],
-                })
+                input_items.append(
+                    {
+                        "type": "message",
+                        "role": role,
+                        "content": [{"type": "output_text", "text": content}],
+                    }
+                )
             else:
-                input_items.append({
-                    "type": "message",
-                    "role": role,
-                    "content": [{"type": "input_text", "text": content}],
-                })
+                input_items.append(
+                    {
+                        "type": "message",
+                        "role": role,
+                        "content": [{"type": "input_text", "text": content}],
+                    }
+                )
 
         return input_items
 
@@ -612,14 +573,19 @@ class _SharedResponses:
         for output_item in response_resource.output:
             if output_item.type == "message" and output_item.content:
                 for content in output_item.content:
-                    if isinstance(content, dict) and content.get("type") == "output_text":
+                    if (
+                        isinstance(content, dict)
+                        and content.get("type") == "output_text"
+                    ):
                         text_parts.append(content.get("text", ""))
                     elif hasattr(content, "type") and content.type == "output_text":
                         text_parts.append(content.text)
         return "".join(text_parts)
 
     def _set_usage_from_response(
-        self, response: Union[Response, AsyncResponse], response_resource: ResponseResource
+        self,
+        response: Union[Response, AsyncResponse],
+        response_resource: ResponseResource,
     ) -> None:
         """Set usage information on the llm response object."""
         if response_resource.usage:
@@ -629,25 +595,29 @@ class _SharedResponses:
             )
 
     def _extract_tool_calls_from_response(
-        self, response: Union[Response, AsyncResponse], response_resource: ResponseResource
+        self,
+        response: Union[Response, AsyncResponse],
+        response_resource: ResponseResource,
     ) -> None:
         """Extract and add tool calls from response resource."""
         for output_item in response_resource.output:
             if output_item.type == "function_call":
-                response.add_tool_call(
-                    name=output_item.name,
+                tool_call = ToolCall(
+                    name=output_item.name or "",
                     arguments=json.loads(output_item.arguments or "{}"),
                     tool_call_id=output_item.call_id,
                 )
-
-
-# ============================================================================
-# Sync Model
-# ============================================================================
+                response.add_tool_call(tool_call)
 
 
 class ResponsesModel(_SharedResponses, KeyModel):
     """Synchronous model for OpenResponses API."""
+
+    needs_key = "openresponses"
+    key_env_var = "OPENRESPONSES_API_KEY"
+
+    class Options(ResponsesOptions):
+        pass
 
     def execute(
         self,
@@ -657,20 +627,10 @@ class ResponsesModel(_SharedResponses, KeyModel):
         conversation: Optional[Conversation],
         key: Optional[str] = None,
     ) -> Iterator[str]:
-        """
-        Execute the model and yield text chunks.
-
-        Args:
-            prompt: The prompt to send to the model.
-            stream: Whether to stream the response.
-            response: The llm Response object to populate.
-            conversation: Optional conversation for context.
-            key: API key to use.
-
-        Yields:
-            Text chunks from the model response.
-        """
+        """Execute the model and yield text chunks."""
         api_key = key or self.key or self.get_key(key)
+        if not api_key:
+            raise ResponsesAuthenticationError("No API key provided")
         body = self._build_request_body(prompt, stream, conversation)
         headers = self._get_headers(api_key)
         url = f"{self.api_base}/responses"
@@ -679,7 +639,9 @@ class ResponsesModel(_SharedResponses, KeyModel):
             if stream:
                 yield from self._execute_streaming(client, url, headers, body, response)
             else:
-                yield from self._execute_non_streaming(client, url, headers, body, response)
+                yield from self._execute_non_streaming(
+                    client, url, headers, body, response
+                )
 
     def _execute_non_streaming(
         self,
@@ -698,13 +660,9 @@ class ResponsesModel(_SharedResponses, KeyModel):
         response_resource = ResponseResource(**http_response.json())
         response.response_json = http_response.json()
 
-        # Set usage
         self._set_usage_from_response(response, response_resource)
-
-        # Extract tool calls
         self._extract_tool_calls_from_response(response, response_resource)
 
-        # Yield the complete text
         text = self._extract_text_from_response(response_resource)
         if text:
             yield text
@@ -720,7 +678,6 @@ class ResponsesModel(_SharedResponses, KeyModel):
         """Execute streaming request."""
         with client.stream("POST", url, headers=headers, json=body) as http_response:
             if http_response.status_code != 200:
-                # Read the full response for error handling
                 http_response.read()
                 self._handle_error_response(http_response)
 
@@ -732,24 +689,23 @@ class ResponsesModel(_SharedResponses, KeyModel):
                 if event is None:
                     continue
 
-                # Handle text delta events
                 if isinstance(event, ResponseOutputTextDeltaEvent):
                     yield event.delta
 
-                # Handle completed event - extract usage and tool calls
                 elif isinstance(event, ResponseCompletedEvent):
                     response.response_json = event.response.model_dump()
                     self._set_usage_from_response(response, event.response)
                     self._extract_tool_calls_from_response(response, event.response)
 
 
-# ============================================================================
-# Async Model
-# ============================================================================
-
-
 class AsyncResponsesModel(_SharedResponses, AsyncKeyModel):
     """Asynchronous model for OpenResponses API."""
+
+    needs_key = "openresponses"
+    key_env_var = "OPENRESPONSES_API_KEY"
+
+    class Options(ResponsesOptions):
+        pass
 
     async def execute(
         self,
@@ -759,30 +715,24 @@ class AsyncResponsesModel(_SharedResponses, AsyncKeyModel):
         conversation: Optional[AsyncConversation],
         key: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        """
-        Execute the model and yield text chunks asynchronously.
-
-        Args:
-            prompt: The prompt to send to the model.
-            stream: Whether to stream the response.
-            response: The llm AsyncResponse object to populate.
-            conversation: Optional conversation for context.
-            key: API key to use.
-
-        Yields:
-            Text chunks from the model response.
-        """
+        """Execute the model and yield text chunks asynchronously."""
         api_key = key or self.key or self.get_key(key)
+        if not api_key:
+            raise ResponsesAuthenticationError("No API key provided")
         body = self._build_request_body(prompt, stream, conversation)
         headers = self._get_headers(api_key)
         url = f"{self.api_base}/responses"
 
         async with httpx.AsyncClient() as client:
             if stream:
-                async for chunk in self._execute_streaming_async(client, url, headers, body, response):
+                async for chunk in self._execute_streaming_async(
+                    client, url, headers, body, response
+                ):
                     yield chunk
             else:
-                async for chunk in self._execute_non_streaming_async(client, url, headers, body, response):
+                async for chunk in self._execute_non_streaming_async(
+                    client, url, headers, body, response
+                ):
                     yield chunk
 
     async def _execute_non_streaming_async(
@@ -802,13 +752,9 @@ class AsyncResponsesModel(_SharedResponses, AsyncKeyModel):
         response_resource = ResponseResource(**http_response.json())
         response.response_json = http_response.json()
 
-        # Set usage
         self._set_usage_from_response(response, response_resource)
-
-        # Extract tool calls
         self._extract_tool_calls_from_response(response, response_resource)
 
-        # Yield the complete text
         text = self._extract_text_from_response(response_resource)
         if text:
             yield text
@@ -822,7 +768,9 @@ class AsyncResponsesModel(_SharedResponses, AsyncKeyModel):
         response: AsyncResponse,
     ) -> AsyncGenerator[str, None]:
         """Execute streaming request asynchronously."""
-        async with client.stream("POST", url, headers=headers, json=body) as http_response:
+        async with client.stream(
+            "POST", url, headers=headers, json=body
+        ) as http_response:
             if http_response.status_code != 200:
                 await http_response.aread()
                 self._handle_error_response(http_response)
@@ -835,11 +783,9 @@ class AsyncResponsesModel(_SharedResponses, AsyncKeyModel):
                 if event is None:
                     continue
 
-                # Handle text delta events
                 if isinstance(event, ResponseOutputTextDeltaEvent):
                     yield event.delta
 
-                # Handle completed event - extract usage and tool calls
                 elif isinstance(event, ResponseCompletedEvent):
                     response.response_json = event.response.model_dump()
                     self._set_usage_from_response(response, event.response)
