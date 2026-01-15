@@ -384,18 +384,20 @@ class _SharedResponses:
     model_id: str
     api_base: str
     can_stream: bool = True
-    supports_schema: bool = False
-    supports_tools: bool = True
 
     def __init__(
         self,
         model_id: str,
         api_base: Optional[str] = None,
         key: Optional[str] = None,
+        supports_schema: bool = False,
+        supports_tools: bool = True,
     ):
         self.model_id = model_id
         self.api_base = api_base or "https://api.openai.com/v1"
         self.key = key
+        self.supports_schema = supports_schema
+        self.supports_tools = supports_tools
 
     def __str__(self) -> str:
         return f"OpenResponses: {self.model_id}"
