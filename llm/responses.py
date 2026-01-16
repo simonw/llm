@@ -450,6 +450,37 @@ class _SharedResponses:
                             "content": [{"type": "output_text", "text": response_text}],
                         }
                     )
+                # Add tool calls from assistant's response
+                tool_calls = resp.tool_calls()
+                if tool_calls:
+                    for tool_call in tool_calls:
+                        input_items.append(
+                            {
+                                "type": "function_call",
+                                "call_id": tool_call.tool_call_id,
+                                "name": tool_call.name,
+                                "arguments": json.dumps(tool_call.arguments),
+                            }
+                        )
+                # Add tool results for this response's tool calls
+                for tool_result in prev_response.prompt.tool_results:
+                    input_items.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": tool_result.tool_call_id,
+                            "output": tool_result.output,
+                        }
+                    )
+
+        # Add tool results from current prompt (for chain continuation)
+        for tool_result in prompt.tool_results:
+            input_items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": tool_result.tool_call_id,
+                    "output": tool_result.output,
+                }
+            )
 
         if prompt.prompt:
             input_items.append(
