@@ -3,6 +3,7 @@ import pytest
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
+    mimetype_from_path,
     maybe_fenced_code,
     schema_dsl,
     simplify_usage_dict,
@@ -10,6 +11,7 @@ from llm.utils import (
     monotonic_ulid,
 )
 from llm import get_key, Toolbox
+import llm.utils as utils_module
 
 
 @pytest.mark.parametrize(
@@ -516,3 +518,35 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_mimetype_from_path_fallback_on_empty_string(tmp_path, monkeypatch):
+    path = tmp_path / "video.mp4"
+    path.write_bytes(b"not really a video")
+    monkeypatch.setattr(utils_module.puremagic, "from_file", lambda *args, **kwargs: "")
+    assert mimetype_from_path(str(path)) == "video/mp4"
+
+
+def test_mimetype_from_path_fallback_on_puremagic_error(tmp_path, monkeypatch):
+    path = tmp_path / "image.jpg"
+    path.write_bytes(b"not really an image")
+
+    def raise_pureerror(*args, **kwargs):
+        raise utils_module.puremagic.PureError("no match")
+
+    monkeypatch.setattr(utils_module.puremagic, "from_file", raise_pureerror)
+    assert mimetype_from_path(str(path)) == "image/jpeg"
+
+
+def test_mimetype_from_path_fallback_normalizes_wav(tmp_path, monkeypatch):
+    path = tmp_path / "audio.wav"
+    path.write_bytes(b"not really audio")
+    monkeypatch.setattr(utils_module.puremagic, "from_file", lambda *args, **kwargs: "")
+    assert mimetype_from_path(str(path)) == "audio/wav"
+
+
+def test_mimetype_from_path_returns_none_if_no_detection(tmp_path, monkeypatch):
+    path = tmp_path / "no_extension"
+    path.write_bytes(b"unknown data")
+    monkeypatch.setattr(utils_module.puremagic, "from_file", lambda *args, **kwargs: "")
+    assert mimetype_from_path(str(path)) is None
