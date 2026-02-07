@@ -413,6 +413,57 @@ def test_execute_prompt_from_template_path():
         }
 
 
+@pytest.mark.parametrize(
+    "template,extra_args,expected",
+    (
+        (
+            "prompt: hi",
+            ["--xl"],
+            "second code",
+        ),
+        (
+            "extract_last: true\nprompt: hi",
+            [],
+            "second code",
+        ),
+        (
+            "extract_last: true\nprompt: hi",
+            ["--extract"],
+            "first code",
+        ),
+    ),
+)
+def test_template_extract_precedence(template, extra_args, expected, httpx_mock, templates_path):
+    (templates_path / "template.yaml").write_text(template, "utf-8")
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            "Start\n```text\nfirst code\n```\n"
+                            "Middle\n```python\nsecond code\n```\nEnd"
+                        )
+                    }
+                }
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "-t", "template"] + extra_args,
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.strip() == expected
+
+
 FUNCTIONS_EXAMPLE = """
 def greet(name: str) -> str:
     return f"Hello, {name}!"
