@@ -3,6 +3,7 @@ import hashlib
 import httpx
 import itertools
 import json
+import mimetypes
 import pathlib
 import puremagic
 import re
@@ -46,9 +47,13 @@ def mimetype_from_string(content) -> Optional[str]:
 def mimetype_from_path(path) -> Optional[str]:
     try:
         type_ = puremagic.from_file(path, mime=True)
-        return MIME_TYPE_FIXES.get(type_, type_)
+        if type_:
+            return MIME_TYPE_FIXES.get(type_, type_)
     except puremagic.PureError:
-        return None
+        pass
+    # Fall back to mimetypes for common extensions
+    mime_type, _ = mimetypes.guess_type(str(path))
+    return mime_type
 
 
 def dicts_to_table_string(
