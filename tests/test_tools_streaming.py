@@ -10,7 +10,7 @@ API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 # This response contains streaming variant "a" where arguments="" is followed by arguments="{}"
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_a():
-    model = llm.get_model("gpt-4.1-mini")
+    model = llm.get_model("openai/chat/gpt-4.1-mini")
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
@@ -20,7 +20,7 @@ def test_tools_streaming_variant_a():
 # This response contains streaming variant "b" where arguments="{}" is the first partial stream received.
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_b():
-    model = llm.get_model("gpt-4.1-mini")
+    model = llm.get_model("openai/chat/gpt-4.1-mini")
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
@@ -30,7 +30,7 @@ def test_tools_streaming_variant_b():
 # This response contains streaming variant "c".
 @pytest.mark.vcr(record_mode="none")
 def test_tools_streaming_variant_c():
-    model = llm.get_model("gpt-4.1-mini")
+    model = llm.get_model("openai/chat/gpt-4.1-mini")
     chain = model.chain(
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )

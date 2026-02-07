@@ -59,7 +59,7 @@ def test_openai_options_min_max():
         assert f"less than or equal to {max_val}" in result2.output
 
 
-@pytest.mark.parametrize("model", ("gpt-4o-mini", "gpt-4o-audio-preview"))
+@pytest.mark.parametrize("model", ("openai/chat/gpt-4o-mini", "openai/chat/gpt-4o-audio-preview"))
 @pytest.mark.parametrize("filetype", ("mp3", "wav"))
 def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
     httpx_mock.add_response(
@@ -68,7 +68,7 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
         content=b"binary-data",
         headers={"Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wav"},
     )
-    if model == "gpt-4o-audio-preview":
+    if model == "openai/chat/gpt-4o-audio-preview":
         httpx_mock.add_response(
             method="POST",
             # chat completion request
@@ -132,7 +132,7 @@ def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
             "x",
         ],
     )
-    if model == "gpt-4o-audio-preview":
+    if model == "openai/chat/gpt-4o-audio-preview":
         assert result.exit_code == 0
         assert result.output == (
             "Why did the pelican get kicked out of the restaurant?\n\n"
@@ -183,7 +183,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
         headers={"Content-Type": "application/json"},
     )
     runner = CliRunner(mix_stderr=False)
-    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    args = ["-m", "openai/chat/gpt-4o-mini", "--key", "x", "--no-stream"]
     if usage:
         args.append(usage)
     if async_:

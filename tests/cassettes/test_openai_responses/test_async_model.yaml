@@ -1,0 +1,181 @@
+interactions:
+- request:
+    body: '{"input":[{"role":"user","content":"say hi"}],"model":"gpt-4o-mini","stream":true}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '82'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - AsyncOpenAI/Python 1.67.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.67.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.10.10
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: 'event: response.created
+
+        data: {"type":"response.created","response":{"id":"resp_67ddb77750c481919ca87c7abd4025850d846bec87ec5d75","object":"response","created_at":1742583671,"status":"in_progress","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.in_progress
+
+        data: {"type":"response.in_progress","response":{"id":"resp_67ddb77750c481919ca87c7abd4025850d846bec87ec5d75","object":"response","created_at":1742583671,"status":"in_progress","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.output_item.added
+
+        data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","status":"in_progress","role":"assistant","content":[]}}
+
+
+        event: response.content_part.added
+
+        data: {"type":"response.content_part.added","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"Hi"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        there"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"!"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        How"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        can"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        I"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        assist"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        you"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"
+        today"}
+
+
+        event: response.output_text.delta
+
+        data: {"type":"response.output_text.delta","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"delta":"?"}
+
+
+        event: response.output_text.done
+
+        data: {"type":"response.output_text.done","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"text":"Hi
+        there! How can I assist you today?"}
+
+
+        event: response.content_part.done
+
+        data: {"type":"response.content_part.done","item_id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","output_index":0,"content_index":0,"part":{"type":"output_text","text":"Hi
+        there! How can I assist you today?","annotations":[]}}
+
+
+        event: response.output_item.done
+
+        data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hi
+        there! How can I assist you today?","annotations":[]}]}}
+
+
+        event: response.completed
+
+        data: {"type":"response.completed","response":{"id":"resp_67ddb77750c481919ca87c7abd4025850d846bec87ec5d75","object":"response","created_at":1742583671,"status":"completed","error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt-4o-mini-2024-07-18","output":[{"type":"message","id":"msg_67ddb777b5d08191a4fc02c7b35057780d846bec87ec5d75","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hi
+        there! How can I assist you today?","annotations":[]}]}],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"generate_summary":null},"store":true,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":27,"input_tokens_details":{"cached_tokens":0},"output_tokens":11,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":38},"user":null,"metadata":{}}}
+
+
+        '
+    headers:
+      CF-RAY:
+      - 923fb2494a442ebd-LAX
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Fri, 21 Mar 2025 19:01:11 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=GV5ydCEY8eCLtfQ56c1Oks0ICg0Mzna8ln7XmmoqIhc-1742583671-1.0.1.1-ZIfFznPT2XKN2f1Bw15xi_sh6R_gTSQt40lgtc9fc6ylzgnL8ZMTHHU6mmDopPPjLivD.MfoGjDGaL98KYjYtVRCiZUfGYy_DjVoJoKpQAE;
+        path=/; expires=Fri, 21-Mar-25 19:31:11 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=PGfWaBDdDZZpDRFVPsKYLFLtJf8ciDb71uQduDSkxkk-1742583671406-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '58'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_661bfed9400364120284e2cdbd0717a7
+    status:
+      code: 200
+      message: OK
+version: 1

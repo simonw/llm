@@ -27,7 +27,7 @@ def test_llm_prompt_creates_log_database(
     custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     runner = CliRunner()
-    args = ["three names \nfor a pet pelican", "--no-stream", "--key", "x"]
+    args = ["-m", "openai/chat/gpt-4o-mini", "three names \nfor a pet pelican", "--no-stream", "--key", "x"]
     if custom_database_path:
         args.extend(["--database", str(custom_db_path)])
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -79,7 +79,7 @@ def test_llm_default_prompt(
     runner = CliRunner()
     prompt = "three names \nfor a pet pelican"
     input = None
-    args = ["--no-stream"]
+    args = ["-m", "openai/chat/gpt-4o-mini", "--no-stream"]
     if use_stdin == "split":
         input = "three names"
         args.append("\nfor a pet pelican")
@@ -103,7 +103,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     expected = {
-        "model": "gpt-4o-mini",
+        "model": "openai/chat/gpt-4o-mini",
         "prompt": "three names \nfor a pet pelican",
         "system": None,
         "options_json": "{}",
@@ -131,7 +131,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-4o-mini",
+            "model": "openai/chat/gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             "prompt_json": {
@@ -147,7 +147,7 @@ def test_llm_default_prompt(
             },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-4o-mini",
+            "conversation_model": "openai/chat/gpt-4o-mini",
         }.items()
     )
 
@@ -182,7 +182,7 @@ def test_llm_prompt_continue(httpx_mock, user_path, async_):
 
     # First prompt
     runner = CliRunner()
-    args = ["three names \nfor a pet pelican", "--no-stream"] + (
+    args = ["-m", "openai/chat/gpt-4o-mini", "three names \nfor a pet pelican", "--no-stream"] + (
         ["--async"] if async_ else []
     )
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -194,7 +194,7 @@ def test_llm_prompt_continue(httpx_mock, user_path, async_):
     assert len(rows) == 1
 
     # Now ask a follow-up
-    args2 = ["one more", "-c", "--no-stream"] + (["--async"] if async_ else [])
+    args2 = ["-m", "openai/chat/gpt-4o-mini", "one more", "-c", "--no-stream"] + (["--async"] if async_ else [])
     result2 = runner.invoke(cli, args2, catch_exceptions=False)
     assert result2.exit_code == 0, result2.output
     assert result2.output == "Terry\n"
@@ -220,7 +220,7 @@ def test_extract_fenced_code(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["-m", "gpt-4o-mini", "--key", "x", "Write code"] + args,
+        ["-m", "openai/chat/gpt-4o-mini", "--key", "x", "Write code"] + args,
         catch_exceptions=False,
     )
     output = result.output
@@ -232,7 +232,7 @@ def test_extract_fenced_code(
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
+    result = runner.invoke(cli, ["-m", "openai/chat/gpt-3.5-turbo", "--key", "x", "Say hi"])
     assert result.exit_code == 0
     assert result.output == "Hi.\n"
 
@@ -246,7 +246,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "openai/chat/gpt-3.5-turbo-instruct",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -270,7 +270,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
     rows = list(log_db["responses"].rows)
     assert len(rows) == 1
     expected = {
-        "model": "gpt-3.5-turbo-instruct",
+        "model": "openai/chat/gpt-3.5-turbo-instruct",
         "prompt": "Say this is a test",
         "system": None,
         "prompt_json": '{"messages": ["Say this is a test"]}',
@@ -287,7 +287,7 @@ def test_openai_completion_system_prompt_error():
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "openai/chat/gpt-3.5-turbo-instruct",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -311,7 +311,7 @@ def test_openai_completion_logprobs_stream(
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "openai/chat/gpt-3.5-turbo-instruct",
         "Say hi",
         "-o",
         "logprobs",
@@ -349,7 +349,7 @@ def test_openai_completion_logprobs_nostream(
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "openai/chat/gpt-3.5-turbo-instruct",
         "Say hi",
         "-o",
         "logprobs",
@@ -495,7 +495,7 @@ def test_llm_models_options(user_path):
     result = runner.invoke(cli, ["models", "--options"], catch_exceptions=False)
     assert result.exit_code == 0
     # Check for key components instead of exact string match
-    assert "OpenAI Chat: gpt-4o (aliases: 4o)" in result.output
+    assert "OpenAI: openai/gpt-4o (aliases: gpt-4o, 4o)" in result.output
     assert "  Options:" in result.output
     assert "    temperature: float" in result.output
     assert "  Keys:" in result.output
@@ -514,18 +514,18 @@ def test_llm_models_async(user_path):
 @pytest.mark.parametrize(
     "args,expected_model_ids,unexpected_model_ids",
     (
-        (["-q", "gpt-4o"], ["OpenAI Chat: gpt-4o"], None),
+        (["-q", "gpt-4o"], ["OpenAI: openai/gpt-4o"], None),
         (["-q", "mock"], ["MockModel: mock"], None),
         (["--query", "mock"], ["MockModel: mock"], None),
         (
             ["-q", "4o", "-q", "mini"],
-            ["OpenAI Chat: gpt-4o-mini"],
-            ["OpenAI Chat: gpt-4o "],
+            ["OpenAI: openai/gpt-4o-mini"],
+            ["OpenAI: openai/gpt-4o ("],
         ),
         (
             ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
-            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
-            ["OpenAI Chat: gpt-4o "],
+            ["OpenAI: openai/gpt-4o-mini", "OpenAI: openai/gpt-4.5-preview"],
+            ["OpenAI: openai/gpt-4o ("],
         ),
     ),
 )
@@ -556,18 +556,18 @@ def test_model_defaults(tmpdir, monkeypatch):
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
     assert llm.get_default_model() == "gpt-4o-mini"
-    assert llm.get_model().model_id == "gpt-4o-mini"
+    assert llm.get_model().model_id == "openai/gpt-4o-mini"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
-    assert llm.get_model().model_id == "gpt-4o"
+    assert llm.get_model().model_id == "openai/gpt-4o"
 
 
 def test_get_models():
     models = llm.get_models()
     assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
     model_ids = [model.model_id for model in models]
-    assert "gpt-4o-mini" in model_ids
+    assert "openai/gpt-4o-mini" in model_ids
     # Ensure no model_ids are duplicated
     # https://github.com/simonw/llm/issues/667
     assert len(model_ids) == len(set(model_ids))
@@ -579,7 +579,7 @@ def test_get_async_models():
         isinstance(model, (llm.AsyncModel, llm.AsyncKeyModel)) for model in models
     )
     model_ids = [model.model_id for model in models]
-    assert "gpt-4o-mini" in model_ids
+    assert "openai/gpt-4o-mini" in model_ids
 
 
 def test_mock_model(mock_model):
@@ -830,7 +830,7 @@ def test_llm_prompt_continue_with_database(
 
     # First prompt
     runner = CliRunner()
-    args = ["three names \nfor a pet pelican", "--no-stream"]
+    args = ["-m", "openai/chat/gpt-4o-mini", "three names \nfor a pet pelican", "--no-stream"]
     if custom_database_path:
         args.extend(["--database", str(custom_db_path)])
     result = runner.invoke(cli, args, catch_exceptions=False)
@@ -838,7 +838,7 @@ def test_llm_prompt_continue_with_database(
     assert result.output == "Bob, Alice, Eve\n"
 
     # Now ask a follow-up
-    args2 = ["one more", "-c", "--no-stream"]
+    args2 = ["-m", "openai/chat/gpt-4o-mini", "one more", "-c", "--no-stream"]
     if custom_database_path:
         args2.extend(["--database", str(custom_db_path)])
     result2 = runner.invoke(cli, args2, catch_exceptions=False)

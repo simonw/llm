@@ -1,0 +1,34 @@
+# serializer version: 1
+# name: test_async_model
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_async_model_schema
+  dict({
+    'age': 5,
+    'bio': 'Barkley is a playful and friendly Golden Retriever mix with a love for adventure. He enjoys playing fetch at the park, splashing in lakes, and cuddling on the couch after a long day of exploring. With a fluffy coat and a wagging tail, Barkley brings joy to everyone he meets.',
+    'name': 'Barkley',
+  })
+# ---
+# name: test_options[options0]
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_options[options1]
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_options[options2]
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_options[options3]
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_options[options4]
+  'Hi there! How can I assist you today?'
+# ---
+# name: test_tools
+  '''
+  I called simple_tool with 5; it returned:
+  "This is a simple tool, 5"
+  
+  Anything else you’d like me to run or change?
+  '''
+# ---
