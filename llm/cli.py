@@ -1249,10 +1249,17 @@ def load_conversation(
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
-        # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
-        if matches:
-            conversation_id = matches[0]["id"]
+        # Return the conversation with the most recent response
+        result = db.execute(
+            """
+            SELECT c.id FROM conversations c
+            JOIN responses r ON c.id = r.conversation_id
+            ORDER BY r.datetime_utc DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if result:
+            conversation_id = result[0]
         else:
             return None
     try:
