@@ -1,7 +1,7 @@
 (contributing)=
 # Contributing
 
-To contribute to this tool, first checkout the code. Then run the tests with `uv run`:
+To contribute to this tool, first checkout the code. Then run the tests with `uv run` (see {ref}`uv` for more details on using `uv`):
 ```bash
 cd llm
 uv run pytest

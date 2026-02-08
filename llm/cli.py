@@ -73,6 +73,7 @@ import re
 import readline
 from runpy import run_module
 import shutil
+import subprocess
 import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
@@ -514,6 +515,13 @@ def cli(ctx, http_logging, http_debug, no_color):
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "render",
+    "--render",
+    help="Render output through a markdown formatter (e.g. glow, bat)",
+    envvar="LLM_RENDER",
+    default=None,
+)
 def prompt(
     prompt,
     system,
@@ -545,6 +553,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    render,
 ):
     """
     Execute a prompt
@@ -887,10 +896,14 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
+                    chunks = []
                     async for chunk in response:
                         print(chunk, end="")
                         sys.stdout.flush()
+                        chunks.append(chunk)
                     print("")
+                    if render:
+                        _render_output("".join(chunks), renderer=render)
                 else:
                     response = prompt_method(
                         prompt,
@@ -906,7 +919,11 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
-                    print(text)
+                    if render:
+                        print(text)
+                        _render_output(text, renderer=render)
+                    else:
+                        print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -921,15 +938,23 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
+                chunks = []
                 for chunk in response:
                     print(chunk, end="")
                     sys.stdout.flush()
+                    chunks.append(chunk)
                 print("")
+                if render:
+                    _render_output("".join(chunks), renderer=render)
             else:
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+                if render:
+                    print(text)
+                    _render_output(text, renderer=render)
+                else:
+                    print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -1057,6 +1082,13 @@ def prompt(
     default=5,
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
+@click.option(
+    "render",
+    "--render",
+    help="Render output through a markdown formatter (e.g. glow, bat)",
+    envvar="LLM_RENDER",
+    default=None,
+)
 def chat(
     system,
     model_id,
@@ -1075,6 +1107,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    render,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1272,11 +1305,15 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
+        chunks = []
         for chunk in response:
             print(chunk, end="")
             sys.stdout.flush()
+            chunks.append(chunk)
         response.log_to_db(db)
         print("")
+        if render:
+            _render_output("".join(chunks), renderer=render)
 
 
 def load_conversation(
@@ -4077,6 +4114,63 @@ def _gather_tools(
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
     return tools
+
+
+def _render_output(text, renderer=None):
+    """
+    Clear raw streamed text from terminal and re-print through a markdown renderer.
+    Only acts when stdout is a TTY and a renderer is available.
+    """
+    if not sys.stdout.isatty():
+        return
+
+    renderer = renderer or os.environ.get("LLM_RENDER", "").strip()
+    if not renderer:
+        return
+
+    renderer_cmd = renderer.split()[0]
+    renderer_path = shutil.which(renderer_cmd)
+    if not renderer_path:
+        return
+
+    term_width = shutil.get_terminal_size().columns or 80
+
+    # Count approximate lines to clear (terminal-width aware)
+    line_count = 0
+    for line in text.split("\n"):
+        line_count += max(1, -(-len(line) // term_width))  # ceil division
+
+    # Move cursor up and clear everything below
+    sys.stdout.write(f"\033[{line_count}F\033[J")
+    sys.stdout.flush()
+
+    # Build renderer command with forced color flags
+    # (subprocess pipes stdout, so renderers detect non-TTY and strip ANSI by default)
+    if renderer_cmd == "glow":
+        cmd = ["glow", "-w", str(term_width), "-s", "dark"]
+    elif renderer_cmd == "bat":
+        cmd = [
+            "bat",
+            "--color=always",
+            "--wrap",
+            "auto",
+            "--paging=never",
+            "--style=plain",
+            "-l",
+            "md",
+        ]
+    else:
+        cmd = renderer.split()
+
+    env = os.environ.copy()
+    env["CLICOLOR_FORCE"] = "1"
+
+    result = subprocess.run(cmd, input=text, capture_output=True, text=True, env=env)
+    if result.returncode == 0:
+        print(result.stdout, end="")
+    else:
+        # Fallback: reprint raw text if renderer fails
+        print(text, end="")
 
 
 def _get_conversation_tools(conversation, tools):

@@ -1,3 +1,4 @@
+import ast
 import click
 import hashlib
 import httpx
@@ -153,13 +154,119 @@ def logging_client() -> httpx.Client:
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
+def _log_request_tui(request: httpx.Request):
+    """Log request details to llm.http logger for TUI display."""
+    logger = logging.getLogger("llm.http")
+    if logger.isEnabledFor(logging.DEBUG):
+        # Generate request ID for correlation and start timing
+        request_id = _get_request_id()
+        _start_request_timer(request_id)
+
+        # Format as a special marker that HTTPColorFormatter can parse
+        data = {
+            "request_id": request_id,
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers)
+        }
+        logger.debug(f"TUI Request: {json.dumps(data)}")
+
+def tui_logging_client() -> httpx.Client:
+    return httpx.Client(
+        event_hooks={"request": [_log_request_tui]}
+    )
+    
+async def _log_request_tui_async(request: httpx.Request):
+    _log_request_tui(request)
+
+def async_tui_logging_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        event_hooks={"request": [_log_request_tui_async]}
+    )
+
+
 
 # --- Universal HTTP Logging System ---
+
+# Thread-local storage for request timing correlation
+_request_context = threading.local()
+
+
+def _get_request_id() -> str:
+    """Generate a short request ID for correlation."""
+    if not hasattr(_request_context, 'counter'):
+        _request_context.counter = 0
+    _request_context.counter += 1
+    return f"req-{_request_context.counter:03d}"
+
+
+def _start_request_timer(request_id: str) -> None:
+    """Record start time for a request."""
+    if not hasattr(_request_context, 'timings'):
+        _request_context.timings = {}
+    _request_context.timings[request_id] = time.time()
+
+
+def _get_request_elapsed(request_id: str) -> Optional[float]:
+    """Get elapsed time in milliseconds for a request."""
+    if not hasattr(_request_context, 'timings'):
+        return None
+    start = _request_context.timings.get(request_id)
+    if start is None:
+        return None
+    elapsed_ms = (time.time() - start) * 1000
+    # Clean up old timing
+    del _request_context.timings[request_id]
+    return elapsed_ms
+
+
+class SafeHTTPCoreFilter(logging.Filter):
+    def filter(self, record):
+        message = record.getMessage()
+
+        # Suppress openai's "Sending HTTP Request" (redundant with Request options)
+        if (
+            record.name == "openai._base_client"
+            and message.startswith("Sending HTTP Request")
+        ):
+            return False
+
+        # Suppress httpx response logs - OpenAI SDK logs them better
+        if record.name.startswith("httpx") and "HTTP Request:" in message:
+            return False
+
+        if record.name.startswith("httpcore"):
+            # Suppress body events
+            if "request_body" in message or "response_body" in message:
+                return False
+
+            # Suppress response headers from httpcore - OpenAI SDK logs them better
+            # with summary line highlighting important headers
+            if "receive_response_headers" in message:
+                return False
+
+            # Suppress .complete events (redundant), except for:
+            # - response_closed.complete (marks end of stream)
+            if ".complete" in message:
+                if "response_closed.complete" in message:
+                    return True
+                return False
+
+            # Suppress response_closed.started
+            if "response_closed.started" in message:
+                return False
+
+        return True
 
 
 class HTTPColorFormatter(logging.Formatter):
     """
     Custom formatter for HTTP logging with colors and improved readability.
+    Features:
+    - Distinct visual separation between log entries
+    - Clear directional indicators for Requests (➔) and Responses (←)
+    - Syntax highlighting for JSON bodies and headers
+    - Connection lifecycle tracking
     """
 
     # ANSI color codes
@@ -172,6 +279,12 @@ class HTTPColorFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset
         "BOLD": "\033[1m",  # Bold
         "DIM": "\033[2m",  # Dim
+        "BLUE": "\033[34m",
+        "CYAN": "\033[36m",
+        "GREEN": "\033[32m",
+        "MAGENTA": "\033[35m",
+        "YELLOW": "\033[33m",
+        "WHITE": "\033[37m",
     }
 
     # Logger-specific colors
@@ -183,6 +296,13 @@ class HTTPColorFormatter(logging.Formatter):
         "llm.http": "\033[96m",  # Light cyan
     }
 
+    # Box drawing characters
+    BOX = {
+        "tl": "╭", "tr": "╮", "bl": "╰", "br": "╯",
+        "h": "─", "v": "│",
+        "vr": "├", "vl": "┤", "ht": "┬", "hb": "┴",
+    }
+
     def __init__(self, use_colors=True):
         super().__init__()
         self.use_colors = use_colors and self._supports_color()
@@ -192,16 +312,12 @@ class HTTPColorFormatter(logging.Formatter):
         import os
         import sys
 
-        # Check if we're in a terminal that supports colors
         if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
-            # Check common environment variables
             term = os.environ.get("TERM", "")
             if "color" in term or term in ("xterm", "xterm-256color", "screen", "tmux"):
                 return True
-            # Check for NO_COLOR environment variable
             if os.environ.get("NO_COLOR"):
                 return False
-            # Default to True for most terminals
             return True
         return False
 
@@ -209,91 +325,504 @@ class HTTPColorFormatter(logging.Formatter):
         if not self.use_colors:
             return self._format_plain(record)
 
-        # Get colors
-        level_color = self.COLORS.get(record.levelname, "")
-        logger_color = self.LOGGER_COLORS.get(record.name.split(".")[0], "")
-        reset = self.COLORS["RESET"]
-        bold = self.COLORS["BOLD"]
-        dim = self.COLORS["DIM"]
+        header = self._format_header(record, colored=True)
+        body = self._structured_message(record, colored=True)
+        
+        if not body:
+            return header
+            
+        # Add visual separation for major events
+        prefix = "\n" if self._is_major_event(record) else ""
+        return f"{prefix}{header}\n{body}"
 
-        # Format timestamp
-        timestamp = self.formatTime(record, "%H:%M:%S")
-
-        # Format logger name with color
-        logger_name = record.name
-        if logger_color:
-            logger_name = f"{logger_color}{logger_name}{reset}"
-
-        # Format level with color
-        level = record.levelname
-        if level_color:
-            level = f"{level_color}{bold}{level}{reset}"
-
-        # Format message with special handling for HTTP-specific content
-        message = record.getMessage()
-        message = self._colorize_message(message, record.name)
-
-        # Assemble final format
-        return f"{dim}[{timestamp}]{reset} {level} {logger_name} - {message}"
+    def _is_major_event(self, record):
+        """Determine if this record warrants a preceding newline."""
+        msg = record.getMessage()
+        return any(x in msg for x in [
+            "Request:", "Response:", "HTTP Request:", 
+            "Connect Tcp", "Start Tls", "HTTP Transaction"
+        ])
 
     def _format_plain(self, record):
         """Plain formatting without colors."""
-        timestamp = self.formatTime(record, "%H:%M:%S")
-        return f"[{timestamp}] {record.levelname} {record.name} - {record.getMessage()}"
+        header = self._format_header(record, colored=False)
+        body = self._structured_message(record, colored=False)
+        return f"{header}\n{body}" if body else header
 
     def _colorize_message(self, message, logger_name):
-        """Add color highlights to HTTP-specific message content."""
+        """Add color highlights to generic message content."""
         if not self.use_colors:
             return message
-
-        reset = self.COLORS["RESET"]
-
-        # Highlight HTTP methods
-        for method in ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]:
-            message = message.replace(
-                f" {method} ", f' {self.COLORS["BOLD"]}{method}{reset} '
-            )
-
-        # Highlight HTTP status codes
-        import re
-
-        # Success status codes (2xx) - green
-        message = re.sub(r"\b(2\d\d)\b", f'{self.COLORS["DEBUG"]}\\1{reset}', message)
-
-        # Client error status codes (4xx) - yellow
-        message = re.sub(r"\b(4\d\d)\b", f'{self.COLORS["WARNING"]}\\1{reset}', message)
-
-        # Server error status codes (5xx) - red
-        message = re.sub(r"\b(5\d\d)\b", f'{self.COLORS["ERROR"]}\\1{reset}', message)
-
-        # Highlight URLs
-        message = re.sub(
-            r'(https?://[^\s"]+)', f'{self.COLORS["DIM"]}\\1{reset}', message
-        )
-
-        # Highlight important headers
-        for header in ["Authorization", "Content-Type", "User-Agent"]:
-            message = message.replace(
-                f"'{header}'", f"'{self.COLORS['BOLD']}{header}{reset}'"
-            )
-            message = message.replace(
-                f'"{header}"', f'"{self.COLORS["BOLD"]}{header}{reset}"'
-            )
-
-        # Highlight connection events for httpcore
-        if "httpcore" in logger_name:
-            for event in [
-                "connect_tcp",
-                "start_tls",
-                "send_request",
-                "receive_response",
-            ]:
-                if event in message:
-                    message = message.replace(
-                        event, f'{self.COLORS["BOLD"]}{event}{reset}'
-                    )
-
+        # Basic highlighting for unstructured messages
         return message
+
+    def _format_header(self, record, *, colored: bool) -> str:
+        timestamp = self.formatTime(record, "%H:%M:%S")
+        timestamp = f"{timestamp}.{int(record.msecs):03d}"
+        logger_root = record.name.split(".")[0]
+
+        if colored:
+            reset = self.COLORS["RESET"]
+            dim = self.COLORS["DIM"]
+            logger_color = self.LOGGER_COLORS.get(logger_root, dim)
+            
+            # Minimalist header: [time] logger
+            return f"{dim}[{timestamp}]{reset} {logger_color}{record.name}{reset}"
+
+        return f"[{timestamp}] {record.name}"
+
+    def _structured_message(self, record, *, colored: bool) -> str:
+        message = record.getMessage()
+
+        if message.startswith("TUI Request:"):
+            return self._format_tui_request(message, colored)
+
+        if record.name.startswith("openai"):
+            rendered = self._format_openai_message(message, colored)
+            if rendered is not None:
+                return rendered
+
+        if record.name.startswith("httpx"):
+            rendered = self._format_httpx_message(message, colored)
+            if rendered is not None:
+                return rendered
+
+        if record.name.startswith("httpcore"):
+            rendered = self._format_httpcore_message(message, colored)
+            if rendered is not None:
+                return rendered
+
+        # Fallback for other messages
+        if message.strip():
+            return textwrap.indent(message, "  ")
+        return ""
+
+    def _format_tui_request(self, message: str, colored: bool) -> str:
+        try:
+            _, _, json_str = message.partition("TUI Request: ")
+            data = json.loads(json_str)
+
+            request_id = data.get("request_id", "")
+            method = data.get("method", "GET")
+            url = data.get("url", "")
+            headers = data.get("headers", {})
+
+            # Build title with request ID
+            if colored:
+                id_part = f"{self.COLORS['DIM']}[{request_id}]{self.COLORS['RESET']} " if request_id else ""
+                title = f"{id_part}{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
+            else:
+                id_part = f"[{request_id}] " if request_id else ""
+                title = f"{id_part}{method} {url}"
+
+            # Build content with headers section
+            lines = []
+            lines.append(self._format_section_title("Headers", colored))
+            lines.append(self._format_mapping(headers, colored, indent="  "))
+
+            content = "\n".join(lines)
+            return self._draw_box(f"➔ REQUEST {title}", content, self.COLORS["BLUE"])
+        except Exception:
+            return message
+
+    def _draw_box(self, title, content, color):
+        if not self.use_colors:
+            return f"{title}\n{content}"
+            
+        lines = content.splitlines()
+        # Calculate width (ignoring ansi codes for length)
+        def len_no_ansi(s):
+            return len(re.sub(r'\033\[[0-9;]*m', '', s))
+            
+        max_len = 0
+        for line in lines:
+            max_len = max(max_len, len_no_ansi(line))
+        
+        title_len = len_no_ansi(title)
+        # Min width 60, max 120? Or just fit content
+        width = max(max_len + 4, title_len + 6, 60)
+        
+        b = self.BOX
+        c = color
+        r = self.COLORS["RESET"]
+        
+        # Top border with title
+        # ╭─ Title ───╮
+        
+        dash_len = width - 2 - title_len - 2 
+        left_dash = 2
+        right_dash = dash_len - left_dash
+        if right_dash < 0: right_dash = 0
+        
+        top = f"{c}{b['tl']}{b['h']*left_dash} {r}{title} {c}{b['h']*right_dash}{b['tr']}{r}"
+        bottom = f"{c}{b['bl']}{b['h']*(width-2)}{b['br']}{r}"
+        
+        boxed = [top]
+        for line in lines:
+            # Pad
+            l_len = len_no_ansi(line)
+            pad = width - 2 - l_len - 1 
+            boxed.append(f"{c}{b['v']}{r} {line}{' ' * pad}{c}{b['v']}{r}")
+            
+        boxed.append(bottom)
+        return "\n".join(boxed)
+
+    def _format_openai_message(self, message: str, colored: bool) -> Optional[str]:
+        if message.startswith("Sending HTTP Request"):
+            return ""
+
+        prefix, sep, payload = message.partition(": ")
+        if not sep:
+            # Handle single word messages
+            if message.startswith("request_id:"):
+                key, _, value = message.partition(":")
+                return self._kv_line("Request ID", value.strip(), colored)
+            if message.startswith("Tool call:"):
+                return self._format_tool_call(message, colored)
+            return None
+
+        if prefix == "Request options":
+            data = self._parse_literal(payload)
+            if isinstance(data, dict):
+                return self._format_openai_request(data, colored)
+            return textwrap.indent(payload, "  ")
+
+        if prefix == "HTTP Response":
+            return self._format_openai_response(payload, colored)
+
+        if prefix == "Tool call":
+            return self._format_tool_call(payload, colored)
+
+        return None
+
+    def _format_openai_request(self, data: Dict[str, Any], colored: bool) -> str:
+        lines: List[str] = []
+        method = data.get("method", "GET")
+        url = data.get("url", "")
+        
+        # Title for the box
+        title = f"{method} {url}"
+        if colored:
+             title = f"{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
+
+        # Headers
+        headers = data.get("headers")
+        if headers:
+            lines.append(self._format_section_title("Headers", colored))
+            lines.append(self._format_mapping(headers, colored, indent="  "))
+            lines.append("") # Spacer
+
+        # Body
+        body = data.get("json_data") or data.get("data")
+        if body is not None:
+            lines.append(self._format_section_title("Payload", colored))
+            lines.append(self._format_json(body, colored, indent="  "))
+            lines.append("")
+
+        # Options (timeout, etc)
+        meta_keys = ["stream", "stream_options", "tools", "files", "timeout"]
+        misc = {k: data.get(k) for k in meta_keys if data.get(k) is not None}
+        if misc:
+            lines.append(self._format_section_title("Options", colored))
+            lines.append(self._format_json(misc, colored, indent="  "))
+
+        content = "\n".join(lines).rstrip()
+        return self._draw_box(title, content, self.COLORS["BLUE"])
+
+    def _format_openai_response(self, payload: str, colored: bool) -> Optional[str]:
+        payload = payload.strip()
+
+        # Extract headers if present
+        headers_literal = None
+        if " Headers(" in payload:
+            front, _, tail = payload.partition(" Headers(")
+            payload = front.strip()
+            headers_literal = tail.rsplit(")", 1)[0]
+
+        # Parse status line
+        method = url = status = None
+        match = re.match(r"(\w+)\s+([^\s]+)\s+\"([^\"]+)\"", payload)
+        if match:
+            method, url, status = match.groups()
+
+        lines: List[str] = []
+
+        # Determine color based on status code
+        color = self.COLORS["GREEN"]
+        status_icon = "✓"
+        if status:
+            code = status.split()[0] if status else ""
+            if code.startswith("3"):
+                color = self.COLORS["BLUE"]
+                status_icon = "→"
+            elif code.startswith("4"):
+                color = self.COLORS["YELLOW"]
+                status_icon = "⚠"
+            elif code.startswith("5"):
+                color = self.COLORS["RED"]
+                status_icon = "✗"
+
+        # Build title with status icon
+        if colored and status:
+            title = f"{color}{status_icon}{self.COLORS['RESET']} {self.COLORS['BOLD']}{status}{self.COLORS['RESET']}"
+            if method and url:
+                title += f" {self.COLORS['DIM']}({method} {url}){self.COLORS['RESET']}"
+        else:
+            title = f"{status_icon} {status}" if status else "Response"
+            if method and url:
+                title += f" ({method} {url})"
+
+        # Headers - extract important ones for summary
+        headers_list = (
+            self._parse_literal(headers_literal)
+            if headers_literal is not None
+            else None
+        )
+        if headers_list:
+            # Show key response headers prominently
+            headers_dict = {}
+            for item in headers_list:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    k = item[0].decode('utf-8') if isinstance(item[0], bytes) else str(item[0])
+                    v = item[1].decode('utf-8') if isinstance(item[1], bytes) else str(item[1])
+                    headers_dict[k] = v
+
+            # Highlight important headers
+            important_keys = ['x-request-id', 'openai-processing-ms', 'x-ratelimit-remaining-requests']
+            summary_parts = []
+            for key in important_keys:
+                if key in headers_dict:
+                    if colored:
+                        summary_parts.append(f"{self.COLORS['DIM']}{key}:{self.COLORS['RESET']} {headers_dict[key]}")
+                    else:
+                        summary_parts.append(f"{key}: {headers_dict[key]}")
+
+            if summary_parts:
+                lines.append("  " + " | ".join(summary_parts))
+                lines.append("")
+
+            lines.append(self._format_section_title("Headers", colored))
+            lines.append(self._format_headers_list(headers_list, colored, indent="  "))
+
+        content = "\n".join(lines)
+        return self._draw_box(f"← RESPONSE {title}", content, color)
+
+    def _format_httpx_message(self, message: str, colored: bool) -> Optional[str]:
+        message = message.strip()
+        if message.startswith("HTTP Request:"):
+            # httpx logs "HTTP Request: METHOD URL 'protocol' status"
+            _, _, rest = message.partition(":")
+            rest = rest.strip()
+            match = re.match(r"(\w+)\s+([^\s]+)\s+\"([^\"]+)\"", rest)
+            
+            if match:
+                method, url, protocol_status = match.groups()
+                # protocol_status might be "HTTP/1.1 200 OK"
+                protocol_parts = protocol_status.split()
+                if len(protocol_parts) > 1 and protocol_parts[0].startswith("HTTP"):
+                    # It's a response-like line (status included)
+                    status = " ".join(protocol_parts[1:])
+                    return self._format_response_line(status, method, url, colored)
+                else:
+                    # It's a request-like line
+                    return self._format_request_line(method, url, colored)
+            
+            return f"  {rest}"
+
+        return None
+
+    def _format_httpcore_message(self, message: str, colored: bool) -> Optional[str]:
+        message = message.strip()
+        event, _, rest = message.partition(" ")
+        
+        # 1. Filter Noise & Redundant Events
+        
+        # Suppress body events entirely
+        if "request_body" in event or "response_body" in event:
+            return ""
+
+        # Suppress .complete events generally (we prefer .started for most things)
+        # BUT keep receive_response_headers.complete (it has the data)
+        # AND keep response_closed.complete (it marks the end)
+        if event.endswith(".complete"):
+            if "receive_response_headers" not in event and "response_closed" not in event:
+                return ""
+
+        # Suppress receive_response_headers.started (wait for complete)
+        if event == "receive_response_headers.started":
+            return ""
+
+        # 2. End of Stream Marker
+        # Only show on complete to avoid duplicates
+        if "response_closed.complete" in event:
+            sep = "─" * 40
+            if colored:
+                return f"\n  {self.COLORS['DIM']}{sep}{self.COLORS['RESET']}\n  {self.COLORS['BOLD']}✨ Response Complete{self.COLORS['RESET']}\n  {self.COLORS['DIM']}{sep}{self.COLORS['RESET']}\n"
+            return f"\n  {sep}\n  Response Complete\n  {sep}\n"
+        
+        # Suppress response_closed.started
+        if "response_closed" in event:
+            return ""
+
+        # 3. Connection Events (Boxed)
+        # These are usually .started events or simple events
+        if "connect_tcp" in event or "start_tls" in event:
+            if event.endswith(".complete"): return "" # Double check suppression
+            
+            kv_dict = {}
+            for match in re.finditer(r"(\w+)=((?:<[^>]+>)|(?:'[^']*')|(?:[^,\s]+))", rest):
+                k, v = match.group(1), match.group(2).strip("'")
+                kv_dict[k] = v
+            
+            title = "Connection" if "connect" in event else "TLS Handshake"
+            details = []
+            for k, v in kv_dict.items():
+                if k in ("host", "port", "server_hostname", "local_address"):
+                    details.append(f"{k}: {v}")
+            
+            content = "\n".join(details)
+            return self._draw_box(f"⚡ {title}", content, self.COLORS["CYAN"])
+
+        # 4. Request Headers (Boxed)
+        if "send_request_headers" in event:
+            # This is .started, which is good
+            # Try to extract request details if present
+            content = "➔ Sending Request Headers"
+            match = re.search(r"request=<Request \[b'(\w+)'\]>", rest)
+            if match:
+                content = f"➔ Sending {match.group(1)} Request"
+
+            return self._draw_box("Request", content, self.COLORS["BLUE"])
+
+        return None
+
+    # --- Formatting Helpers ---
+
+    def _format_request_line(self, method, url, colored):
+        if colored:
+            bold = self.COLORS["BOLD"]
+            blue = self.COLORS["BLUE"]
+            reset = self.COLORS["RESET"]
+            return f"  {blue}{bold}➔ {method.upper()}{reset} {blue}{url}{reset}"
+        return f"  -> {method.upper()} {url}"
+
+    def _format_response_line(self, status, method, url, colored):
+        if colored:
+            bold = self.COLORS["BOLD"]
+            reset = self.COLORS["RESET"]
+
+            # Colorize status code with appropriate icon
+            code = status.split()[0]
+            color = self.COLORS["GREEN"]
+            icon = "✓"
+            if code.startswith("3"):
+                color = self.COLORS["BLUE"]
+                icon = "→"
+            elif code.startswith("4"):
+                color = self.COLORS["YELLOW"]
+                icon = "⚠"
+            elif code.startswith("5"):
+                color = self.COLORS["RED"]
+                icon = "✗"
+
+            meta = ""
+            if method and url:
+                meta = f" {self.COLORS['DIM']}({method} {url}){reset}"
+
+            return f"  {color}{bold}← {icon} {status}{reset}{meta}"
+        return f"  <- {status} ({method} {url})"
+
+    def _format_section_title(self, title, colored):
+        if colored:
+            return f"    {self.COLORS['DIM']}{title}:{self.COLORS['RESET']}"
+        return f"    {title}:"
+
+    def _kv_line(self, key, value, colored):
+        if colored:
+            return f"  {self.COLORS['DIM']}{key}:{self.COLORS['RESET']} {value}"
+        return f"  {key}: {value}"
+
+    def _format_mapping(self, mapping, colored, indent=""):
+        if not isinstance(mapping, dict):
+            return f"{indent}{str(mapping)}"
+
+        lines = []
+        for key, value in mapping.items():
+            # Show all headers including auth - useful for debugging which key is being used
+            k_str = f"{self.COLORS['DIM']}{key}{self.COLORS['RESET']}" if colored else key
+            lines.append(f"{indent}{k_str}: {value}")
+        return "\n".join(lines)
+
+    def _format_headers_list(self, headers, colored, indent=""):
+        if not isinstance(headers, (list, tuple)):
+            return ""
+        
+        # Convert list of tuples to dict for easier formatting (assuming unique keys for display)
+        d = {}
+        for item in headers:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                # Decode bytes if needed
+                k = item[0].decode('utf-8') if isinstance(item[0], bytes) else str(item[0])
+                v = item[1].decode('utf-8') if isinstance(item[1], bytes) else str(item[1])
+                d[k] = v
+        return self._format_mapping(d, colored, indent)
+
+    def _format_tool_call(self, payload: str, colored: bool) -> str:
+        payload = payload.strip()
+        if colored:
+            return f"  {self.COLORS['MAGENTA']}• Tool Call:{self.COLORS['RESET']} {payload}"
+        return f"  Tool Call: {payload}"
+
+    def _truncate_body(self, text: str, max_chars: int = 500) -> str:
+        """Truncate body text with indicator showing total length."""
+        if len(text) <= max_chars:
+            return text
+        return f"{text[:max_chars]}...\n[truncated, {len(text)} chars total]"
+
+    def _format_json(self, data: Any, colored: bool, indent: str = "", truncate: bool = True) -> str:
+        """Format JSON with optional colorization and truncation."""
+        try:
+            text = json.dumps(self._sanitize(data), indent=2, ensure_ascii=False)
+
+            # Apply truncation before colorization
+            if truncate:
+                text = self._truncate_body(text)
+
+            if colored:
+                # Colorize JSON
+                # Keys
+                text = re.sub(r'^\s*"([^"]+)":', f'  {self.COLORS["CYAN"]}"\\1"{self.COLORS["RESET"]}:', text, flags=re.MULTILINE)
+                # String values
+                text = re.sub(r': "([^"]*)"', f': {self.COLORS["GREEN"]}"\\1"{self.COLORS["RESET"]}', text)
+                # Numbers/Booleans/Null
+                text = re.sub(r': (true|false|null|[0-9\.]+)', f': {self.COLORS["YELLOW"]}\\1{self.COLORS["RESET"]}', text)
+
+            if indent:
+                return textwrap.indent(text, indent)
+            return text
+        except TypeError:
+            from pprint import pformat
+            text = pformat(self._sanitize(data), indent=2, compact=True)
+            if truncate:
+                text = self._truncate_body(text)
+            if indent:
+                return textwrap.indent(text, indent)
+            return text
+
+    def _sanitize(self, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: self._sanitize(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [self._sanitize(v) for v in data]
+        if isinstance(data, (bytes, bytearray)):
+            return data.decode(errors="replace")
+        return data
+
+    def _parse_literal(self, value: str):
+        try:
+            return ast.literal_eval(value)
+        except Exception:
+            return None
 
 
 def _get_http_logging_config():
@@ -359,6 +888,7 @@ def configure_http_logging():
     if not logging.getLogger().handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(formatter)
+        handler.addFilter(SafeHTTPCoreFilter())
         logging.getLogger().addHandler(handler)
         logging.getLogger().setLevel(logging.WARNING)  # Keep root logger quiet
 
@@ -367,11 +897,19 @@ def configure_http_logging():
 
     # Core HTTP libraries
     logging.getLogger("httpx").setLevel(log_level)
-    logging.getLogger("httpcore").setLevel(log_level)
+    
+    # Force httpcore to TRACE level (5) if DEBUG is enabled, to hopefully capture headers
+    if config["level"] == "DEBUG":
+        logging.getLogger("httpcore").setLevel(5)
+    else:
+        logging.getLogger("httpcore").setLevel(log_level)
 
     # Provider SDKs
     logging.getLogger("openai").setLevel(log_level)
     logging.getLogger("anthropic").setLevel(log_level)
+
+    # Our internal logger for TUI request tracking
+    logging.getLogger("llm.http").setLevel(log_level)
 
     # Additional useful loggers
     if config["level"] == "DEBUG":
@@ -383,15 +921,22 @@ def configure_http_logging():
     if config["level"] == "DEBUG":
         http_loggers.extend(["urllib3", "requests"])
 
-        # Replace NullHandlers with our custom handler
+    # Ensure each HTTP logger uses our formatter and has a useful handler
+    safe_filter = SafeHTTPCoreFilter()
+    for logger_name in http_loggers:
+        logger = logging.getLogger(logger_name)
+
         if all(isinstance(h, logging.NullHandler) for h in logger.handlers):
             logger.handlers.clear()
             handler = logging.StreamHandler()
             handler.setFormatter(formatter)
+            handler.addFilter(safe_filter)
             logger.addHandler(handler)
             logger.propagate = False
-            logger.addHandler(handler)
-            logger.propagate = False
+        else:
+            for handler in logger.handlers:
+                handler.setFormatter(formatter)
+                handler.addFilter(safe_filter)
 
     # Log that HTTP logging is enabled
     logging.getLogger("llm.http").info(

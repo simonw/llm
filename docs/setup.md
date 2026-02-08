@@ -10,7 +10,7 @@ Or using [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
-Or using [uv](https://docs.astral.sh/uv/guides/tools/) ({ref}`more tips below <setup-uvx>`):
+Or using [uv](https://docs.astral.sh/uv/guides/tools/) (see {ref}`using-uv` for more details):
 ```bash
 uv tool install llm
 ```
@@ -41,6 +41,11 @@ If the latest version is not yet available on Homebrew you can upgrade like this
 ```bash
 llm install -U llm
 ```
+
+(using-uv)=
+## Using uv
+
+For more detailed information on using LLM with `uv`, including how to manage plugins and use `uvx`, see {ref}`uv`.
 
 (setup-uvx)=
 ## Using uvx

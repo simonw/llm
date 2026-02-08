@@ -39,6 +39,7 @@ dependencies = [
     "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
+    "duckduckgo-search",
 ]
 
 [dependency-groups]
@@ -81,3 +82,9 @@ llm = "llm.cli:cli"
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
+
+[tool.setuptools.packages.find]
+exclude = ["tmp*", "node-net-dbg*"]

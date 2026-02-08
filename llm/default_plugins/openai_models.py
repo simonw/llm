@@ -14,6 +14,8 @@ from llm.utils import (
     dicts_to_table_string,
     remove_dict_none_values,
     logging_client,
+    tui_logging_client,
+    async_tui_logging_client,
     simplify_usage_dict,
 )
 import click
@@ -728,6 +730,11 @@ class _Shared:
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
+        elif os.environ.get("LLM_HTTP_DEBUG"):
+            if async_:
+                kwargs["http_client"] = async_tui_logging_client()
+            else:
+                kwargs["http_client"] = tui_logging_client()
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:

@@ -228,7 +228,8 @@ class TestHTTPLoggingIntegration:
             assert httpx_logger.level == logging.DEBUG
 
             httpcore_logger = logging.getLogger("httpcore")
-            assert httpcore_logger.level == logging.DEBUG
+            # We force httpcore to TRACE (5) when in DEBUG mode to capture headers
+            assert httpcore_logger.level == 5
 
 
 class TestHTTPLoggingDocumentation:

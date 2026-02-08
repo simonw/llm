@@ -35,7 +35,7 @@ Or with [pipx](https://pypa.github.io/pipx/):
 ```bash
 pipx install llm
 ```
-Or with [uv](https://docs.astral.sh/uv/guides/tools/)
+Or with [uv](https://docs.astral.sh/uv/guides/tools/) (see {ref}`uv` for more details)
 ```bash
 uv tool install llm
 ```
@@ -109,6 +109,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 maxdepth: 3
 ---
 setup
+uv
 usage
 openai-models
 other-models

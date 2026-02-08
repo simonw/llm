@@ -1,17 +1,19 @@
 # AGENTS.md
 
-This project uses a Python environment for development and tests.
+This project uses [uv](https://docs.astral.sh/uv/) for development and tests.
 
 ## Setting up a development environment
 
-1. Install the project with its test dependencies:
-   ```bash
-   pip install -e '.[test]'
-   ```
+1. Create a virtual environment and install dependencies:
+ ```bash
+ uv venv
+ source .venv/bin/activate
+ uv pip install -e '.[test]'
+ ```
 2. Run the tests:
-   ```bash
-   pytest
-   ```
+ ```bash
+ uv run pytest
+ ```
 
 ## Building the documentation
 
@@ -19,6 +21,5 @@ Run the following commands if you want to build the docs locally:
 
 ```bash
 cd docs
-pip install -r requirements.txt
-make html
+uv run make html
 ```
