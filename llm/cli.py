@@ -1399,6 +1399,30 @@ def backup(path):
         "Backed up {} to {}".format(_human_readable_size(path.stat().st_size), path)
     )
 
+@logs.command(name="clear")
+@click.argument("path")
+def clear(path):
+    "Clear the logs database"
+    logs_path = logs_db_path()
+    path = pathlib.Path(path)
+    db = sqlite_utils.Database(logs_path)
+    try:
+        db.execute("""
+PRAGMA foreign_keys = OFF;
+SELECT 'DELETE FROM ' || name || ';'
+    FROM sqlite_master
+    WHERE type='table'
+    AND name IN (
+        'attachments', 'conversations', 'prompt_attachments', 'responses',
+        'responses_fts', 'responses_fts_data', 'responses_fts_docsize', 'responses_fts_idx',
+        'tool_responses', 'tool_results', 'tool_results_attachments'
+    );
+PRAGMA foreign_keys = ON;
+VACUUM;
+""")
+    except Exception as ex:
+        raise click.ClickException(str(ex))
+    click.echo("Logs database has been cleared")
 
 @logs.command(name="on")
 def logs_turn_on():
