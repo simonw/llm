@@ -1,9 +1,13 @@
 import json
+import pathlib
 import pytest
+from unittest.mock import patch
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
+    mimetype_from_path,
+    mimetype_from_string,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
@@ -516,3 +520,60 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+class TestMimetypeFromPath:
+    def test_puremagic_returns_valid_type(self, tmp_path):
+        f = tmp_path / "image.png"
+        f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+        result = mimetype_from_path(str(f))
+        assert result == "image/png"
+
+    def test_puremagic_returns_empty_string_falls_back_to_mimetypes(self, tmp_path):
+        f = tmp_path / "video.mp4"
+        f.write_bytes(b"\x00" * 16)
+        with patch("puremagic.from_file", return_value=""):
+            result = mimetype_from_path(str(f))
+        assert result == "video/mp4"
+
+    def test_puremagic_raises_falls_back_to_mimetypes(self, tmp_path):
+        import mimetypes
+        import puremagic
+        f = tmp_path / "audio.wav"
+        f.write_bytes(b"\x00" * 16)
+        with patch("puremagic.from_file", side_effect=puremagic.PureError):
+            result = mimetype_from_path(str(f))
+        expected, _ = mimetypes.guess_type("audio.wav")
+        assert result == expected
+
+    def test_unknown_extension_returns_none(self, tmp_path):
+        f = tmp_path / "file.unknownxyz"
+        f.write_bytes(b"\x00" * 16)
+        with patch("puremagic.from_file", return_value=""):
+            result = mimetype_from_path(str(f))
+        assert result is None
+
+    def test_mime_type_fix_applied(self, tmp_path):
+        f = tmp_path / "sound.wav"
+        f.write_bytes(b"\x00" * 16)
+        with patch("puremagic.from_file", return_value="audio/wave"):
+            result = mimetype_from_path(str(f))
+        assert result == "audio/wav"
+
+
+class TestMimetypeFromString:
+    def test_puremagic_returns_valid_type(self):
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        result = mimetype_from_string(png_bytes)
+        assert result == "image/png"
+
+    def test_puremagic_returns_empty_string_returns_none(self):
+        with patch("puremagic.from_string", return_value=""):
+            result = mimetype_from_string(b"\x00" * 16)
+        assert result is None
+
+    def test_puremagic_raises_returns_none(self):
+        import puremagic
+        with patch("puremagic.from_string", side_effect=puremagic.PureError):
+            result = mimetype_from_string(b"\x00" * 16)
+        assert result is None
