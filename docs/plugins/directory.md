@@ -16,6 +16,8 @@ These plugins all help you run LLMs directly on your own computer:
 
 These plugins can be used to interact with remotely hosted models via their API:
 
+- **[llm-moonshot](https://github.com/ghostofpokemon/llm-moonshot)** adds support for remote models hosted by [Moonshot AI](https://moonshot.cn/), including Kimi.
+- **[llm-deepseek-xtreme](https://github.com/ghostofpokemon/llm-deepseek)** adds support for [DeepSeek](https://www.deepseek.com/) models, including reasoning variants.
 - **[llm-mistral](https://github.com/simonw/llm-mistral)** adds support for [Mistral AI](https://mistral.ai/)'s language and embedding models.
 - **[llm-gemini](https://github.com/simonw/llm-gemini)** adds support for Google's [Gemina]([https://developers.generativeai.google/](https://ai.google.dev/docs)) models.
 - **[llm-claude](https://github.com/tomviner/llm-claude)** by Tom Viner adds support for Claude and Claude Instant by Anthropic.
