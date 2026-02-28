@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from collections import deque
 from condense_json import condense_json
 from dataclasses import dataclass, field
 import datetime
@@ -1386,13 +1387,13 @@ class AsyncResponse(_BaseResponse):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
-            self._iter_chunks = list(self._chunks)  # Make a copy for iteration
+            self._iter_chunks = deque(self._chunks)  # Make a copy for iteration
         return self
 
     async def __anext__(self) -> str:
         if self._done:
             if hasattr(self, "_iter_chunks") and self._iter_chunks:
-                return self._iter_chunks.pop(0)
+                return self._iter_chunks.popleft()
             raise StopAsyncIteration
 
         if not hasattr(self, "_generator"):
