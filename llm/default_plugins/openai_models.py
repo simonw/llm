@@ -233,6 +233,25 @@ def register_models(register):
         )
         # "gpt-5.2-pro" is Responses API only
 
+    # GPT-5.4
+    for model_id in ("gpt-5.4", "gpt-5.4-2026-03-05"):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
