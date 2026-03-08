@@ -25,6 +25,14 @@ llm -f https://llm.datasette.io/robots.txt "Explain this robots.txt file in deta
 ```
 Here we are specifying a fragment using a URL. The contents of that URL will be included in the prompt that is sent to the model, prepended prior to the prompt text.
 
+<!--[[[cog
+from importlib.metadata import version
+llm_version = version("llm")
+cog.out(f'The URL will be fetched with the user-agent `llm/{llm_version} (https://llm.datasette.io/)`.')
+]]]-->
+The URL will be fetched with the user-agent `llm/0.28 (https://llm.datasette.io/)`.
+<!--[[[end]]]-->
+
 The `-f` option can be used multiple times to combine together multiple fragments.
 
 Fragments can also be files on disk, for example:

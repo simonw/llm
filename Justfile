@@ -1,49 +1,45 @@
 # Run tests and linters
 @default: test lint
 
-# Install dependencies and test dependencies
-@init:
-  pipenv run pip install -e '.[test]'
-
 # Run pytest with supplied options
 @test *options:
-  pipenv run pytest {{options}}
+  uv run pytest {{options}}
 
 # Run linters
 @lint:
   echo "Linters..."
   echo "  Black"
-  pipenv run black . --check
+  uv run black . --check
   echo "  cog"
-  pipenv run cog --check \
+  uv run cog --check \
     -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
     README.md docs/*.md
   echo "  mypy"
-  pipenv run mypy llm
+  uv run mypy llm
   echo "  ruff"
-  pipenv run ruff check .
+  uv run ruff check .
 
 # Run mypy
 @mypy:
-  pipenv run mypy llm
+  uv run mypy llm
 
 # Rebuild docs with cog
 @cog:
-  pipenv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
+  uv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
 
 # Serve live docs on localhost:8000
 @docs: cog
   rm -rf docs/_build
-  cd docs && pipenv run make livehtml
+  cd docs && uv run make livehtml
 
 # Apply Black
 @black:
-  pipenv run black .
+  uv run black .
 
 # Run automatic fixes
 @fix: cog
-  pipenv run ruff check . --fix
-  pipenv run black .
+  uv run ruff check . --fix
+  uv run black .
 
 # Push commit if tests pass
 @push: test lint

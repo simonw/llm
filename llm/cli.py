@@ -2,6 +2,7 @@ import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
+from importlib.metadata import version
 import io
 import json
 import os
@@ -121,7 +122,11 @@ def resolve_fragments(
     resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
-            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            llm_version = version("llm")
+            headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
+            client = httpx.Client(
+                follow_redirects=True, max_redirects=3, headers=headers
+            )
             response = client.get(fragment)
             response.raise_for_status()
             resolved.append(Fragment(response.text, fragment))
@@ -559,8 +564,6 @@ def prompt(
         # Convert that schema into multiple "items" of the same schema
         schema = multi_schema(schema)
 
-    model_aliases = get_model_aliases()
-
     def read_prompt():
         nonlocal prompt, schema
 
@@ -606,6 +609,7 @@ def prompt(
         path = template_dir() / f"{save}.yaml"
         to_save = {}
         if model_id:
+            model_aliases = get_model_aliases()
             try:
                 to_save["model"] = model_aliases[model_id].model_id
             except KeyError:
@@ -1219,10 +1223,8 @@ def chat(
 
         response = conversation.chain(
             prompt,
-            fragments=[str(fragment) for fragment in fragments],
-            system_fragments=[
-                str(system_fragment) for system_fragment in argument_system_fragments
-            ],
+            fragments=fragments,
+            system_fragments=argument_system_fragments,
             attachments=attachments,
             system=system,
             **kwargs,
@@ -2080,6 +2082,15 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
+            if row["options_json"]:
+                options = row["options_json"]
+                if isinstance(options, str):
+                    options = json.loads(options)
+                if options:
+                    options_text = "\n".join(
+                        "- {}: {}".format(key, value) for key, value in options.items()
+                    )
+                    click.echo("\n## Options\n\n{}".format(options_text))
             if row["system"] != current_system:
                 if row["system"] is not None:
                     click.echo("\n## System\n\n{}".format(row["system"]))

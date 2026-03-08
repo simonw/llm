@@ -1,4 +1,14 @@
-from llm import AsyncKeyModel, EmbeddingModel, KeyModel, hookimpl
+from llm import (
+    AsyncConversation,
+    AsyncKeyModel,
+    AsyncResponse,
+    Conversation,
+    EmbeddingModel,
+    KeyModel,
+    Prompt,
+    Response,
+    hookimpl,
+)
 import llm
 from llm.utils import (
     dicts_to_table_string,
@@ -15,7 +25,7 @@ import os
 
 from pydantic import field_validator, Field
 
-from typing import AsyncGenerator, List, Iterable, Iterator, Optional, Union
+from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
 import json
 import yaml
 
@@ -182,6 +192,47 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
+    # GPT-5.1
+    for model_id in (
+        "gpt-5.1",
+        "gpt-5.1-chat-latest",
+    ):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+    # GPT-5.2
+    for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+        # "gpt-5.2-pro" is Responses API only
+
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -539,7 +590,7 @@ class _Shared:
                 }
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "OpenAI Chat: {}".format(self.model_id)
 
     def build_messages(self, prompt, conversation):
@@ -694,7 +745,14 @@ class Chat(_Shared, KeyModel):
             default=None,
         )
 
-    def execute(self, prompt, stream, response, conversation=None, key=None):
+    def execute(
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: Response,
+        conversation: Optional[Conversation] = None,
+        key: Optional[str] = None,
+    ) -> Iterator[str]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -778,7 +836,12 @@ class AsyncChat(_Shared, AsyncKeyModel):
         )
 
     async def execute(
-        self, prompt, stream, response, conversation=None, key=None
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: AsyncResponse,
+        conversation: Optional[AsyncConversation] = None,
+        key: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
@@ -865,10 +928,17 @@ class Completion(Chat):
         super().__init__(*args, **kwargs)
         self.default_max_tokens = default_max_tokens
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "OpenAI Completion: {}".format(self.model_id)
 
-    def execute(self, prompt, stream, response, conversation=None, key=None):
+    def execute(
+        self,
+        prompt: Prompt,
+        stream: bool,
+        response: Response,
+        conversation: Optional[Conversation] = None,
+        key: Optional[str] = None,
+    ) -> Iterator[str]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
@@ -877,7 +947,7 @@ class Completion(Chat):
         if conversation is not None:
             for prev_response in conversation.responses:
                 messages.append(prev_response.prompt.prompt)
-                messages.append(prev_response.text())
+                messages.append(cast(Response, prev_response).text())
         messages.append(prompt.prompt)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)

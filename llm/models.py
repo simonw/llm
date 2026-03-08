@@ -7,6 +7,7 @@ from .errors import NeedsKeyException
 import hashlib
 import httpx
 from itertools import islice
+from pathlib import Path
 import re
 import time
 from types import MethodType
@@ -33,6 +34,7 @@ from .utils import (
     mimetype_from_string,
     token_usage_string,
     monotonic_ulid,
+    Fragment,
 )
 from abc import ABC, abstractmethod
 import inspect
@@ -63,7 +65,7 @@ class Attachment:
             if self.content:
                 self._id = hashlib.sha256(self.content).hexdigest()
             elif self.path:
-                self._id = hashlib.sha256(open(self.path, "rb").read()).hexdigest()
+                self._id = hashlib.sha256(Path(self.path).read_bytes()).hexdigest()
             else:
                 self._id = hashlib.sha256(
                     json.dumps({"url": self.url}).encode("utf-8")
@@ -88,7 +90,7 @@ class Attachment:
         content = self.content
         if not content:
             if self.path:
-                content = open(self.path, "rb").read()
+                content = Path(self.path).read_bytes()
             elif self.url:
                 response = httpx.get(self.url)
                 response.raise_for_status()
@@ -325,10 +327,10 @@ class CancelToolCall(Exception):
 class Prompt:
     _prompt: Optional[str]
     model: "Model"
-    fragments: Optional[List[str]]
+    fragments: Optional[List[Union[str, Fragment]]]
     attachments: Optional[List[Attachment]]
     _system: Optional[str]
-    system_fragments: Optional[List[str]]
+    system_fragments: Optional[List[Union[str, Fragment]]]
     prompt_json: Optional[str]
     schema: Optional[Union[Dict, type[BaseModel]]]
     tools: List[Tool]
@@ -416,13 +418,13 @@ class Conversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -1090,7 +1092,7 @@ class Response(_BaseResponse):
             exception = None
 
             try:
-                if asyncio.iscoroutinefunction(tool.implementation):
+                if inspect.iscoroutinefunction(tool.implementation):
                     result = asyncio.run(tool.implementation(**tool_call.arguments))
                 else:
                     result = tool.implementation(**tool_call.arguments)
@@ -1799,10 +1801,10 @@ class _Model(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -1908,13 +1910,13 @@ class _AsyncModel(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        fragments: Optional[List[str]] = None,
+        fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[str]] = None,
+        system_fragments: Optional[List[Union[str, Fragment]]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:

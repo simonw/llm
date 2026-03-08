@@ -648,7 +648,8 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
     schema_value = '{"schema": "one"}'
-    open(schema_path, "w").write(schema_value)
+    with open(schema_path, "w") as f:
+        f.write(schema_value)
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     if use_filename:
         schema_value = str(schema_path)
@@ -851,3 +852,9 @@ def test_llm_prompt_continue_with_database(
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
     assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+
+def test_default_exports():
+    "Check key exports in the llm __all__ list"
+    for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
+        assert name in llm.__all__, f"{name} not in llm.__all__"

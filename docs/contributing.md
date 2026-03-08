@@ -1,22 +1,14 @@
+(contributing)=
 # Contributing
 
-To contribute to this tool, first checkout the code. Then create a new virtual environment:
+To contribute to this tool, first checkout the code. Then run the tests with `uv run`:
 ```bash
 cd llm
-python -m venv venv
-source venv/bin/activate
+uv run pytest
 ```
-Or if you are using `pipenv`:
+You can run your development copy of `llm` using `uv run` as well:
 ```bash
-pipenv shell
-```
-Now install the dependencies and test dependencies:
-```bash
-pip install -e '.[test]'
-```
-To run the tests:
-```bash
-pytest
+uv run llm --help
 ```
 
 ## Updating recorded HTTP API interactions and associated snapshots
@@ -25,7 +17,7 @@ This project uses [pytest-recording](https://github.com/kiwicom/pytest-recording
 
 If you add a new test that calls the API you can capture the API response and snapshot like this:
 ```bash
-PYTEST_OPENAI_API_KEY="$(llm keys get openai)" pytest --record-mode once --snapshot-update
+PYTEST_OPENAI_API_KEY="$(llm keys get openai)" uv run pytest --record-mode once --snapshot-update
 ```
 Then review the new snapshots in `tests/__snapshots__/` to make sure they look correct.
 
@@ -35,14 +27,14 @@ The default OpenAI plugin has a debugging mechanism for showing the exact reques
 
 Set the `LLM_OPENAI_SHOW_RESPONSES` environment variable like this:
 ```bash
-LLM_OPENAI_SHOW_RESPONSES=1 llm -m chatgpt 'three word slogan for an an otter-run bakery'
+LLM_OPENAI_SHOW_RESPONSES=1 uv run llm -m chatgpt 'three word slogan for an an otter-run bakery'
 ```
 This will output details of the API requests and responses to the console.
 
 Use `--no-stream` to see a more readable version of the body that avoids streaming the response:
 
 ```bash
-LLM_OPENAI_SHOW_RESPONSES=1 llm -m chatgpt --no-stream \
+LLM_OPENAI_SHOW_RESPONSES=1 uv run llm -m chatgpt --no-stream \
   'three word slogan for an an otter-run bakery'
 ```
 
@@ -52,9 +44,7 @@ Documentation for this project uses [MyST](https://myst-parser.readthedocs.io/) 
 
 To build the documentation locally, run the following:
 ```bash
-cd docs
-pip install -r requirements.txt
-make livehtml
+just docs
 ```
 This will start a live preview server, using [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/).
 
@@ -62,7 +52,7 @@ The CLI `--help` examples in the documentation are managed using [Cog](https://g
 ```bash
 just cog
 ```
-You'll need [Just](https://github.com/casey/just) installed to run this command.
+You'll need [Just](https://github.com/casey/just) installed to run these commands.
 
 ## Release process
 
@@ -70,6 +60,7 @@ To release a new version:
 
 1. Update `docs/changelog.md` with the new changes.
 2. Update the version number in `pyproject.toml`
-3. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
-4. Wait for the package to push to PyPI and then...
-5. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.
+3. Run `just cog` to update `docs/fragments.md` with the new version number.
+4. [Create a GitHub release](https://github.com/simonw/llm/releases/new) for the new version.
+5. Wait for the package to push to PyPI and then...
+6. Run the [regenerate.yaml](https://github.com/simonw/homebrew-llm/actions/workflows/regenerate.yaml) workflow to update the Homebrew tap to the latest version.

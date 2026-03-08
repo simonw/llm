@@ -1,4 +1,6 @@
 from click.testing import CliRunner
+import os
+import sys
 from unittest.mock import ANY
 import llm
 from llm import cli
@@ -57,3 +59,40 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     prompt_attachment = list(logs_db["prompt_attachments"].rows)[0]
     assert prompt_attachment["attachment_id"] == attachment["id"]
     assert prompt_attachment["response_id"] == response["id"]
+
+
+def _count_open_fds():
+    """Count open file descriptors (macOS and Linux only)."""
+    if sys.platform == "darwin":
+        fd_dir = "/dev/fd"
+    elif sys.platform == "linux":
+        fd_dir = "/proc/self/fd"
+    else:
+        return None
+    return len(os.listdir(fd_dir))
+
+
+@pytest.mark.skipif(
+    sys.platform not in ("darwin", "linux"),
+    reason="File descriptor counting only supported on macOS and Linux",
+)
+def test_attachment_no_file_descriptor_leak(tmp_path):
+    """Verify reading attachments from paths doesn't leak file descriptors."""
+    test_file = tmp_path / "test.bin"
+    test_file.write_bytes(b"x" * 1000)
+
+    # Warm up - first call may open other resources
+    attachment = llm.Attachment(path=str(test_file))
+    _ = attachment.id()
+    _ = attachment.content_bytes()
+
+    baseline = _count_open_fds()
+
+    # Create many attachments and read them
+    for _ in range(100):
+        a = llm.Attachment(path=str(test_file))
+        _ = a.id()
+        _ = a.content_bytes()
+
+    # File descriptor count should not have grown significantly
+    assert _count_open_fds() <= baseline + 5
