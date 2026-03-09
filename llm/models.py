@@ -910,6 +910,7 @@ class _BaseResponse:
                     "attachment_id": attachment_id,
                     "order": index,
                 },
+                ignore=True,
             )
 
         # Persist any tools, tool calls and tool results
