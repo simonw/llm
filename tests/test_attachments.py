@@ -61,6 +61,37 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert prompt_attachment["response_id"] == response["id"]
 
 
+def test_duplicate_attachment(mock_model, logs_db, tmp_path):
+    """Passing the same attachment twice should not crash with a unique constraint error."""
+    test_file = tmp_path / "image.png"
+    test_file.write_bytes(TINY_PNG)
+    runner = CliRunner()
+    mock_model.enqueue(["two boxes"])
+    result = runner.invoke(
+        cli.cli,
+        [
+            "prompt",
+            "-m",
+            "mock",
+            "describe file",
+            "-a",
+            str(test_file),
+            "-a",
+            str(test_file),
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output == "two boxes\n"
+
+    # The attachment should be stored once
+    attachments = list(logs_db["attachments"].rows)
+    assert len(attachments) == 1
+    # prompt_attachments should have one row (duplicate ignored)
+    prompt_attachments = list(logs_db["prompt_attachments"].rows)
+    assert len(prompt_attachments) == 1
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":
