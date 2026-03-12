@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI tool and Python library for interacting with **OpenAI**, **Anthropic's Claude**, **Google's Gemini**, **Meta's Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
+A CLI tool and Python library for interacting with the **OpenAI**, **Anthropic's Claude**, **Google's Gemini**, **Meta's Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
 
 Watch **[Language models on the command-line](https://www.youtube.com/watch?v=QUXQNi6jQ30)** on YouTube for a demo or [read the accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
