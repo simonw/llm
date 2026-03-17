@@ -413,6 +413,21 @@ def test_execute_prompt_from_template_path():
         }
 
 
+def test_template_respects_cli_extract_flag(
+    mocked_openai_chat_returning_fenced_code, templates_path
+):
+    (templates_path / "code.yaml").write_text("prompt: Write code", "utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-t", "code", "-m", "gpt-4o-mini", "--key", "x", "-x"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "```" not in result.output
+    assert result.output.strip() == "function foo() {\n  return 'bar';\n}"
+
+
 FUNCTIONS_EXAMPLE = """
 def greet(name: str) -> str:
     return f"Hello, {name}!"
