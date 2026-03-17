@@ -1,5 +1,12 @@
 # Changelog
 
+(v0_29)=
+## 0.29 (2025-03-17)
+
+- The `-t/--template` option now works correctly with the `-x/--extract` and `--xl/--extract-last` flags.
+- `llm logs` now shows any additional model options in the Markdown output. [#1322](https://github.com/simonw/llm/issues/1322)
+- New OpenAI models: `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`. [#1376](https://github.com/simonw/llm/issues/1376)
+
 (v0_28)=
 ## 0.28 (2025-12-12)
 
