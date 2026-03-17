@@ -30,7 +30,7 @@ cog.out(readme_markdown)
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI tool and Python library for interacting with **OpenAI**, **Anthropic’s Claude**, **Google’s Gemini**, **Meta’s Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
+A CLI tool and Python library for interacting with **OpenAI**, **Anthropic’s Claude**, **Google’s Gemini**, **Meta’s Llama**, **MiniMax** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
 
 Watch **[Language models on the command-line](https://www.youtube.com/watch?v=QUXQNi6jQ30)** on YouTube for a demo or [read the accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
@@ -97,6 +97,17 @@ llm install llm-anthropic
 llm keys set anthropic
 # Paste Anthropic API key here
 llm -m claude-4-opus 'Impress me with wild facts about turnips'
+```
+
+[MiniMax](https://www.minimaxi.com/) models are available as built-in models with no plugin required:
+
+```bash
+llm keys set minimax
+# Paste MiniMax API key here
+llm -m MiniMax-M2.5 'Tell me about the Great Wall of China'
+
+# Use the faster model variant
+llm -m MiniMax-M2.5-highspeed 'Summarize this text' < article.txt
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):
