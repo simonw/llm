@@ -568,6 +568,8 @@ def test_get_models():
     assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
+    assert "gpt-5.4-mini" in model_ids
+    assert "gpt-5.4-nano" in model_ids
     # Ensure no model_ids are duplicated
     # https://github.com/simonw/llm/issues/667
     assert len(model_ids) == len(set(model_ids))
@@ -580,6 +582,8 @@ def test_get_async_models():
     )
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
+    assert "gpt-5.4-mini" in model_ids
+    assert "gpt-5.4-nano" in model_ids
 
 
 def test_mock_model(mock_model):

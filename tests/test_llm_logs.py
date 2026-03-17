@@ -15,7 +15,6 @@ import time
 from ulid import ULID
 import yaml
 
-
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
 MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
 
@@ -935,12 +934,10 @@ def test_expand_fragment_markdown(fragments_fixture):
 
 def test_logs_tools(logs_db):
     runner = CliRunner()
-    code = textwrap.dedent(
-        """
+    code = textwrap.dedent("""
     def demo():
         return "one\\ntwo\\nthree"
-    """
-    )
+    """)
     result1 = runner.invoke(
         cli,
         [

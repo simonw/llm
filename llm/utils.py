@@ -16,7 +16,6 @@ from typing import Final
 
 from ulid import ULID
 
-
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
 }
