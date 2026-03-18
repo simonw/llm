@@ -52,6 +52,32 @@ MINIMAX_API_BASE = "https://api.minimax.io/v1"
 def register_models(register):
     register(
         MiniMaxChat(
+            "MiniMax-M2.7",
+            model_name="MiniMax-M2.7",
+            api_base=MINIMAX_API_BASE,
+        ),
+        MiniMaxAsyncChat(
+            "MiniMax-M2.7",
+            model_name="MiniMax-M2.7",
+            api_base=MINIMAX_API_BASE,
+        ),
+        aliases=("minimax", "m2.7"),
+    )
+    register(
+        MiniMaxChat(
+            "MiniMax-M2.7-highspeed",
+            model_name="MiniMax-M2.7-highspeed",
+            api_base=MINIMAX_API_BASE,
+        ),
+        MiniMaxAsyncChat(
+            "MiniMax-M2.7-highspeed",
+            model_name="MiniMax-M2.7-highspeed",
+            api_base=MINIMAX_API_BASE,
+        ),
+        aliases=("minimax-fast", "m2.7-highspeed"),
+    )
+    register(
+        MiniMaxChat(
             "MiniMax-M2.5",
             model_name="MiniMax-M2.5",
             api_base=MINIMAX_API_BASE,
@@ -61,7 +87,7 @@ def register_models(register):
             model_name="MiniMax-M2.5",
             api_base=MINIMAX_API_BASE,
         ),
-        aliases=("minimax", "m2.5"),
+        aliases=("m2.5",),
     )
     register(
         MiniMaxChat(
@@ -74,5 +100,5 @@ def register_models(register):
             model_name="MiniMax-M2.5-highspeed",
             api_base=MINIMAX_API_BASE,
         ),
-        aliases=("minimax-fast", "m2.5-highspeed"),
+        aliases=("m2.5-highspeed",),
     )

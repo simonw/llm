@@ -22,6 +22,18 @@ from pytest_httpx import IteratorStream
 class TestModelRegistration:
     """Verify MiniMax models appear in the model registry."""
 
+    def test_minimax_m27_registered(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["models", "list"])
+        assert result.exit_code == 0
+        assert "MiniMax-M2.7" in result.output
+
+    def test_minimax_m27_highspeed_registered(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["models", "list"])
+        assert result.exit_code == 0
+        assert "MiniMax-M2.7-highspeed" in result.output
+
     def test_minimax_m25_registered(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["models", "list"])
@@ -39,9 +51,28 @@ class TestModelRegistration:
         result = runner.invoke(cli, ["aliases", "list"])
         assert result.exit_code == 0
         assert "minimax" in result.output
-        assert "m2.5" in result.output
+        assert "m2.7" in result.output
         assert "minimax-fast" in result.output
-        assert "m2.5-highspeed" in result.output
+        assert "m2.7-highspeed" in result.output
+
+    def test_minimax_default_alias_points_to_m27(self):
+        """The 'minimax' alias should resolve to MiniMax-M2.7."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["aliases", "list"])
+        assert result.exit_code == 0
+        for line in result.output.splitlines():
+            if line.strip().startswith("minimax"):
+                assert "MiniMax-M2.7" in line
+                break
+
+    def test_m27_registered_before_m25(self):
+        """M2.7 should appear before M2.5 in the model list."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["models", "list"])
+        assert result.exit_code == 0
+        m27_pos = result.output.index("MiniMax-M2.7")
+        m25_pos = result.output.index("MiniMax-M2.5")
+        assert m27_pos < m25_pos
 
 
 class TestMiniMaxChatModel:
@@ -443,7 +474,7 @@ class TestMiniMaxIntegration:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M2.7",
                 "--key",
                 minimax_api_key,
                 "--no-stream",
@@ -460,7 +491,7 @@ class TestMiniMaxIntegration:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M2.7",
                 "--key",
                 minimax_api_key,
                 "What is 2+2? Answer with just the number.",
@@ -476,7 +507,7 @@ class TestMiniMaxIntegration:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5-highspeed",
+                "MiniMax-M2.7-highspeed",
                 "--key",
                 minimax_api_key,
                 "--no-stream",
