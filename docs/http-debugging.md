@@ -266,9 +266,32 @@ export LLM_OPENAI_SHOW_RESPONSES=1
 export LLM_HTTP_LOGGING=1
 ```
 
+## TUI Formatting
+
+When `LLM_HTTP_DEBUG=1` is set, debug output uses a minimal open-ended section format that is safe for any terminal width:
+
+```
+── ➔ REQUEST POST /chat/completions ──────
+│ Headers:
+│   content-type: application/json
+│   ...
+
+── ← RESPONSE ✓ 200 OK ──────
+│ Headers:
+│   ...
+
+── ▼ Stream ──────
+(model output appears here)
+
+── ✓ Response Complete 18:29:28.789 ──────
+```
+
+The left `│` gutter can be disabled with `LLM_HTTP_UI_MINIMAL=1`.
+
 ## Related Documentation
 
 - [LLM CLI Documentation](https://llm.datasette.io/)
+- [Colored Markdown Output](color-output.md)
 - [Logging and Storage](logging.md)
 - [Provider-Specific Setup](setup.md)
 - [Tools and Function Calling](tools.md)

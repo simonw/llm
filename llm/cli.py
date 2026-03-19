@@ -73,7 +73,6 @@ import re
 import readline
 from runpy import run_module
 import shutil
-import subprocess
 import sqlite_utils
 from sqlite_utils.utils import rows_from_file, Format
 import sys
@@ -516,10 +515,12 @@ def cli(ctx, http_logging, http_debug, no_color):
     help="Extract last fenced code block",
 )
 @click.option(
-    "render",
-    "--render",
-    help="Render output through a markdown formatter (e.g. glow, bat)",
-    envvar="LLM_RENDER",
+    "color",
+    "-C",
+    "--color",
+    help="Render output with markdown formatting (default: mdstream)",
+    is_flag=False,
+    flag_value="mdstream",
     default=None,
 )
 def prompt(
@@ -553,7 +554,7 @@ def prompt(
     usage,
     extract,
     extract_last,
-    render,
+    color,
 ):
     """
     Execute a prompt
@@ -882,6 +883,8 @@ def prompt(
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
 
+    writer = _ColorWriter(color)
+
     try:
         if async_:
 
@@ -898,12 +901,9 @@ def prompt(
                     )
                     chunks = []
                     async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
+                        writer.write(chunk)
                         chunks.append(chunk)
-                    print("")
-                    if render:
-                        _render_output("".join(chunks), renderer=render)
+                    writer.finish()
                 else:
                     response = prompt_method(
                         prompt,
@@ -919,11 +919,7 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
-                    if render:
-                        print(text)
-                        _render_output(text, renderer=render)
-                    else:
-                        print(text)
+                    print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -940,21 +936,14 @@ def prompt(
             if should_stream:
                 chunks = []
                 for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
+                    writer.write(chunk)
                     chunks.append(chunk)
-                print("")
-                if render:
-                    _render_output("".join(chunks), renderer=render)
+                writer.finish()
             else:
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                if render:
-                    print(text)
-                    _render_output(text, renderer=render)
-                else:
-                    print(text)
+                print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -1083,10 +1072,12 @@ def prompt(
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
 @click.option(
-    "render",
-    "--render",
-    help="Render output through a markdown formatter (e.g. glow, bat)",
-    envvar="LLM_RENDER",
+    "color",
+    "-C",
+    "--color",
+    help="Render output with markdown formatting (default: mdstream)",
+    is_flag=False,
+    flag_value="mdstream",
     default=None,
 )
 def chat(
@@ -1107,7 +1098,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
-    render,
+    color,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1305,15 +1296,13 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
+        chat_writer = _ColorWriter(color)
         chunks = []
         for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+            chat_writer.write(chunk)
             chunks.append(chunk)
+        chat_writer.finish()
         response.log_to_db(db)
-        print("")
-        if render:
-            _render_output("".join(chunks), renderer=render)
 
 
 def load_conversation(
@@ -4116,61 +4105,87 @@ def _gather_tools(
     return tools
 
 
-def _render_output(text, renderer=None):
+class _ColorWriter:
     """
-    Clear raw streamed text from terminal and re-print through a markdown renderer.
-    Only acts when stdout is a TTY and a renderer is available.
+    Wraps streaming output through a markdown renderer.
+
+    Intercepts chunks written via write(), displays them raw for instant
+    streaming feedback, then re-renders completed lines with full markdown
+    formatting (headings, code highlighting, inline styles).
+
+    When color_mode is None or stdout is not a TTY, acts as a plain
+    passthrough to sys.stdout.
     """
-    if not sys.stdout.isatty():
-        return
 
-    renderer = renderer or os.environ.get("LLM_RENDER", "").strip()
-    if not renderer:
-        return
+    def __init__(self, color_mode):
+        self.renderer = None
+        if color_mode and sys.stdout.isatty():
+            if color_mode == "mdstream":
+                try:
+                    from tools.mdstream import StreamingMarkdownRenderer
+                except ImportError:
+                    # Fallback: try importing from the tools directory relative to llm
+                    import importlib.util
+                    spec_path = os.path.join(
+                        os.path.dirname(os.path.dirname(__file__)),
+                        "tools", "mdstream.py",
+                    )
+                    if os.path.exists(spec_path):
+                        spec = importlib.util.spec_from_file_location("mdstream", spec_path)
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        self.renderer = mod.StreamingMarkdownRenderer()
+                    return
+                self.renderer = StreamingMarkdownRenderer()
 
-    renderer_cmd = renderer.split()[0]
-    renderer_path = shutil.which(renderer_cmd)
-    if not renderer_path:
-        return
+    def write(self, chunk):
+        """Write a streaming chunk — renders if a renderer is active."""
+        if not self.renderer:
+            print(chunk, end="")
+            sys.stdout.flush()
+            return
 
-    term_width = shutil.get_terminal_size().columns or 80
+        out = sys.stdout
+        p = self.renderer.pad
 
-    # Count approximate lines to clear (terminal-width aware)
-    line_count = 0
-    for line in text.split("\n"):
-        line_count += max(1, -(-len(line) // term_width))  # ceil division
+        # Split chunk on newlines to detect completed lines
+        parts = chunk.split("\n")
+        if len(parts) == 1:
+            # No newline — append to live partial line
+            if not self.renderer.partial:
+                out.write(p)
+            self.renderer.partial += parts[0]
+            out.write(parts[0])
+            out.flush()
+            return
 
-    # Move cursor up and clear everything below
-    sys.stdout.write(f"\033[{line_count}F\033[J")
-    sys.stdout.flush()
+        # Complete the current partial line
+        first_complete = self.renderer.partial + parts[0]
+        self.renderer._erase_partial(out)
+        self.renderer.partial = ""
+        out.write(self.renderer.render_line(first_complete + "\n"))
 
-    # Build renderer command with forced color flags
-    # (subprocess pipes stdout, so renderers detect non-TTY and strip ANSI by default)
-    if renderer_cmd == "glow":
-        cmd = ["glow", "-w", str(term_width), "-s", "dark"]
-    elif renderer_cmd == "bat":
-        cmd = [
-            "bat",
-            "--color=always",
-            "--wrap",
-            "auto",
-            "--paging=never",
-            "--style=plain",
-            "-l",
-            "md",
-        ]
-    else:
-        cmd = renderer.split()
+        # Render middle complete lines
+        for part in parts[1:-1]:
+            out.write(self.renderer.render_line(part + "\n"))
 
-    env = os.environ.copy()
-    env["CLICOLOR_FORCE"] = "1"
+        # Start new partial
+        self.renderer.partial = parts[-1]
+        if self.renderer.partial:
+            out.write(p)
+            out.write(self.renderer.partial)
 
-    result = subprocess.run(cmd, input=text, capture_output=True, text=True, env=env)
-    if result.returncode == 0:
-        print(result.stdout, end="")
-    else:
-        # Fallback: reprint raw text if renderer fails
-        print(text, end="")
+        out.flush()
+
+    def finish(self):
+        """Flush any remaining partial line at end of stream."""
+        if self.renderer and self.renderer.partial:
+            self.renderer._erase_partial(sys.stdout)
+            sys.stdout.write(self.renderer.render_line(self.renderer.partial + "\n"))
+            sys.stdout.flush()
+        # Print trailing newline for non-rendered output
+        if not self.renderer:
+            print("")
 
 
 def _get_conversation_tools(conversation, tools):

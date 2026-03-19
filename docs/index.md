@@ -123,6 +123,7 @@ plugins/index
 python-api
 logging
 http-debugging
+color-output
 related-tools
 help
 contributing
