@@ -39,7 +39,6 @@ dependencies = [
     "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
-    "duckduckgo-search",
 ]
 
 [dependency-groups]

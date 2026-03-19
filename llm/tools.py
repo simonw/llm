@@ -35,23 +35,3 @@ def llm_time() -> dict:
         "timezone_offset": timezone_offset,
         "is_dst": is_dst,
     }
-
-
-def web_search(query: str) -> str:
-    "Perform a web search using DuckDuckGo"
-    try:
-        from duckduckgo_search import DDGS
-    except ImportError:
-        return "Error: duckduckgo-search module is not installed. Install it with: pip install duckduckgo-search"
-
-    results = []
-    try:
-        with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=5):
-                results.append(
-                    f"Title: {r['title']}\nURL: {r['href']}\nSummary: {r['body']}\n"
-                )
-    except Exception as e:
-        return f"Error performing search: {e}"
-
-    return "\n---\n".join(results)

@@ -3,7 +3,7 @@ import click
 import importlib
 import json
 import llm
-from llm.tools import llm_version, llm_time, web_search
+from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import pytest
@@ -272,17 +272,6 @@ def test_register_tools(tmpdir, logs_db):
                 implementation=llm_time,
                 plugin="llm.default_plugins.default_tools",
             ),
-            "web_search": llm.Tool(
-                name="web_search",
-                description="Perform a web search using DuckDuckGo",
-                input_schema={
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                    "type": "object",
-                },
-                implementation=web_search,
-                plugin="llm.default_plugins.default_tools",
-            ),
         }
 
         # Test the CLI command
@@ -299,8 +288,6 @@ def test_register_tools(tmpdir, logs_db):
             "output_as_json(text: str) (plugin: ToolsPlugin)\n\n"
             "upper(text: str) -> str (plugin: ToolsPlugin)\n\n"
             "  Convert text to uppercase.\n\n"
-            "web_search(query: str) -> str (plugin: llm.default_plugins.default_tools)\n\n"
-            "  Perform a web search using DuckDuckGo\n\n"
         )
         # And --json
         result2 = runner.invoke(cli.cli, ["tools", "list", "--json"])
@@ -354,16 +341,6 @@ def test_register_tools(tmpdir, logs_db):
                         "type": "object",
                     },
                     "plugin": "ToolsPlugin",
-                },
-                {
-                    "name": "web_search",
-                    "description": "Perform a web search using DuckDuckGo",
-                    "arguments": {
-                        "properties": {"query": {"type": "string"}},
-                        "required": ["query"],
-                        "type": "object",
-                    },
-                    "plugin": "llm.default_plugins.default_tools",
                 },
             ],
             "toolboxes": [],
@@ -656,16 +633,6 @@ def test_register_toolbox(tmpdir, logs_db):
                     "arguments": {"properties": {}, "type": "object"},
                     "plugin": "llm.default_plugins.default_tools",
                 },
-                {
-                    "name": "web_search",
-                    "description": "Perform a web search using DuckDuckGo",
-                    "arguments": {
-                        "properties": {"query": {"type": "string"}},
-                        "required": ["query"],
-                        "type": "object",
-                    },
-                    "plugin": "llm.default_plugins.default_tools",
-                },
             ],
             "toolboxes": [
                 {
@@ -732,8 +699,6 @@ def test_register_toolbox(tmpdir, logs_db):
             "  Returns the current time, as local time and UTC\n\n"
             "llm_version() -> str (plugin: llm.default_plugins.default_tools)\n\n"
             "  Return the installed version of llm\n\n"
-            "web_search(query: str) -> str (plugin: llm.default_plugins.default_tools)\n\n"
-            "  Perform a web search using DuckDuckGo\n\n"
             "Filesystem:\n\n"
             "  Filesystem_list_files()\n\n"
             "Memory:\n\n"
