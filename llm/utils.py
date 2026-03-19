@@ -482,10 +482,19 @@ class HTTPColorFormatter(logging.Formatter):
         method = data.get("method", "GET")
         url = data.get("url", "")
         
+        # Extract model name from body for display in title
+        body = data.get("json_data") or data.get("data")
+        model_name = ""
+        if isinstance(body, dict):
+            model_name = body.get("model", "")
+
         # Title for the section header
         title = f"{method} {url}"
+        if model_name:
+            title += f" [{model_name}]"
         if colored:
-             title = f"{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
+            model_part = f" {self.COLORS['YELLOW']}[{model_name}]{self.COLORS['RESET']}" if model_name else ""
+            title = f"{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}{model_part}"
 
         # Headers
         headers = data.get("headers")
@@ -784,7 +793,10 @@ class HTTPColorFormatter(logging.Formatter):
         return f"  Tool Call: {payload}"
 
     def _truncate_body(self, text: str, max_chars: int = 500) -> str:
-        """Truncate body text with indicator showing total length."""
+        """Truncate body text with indicator showing total length.
+        Set LLM_HTTP_NO_TRUNCATE=1 to disable truncation."""
+        if os.environ.get("LLM_HTTP_NO_TRUNCATE"):
+            return text
         if len(text) <= max_chars:
             return text
         return f"{text[:max_chars]}...\n[truncated, {len(text)} chars total]"
