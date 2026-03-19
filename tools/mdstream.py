@@ -309,6 +309,10 @@ class StreamingMarkdownRenderer:
         buf = b""
         p = self.pad
 
+        # Breathing room between shell prompt and rendered output
+        out.write("\n")
+        out.flush()
+
         while True:
             try:
                 chunk = os.read(0, 4096)
