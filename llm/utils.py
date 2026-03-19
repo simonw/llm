@@ -306,6 +306,7 @@ class HTTPColorFormatter(logging.Formatter):
     def __init__(self, use_colors=True):
         super().__init__()
         self.use_colors = use_colors and self._supports_color()
+        self.show_gutter = not os.environ.get("LLM_HTTP_UI_MINIMAL")
 
     def _supports_color(self):
         """Check if the terminal supports color output."""
@@ -388,7 +389,7 @@ class HTTPColorFormatter(logging.Formatter):
                 return rendered
 
         if record.name.startswith("httpcore"):
-            rendered = self._format_httpcore_message(message, colored)
+            rendered = self._format_httpcore_message(message, colored, record)
             if rendered is not None:
                 return rendered
 
@@ -421,62 +422,43 @@ class HTTPColorFormatter(logging.Formatter):
             lines.append(self._format_mapping(headers, colored, indent="  "))
 
             content = "\n".join(lines)
-            return self._draw_box(f"➔ REQUEST {title}", content, self.COLORS["BLUE"])
+            return self._draw_section(f"➔ REQUEST {title}", content, self.COLORS["BLUE"])
         except Exception:
             return message
 
-    def _draw_box(self, title, content, color):
+    def _draw_section(self, title, content, color):
+        """Draw an open-ended section: header line + optional gutter, no right/bottom border."""
         if not self.use_colors:
-            return f"{title}\n{content}"
-            
-        lines = content.splitlines()
-        # Calculate width (ignoring ansi codes for length)
-        def len_no_ansi(s):
-            return len(re.sub(r'\033\[[0-9;]*m', '', s))
-            
-        max_len = 0
-        for line in lines:
-            max_len = max(max_len, len_no_ansi(line))
-        
-        title_len = len_no_ansi(title)
-        # Min width 60, max 120? Or just fit content
-        width = max(max_len + 4, title_len + 6, 60)
-        
+            return f"── {title}\n{content}"
+
         b = self.BOX
         c = color
         r = self.COLORS["RESET"]
-        
-        # Top border with title
-        # ╭─ Title ───╮
-        
-        dash_len = width - 2 - title_len - 2 
-        left_dash = 2
-        right_dash = dash_len - left_dash
-        if right_dash < 0: right_dash = 0
-        
-        top = f"{c}{b['tl']}{b['h']*left_dash} {r}{title} {c}{b['h']*right_dash}{b['tr']}{r}"
-        bottom = f"{c}{b['bl']}{b['h']*(width-2)}{b['br']}{r}"
-        
-        boxed = [top]
-        for line in lines:
-            # Pad
-            l_len = len_no_ansi(line)
-            pad = width - 2 - l_len - 1 
-            boxed.append(f"{c}{b['v']}{r} {line}{' ' * pad}{c}{b['v']}{r}")
-            
-        boxed.append(bottom)
-        return "\n".join(boxed)
+
+        # Header: ── Title ──────
+        trail = 6  # short trailing dash — safe for any terminal width
+        top = f"{c}{b['h']*2} {r}{title} {c}{b['h']*trail}{r}"
+
+        gutter = f"{c}{b['v']}{r} " if self.show_gutter else "  "
+        body_lines = []
+        for line in content.splitlines():
+            body_lines.append(f"{gutter}{line}")
+
+        return f"{top}\n" + "\n".join(body_lines)
+
+    # Keep old name as alias so any external callers still work
+    _draw_box = _draw_section
 
     def _format_openai_message(self, message: str, colored: bool) -> Optional[str]:
         if message.startswith("Sending HTTP Request"):
             return ""
 
+        # Suppress request_id — it's visible in the response header already
+        if message.startswith("request_id"):
+            return ""
+
         prefix, sep, payload = message.partition(": ")
         if not sep:
-            # Handle single word messages
-            if message.startswith("request_id:"):
-                key, _, value = message.partition(":")
-                return self._kv_line("Request ID", value.strip(), colored)
             if message.startswith("Tool call:"):
                 return self._format_tool_call(message, colored)
             return None
@@ -500,7 +482,7 @@ class HTTPColorFormatter(logging.Formatter):
         method = data.get("method", "GET")
         url = data.get("url", "")
         
-        # Title for the box
+        # Title for the section header
         title = f"{method} {url}"
         if colored:
              title = f"{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
@@ -527,7 +509,7 @@ class HTTPColorFormatter(logging.Formatter):
             lines.append(self._format_json(misc, colored, indent="  "))
 
         content = "\n".join(lines).rstrip()
-        return self._draw_box(title, content, self.COLORS["BLUE"])
+        return self._draw_section(title, content, self.COLORS["BLUE"])
 
     def _format_openai_response(self, payload: str, colored: bool) -> Optional[str]:
         payload = payload.strip()
@@ -604,8 +586,22 @@ class HTTPColorFormatter(logging.Formatter):
             lines.append(self._format_section_title("Headers", colored))
             lines.append(self._format_headers_list(headers_list, colored, indent="  "))
 
-        content = "\n".join(lines)
-        return self._draw_box(f"← RESPONSE {title}", content, color)
+        # Build response section + a clear "stream starts" separator
+        content = "\n".join(lines) if lines else ""
+        section = self._draw_section(f"← RESPONSE {title}", content, color) if content else ""
+
+        # Add a visible stream-start marker so model output doesn't blend with debug logs
+        if colored:
+            dim = self.COLORS["DIM"]
+            bold = self.COLORS["BOLD"]
+            r = self.COLORS["RESET"]
+            stream_marker = f"\n{color}{'─' * 2} {bold}▼ Stream{r} {dim}{'─' * 6}{r}\n"
+        else:
+            stream_marker = "\n── ▼ Stream ──────\n"
+
+        if section:
+            return f"{section}\n{stream_marker}"
+        return f"{self._format_response_status_line(title, color, colored)}\n{stream_marker}"
 
     def _format_httpx_message(self, message: str, colored: bool) -> Optional[str]:
         message = message.strip()
@@ -631,7 +627,7 @@ class HTTPColorFormatter(logging.Formatter):
 
         return None
 
-    def _format_httpcore_message(self, message: str, colored: bool) -> Optional[str]:
+    def _format_httpcore_message(self, message: str, colored: bool, record=None) -> Optional[str]:
         message = message.strip()
         event, _, rest = message.partition(" ")
         
@@ -655,48 +651,62 @@ class HTTPColorFormatter(logging.Formatter):
         # 2. End of Stream Marker
         # Only show on complete to avoid duplicates
         if "response_closed.complete" in event:
-            sep = "─" * 40
+            ts_part = ""
+            if record is not None:
+                ts = self.formatTime(record, "%H:%M:%S")
+                ts = f"{ts}.{int(record.msecs):03d}"
+                if colored:
+                    ts_part = f" {self.COLORS['DIM']}{ts}{self.COLORS['RESET']}"
+                else:
+                    ts_part = f" {ts}"
             if colored:
-                return f"\n  {self.COLORS['DIM']}{sep}{self.COLORS['RESET']}\n  {self.COLORS['BOLD']}✨ Response Complete{self.COLORS['RESET']}\n  {self.COLORS['DIM']}{sep}{self.COLORS['RESET']}\n"
-            return f"\n  {sep}\n  Response Complete\n  {sep}\n"
+                green = self.COLORS["GREEN"]
+                bold = self.COLORS["BOLD"]
+                r = self.COLORS["RESET"]
+                return f"\n{green}{'─' * 2} {bold}✓ Response Complete{r}{ts_part} {green}{'─' * 6}{r}\n"
+            return f"\n── ✓ Response Complete{ts_part} ──────\n"
         
         # Suppress response_closed.started
         if "response_closed" in event:
             return ""
 
-        # 3. Connection Events (Boxed)
-        # These are usually .started events or simple events
+        # 3. Connection Events
         if "connect_tcp" in event or "start_tls" in event:
-            if event.endswith(".complete"): return "" # Double check suppression
-            
+            if event.endswith(".complete"): return ""
+
             kv_dict = {}
             for match in re.finditer(r"(\w+)=((?:<[^>]+>)|(?:'[^']*')|(?:[^,\s]+))", rest):
                 k, v = match.group(1), match.group(2).strip("'")
                 kv_dict[k] = v
-            
-            title = "Connection" if "connect" in event else "TLS Handshake"
+
+            title = "⚡ Connection" if "connect" in event else "⚡ TLS Handshake"
             details = []
             for k, v in kv_dict.items():
                 if k in ("host", "port", "server_hostname", "local_address"):
                     details.append(f"{k}: {v}")
-            
-            content = "\n".join(details)
-            return self._draw_box(f"⚡ {title}", content, self.COLORS["CYAN"])
 
-        # 4. Request Headers (Boxed)
+            content = "\n".join(details)
+            return self._draw_section(title, content, self.COLORS["CYAN"])
+
+        # 4. Request Headers
         if "send_request_headers" in event:
-            # This is .started, which is good
-            # Try to extract request details if present
             content = "➔ Sending Request Headers"
             match = re.search(r"request=<Request \[b'(\w+)'\]>", rest)
             if match:
                 content = f"➔ Sending {match.group(1)} Request"
 
-            return self._draw_box("Request", content, self.COLORS["BLUE"])
+            return self._draw_section("Request", content, self.COLORS["BLUE"])
 
         return None
 
     # --- Formatting Helpers ---
+
+    def _format_response_status_line(self, title, color, colored):
+        """Single-line response status without section body."""
+        if colored:
+            r = self.COLORS["RESET"]
+            return f"{color}{'─' * 2} {r}← RESPONSE {title} {color}{'─' * 6}{r}"
+        return f"── ← RESPONSE {title} ──────"
 
     def _format_request_line(self, method, url, colored):
         if colored:
