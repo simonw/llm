@@ -12,5 +12,5 @@ venv
 uv.lock
 build/
 dist/
-node-net-dbg*
-/tmp/
+.node-net-dbg/
+tmp/

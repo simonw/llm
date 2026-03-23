@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --quiet
+#!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["pygments"]
@@ -18,13 +18,27 @@ Design:
     History lines (above the cursor) are frozen and fully rendered.
     The current line (at the cursor) streams raw tokens live.
 
+Architecture:
+    mdstream is intentionally not a full Markdown parser. Instead, it is a
+    small line-oriented state machine tuned for streaming terminal output:
+
+    1. Raw chunks arrive and are shown immediately on the current line.
+    2. When a newline arrives, that completed line is re-rendered with
+       markdown styling.
+    3. A small amount of state tracks code fences, candidate tables, and
+       the currently visible partial line.
+
+    This architecture keeps latency low while still supporting richer output
+    for completed lines. The only structure that is repainted after the fact
+    is the current table block at the bottom of the terminal.
+
 Usage:
     llm "prompt" | mdstream          # standalone pipe
-    llm "prompt" --color mdstream    # integrated via llm CLI
+    llm "prompt" --color             # integrated via llm CLI
     cat README.md | mdstream         # render any markdown
 
 Environment:
-    MDSTREAM_PADDING  Left padding in spaces (default: 4)
+    MDSTREAM_PADDING  Left padding in spaces (default: 0)
 """
 
 import math
@@ -276,28 +290,53 @@ def _block_prefix(base_pad: str, quote_depth: int) -> str:
 
 class StreamingMarkdownRenderer:
     """
-    Streaming markdown renderer with repaint support for live table blocks.
+    Stateful markdown renderer for terminal streaming.
 
-    Code blocks are still rendered line-by-line for low-latency syntax
-    highlighting. Pipe tables are upgraded in place as additional table rows
-    arrive, so the current bottom block can be repainted without disturbing
+    The renderer owns two distinct responsibilities:
+
+    1. Track stream state across chunks and lines:
+       - raw partial text on the current terminal line
+       - whether we are inside a fenced code block
+       - whether the most recent line might become a pipe table
+    2. Convert completed lines into ANSI-formatted terminal output.
+
+    Code blocks are rendered line-by-line for low-latency syntax
+    highlighting. Pipe tables are upgraded in place as additional rows
+    arrive, so only the live bottom block is repainted without disturbing
     earlier output.
     """
 
     def __init__(self, padding: int = None):
+        # Code fence state. We keep every prior line in the current fenced
+        # block so Pygments can re-highlight with full lexer context and we
+        # can emit only the latest rendered line.
         self.in_code_block = False
         self.code_lang = ""
         self.code_lines: list[str] = []
         self.code_line_num = 0
+
+        # The current in-progress terminal line. This is echoed raw as chunks
+        # arrive and replaced with a rendered version once a newline lands.
         self.partial = ""
+
+        # Heading rendering inserts a leading blank line unless the previous
+        # line was already blank. This keeps headings visually separated
+        # without double-spacing explicit blank lines.
         self.previous_was_blank = True
+
+        # Two-phase table detection:
+        # - pending_table_header remembers a line that *might* be the first
+        #   row of a pipe table.
+        # - table_lines/alignments take over once a valid separator row
+        #   confirms that we should repaint as a formatted table.
         self.pending_table_header: str | None = None
         self.pending_table_rows = 0
         self.table_lines: list[str] = []
         self.table_alignments: list[str] = []
         self.table_render_rows = 0
         if padding is None:
-            padding = int(os.environ.get("MDSTREAM_PADDING", "4"))
+            # Default to 0 — no left padding. Override with MDSTREAM_PADDING=N.
+            padding = int(os.environ.get("MDSTREAM_PADDING", "0"))
         self.pad = " " * padding
         # Line numbers in code blocks: enabled by default, disable with MDSTREAM_NO_LINENO=1
         self.show_lineno = not os.environ.get("MDSTREAM_NO_LINENO")
@@ -339,12 +378,66 @@ class StreamingMarkdownRenderer:
         self.previous_was_blank = stripped == ""
         return rendered
 
+    def write_chunk(self, chunk: str, out) -> None:
+        """
+        Consume decoded text from the stream and write terminal output.
+
+        The algorithm is the core of mdstream's "hybrid" behavior:
+
+        - incomplete lines are echoed raw immediately for token-speed UX
+        - completed lines are erased and re-rendered with markdown styling
+
+        Both the standalone CLI entrypoint and llm's `_ColorWriter` call this
+        method so the streaming behavior is defined in one place.
+        """
+        parts = chunk.split("\n")
+        if len(parts) == 1:
+            # No newline yet. Keep extending the live raw line at the cursor.
+            if not self.partial:
+                out.write(self.pad)
+            self.partial += parts[0]
+            out.write(parts[0])
+            return
+
+        # The first item completes the current partial line.
+        first_complete = self.partial + parts[0]
+        self._erase_partial(out)
+        self.partial = ""
+        out.write(self.render_line(first_complete + "\n"))
+
+        # Any middle items are complete lines entirely contained in this chunk.
+        for part in parts[1:-1]:
+            out.write(self.render_line(part + "\n"))
+
+        # The final item is the new in-progress raw line, if any.
+        self.partial = parts[-1]
+        if self.partial:
+            out.write(self.pad)
+            out.write(self.partial)
+
+    def finish(self, out) -> None:
+        """
+        Flush any trailing partial line at end-of-stream.
+
+        Streaming sources often terminate without a final newline. We still
+        render that last line so the terminal ends in the same fully rendered
+        state as newline-terminated output.
+        """
+        if self.partial:
+            partial = self.partial
+            self._erase_partial(out)
+            self.partial = ""
+            out.write(self.render_line(partial + "\n"))
+
     def _render_noncode_line(self, stripped: str) -> str:
         fence_match = re.match(r"^(\s*)(```+|~~~+)(.*)", stripped)
         if fence_match:
             return self._render_code_fence(fence_match)
 
         if _looks_like_table_row(stripped):
+            # Render the line immediately so streaming stays snappy. If the
+            # next line proves this is really a table separator, we will
+            # repaint this bottom block in-place as a formatted table.
             rendered = self._render_structured_line(stripped)
             self.pending_table_header = stripped
             self.pending_table_rows = self._measure_rendered_rows(rendered)
@@ -387,6 +480,9 @@ class StreamingMarkdownRenderer:
         self.code_line_num += 1
         full_code = "\n".join(self.code_lines) + "\n"
         lexer = _get_lexer(self.code_lang)
+        # Re-highlight the whole block every time so lexer state is correct for
+        # multi-line constructs such as strings or comments, then emit only the
+        # final highlighted line to preserve low-latency streaming.
         hl_full = _pygments_highlight(full_code, lexer, _formatter).rstrip("\n")
         hl_last = hl_full.rsplit("\n", 1)[-1]
         if self.show_lineno:
@@ -395,6 +491,13 @@ class StreamingMarkdownRenderer:
         return f"{p}  {hl_last}\n"
 
     def _maybe_promote_table(self, stripped: str) -> str | None:
+        """
+        Upgrade a previously rendered candidate header into a live table block.
+
+        We only commit to table rendering after seeing a valid separator row.
+        At that point we erase the previously printed header line and replace
+        it with a formatted table.
+        """
         alignments = _parse_table_separator(stripped)
         header_cells = _split_table_row(self.pending_table_header or "")
         if alignments and header_cells and len(alignments) == len(header_cells):
@@ -412,6 +515,14 @@ class StreamingMarkdownRenderer:
         return None
 
     def _maybe_extend_table(self, stripped: str) -> str | None:
+        """
+        Extend the current live table block if the next line is another row.
+
+        Tables are the one place where mdstream intentionally repaints already
+        rendered output. We keep the active table at the bottom of the screen,
+        recalculate widths, erase the prior rendering, and print the larger
+        table in its place.
+        """
         row_cells = _split_table_row(stripped)
         header_cells = _split_table_row(self.table_lines[0])
         if (
@@ -488,6 +599,7 @@ class StreamingMarkdownRenderer:
         return "\n"
 
     def _render_table(self) -> str:
+        """Render the current promoted pipe table as an ANSI-styled grid."""
         header = _split_table_row(self.table_lines[0]) or []
         body_rows = [_split_table_row(line) or [] for line in self.table_lines[2:]]
         widths = [0] * len(header)
@@ -511,17 +623,23 @@ class StreamingMarkdownRenderer:
             for idx, cell in enumerate(cells):
                 aligned = _align_cell(cell, widths[idx], alignments[idx])
                 padded_cells.append(f" {aligned} ")
-            row = f"{DIM}│{RESET}".join(padded_cells)
+            # Column dividers use full brightness (no DIM) so they match
+            # the header separator line — avoids a visual glitch where
+            # dimmed dividers looked disconnected from bright separators.
+            row = "│".join(padded_cells)
             return f"{self.pad}{row}\n"
 
         lines = []
         header_alignments = ["center"] * len(header)
         lines.append(render_row(styled_header, header_alignments))
+        # Header separator: thick lines (━) with ┿ crossings
         lines.append(separator("━", "┿", dim=False))
         for idx, row in enumerate(styled_rows):
             lines.append(render_row(row, self.table_alignments))
             if idx < len(styled_rows) - 1:
-                lines.append(separator("─", "┼", dim=True))
+                # Body separator: thin lines (─) with ┼ crossings,
+                # same brightness as header for visual consistency
+                lines.append(separator("─", "┼", dim=False))
         return "".join(lines)
 
     # ── Terminal helpers ──────────────────────────────────────────────────
@@ -534,6 +652,13 @@ class StreamingMarkdownRenderer:
             return 80
 
     def _measure_rendered_rows(self, rendered: str) -> int:
+        """
+        Estimate how many terminal rows a rendered block currently occupies.
+
+        Repaint operations need row counts rather than logical line counts
+        because wide rendered lines can wrap. We strip ANSI first so width
+        calculations reflect what the terminal actually displays.
+        """
         width = max(1, self._term_width())
         total = 0
         for line in rendered.splitlines():
@@ -577,7 +702,6 @@ class StreamingMarkdownRenderer:
         """
         out = sys.stdout
         buf = b""
-        p = self.pad
 
         # Breathing room between shell prompt and rendered output
         out.write("\n")
@@ -603,39 +727,12 @@ class StreamingMarkdownRenderer:
                 except UnicodeDecodeError:
                     continue
 
-            parts = text.split("\n")
-
-            if len(parts) == 1:
-                # No newline — append token to live partial line
-                if not self.partial:
-                    out.write(p)
-                self.partial += parts[0]
-                out.write(parts[0])
-                out.flush()
-                continue
-
-            # Newline arrived — complete the partial line and render it
-            first_complete = self.partial + parts[0]
-            self._erase_partial(out)
-            self.partial = ""
-            out.write(self.render_line(first_complete + "\n"))
-
-            # Render any additional complete lines in this chunk
-            for part in parts[1:-1]:
-                out.write(self.render_line(part + "\n"))
-
-            # Start new partial line with any trailing content
-            self.partial = parts[-1]
-            if self.partial:
-                out.write(p)
-                out.write(self.partial)
-
+            self.write_chunk(text, out)
             out.flush()
 
         # Render any remaining partial at EOF
         if self.partial:
-            self._erase_partial(out)
-            out.write(self.render_line(self.partial + "\n"))
+            self.finish(out)
             out.flush()
 
 

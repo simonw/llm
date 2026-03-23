@@ -42,6 +42,7 @@ from llm import (
     remove_alias,
 )
 from llm.models import _BaseConversation, ChainResponse
+from llm.utils import buffered_stream_end
 
 from .migrations import migrate
 from .plugins import pm, load_plugins
@@ -317,16 +318,12 @@ def schema_option(fn):
 )
 @click.version_option()
 @click.option(
-    "--http-logging",
-    is_flag=True,
-    help="Enable HTTP request/response logging for debugging",
-    envvar="LLM_HTTP_LOGGING",
-)
-@click.option(
-    "--http-debug",
-    is_flag=True,
-    help="Enable verbose HTTP debugging (includes connection details)",
+    "--debug",
+    "debug_level",
+    type=int,
+    default=0,
     envvar="LLM_HTTP_DEBUG",
+    help="HTTP debug level (1=requests/responses, 2=verbose with headers)",
 )
 @click.option(
     "--no-color",
@@ -335,7 +332,7 @@ def schema_option(fn):
     envvar="NO_COLOR",
 )
 @click.pass_context
-def cli(ctx, http_logging, http_debug, no_color):
+def cli(ctx, debug_level, no_color):
     """
     Access Large Language Models from the command-line
 
@@ -352,24 +349,33 @@ def cli(ctx, http_logging, http_debug, no_color):
         $ llm keys set openai
         Enter key: ...
 
-    Then execute a prompt like this:
+    Prompting shortcuts:
 
+    \b
         llm 'Five outrageous names for a pet pelican'
+        llm --prompt 'Five outrageous names for a pet pelican'
+        llm -m gpt-4o -C 'Show me a Markdown table'
+        cat notes.txt | llm -s 'Summarize this'
 
-    For a full list of prompting options run:
+    `prompt` is the default command, so `llm ...` and
+    `llm prompt ...` accept the same prompting options.
 
+    Common follow-up commands:
+
+    \b
         llm prompt --help
+        llm chat --help
+        llm models --help
+        llm logs --help
 
-    Environment variables for HTTP debugging:
-    - LLM_HTTP_LOGGING=1: Enable HTTP request/response logging
-    - LLM_HTTP_DEBUG=1: Enable verbose HTTP debugging
-    - LLM_OPENAI_SHOW_RESPONSES=1: Legacy OpenAI-only debugging
+    \b
+    HTTP debugging:
+        --debug 1 / LLM_HTTP_DEBUG=1   Show requests and responses
+        --debug 2 / LLM_HTTP_DEBUG=2   Verbose (includes headers, connections)
     """
-    # Set environment variables if CLI flags are provided
-    if http_logging:
-        os.environ["LLM_HTTP_LOGGING"] = "1"
-    if http_debug:
-        os.environ["LLM_HTTP_DEBUG"] = "1"
+    # Set environment variable if CLI flag is provided
+    if debug_level:
+        os.environ["LLM_HTTP_DEBUG"] = str(debug_level)
     if no_color:
         os.environ["NO_COLOR"] = "1"
 
@@ -380,8 +386,13 @@ def cli(ctx, http_logging, http_debug, no_color):
     ctx.ensure_object(dict)
 
 
-@cli.command(name="prompt")
+@cli.command(name="prompt", short_help="Execute a one-shot prompt (default command)")
 @click.argument("prompt", required=False)
+@click.option(
+    "prompt_option",
+    "--prompt",
+    help="Prompt text. Equivalent to [PROMPT]; use one or the other.",
+)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -518,13 +529,14 @@ def cli(ctx, http_logging, http_debug, no_color):
     "color",
     "-C",
     "--color",
-    help="Render output with markdown formatting (default: mdstream)",
-    is_flag=False,
+    help="Render streamed Markdown using mdstream formatting",
+    is_flag=True,
     flag_value="mdstream",
     default=None,
 )
 def prompt(
     prompt,
+    prompt_option,
     system,
     model_id,
     database,
@@ -561,20 +573,29 @@ def prompt(
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
 
-    Examples:
+    Prompt input:
 
     \b
         llm 'Capital of France?'
         llm 'Capital of France?' -m gpt-4o
-        llm 'Capital of France?' -s 'answer in Spanish'
+        llm --prompt 'Capital of France?'
+        cat article.txt | llm -s 'Summarize this'
 
-    Multi-modal models can be called with attachments like this:
+    Use either [PROMPT] or --prompt, not both.
+    The positional [PROMPT] can appear before or after other options.
+
+    Common workflows:
 
     \b
+        llm 'Capital of France?' -s 'answer in Spanish'
+        llm 'Show me a Markdown table' -C
         llm 'Extract text from this image' -a image.jpg
         llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
         cat image | llm 'describe image' -a -
-        # With an explicit mimetype:
+        llm 'Extract countries' --schema schema.json
+        llm 'Use the weather tool' -T weather
+        llm -t release-notes -p version 0.29
+        llm -c 'one more'
         cat image | llm 'describe image' --at - image/jpeg
 
     The -x/--extract option returns just the content of the first ``` fenced code
@@ -583,6 +604,11 @@ def prompt(
     \b
         llm 'JavaScript function for reversing a string' -x
     """
+    if prompt is not None and prompt_option is not None:
+        raise click.ClickException("Cannot use both [PROMPT] and --prompt")
+    if prompt is None:
+        prompt = prompt_option
+
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
@@ -885,6 +911,29 @@ def prompt(
 
     writer = _ColorWriter(color)
 
+    # Spinner: shows loading state until the first content chunk arrives.
+    # Enabled when --color is active and stdout is a TTY (or LLM_SPINNER=1).
+    spinner_env = os.environ.get("LLM_SPINNER")
+    spinner_enabled = (
+        (spinner_env == "1")
+        or (spinner_env != "0" and bool(color) and sys.stdout.isatty())
+    )
+    spinner = _make_spinner(spinner_enabled)
+
+    # Wrap tool callbacks to drive spinner state during tool chains.
+    if tool_implementations and spinner.enabled:
+        _wrap_tool_callbacks_for_spinner(kwargs, spinner)
+
+    # Blank line between command and response.  Only in colored
+    # interactive mode.  Opt out with LLM_COMPACT=1.
+    show_separator = (
+        bool(color)
+        and sys.stdout.isatty()
+        and not os.environ.get("LLM_COMPACT")
+    )
+
+    spinner.start()
+
     try:
         if async_:
 
@@ -899,11 +948,19 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    chunks = []
-                    async for chunk in response:
-                        writer.write(chunk)
-                        chunks.append(chunk)
-                    writer.finish()
+                    with buffered_stream_end() as get_pending:
+                        first_chunk = True
+                        async for chunk in response:
+                            if first_chunk:
+                                spinner.stop()
+                                if show_separator:
+                                    print()
+                                first_chunk = False
+                            writer.write(chunk)
+                        writer.finish()
+                        for pending in get_pending():
+                            if pending:
+                                click.echo(pending, err=True, nl=False)
                 else:
                     response = prompt_method(
                         prompt,
@@ -914,6 +971,9 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
+                    spinner.stop()
+                    if show_separator:
+                        print()
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -934,20 +994,33 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
-                chunks = []
-                for chunk in response:
-                    writer.write(chunk)
-                    chunks.append(chunk)
-                writer.finish()
+                with buffered_stream_end() as get_pending:
+                    first_chunk = True
+                    for chunk in response:
+                        if first_chunk:
+                            spinner.stop()
+                            if show_separator:
+                                print()
+                            first_chunk = False
+                        writer.write(chunk)
+                    writer.finish()
+                    for pending in get_pending():
+                        if pending:
+                            click.echo(pending, err=True, nl=False)
             else:
+                spinner.stop()
+                if show_separator:
+                    print()
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
                 print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
+        spinner.stop()
         raise click.ClickException(str(ex))
     except Exception as ex:
+        spinner.stop()
         # All other exceptions should raise in pytest, show to user otherwise
         if getattr(sys, "_called_from_test", False) or os.environ.get(
             "LLM_RAISE_ERRORS", None
@@ -980,7 +1053,7 @@ def prompt(
         response.log_to_db(db)
 
 
-@cli.command()
+@cli.command(short_help="Hold an interactive multi-turn chat")
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -1075,8 +1148,8 @@ def prompt(
     "color",
     "-C",
     "--color",
-    help="Render output with markdown formatting (default: mdstream)",
-    is_flag=False,
+    help="Render streamed Markdown using mdstream formatting",
+    is_flag=True,
     flag_value="mdstream",
     default=None,
 )
@@ -1102,6 +1175,18 @@ def chat(
 ):
     """
     Hold an ongoing chat with a model.
+
+    Examples:
+
+    \b
+        llm chat
+        llm chat -m gpt-4o -s 'Answer in JSON'
+        llm chat -t code-review
+        llm chat -c
+        llm chat -T my_tool -C
+
+    The chat command reuses templates, fragments, options, tools and color
+    rendering from `llm prompt`, but keeps the conversation open until you exit.
     """
     # Left and right arrow keys to move cursor:
     if sys.platform != "win32":
@@ -1297,11 +1382,28 @@ def chat(
         system = None
         argument_system_fragments = []
         chat_writer = _ColorWriter(color)
-        chunks = []
-        for chunk in response:
-            chat_writer.write(chunk)
-            chunks.append(chunk)
-        chat_writer.finish()
+        chat_spinner = _make_spinner(
+            bool(color) and sys.stdout.isatty()
+        )
+        chat_show_sep = (
+            bool(color)
+            and sys.stdout.isatty()
+            and not os.environ.get("LLM_COMPACT")
+        )
+        chat_spinner.start()
+        with buffered_stream_end() as get_pending:
+            first_chunk = True
+            for chunk in response:
+                if first_chunk:
+                    chat_spinner.stop()
+                    if chat_show_sep:
+                        print()
+                    first_chunk = False
+                chat_writer.write(chunk)
+            chat_writer.finish()
+            for pending in get_pending():
+                if pending:
+                    click.echo(pending, err=True, nl=False)
         response.log_to_db(db)
 
 
@@ -4115,6 +4217,9 @@ class _ColorWriter:
 
     When color_mode is None or stdout is not a TTY, acts as a plain
     passthrough to sys.stdout.
+
+    The renderer owns all stream state so the integrated CLI path and the
+    standalone `mdstream` script follow the same chunk-handling rules.
     """
 
     def __init__(self, color_mode):
@@ -4145,47 +4250,69 @@ class _ColorWriter:
             sys.stdout.flush()
             return
 
-        out = sys.stdout
-        p = self.renderer.pad
-
-        # Split chunk on newlines to detect completed lines
-        parts = chunk.split("\n")
-        if len(parts) == 1:
-            # No newline — append to live partial line
-            if not self.renderer.partial:
-                out.write(p)
-            self.renderer.partial += parts[0]
-            out.write(parts[0])
-            out.flush()
-            return
-
-        # Complete the current partial line
-        first_complete = self.renderer.partial + parts[0]
-        self.renderer._erase_partial(out)
-        self.renderer.partial = ""
-        out.write(self.renderer.render_line(first_complete + "\n"))
-
-        # Render middle complete lines
-        for part in parts[1:-1]:
-            out.write(self.renderer.render_line(part + "\n"))
-
-        # Start new partial
-        self.renderer.partial = parts[-1]
-        if self.renderer.partial:
-            out.write(p)
-            out.write(self.renderer.partial)
-
-        out.flush()
+        self.renderer.write_chunk(chunk, sys.stdout)
+        sys.stdout.flush()
 
     def finish(self):
         """Flush any remaining partial line at end of stream."""
-        if self.renderer and self.renderer.partial:
-            self.renderer._erase_partial(sys.stdout)
-            sys.stdout.write(self.renderer.render_line(self.renderer.partial + "\n"))
+        if self.renderer:
+            self.renderer.finish(sys.stdout)
             sys.stdout.flush()
         # Print trailing newline for non-rendered output
         if not self.renderer:
             print("")
+
+
+def _make_spinner(enabled):
+    """Create a Spinner instance, handling import errors gracefully."""
+    if not enabled:
+        from tools.spinner import Spinner
+
+        return Spinner(enabled=False)
+    try:
+        from tools.spinner import Spinner
+
+        return Spinner(enabled=True)
+    except ImportError:
+        # Fallback: return a no-op object if spinner module unavailable
+        class _NoopSpinner:
+            enabled = False
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def set_state(self, *a, **kw):
+                pass
+
+            @property
+            def is_running(self):
+                return False
+
+        return _NoopSpinner()
+
+
+def _wrap_tool_callbacks_for_spinner(kwargs, spinner):
+    """Wrap before_call / after_call in kwargs to drive spinner state."""
+    original_before = kwargs.get("before_call")
+    original_after = kwargs.get("after_call")
+
+    def spinner_before_call(tool, tool_call):
+        spinner.set_state("tool_calling", tool_name=tool_call.name)
+        if not spinner.is_running:
+            spinner.start()
+        if original_before:
+            return original_before(tool, tool_call)
+
+    def spinner_after_call(tool, tool_call, tool_result):
+        spinner.set_state("starting")
+        if original_after:
+            return original_after(tool, tool_call, tool_result)
+
+    kwargs["before_call"] = spinner_before_call
+    kwargs["after_call"] = spinner_after_call
 
 
 def _get_conversation_tools(conversation, tools):

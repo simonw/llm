@@ -13,6 +13,52 @@ def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text).replace("\r", "")
 
 
+class FakeStreamTerminal:
+    """
+    Minimal terminal emulator for mdstream streaming tests.
+
+    It understands the single-line erase sequence used for partial-line
+    streaming (`\\r\\033[K`) and ignores style ANSI escapes. That is enough
+    to assert the final visible text for non-table streaming behavior.
+    """
+
+    def __init__(self):
+        self.lines = []
+        self.current = ""
+
+    def write(self, text):
+        i = 0
+        while i < len(text):
+            if text.startswith("\r\033[K", i):
+                self.current = ""
+                i += 4
+                continue
+            char = text[i]
+            if char == "\n":
+                self.lines.append(self.current)
+                self.current = ""
+            elif char == "\r":
+                self.current = ""
+            elif char == "\033":
+                match = ANSI_RE.match(text, i)
+                if match:
+                    i = match.end()
+                    continue
+                i += 1
+                continue
+            else:
+                self.current += char
+            i += 1
+
+    def flush(self):
+        pass
+
+    def rendered(self):
+        if self.current:
+            return "\n".join([*self.lines, self.current])
+        return "\n".join(self.lines)
+
+
 def test_task_lists_images_links_and_escaping():
     renderer = StreamingMarkdownRenderer(padding=0)
 
@@ -49,7 +95,7 @@ def test_headings_do_not_add_extra_blank_lines():
     top_heading = strip_ansi(renderer.render_line("## Basic Formatting\n"))
     explicit_blank = strip_ansi(renderer.render_line("\n"))
     nested_heading = strip_ansi(renderer.render_line("### Text Styles\n"))
-    paragraph = strip_ansi(renderer.render_line("Paragraph\n"))
+    strip_ansi(renderer.render_line("Paragraph\n"))
     following_heading = strip_ansi(renderer.render_line("## Next Section\n"))
 
     assert not top_heading.startswith("\n")
@@ -75,6 +121,90 @@ def test_table_promotion_alignment_and_repaint():
     assert "━━━━━━━━━━┿━━━━━━━" in clean_promoted
     assert " Python   │    10 " in clean_repainted
     assert strip_ansi(closed) == "after\n"
+
+
+def test_inline_styles_autolinks_code_spans_and_rules():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    styled = strip_ansi(
+        renderer.render_line(
+            "***both*** **bold** *italic* ~~gone~~ `code` <https://a.test> https://b.test\n"
+        )
+    )
+    rule = strip_ansi(renderer.render_line("---\n"))
+
+    assert styled == "both bold italic gone code https://a.test https://b.test\n"
+    assert rule == "────────────────────────────────────────\n"
+
+
+def test_headings_h1_h2_and_blockquote_heading_passthrough():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    h1 = strip_ansi(renderer.render_line("# Title\n"))
+    h2 = strip_ansi(renderer.render_line("## Subtitle\n"))
+    quoted_heading = strip_ansi(renderer.render_line("> ## not a heading\n"))
+
+    assert h1 == "Title\n━━━━━\n"
+    assert h2.startswith("\nSubtitle\n────────\n")
+    assert quoted_heading == "  │ ## not a heading\n"
+
+
+def test_code_fences_render_language_labels_and_line_numbers():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    start = strip_ansi(renderer.render_line("```python\n"))
+    first = strip_ansi(renderer.render_line("print('hello')\n"))
+    second = strip_ansi(renderer.render_line("x = 1\n"))
+    end = strip_ansi(renderer.render_line("```\n"))
+
+    assert "python" in start
+    assert "──" in start
+    assert "  1  print('hello')" in first
+    assert "  2  x = 1" in second
+    assert end == "────────────────────────────────────────\n"
+
+
+def test_code_fences_can_disable_line_numbers(monkeypatch):
+    monkeypatch.setenv("MDSTREAM_NO_LINENO", "1")
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    renderer.render_line("```python\n")
+    line = strip_ansi(renderer.render_line("print('hello')\n"))
+
+    assert line == "  print('hello')\n"
+
+
+def test_write_chunk_and_finish_render_streaming_output():
+    renderer = StreamingMarkdownRenderer(padding=0)
+    out = FakeStreamTerminal()
+
+    renderer.write_chunk("Hello", out)
+    assert renderer.partial == "Hello"
+    assert out.rendered() == "Hello"
+
+    renderer.write_chunk(" world\nNext", out)
+    assert renderer.partial == "Next"
+    assert out.rendered() == "Hello world\nNext"
+
+    renderer.finish(out)
+    assert renderer.partial == ""
+    assert out.rendered() == "Hello world\nNext"
+
+
+def test_run_handles_chunked_utf8_and_flushes_final_partial(monkeypatch):
+    renderer = StreamingMarkdownRenderer(padding=0)
+    out = FakeStreamTerminal()
+    chunks = iter([b"caf\xc3", b"\xa9\nna", b"\xc3\xafve", b""])
+
+    monkeypatch.setattr("tools.mdstream.sys.stdout", out)
+    monkeypatch.setattr(
+        "tools.mdstream.os.read",
+        lambda _fd, _size: next(chunks),
+    )
+
+    renderer.run()
+
+    assert out.rendered() == "\ncaf\xe9\nna\xefve"
 
 
 def test_color_writer_uses_renderer_repaint(monkeypatch):

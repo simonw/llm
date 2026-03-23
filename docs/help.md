@@ -55,29 +55,38 @@ Usage: llm [OPTIONS] COMMAND [ARGS]...
       $ llm keys set openai
       Enter key: ...
 
-  Then execute a prompt like this:
+  Prompting shortcuts:
 
       llm 'Five outrageous names for a pet pelican'
+      llm --prompt 'Five outrageous names for a pet pelican'
+      llm -m gpt-4o -C 'Show me a Markdown table'
+      cat notes.txt | llm -s 'Summarize this'
 
-  For a full list of prompting options run:
+  `prompt` is the default command, so `llm ...` and `llm prompt ...` accept the
+  same prompting options.
+
+  Common follow-up commands:
 
       llm prompt --help
+      llm chat --help
+      llm models --help
+      llm logs --help
 
-  Environment variables for HTTP debugging: - LLM_HTTP_LOGGING=1: Enable HTTP
-  request/response logging - LLM_HTTP_DEBUG=1: Enable verbose HTTP debugging -
-  LLM_OPENAI_SHOW_RESPONSES=1: Legacy OpenAI-only debugging
+  HTTP debugging:
+      --debug 1 / LLM_HTTP_DEBUG=1   Show requests and responses
+      --debug 2 / LLM_HTTP_DEBUG=2   Verbose (includes headers, connections)
 
 Options:
-  --version       Show the version and exit.
-  --http-logging  Enable HTTP request/response logging for debugging
-  --http-debug    Enable verbose HTTP debugging (includes connection details)
-  --no-color      Disable colored output in HTTP logging
-  -h, --help      Show this message and exit.
+  --version        Show the version and exit.
+  --debug INTEGER  HTTP debug level (1=requests/responses, 2=verbose with
+                   headers)
+  --no-color       Disable colored output in HTTP logging
+  -h, --help       Show this message and exit.
 
 Commands:
-  prompt*       Execute a prompt
+  prompt*       Execute a one-shot prompt (default command)
   aliases       Manage model aliases
-  chat          Hold an ongoing chat with a model.
+  chat          Hold an interactive multi-turn chat
   collections   View and manage collections of embeddings
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
@@ -105,18 +114,27 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 
   Documentation: https://llm.datasette.io/en/stable/usage.html
 
-  Examples:
+  Prompt input:
 
       llm 'Capital of France?'
       llm 'Capital of France?' -m gpt-4o
+      llm --prompt 'Capital of France?'
+      cat article.txt | llm -s 'Summarize this'
+
+  Use either [PROMPT] or --prompt, not both. The positional [PROMPT] can appear
+  before or after other options.
+
+  Common workflows:
+
       llm 'Capital of France?' -s 'answer in Spanish'
-
-  Multi-modal models can be called with attachments like this:
-
+      llm 'Show me a Markdown table' -C
       llm 'Extract text from this image' -a image.jpg
       llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
       cat image | llm 'describe image' -a -
-      # With an explicit mimetype:
+      llm 'Extract countries' --schema schema.json
+      llm 'Use the weather tool' -T weather
+      llm -t release-notes -p version 0.29
+      llm -c 'one more'
       cat image | llm 'describe image' --at - image/jpeg
 
   The -x/--extract option returns just the content of the first ``` fenced code
@@ -125,6 +143,8 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       llm 'JavaScript function for reversing a string' -x
 
 Options:
+  --prompt TEXT                   Prompt text. Equivalent to [PROMPT]; use one
+                                  or the other.
   -s, --system TEXT               System prompt to use
   -m, --model TEXT                Model to use
   -d, --database FILE             Path to log database
@@ -159,6 +179,8 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  -C, --color                     Render streamed Markdown using mdstream
+                                  formatting
   -h, --help                      Show this message and exit.
 ```
 
@@ -168,6 +190,17 @@ Options:
 Usage: llm chat [OPTIONS]
 
   Hold an ongoing chat with a model.
+
+  Examples:
+
+      llm chat
+      llm chat -m gpt-4o -s 'Answer in JSON'
+      llm chat -t code-review
+      llm chat -c
+      llm chat -T my_tool -C
+
+  The chat command reuses templates, fragments, options, tools and color
+  rendering from `llm prompt`, but keeps the conversation open until you exit.
 
 Options:
   -s, --system TEXT             System prompt to use
@@ -190,6 +223,8 @@ Options:
   --ta, --tools-approve         Manually approve every tool execution
   --cl, --chain-limit INTEGER   How many chained tool responses to allow,
                                 default 5, set 0 for unlimited
+  -C, --color                   Render streamed Markdown using mdstream
+                                formatting
   -h, --help                    Show this message and exit.
 ```
 

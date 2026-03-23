@@ -77,13 +77,14 @@ Changelog = "https://github.com/simonw/llm/releases"
 
 [project.scripts]
 llm = "llm.cli:cli"
+mdstream = "tools.mdstream:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["llm", "llm.default_plugins", "tools"]
+
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
-
-[tool.setuptools.packages.find]
-exclude = ["tmp*", "node-net-dbg*"]
