@@ -11,10 +11,10 @@ Usage::
     spinner = Spinner(enabled=sys.stdout.isatty())
     spinner.start()                          # shows "□ Starting..."
     spinner.set_state("connecting")          # shows "■ Connecting..."
-    spinner.stop()                           # erases line, joins thread
+    spinner.stop()                           # clears by default; can persist via env
 
 The spinner is thread-safe: ``set_state`` can be called from any thread
-(e.g. a logging handler watching httpcore events).
+(e.g. a logging handler watching structured TUI lifecycle events).
 """
 
 import os
@@ -73,37 +73,65 @@ SPINNER_STATES = {
         "color": "cyan",
         "spinner": "toggle3",
         "timeout": 10,
-        "persist_icon": "·",
     },
     "connecting": {
         "label": "Connecting...",
         "color": "cyan",
         "spinner": "toggle3",
         "timeout": 10,
-        "persist_icon": "⚡",
     },
     "waiting": {
         "label": "Waiting for response...",
         "color": "cyan",
         "spinner": "toggle3",
         "timeout": 30,
-        "persist_icon": "⏳",
     },
     "tool_calling": {
         "label": "Calling {tool_name}...",
         "color": "yellow",
         "spinner": "toggle3",
         "timeout": 30,
-        "persist_icon": "🔧",
     },
     "tool_running": {
         "label": "Running {tool_name}...",
         "color": "yellow",
         "spinner": "toggle3",
         "timeout": 60,
-        "persist_icon": "⚙",
     },
 }
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off", ""}
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in _TRUE_VALUES:
+        return True
+    if value in _FALSE_VALUES:
+        return False
+    return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return default
+
+
+def _should_persist_spinner() -> bool:
+    if "LLM_SPINNER_PERSIST" in os.environ:
+        return _env_flag("LLM_SPINNER_PERSIST", default=False)
+    if "LLM_SPINNER_CLEAR" in os.environ:
+        return not _env_flag("LLM_SPINNER_CLEAR", default=False)
+    return False
 
 
 # ── Spinner class ──────────────────────────────────────────────────────
@@ -130,7 +158,14 @@ class Spinner:
         self._hidden = False
         self._frame_idx = 0
         self._use_color = not os.environ.get("NO_COLOR")
-        self._should_clear = bool(os.environ.get("LLM_SPINNER_CLEAR"))
+        self._persist_on_stop = _should_persist_spinner()
+        self._persist_text = os.environ.get("LLM_SPINNER_PERSIST_TEXT", ">")
+        self._padding_before = _env_int(
+            "LLM_SPINNER_PADDING_BEFORE", 1 if self._persist_on_stop else 0
+        )
+        self._padding_after = _env_int(
+            "LLM_SPINNER_PADDING_AFTER", 1 if self._persist_on_stop else 0
+        )
         self._log_handler = None
         self._original_levels = {}
 
@@ -160,8 +195,9 @@ class Spinner:
     def stop(self) -> None:
         """Stop the spinner and join the animation thread.
 
-        By default the last state is persisted as a dim static line in
-        scrollback.  Set ``LLM_SPINNER_CLEAR=1`` to erase instead.
+        By default the spinner clears on stop.  Set
+        ``LLM_SPINNER_PERSIST=1`` to keep a static line in scrollback.
+        ``LLM_SPINNER_CLEAR`` is supported as a legacy inverse alias.
 
         Idempotent — safe to call multiple times or on a stopped spinner.
         """
@@ -171,10 +207,10 @@ class Spinner:
             return
         self._stop_event.set()
         self._thread.join(timeout=1.0)
-        if self._should_clear:
-            self._erase()
-        else:
+        if self._persist_on_stop:
             self._persist()
+        else:
+            self._erase()
         self._detach_log_handler()
         self._thread = None
         self._state = None
@@ -223,7 +259,7 @@ class Spinner:
 
     # ── Log handler for automatic state transitions ──────────────
 
-    _LOG_TARGETS = ("httpcore", "openai", "anthropic")
+    _LOG_TARGETS = ("llm.http", "httpcore", "openai", "anthropic")
 
     def _attach_log_handler(self) -> None:
         """Add a SpinnerLogHandler to HTTP loggers for auto state transitions."""
@@ -325,13 +361,18 @@ class Spinner:
         if not cfg:
             self._erase()
             return
-        icon = cfg.get("persist_icon", ">")
         label = cfg["label"].format(**self._state_kwargs)
+        padding_before = "\n" * self._padding_before
+        padding_after = "\n" * self._padding_after
+        line_body = f"{self._persist_text} {label}".rstrip()
         try:
             if self._use_color:
-                line = f"{ERASE_LINE}{DIM}{icon} {label}{RESET}\n"
+                line = (
+                    f"{ERASE_LINE}{padding_before}"
+                    f"{DIM}{line_body}{RESET}\n{padding_after}"
+                )
             else:
-                line = f"{ERASE_LINE}{icon} {label}\n"
+                line = f"{ERASE_LINE}{padding_before}{line_body}\n{padding_after}"
             sys.stdout.write(line)
             sys.stdout.flush()
         except (BrokenPipeError, OSError):

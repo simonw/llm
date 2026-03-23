@@ -1,71 +1,102 @@
 (http-debugging)=
 # HTTP Debugging and Logging
 
-LLM CLI provides comprehensive HTTP logging capabilities to debug requests and responses across all model providers. This feature enables you to see exactly what's being sent to and received from AI APIs, making it invaluable for troubleshooting and understanding model behavior.
+LLM CLI provides HTTP logging to debug requests and responses across all model providers. See exactly what's being sent to and received from AI APIs — invaluable for troubleshooting and understanding model behavior.
 
 ## Quick Start
 
-Enable HTTP logging for all providers:
-
 ```bash
-# Basic HTTP logging (shows requests and responses)
-LLM_HTTP_LOGGING=1 llm -m gpt-4o "Hello world"
+# Level 1: show requests and responses
+LLM_HTTP_DEBUG=1 llm -m gpt-4o "Hello world"
 
-# Verbose HTTP debugging (includes connection details)
-LLM_HTTP_DEBUG=1 llm -m gemini-2.5-pro "Reasoning task"
+# Level 2: verbose (includes headers, connection details)
+LLM_HTTP_DEBUG=2 llm -m gemini-2.5-pro "Reasoning task"
 
-# Using CLI flags (alternative to environment variables)
-llm --http-logging -m claude-4-sonnet "Debug this request"
-llm --http-debug -m o3 "Show all HTTP details"
+# Using CLI flags (equivalent to environment variable)
+llm --debug 1 -m claude-4-sonnet "Debug this request"
+llm --debug 2 -m o3 "Show all HTTP details"
 
 # For development/testing without global install
 LLM_HTTP_DEBUG=1 uv run llm -m gpt-4o "Test prompt"
-LLM_HTTP_DEBUG=1 python -m llm -m gpt-4o "Test prompt"  # if already installed
 ```
 
-## Environment Variables
+## Configuration
 
-| Variable | Level | Description |
-|----------|-------|-------------|
-| `LLM_HTTP_LOGGING=1` | INFO | Shows HTTP requests and responses |
-| `LLM_HTTP_DEBUG=1` | DEBUG | Shows detailed connection info and headers |
-| `LLM_HTTP_VERBOSE=1` | DEBUG | Alias for `LLM_HTTP_DEBUG` |
+### Environment Variable
+
+| Value | Level | Description |
+|-------|-------|-------------|
+| `LLM_HTTP_DEBUG=1` | INFO | Shows HTTP requests and responses |
+| `LLM_HTTP_DEBUG=2` | DEBUG | Verbose: connection info, headers, timing |
 | `LLM_OPENAI_SHOW_RESPONSES=1` | INFO | Legacy OpenAI-only debugging (still supported) |
 
-## CLI Flags
+### CLI Flag
 
 ```bash
-llm --http-logging [command]     # Enable INFO-level HTTP logging
-llm --http-debug [command]       # Enable DEBUG-level HTTP logging
+llm --debug 1 [command]     # INFO-level HTTP logging
+llm --debug 2 [command]     # DEBUG-level HTTP logging
 ```
 
 ## What Gets Logged
 
-### INFO Level (`LLM_HTTP_LOGGING=1`)
+### Level 1 (`LLM_HTTP_DEBUG=1`)
 
 Shows high-level HTTP request information:
 
 ```
-httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
-httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent "HTTP/1.1 200 OK"
+[18:29:28.100] llm.http
+  HTTP logging enabled at INFO level
+[18:29:28.200] openai._base_client
+── POST /chat/completions [gpt-4o]
 ```
 
-### DEBUG Level (`LLM_HTTP_DEBUG=1`)
+### Level 2 (`LLM_HTTP_DEBUG=2`)
 
-Shows detailed connection and protocol information:
+Shows detailed connection and protocol information with request correlation:
 
 ```
-httpcore.connection - DEBUG - connect_tcp.started host='api.openai.com' port=443
-httpcore.connection - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object>
-httpcore.connection - DEBUG - start_tls.started ssl_context=<ssl.SSLContext object> server_hostname='api.openai.com'
-httpcore.http11 - DEBUG - send_request_headers.started request=<Request [b'POST']>
-httpcore.http11 - DEBUG - send_request_body.started request=<Request [b'POST']>
-httpcore.http11 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
-httpcore.http11 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [...headers...])
-httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
-httpcore.http11 - DEBUG - receive_response_body.started request=<Request [b'POST']>
-httpcore.http11 - DEBUG - receive_response_body.complete
+[18:29:28.100] llm.http
+  HTTP logging enabled at DEBUG level
+[18:29:28.200] openai._base_client
+── POST /chat/completions [gpt-4o]
+    Payload:
+  { "model": "gpt-4o", "messages": [...] }
+
+[18:29:28.210] llm.http
+── ➔ REQUEST [req-001] POST https://api.openai.com/v1/chat/completions
+    Headers:
+  content-type: application/json
+  authorization: Bearer sk-...
+
+[18:29:28.300] llm.http
+── ⚡ Connection [req-001]
+  host: api.openai.com
+  port: 443
+
+[18:29:28.400] llm.http
+── ↓ Response Start [req-001] ✓ 200 OK (POST https://api.openai.com/v1/chat/completions)
+    Headers:
+  x-request-id: req_abc123
+
+── ▼ Stream Start [req-001] 18:29:28.401 ──────
+(model output appears here)
+
+── ■ Stream End [req-001] 18:29:28.788 ──────
+── ✓ Response Complete [req-001] 18:29:28.789 ──────
 ```
+
+## Correlated TUI Events
+
+When the OpenAI TUI HTTP client is active, `llm.http` becomes the
+authoritative source for user-facing request lifecycle output.
+
+- `➔ REQUEST [req-NNN]` identifies the outgoing request
+- `⚡ Connection [req-NNN]` and `⚡ TLS Handshake [req-NNN]` show transport setup
+- `↓ Response Start [req-NNN]` shows the status line and response headers
+- `▼ Stream Start [req-NNN]`, `■ Stream End [req-NNN]`, and `✓ Response Complete [req-NNN]` bracket the streamed body
+
+This avoids ambiguous marker attribution when tool calls or chained
+requests interleave within a single command.
 
 ## Provider-Specific Debugging
 
@@ -77,27 +108,20 @@ httpcore.http11 - DEBUG - receive_response_body.complete
 - Tool calling request/response cycles
 - Rate limiting headers
 
-**Example:**
 ```bash
-export LLM_HTTP_DEBUG=1
-llm -m o3 "Solve this step by step: What is 15% of 240?"
+LLM_HTTP_DEBUG=2 llm -m o3 "Solve this step by step: What is 15% of 240?"
 ```
-Shows reasoning parameters and token usage in HTTP traffic.
 
-### Gemini Models (including 2.5-pro reasoning)
+### Gemini Models (including reasoning models)
 
 **What you can see:**
 - Thinking budget configuration: `thinking_config: {"thinking_budget": 1000}`
 - Response with thinking tokens: `thoughtsTokenCount: 500`
 - Streaming response chunks
-- Model-specific parameters
 
-**Example:**
 ```bash
-export LLM_HTTP_DEBUG=1
-llm -m gemini-2.5-pro "Think carefully about this complex problem"
+LLM_HTTP_DEBUG=2 llm -m gemini-2.5-pro "Think carefully about this complex problem"
 ```
-Shows direct HTTP calls to Google's API with thinking parameters.
 
 ### Anthropic Claude Models (including reasoning)
 
@@ -105,61 +129,44 @@ Shows direct HTTP calls to Google's API with thinking parameters.
 - Thinking configuration: `thinking: {"type": "enabled", "budget_tokens": 1000}`
 - Beta API usage indicators
 - Message structure and tool calls
-- Thinking parameters in requests
 
-**Example:**
 ```bash
-export LLM_HTTP_DEBUG=1
-llm -m claude-4-sonnet "Analyze this problem methodically"
+LLM_HTTP_DEBUG=2 llm -m claude-4-sonnet "Analyze this problem methodically"
 ```
-Shows Anthropic SDK's HTTP traffic including reasoning config.
 
 ## Real-World Use Cases
 
 ### Debugging Reasoning Models
 
-See what reasoning parameters are being sent:
-
 ```bash
-export LLM_HTTP_DEBUG=1
-
 # OpenAI o3 reasoning
-llm -m o3 "Complex math problem" --max-tokens 1000
+LLM_HTTP_DEBUG=2 llm -m o3 "Complex math problem" --max-tokens 1000
 
 # Gemini with thinking budget
-llm -m gemini-2.5-pro "Reasoning task" 
+LLM_HTTP_DEBUG=2 llm -m gemini-2.5-pro "Reasoning task"
 
 # Claude with thinking enabled
-llm -m claude-4-sonnet "Analytical problem"
+LLM_HTTP_DEBUG=2 llm -m claude-4-sonnet "Analytical problem"
 ```
 
 ### Investigating API Errors
 
-Debug failed requests:
-
 ```bash
-export LLM_HTTP_DEBUG=1
-llm -m gpt-4o "Test prompt"
+LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test prompt"
 # Shows exact error responses, status codes, headers
 ```
 
 ### Understanding Token Usage
 
-See how tokens are calculated:
-
 ```bash
-export LLM_HTTP_LOGGING=1
-llm -m o3-mini "Short prompt"
+LLM_HTTP_DEBUG=1 llm -m o3-mini "Short prompt"
 # Response shows: reasoning_tokens, input_tokens, output_tokens
 ```
 
 ### Monitoring Rate Limits
 
-Track API usage and limits:
-
 ```bash
-export LLM_HTTP_DEBUG=1
-llm -m gpt-4o "Test"
+LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 # Shows rate limit headers in response
 ```
 
@@ -170,38 +177,57 @@ llm -m gpt-4o "Test"
 HTTP logging works alongside LLM's built-in SQLite logging:
 
 ```bash
-# Enable both HTTP debugging and LLM logging
-export LLM_HTTP_LOGGING=1
-llm logs on
-llm -m gpt-4o "Test prompt"
-
-# View logged interactions
+LLM_HTTP_DEBUG=1 llm logs on
+LLM_HTTP_DEBUG=1 llm -m gpt-4o "Test prompt"
 llm logs list --json
 ```
 
 ### Filtering Logs
 
-Focus on specific providers or domains:
-
 ```bash
 # Only log OpenAI requests
-export LLM_HTTP_DEBUG=1
-llm -m gpt-4o "Test" 2>&1 | grep "api.openai.com"
+LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test" 2>&1 | grep "api.openai.com"
 
-# Only log Gemini requests  
-llm -m gemini-2.5-pro "Test" 2>&1 | grep "generativelanguage.googleapis.com"
+# Only log Gemini requests
+LLM_HTTP_DEBUG=2 llm -m gemini-2.5-pro "Test" 2>&1 | grep "generativelanguage.googleapis.com"
 ```
 
 ### Performance Considerations
 
-HTTP logging adds overhead. For production use:
+```bash
+# Use level 1 for minimal overhead
+LLM_HTTP_DEBUG=1 llm -m gpt-4o "Test"
+
+# Level 2 adds more overhead — avoid in production
+```
+
+### Disabling Colors and Gutter
 
 ```bash
-# Use INFO level for minimal overhead
-export LLM_HTTP_LOGGING=1
+# Disable colored output
+NO_COLOR=1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 
-# Avoid DEBUG level in production
-# export LLM_HTTP_DEBUG=1  # Don't use this in production
+# Disable the left │ gutter
+LLM_HTTP_UI_MINIMAL=1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+```
+
+### Spinner Controls
+
+Interactive color mode uses a request-phase spinner by default. It clears on stop unless you opt into persistence.
+
+```bash
+# Keep a static spinner line in history
+LLM_SPINNER_PERSIST=1 llm -C "Test"
+
+# Customize the persisted prefix and spacing
+LLM_SPINNER_PERSIST=1 \
+LLM_SPINNER_PERSIST_TEXT=">" \
+LLM_SPINNER_PADDING_BEFORE=1 \
+LLM_SPINNER_PADDING_AFTER=1 \
+llm -C "Test"
+
+# Legacy inverse alias still supported
+LLM_SPINNER_CLEAR=1 llm -C "Test"
 ```
 
 ## Troubleshooting
@@ -209,12 +235,11 @@ export LLM_HTTP_LOGGING=1
 ### Common Issues
 
 **No logs appearing:**
-- Verify environment variable is set: `echo $LLM_HTTP_LOGGING`
+- Verify environment variable is set: `echo $LLM_HTTP_DEBUG`
 - Check that the provider actually uses HTTP (not all providers do)
-- Some providers may use custom logging that bypasses this system
 
 **Too much output:**
-- Use `LLM_HTTP_LOGGING=1` instead of `LLM_HTTP_DEBUG=1`
+- Use level 1 instead of level 2: `LLM_HTTP_DEBUG=1`
 - Redirect stderr: `llm prompt "test" 2>/dev/null`
 
 **Missing reasoning details:**
@@ -224,69 +249,34 @@ export LLM_HTTP_LOGGING=1
 
 ### Integration with External Tools
 
-**Using with jq for JSON parsing:**
-```bash
-export LLM_HTTP_DEBUG=1
-llm -m gpt-4o "test" 2>&1 | grep -A 10 "Request:" | jq '.'
-```
-
 **Saving logs to files:**
 ```bash
-export LLM_HTTP_LOGGING=1
-llm -m gemini-2.5-pro "test" 2>debug.log
+LLM_HTTP_DEBUG=2 llm -m gpt-4o "test" 2>debug.log
 ```
 
 ## Security Considerations
 
-⚠️ **Important Security Notes:**
+**Important Security Notes:**
 
-- HTTP logs may contain API keys in headers (these are automatically redacted)
+- HTTP logs may contain API keys in headers
 - Request/response bodies may contain sensitive data
 - Never commit log files containing real API interactions
-- Use environment variables instead of command-line flags in scripts to avoid shell history
+- Use environment variables instead of command-line flags in scripts to avoid shell history exposure
 
 ## Backward Compatibility
 
-The new HTTP logging system maintains full backward compatibility.
-
-### Legacy Support
-
-- `LLM_OPENAI_SHOW_RESPONSES=1` still works (OpenAI only)
-- New variables extend functionality to all providers
-- No breaking changes to existing workflows
+- `LLM_OPENAI_SHOW_RESPONSES=1` still works (maps to level 1)
+- No breaking changes to existing workflows using that variable
 
 ### Migration Path
 
-For users currently using OpenAI-specific debugging:
 ```bash
 # Old way (still works)
 export LLM_OPENAI_SHOW_RESPONSES=1
 
 # New way (works for all providers)
-export LLM_HTTP_LOGGING=1
+export LLM_HTTP_DEBUG=1
 ```
-
-## TUI Formatting
-
-When `LLM_HTTP_DEBUG=1` is set, debug output uses a minimal open-ended section format that is safe for any terminal width:
-
-```
-── ➔ REQUEST POST /chat/completions ──────
-│ Headers:
-│   content-type: application/json
-│   ...
-
-── ← RESPONSE ✓ 200 OK ──────
-│ Headers:
-│   ...
-
-── ▼ Stream ──────
-(model output appears here)
-
-── ✓ Response Complete 18:29:28.789 ──────
-```
-
-The left `│` gutter can be disabled with `LLM_HTTP_UI_MINIMAL=1`.
 
 ## Related Documentation
 

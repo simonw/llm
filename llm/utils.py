@@ -1,6 +1,7 @@
 import ast
 import click
 import contextlib
+import contextvars
 import hashlib
 import httpx
 import itertools
@@ -157,32 +158,74 @@ def logging_client() -> httpx.Client:
 
 def _log_request_tui(request: httpx.Request):
     """Log request details to llm.http logger for TUI display."""
-    logger = logging.getLogger("llm.http")
-    if logger.isEnabledFor(logging.DEBUG):
-        # Generate request ID for correlation and start timing
-        request_id = _get_request_id()
-        _start_request_timer(request_id)
+    request_id = request.extensions.get("llm_request_id") or _get_request_id()
+    request.extensions["llm_request_id"] = request_id
+    _start_request_timer(request_id)
+    _activate_tui_request(request_id)
 
-        # Format as a special marker that HTTPColorFormatter can parse
-        data = {
-            "request_id": request_id,
-            "method": request.method,
-            "url": str(request.url),
-            "headers": dict(request.headers)
-        }
-        logger.debug(f"TUI Request: {json.dumps(data)}")
+    existing_trace = request.extensions.get("trace")
+    request.extensions["trace"] = _build_tui_trace_callback(request_id, existing_trace)
+
+    _log_tui_event(
+        "request",
+        logging.INFO,
+        request_id=request_id,
+        method=request.method,
+        url=str(request.url),
+        headers=dict(request.headers),
+    )
+
+
+def _log_response_tui(response: httpx.Response):
+    request = response.request
+    request_id = request.extensions.get("llm_request_id", "")
+    reason = getattr(response, "reason_phrase", "") or ""
+    status = f"{response.status_code} {reason}".strip()
+    _log_tui_event(
+        "response_start",
+        logging.INFO,
+        request_id=request_id,
+        method=request.method,
+        url=str(request.url),
+        status=status,
+        headers=dict(response.headers),
+    )
 
 def tui_logging_client() -> httpx.Client:
     return httpx.Client(
-        event_hooks={"request": [_log_request_tui]}
+        event_hooks={"request": [_log_request_tui], "response": [_log_response_tui]}
     )
 
 async def _log_request_tui_async(request: httpx.Request):
-    _log_request_tui(request)
+    request_id = request.extensions.get("llm_request_id") or _get_request_id()
+    request.extensions["llm_request_id"] = request_id
+    _start_request_timer(request_id)
+    _activate_tui_request(request_id)
+
+    existing_trace = request.extensions.get("trace")
+    request.extensions["trace"] = _build_async_tui_trace_callback(
+        request_id, existing_trace
+    )
+
+    _log_tui_event(
+        "request",
+        logging.INFO,
+        request_id=request_id,
+        method=request.method,
+        url=str(request.url),
+        headers=dict(request.headers),
+    )
+
+
+async def _log_response_tui_async(response: httpx.Response):
+    _log_response_tui(response)
 
 def async_tui_logging_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
-        event_hooks={"request": [_log_request_tui_async]}
+        event_hooks={
+            "request": [_log_request_tui_async],
+            "response": [_log_response_tui_async],
+        }
     )
 
 
@@ -191,11 +234,9 @@ def async_tui_logging_client() -> httpx.AsyncClient:
 
 # Thread-local storage for request timing correlation
 _request_context = threading.local()
-
-# Thread-local storage for request ID correlation in the formatter.
-# Stored per-thread (not on the formatter instance) so concurrent
-# requests on different threads each see their own ID.
-_formatter_request_id = threading.local()
+_active_tui_request_ids = contextvars.ContextVar(
+    "llm_active_tui_request_ids", default=()
+)
 
 
 def _get_request_id() -> str:
@@ -226,6 +267,113 @@ def _get_request_elapsed(request_id: str) -> Optional[float]:
     return elapsed_ms
 
 
+def _activate_tui_request(request_id: str) -> None:
+    ids = list(_active_tui_request_ids.get())
+    if request_id not in ids:
+        ids.append(request_id)
+        _active_tui_request_ids.set(tuple(ids))
+
+
+def _deactivate_tui_request(request_id: str) -> None:
+    ids = [item for item in _active_tui_request_ids.get() if item != request_id]
+    _active_tui_request_ids.set(tuple(ids))
+    _get_request_elapsed(request_id)
+
+
+def _has_active_tui_requests() -> bool:
+    return bool(_active_tui_request_ids.get())
+
+
+def _log_tui_event(kind: str, level: int = logging.INFO, **data: Any) -> None:
+    logger = logging.getLogger("llm.http")
+    if not logger.isEnabledFor(level):
+        return
+    payload = {"kind": kind, **data}
+    logger.log(level, f"TUI Event: {json.dumps(payload, default=str)}")
+
+
+def _normalize_method(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError:
+            return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _build_tui_trace_callback(request_id: str, existing_trace=None):
+    def callback(name: str, info: Dict[str, Any]):
+        if name.endswith(".failed"):
+            _deactivate_tui_request(request_id)
+        elif name.endswith("connect_tcp.started"):
+            _log_tui_event("connect", logging.DEBUG, request_id=request_id, **info)
+        elif name.endswith("start_tls.started"):
+            _log_tui_event("tls", logging.DEBUG, request_id=request_id, **info)
+        elif name.endswith("send_request_headers.started"):
+            request = info.get("request")
+            method = None
+            if request is not None:
+                method = _normalize_method(getattr(request, "method", None))
+            _log_tui_event(
+                "request_sent",
+                logging.DEBUG,
+                request_id=request_id,
+                method=method,
+            )
+        elif name.endswith("receive_response_body.started"):
+            _log_tui_event("stream_start", logging.DEBUG, request_id=request_id)
+        elif name.endswith("receive_response_body.complete"):
+            _log_tui_event("stream_end", logging.DEBUG, request_id=request_id)
+        elif name.endswith("response_closed.complete"):
+            _log_tui_event("response_complete", logging.DEBUG, request_id=request_id)
+            _deactivate_tui_request(request_id)
+
+        if existing_trace is not None:
+            return existing_trace(name, info)
+        return None
+
+    return callback
+
+
+def _build_async_tui_trace_callback(request_id: str, existing_trace=None):
+    async def callback(name: str, info: Dict[str, Any]):
+        if name.endswith(".failed"):
+            _deactivate_tui_request(request_id)
+        elif name.endswith("connect_tcp.started"):
+            _log_tui_event("connect", logging.DEBUG, request_id=request_id, **info)
+        elif name.endswith("start_tls.started"):
+            _log_tui_event("tls", logging.DEBUG, request_id=request_id, **info)
+        elif name.endswith("send_request_headers.started"):
+            request = info.get("request")
+            method = None
+            if request is not None:
+                method = _normalize_method(getattr(request, "method", None))
+            _log_tui_event(
+                "request_sent",
+                logging.DEBUG,
+                request_id=request_id,
+                method=method,
+            )
+        elif name.endswith("receive_response_body.started"):
+            _log_tui_event("stream_start", logging.DEBUG, request_id=request_id)
+        elif name.endswith("receive_response_body.complete"):
+            _log_tui_event("stream_end", logging.DEBUG, request_id=request_id)
+        elif name.endswith("response_closed.complete"):
+            _log_tui_event("response_complete", logging.DEBUG, request_id=request_id)
+            _deactivate_tui_request(request_id)
+
+        if existing_trace is not None:
+            result = existing_trace(name, info)
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return None
+
+    return callback
+
+
 class _QuietStreamHandler(logging.StreamHandler):
     """StreamHandler that suppresses empty messages.
 
@@ -251,6 +399,13 @@ class SafeHTTPCoreFilter(logging.Filter):
     def filter(self, record):
         message = record.getMessage()
 
+        if (
+            record.name == "openai._base_client"
+            and message.startswith("HTTP Response:")
+            and _has_active_tui_requests()
+        ):
+            return False
+
         # Suppress openai's "Sending HTTP Request" (redundant with Request options)
         if (
             record.name == "openai._base_client"
@@ -263,6 +418,20 @@ class SafeHTTPCoreFilter(logging.Filter):
             return False
 
         if record.name.startswith("httpcore"):
+            if _has_active_tui_requests() and ".failed" not in message:
+                if any(
+                    token in message
+                    for token in (
+                        "connect_tcp.",
+                        "start_tls.",
+                        "send_request_headers.",
+                        "receive_response_headers.",
+                        "receive_response_body.",
+                        "response_closed.",
+                    )
+                ):
+                    return False
+
             # httpcore emits lifecycle event pairs (.started / .complete) for
             # each phase of an HTTP exchange.  We selectively allow events that
             # map to the four user-visible lifecycle markers:
@@ -362,7 +531,6 @@ class HTTPColorFormatter(logging.Formatter):
         super().__init__()
         self.use_colors = use_colors and self._supports_color()
         self.show_gutter = not os.environ.get("LLM_HTTP_UI_MINIMAL")
-        self._current_request_id = ""
 
     def _supports_color(self):
         """Check if the terminal supports color output."""
@@ -436,6 +604,8 @@ class HTTPColorFormatter(logging.Formatter):
 
     def _is_stream_start(self, record):
         """Check if this record is the Stream Start marker."""
+        if self._tui_event_kind(record) == "stream_start":
+            return True
         return (
             record.name.startswith("httpcore")
             and "response_body.started" in record.getMessage()
@@ -450,6 +620,9 @@ class HTTPColorFormatter(logging.Formatter):
         be deferred when mdstream is active so they don't displace the
         cursor before finish() re-renders the last line.
         """
+        tui_kind = self._tui_event_kind(record)
+        if tui_kind in ("stream_end", "response_complete"):
+            return True
         if not record.name.startswith("httpcore"):
             return False
         msg = record.getMessage()
@@ -492,6 +665,10 @@ class HTTPColorFormatter(logging.Formatter):
     def _structured_message(self, record, *, colored: bool) -> str:
         message = record.getMessage()
 
+        parsed_tui_event = self._parse_tui_event(message)
+        if parsed_tui_event is not None:
+            return self._format_tui_event(parsed_tui_event, colored, record)
+
         if message.startswith("TUI Request:"):
             return self._format_tui_request(message, colored)
 
@@ -515,13 +692,31 @@ class HTTPColorFormatter(logging.Formatter):
             return textwrap.indent(message, "  ")
         return ""
 
+    def _parse_tui_event(self, message: str) -> Optional[Dict[str, Any]]:
+        if message.startswith("TUI Event: "):
+            _, _, json_str = message.partition("TUI Event: ")
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                return None
+            return data if isinstance(data, dict) else None
+        return None
+
+    def _tui_event_kind(self, record) -> Optional[str]:
+        if record.name != "llm.http":
+            return None
+        parsed = self._parse_tui_event(record.getMessage())
+        if parsed is None:
+            return None
+        kind = parsed.get("kind")
+        return str(kind) if kind else None
+
     def _format_tui_request(self, message: str, colored: bool) -> str:
         try:
             _, _, json_str = message.partition("TUI Request: ")
             data = json.loads(json_str)
 
             request_id = data.get("request_id", "")
-            self._current_request_id = request_id
             method = data.get("method", "GET")
             url = data.get("url", "")
             headers = data.get("headers", {})
@@ -543,6 +738,99 @@ class HTTPColorFormatter(logging.Formatter):
             return self._draw_section(f"➔ REQUEST {title}", content, self.COLORS["BLUE"])
         except Exception:
             return message
+
+    def _format_tui_event(
+        self, data: Dict[str, Any], colored: bool, record
+    ) -> Optional[str]:
+        kind = data.get("kind")
+        request_id = data.get("request_id", "")
+
+        if kind == "request":
+            method = str(data.get("method", "GET")).upper()
+            url = str(data.get("url", ""))
+            headers = data.get("headers", {})
+            if colored:
+                id_part = (
+                    f"{self.COLORS['DIM']}[{request_id}]{self.COLORS['RESET']} "
+                    if request_id
+                    else ""
+                )
+                title = (
+                    f"{id_part}{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} "
+                    f"{self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
+                )
+            else:
+                id_part = f"[{request_id}] " if request_id else ""
+                title = f"{id_part}{method} {url}"
+            lines = [self._format_section_title("Headers", colored)]
+            lines.append(self._format_mapping(headers, colored))
+            return self._draw_section(
+                f"➔ REQUEST {title}", "\n".join(lines), self.COLORS["BLUE"]
+            )
+
+        if kind == "response_start":
+            method = data.get("method")
+            url = data.get("url")
+            status = data.get("status")
+            headers = data.get("headers") or {}
+            return self._format_response_start_event(
+                request_id=request_id,
+                method=method,
+                url=url,
+                status=status,
+                headers=headers,
+                colored=colored,
+            )
+
+        if kind == "connect":
+            show_keys = ("host", "port", "local_address")
+            content = self._format_mapping(
+                {k: data.get(k) for k in show_keys if data.get(k) is not None},
+                colored,
+            )
+            title = "⚡ Connection"
+            if request_id:
+                title += f" [{request_id}]"
+            return self._draw_section(title, content, self.COLORS["CYAN"])
+
+        if kind == "tls":
+            show_keys = ("server_hostname",)
+            content = self._format_mapping(
+                {k: data.get(k) for k in show_keys if data.get(k) is not None},
+                colored,
+            )
+            title = "⚡ TLS Handshake"
+            if request_id:
+                title += f" [{request_id}]"
+            return self._draw_section(title, content, self.COLORS["CYAN"])
+
+        if kind == "request_sent":
+            method = str(data.get("method") or "REQUEST")
+            title = "Request"
+            if request_id:
+                title += f" [{request_id}]"
+            return self._draw_section(
+                title,
+                f"➔ Sending {method.upper()} Request",
+                self.COLORS["BLUE"],
+            )
+
+        if kind == "stream_start":
+            return self._format_marker(
+                "▼", "Stream Start", record, colored, request_id=request_id
+            )
+
+        if kind == "stream_end":
+            return self._format_marker(
+                "■", "Stream End", record, colored, request_id=request_id
+            )
+
+        if kind == "response_complete":
+            return self._format_marker(
+                "✓", "Response Complete", record, colored, request_id=request_id
+            )
+
+        return None
 
     def _draw_section(self, title, content, color):
         """Draw an open-ended section: header line + optional gutter, no right/bottom border."""
@@ -690,18 +978,14 @@ class HTTPColorFormatter(logging.Formatter):
             lines.append(self._format_section_title("Headers", colored))
             lines.append(self._format_mapping(headers_dict, colored))
 
-        # Build the "↓ Response Start" section.  The synthetic "▼ Stream"
-        # marker that used to be appended here is now a real httpcore event
-        # (response_body.started) handled by _format_httpcore_message.
-        req_id = self._current_request_id
-        if colored:
-            id_part = f" {self.COLORS['DIM']}[{req_id}]{self.COLORS['RESET']}" if req_id else ""
-        else:
-            id_part = f" [{req_id}]" if req_id else ""
-        content = "\n".join(lines) if lines else ""
-        if content:
-            return self._draw_section(f"↓ Response Start{id_part} {title}", content, color)
-        return self._format_response_status_line(title, req_id, color, colored)
+        return self._format_response_start_event(
+            request_id="",
+            method=method,
+            url=url,
+            status=status,
+            headers=headers_dict if headers_parsed else {},
+            colored=colored,
+        )
 
     def _format_httpx_message(self, message: str, colored: bool) -> Optional[str]:
         message = message.strip()
@@ -733,8 +1017,8 @@ class HTTPColorFormatter(logging.Formatter):
         httpcore emits paired .started/.complete events for each phase.
         We render three of them as user-visible lifecycle markers:
 
-            ▼ Stream Start      ← response_body.started
-            ■ Stream End        ← response_body.complete
+            ▼ Stream Start      ← receive_response_body.started
+            ■ Stream End        ← receive_response_body.complete
             ✓ Response Complete ← response_closed.complete
 
         (The fourth marker, ↓ Response, comes from the OpenAI SDK logger
@@ -807,7 +1091,15 @@ class HTTPColorFormatter(logging.Formatter):
 
     # --- Formatting Helpers ---
 
-    def _format_marker(self, icon: str, label: str, record, colored: bool) -> str:
+    def _format_marker(
+        self,
+        icon: str,
+        label: str,
+        record,
+        colored: bool,
+        *,
+        request_id: str = "",
+    ) -> str:
         """Format a lifecycle marker banner line.
 
         Produces a standalone timestamped banner like:
@@ -830,7 +1122,7 @@ class HTTPColorFormatter(logging.Formatter):
                 ts_part = f" {self.COLORS['DIM']}{ts}{self.COLORS['RESET']}"
             else:
                 ts_part = f" {ts}"
-        req_id = self._current_request_id
+        req_id = request_id
         if colored:
             green = self.COLORS["GREEN"]
             bold = self.COLORS["BOLD"]
@@ -850,6 +1142,63 @@ class HTTPColorFormatter(logging.Formatter):
             return f"{color}{'─' * 2} {r}↓ Response Start{id_part} {title} {color}{'─' * 6}{r}"
         id_part = f" [{req_id}]" if req_id else ""
         return f"── ↓ Response Start{id_part} {title} ──────"
+
+    def _format_response_start_event(
+        self,
+        *,
+        request_id: str,
+        method,
+        url,
+        status,
+        headers,
+        colored: bool,
+    ) -> str:
+        lines: List[str] = []
+
+        color = self.COLORS["GREEN"]
+        status_icon = "✓"
+        if status:
+            code = str(status).split()[0]
+            if code.startswith("3"):
+                color = self.COLORS["BLUE"]
+                status_icon = "→"
+            elif code.startswith("4"):
+                color = self.COLORS["YELLOW"]
+                status_icon = "⚠"
+            elif code.startswith("5"):
+                color = self.COLORS["RED"]
+                status_icon = "✗"
+
+        if colored and status:
+            title = (
+                f"{color}{status_icon}{self.COLORS['RESET']} "
+                f"{self.COLORS['BOLD']}{status}{self.COLORS['RESET']}"
+            )
+            if method and url:
+                title += (
+                    f" {self.COLORS['DIM']}({method} {url}){self.COLORS['RESET']}"
+                )
+        else:
+            title = f"{status_icon} {status}" if status else "Response"
+            if method and url:
+                title += f" ({method} {url})"
+
+        if headers:
+            lines.append(self._format_section_title("Headers", colored))
+            lines.append(self._format_mapping(headers, colored))
+
+        content = "\n".join(lines) if lines else ""
+        if content:
+            if colored:
+                id_part = (
+                    f" {self.COLORS['DIM']}[{request_id}]{self.COLORS['RESET']}"
+                    if request_id
+                    else ""
+                )
+            else:
+                id_part = f" [{request_id}]" if request_id else ""
+            return self._draw_section(f"↓ Response Start{id_part} {title}", content, color)
+        return self._format_response_status_line(title, request_id, color, colored)
 
     def _format_request_line(self, method, url, colored):
         if colored:
@@ -1105,16 +1454,11 @@ def configure_http_logging():
 
 
 class SpinnerLogHandler(logging.Handler):
-    """Watches httpcore/openai log events to drive spinner state transitions.
+    """Drive spinner state transitions from TUI lifecycle events.
 
-    This handler never emits text.  It only calls ``spinner.set_state()``
-    when it detects HTTP lifecycle events that map to spinner states:
-
-        connect_tcp / start_tls  →  "connecting"
-        send_request_headers     →  "waiting"
-
-    Attach to httpcore/openai loggers while the spinner is active and
-    remove when the spinner stops.
+    The preferred source is structured ``llm.http`` TUI events carrying
+    explicit request phases and IDs.  Raw ``httpcore``/``openai`` logs are
+    only used as a fallback when TUI lifecycle events are unavailable.
     """
 
     def __init__(self, spinner):
@@ -1125,6 +1469,26 @@ class SpinnerLogHandler(logging.Handler):
         try:
             msg = record.getMessage()
         except Exception:
+            return
+
+        if record.name == "llm.http" and msg.startswith("TUI Event: "):
+            try:
+                _, _, json_str = msg.partition("TUI Event: ")
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                return
+
+            kind = data.get("kind")
+            if kind == "request":
+                if not self._spinner.is_running:
+                    self._spinner.start()
+                self._spinner.set_state("starting")
+            elif kind in ("connect", "tls"):
+                self._spinner.set_state("connecting")
+            elif kind == "request_sent":
+                self._spinner.set_state("waiting")
+            elif kind == "response_start":
+                self._spinner.stop()
             return
 
         if record.name.startswith("httpcore"):

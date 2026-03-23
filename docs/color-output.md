@@ -9,9 +9,6 @@ LLM CLI can render streaming output with syntax-highlighted code blocks, styled 
 # Enable colored output with the --color flag (or -C)
 llm "explain rust vs c with code examples" --color
 
-# Explicit renderer name (mdstream is the default)
-llm "explain rust" --color mdstream
-
 # Works with chat too
 llm chat --color
 ```
@@ -25,6 +22,44 @@ The `mdstream` renderer uses a **hybrid streaming approach**:
 3. **History is frozen** — completed lines above the cursor are fully rendered and never change
 
 This gives you the best of both worlds: instant token-by-token streaming feedback with polished final output.
+
+## Architecture
+
+`mdstream` is deliberately split into three layers:
+
+1. **Model streaming**: `llm` models yield raw text chunks as they arrive.
+2. **CLI adapter**: `llm.cli._ColorWriter` forwards those chunks into the renderer when `--color` is enabled.
+3. **Renderer state machine**: `tools/mdstream.py` tracks the current partial line, code-fence state, and live table state, then converts completed lines into ANSI-formatted output.
+
+That split matters because `mdstream` does not participate in model execution, API calls, or tool use. It is purely a terminal presentation layer.
+
+### Why It Is Line-Oriented
+
+`mdstream` does **not** build a full Markdown AST. Instead, it optimizes for low-latency terminal rendering:
+
+- Partial lines are shown immediately as raw text.
+- Completed lines are reformatted once enough context exists.
+- Tables are the one exception: the renderer can repaint the active bottom table block after detecting the separator row and additional table rows.
+
+This approach keeps streaming responsive while still supporting headings, lists, links, code fences, and table upgrades.
+
+### Code Blocks
+
+Code fences are rendered incrementally, one line at a time. To preserve syntax-highlighting correctness for multi-line strings and comments, `mdstream` re-highlights the entire fenced block each time a new code line arrives, then prints only the latest highlighted line.
+
+This is a deliberate tradeoff:
+
+- You get immediate output instead of waiting for the whole block to finish.
+- Pygments still sees full block context, so highlighting remains correct.
+
+### Tables
+
+Pipe tables are detected in two phases:
+
+1. A possible header row is rendered immediately as normal text.
+2. If the following line is a valid separator row, the renderer repaints that bottom block as a formatted table.
+
+As more matching rows arrive, the table is re-rendered in place with recalculated column widths. Earlier output above that active table block remains unchanged.
 
 ## Features
 
@@ -80,8 +115,32 @@ curl -s https://raw.githubusercontent.com/.../README.md | mdstream
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MDSTREAM_PADDING` | `4` | Left padding in spaces |
+| `MDSTREAM_PADDING` | `0` | Left padding in spaces |
 | `MDSTREAM_NO_LINENO` | unset | Set to `1` to disable line numbers in code blocks |
+| `LLM_SPINNER` | auto | Enable/disable the interactive spinner (`0` disables, `1` forces on) |
+| `LLM_SPINNER_PERSIST` | `0` | Keep a static spinner line in scrollback when the spinner stops |
+| `LLM_SPINNER_PERSIST_TEXT` | `>` | Prefix/string used for the persisted spinner line |
+| `LLM_SPINNER_PADDING_BEFORE` | `1` when persisting | Blank lines before the persisted spinner line |
+| `LLM_SPINNER_PADDING_AFTER` | `1` when persisting | Blank lines after the persisted spinner line |
+
+## Spinner Behavior
+
+In interactive color mode, `llm` shows a spinner while requests are in flight.
+
+- Request-phase spinner states track connection and waiting phases
+- The spinner stops at response start, before streamed content begins
+- By default the spinner clears on stop
+- Set `LLM_SPINNER_PERSIST=1` to keep a static history line instead
+
+Example:
+
+```bash
+LLM_SPINNER_PERSIST=1 \
+LLM_SPINNER_PERSIST_TEXT=">" \
+LLM_SPINNER_PADDING_BEFORE=1 \
+LLM_SPINNER_PADDING_AFTER=1 \
+llm -C "Explain Rust lifetimes briefly"
+```
 
 ## Comparison with Other Renderers
 

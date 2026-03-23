@@ -83,7 +83,7 @@ class TestSpinnerLabels:
         s.stop()
 
     def test_all_states_have_required_keys(self):
-        required = {"label", "color", "spinner", "timeout", "persist_icon"}
+        required = {"label", "color", "spinner", "timeout"}
         for name, cfg in SPINNER_STATES.items():
             assert required.issubset(cfg.keys()), f"State {name!r} missing keys"
 
@@ -136,8 +136,9 @@ class TestSpinnerHide:
 class TestSpinnerPersist:
     """Persist vs clear behavior on stop()."""
 
-    def test_persist_default(self, monkeypatch):
-        """Default: stop() writes a dim persist line instead of erasing."""
+    def test_clear_default(self, monkeypatch):
+        """Default: stop() clears the spinner instead of persisting it."""
+        monkeypatch.delenv("LLM_SPINNER_PERSIST", raising=False)
         monkeypatch.delenv("LLM_SPINNER_CLEAR", raising=False)
         monkeypatch.delenv("NO_COLOR", raising=False)
         s = Spinner(enabled=True)
@@ -148,12 +149,12 @@ class TestSpinnerPersist:
         s.stop()
         monkeypatch.undo()
         output = buf.getvalue()
-        assert "⏳" in output
-        assert "Waiting for response..." in output
+        assert "Waiting for response..." not in output
 
-    def test_clear_mode(self, monkeypatch):
-        """LLM_SPINNER_CLEAR=1: stop() erases the spinner line."""
-        monkeypatch.setenv("LLM_SPINNER_CLEAR", "1")
+    def test_persist_mode(self, monkeypatch):
+        """LLM_SPINNER_PERSIST=1 keeps a static line in scrollback."""
+        monkeypatch.setenv("LLM_SPINNER_PERSIST", "1")
+        monkeypatch.setenv("LLM_SPINNER_PERSIST_TEXT", ">")
         s = Spinner(enabled=True)
         s.start()
         s.set_state("waiting")
@@ -162,10 +163,36 @@ class TestSpinnerPersist:
         s.stop()
         monkeypatch.undo()
         output = buf.getvalue()
-        # Erase writes \r\033[K only — no persist icon
-        assert "⏳" not in output
+        assert "> Waiting for response..." in output
 
-    def test_persist_icon_per_state(self):
-        """Each state has a distinct persist_icon."""
-        icons = {cfg["persist_icon"] for cfg in SPINNER_STATES.values()}
-        assert len(icons) == len(SPINNER_STATES), "persist_icon values should be unique"
+    def test_legacy_clear_alias_true(self, monkeypatch):
+        monkeypatch.setenv("LLM_SPINNER_CLEAR", "1")
+        s = Spinner(enabled=True)
+        assert s._persist_on_stop is False
+
+    def test_legacy_clear_alias_false(self, monkeypatch):
+        monkeypatch.setenv("LLM_SPINNER_CLEAR", "0")
+        s = Spinner(enabled=True)
+        assert s._persist_on_stop is True
+
+    def test_persist_flag_takes_precedence_over_legacy_clear(self, monkeypatch):
+        monkeypatch.setenv("LLM_SPINNER_PERSIST", "1")
+        monkeypatch.setenv("LLM_SPINNER_CLEAR", "1")
+        s = Spinner(enabled=True)
+        assert s._persist_on_stop is True
+
+    def test_persist_padding(self, monkeypatch):
+        monkeypatch.setenv("LLM_SPINNER_PERSIST", "1")
+        monkeypatch.setenv("LLM_SPINNER_PERSIST_TEXT", ">")
+        monkeypatch.setenv("LLM_SPINNER_PADDING_BEFORE", "1")
+        monkeypatch.setenv("LLM_SPINNER_PADDING_AFTER", "1")
+        monkeypatch.setenv("NO_COLOR", "1")
+        s = Spinner(enabled=True)
+        s.start()
+        s.set_state("waiting")
+        buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", buf)
+        s.stop()
+        monkeypatch.undo()
+        output = buf.getvalue()
+        assert "\n> Waiting for response...\n\n" in output

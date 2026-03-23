@@ -5,8 +5,11 @@ This module tests the HTTP logging system that enables debug visibility
 into requests/responses across all LLM providers (OpenAI, Anthropic, Gemini, etc).
 """
 
+import asyncio
+import json
 import logging
 import os
+import httpx
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -15,7 +18,12 @@ from llm.cli import cli
 from llm.utils import (
     HTTPColorFormatter,
     SafeHTTPCoreFilter,
+    SpinnerLogHandler,
     _get_http_logging_config,
+    _log_request_tui,
+    _log_request_tui_async,
+    _log_response_tui,
+    _log_response_tui_async,
     buffered_stream_end,
     configure_http_logging,
     is_http_logging_enabled,
@@ -27,8 +35,10 @@ import llm.utils
 def _reset_http_logging_state():
     """Reset the idempotency guard between tests."""
     llm.utils._http_logging_configured = False
+    llm.utils._active_tui_request_ids.set(())
     yield
     llm.utils._http_logging_configured = False
+    llm.utils._active_tui_request_ids.set(())
 
 
 class TestHTTPLoggingConfig:
@@ -328,20 +338,34 @@ class TestHTTPColorFormatterMarkers:
         assert not output.endswith("\n")
 
     def test_markers_include_request_id(self):
-        """Markers should include [req-NNN] when a request ID has been set."""
-        self.fmt._current_request_id = "req-001"
-        r = self._record("httpcore.http11", "receive_response_body.started request=<>")
+        """Correlated TUI events should carry their own request ID."""
+        msg = 'TUI Event: {"kind": "stream_start", "request_id": "req-001"}'
+        r = self._record("llm.http", msg)
         output = self.fmt.format(r)
         assert "[req-001]" in output
 
     def test_markers_omit_request_id_when_empty(self):
         """Markers should not include brackets when no request ID is set."""
-        self.fmt._current_request_id = ""
-        r = self._record("httpcore.http11", "response_closed.complete")
+        msg = 'TUI Event: {"kind": "response_complete", "request_id": ""}'
+        r = self._record("llm.http", msg)
         output = self.fmt.format(r)
-        assert "[" not in output or "[" in output.split("──")[0] is False
-        # Simpler: just check no empty brackets
         assert "[]" not in output
+
+    def test_interleaved_requests_keep_their_own_ids(self):
+        """Markers should not inherit the most recently seen request ID."""
+        req2 = self._record(
+            "llm.http",
+            'TUI Event: {"kind": "request", "request_id": "req-002", "method": "POST", "url": "https://two", "headers": {}}',
+        )
+        self.fmt.format(req2)
+
+        req1_done = self._record(
+            "llm.http",
+            'TUI Event: {"kind": "response_complete", "request_id": "req-001"}',
+        )
+        output = self.fmt.format(req1_done)
+        assert "[req-001]" in output
+        assert "[req-002]" not in output
 
 
 class TestBufferedStreamEnd:
@@ -432,6 +456,236 @@ class TestConfigureIdempotent:
         with patch.dict(os.environ, {"LLM_HTTP_DEBUG": "2"}, clear=True):
             configure_http_logging()
             assert logging.getLogger("httpcore").level == logging.DEBUG
+
+
+class TestTUIEventFiltering:
+    def test_suppresses_raw_openai_response_when_tui_request_active(self):
+        llm.utils._active_tui_request_ids.set(("req-001",))
+        record = logging.LogRecord(
+            "openai._base_client",
+            logging.DEBUG,
+            "",
+            0,
+            'HTTP Response: POST https://api.openai.com/v1/chat/completions "200 OK"',
+            (),
+            None,
+        )
+        assert SafeHTTPCoreFilter().filter(record) is False
+
+
+class TestTUIEventHooks:
+    def test_log_request_tui_emits_request_event_and_sets_extensions(self):
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        with patch("llm.utils._log_tui_event") as mock_log:
+            _log_request_tui(request)
+
+        assert request.extensions["llm_request_id"].startswith("req-")
+        assert callable(request.extensions["trace"])
+        kind = mock_log.call_args.args[0]
+        kwargs = mock_log.call_args.kwargs
+        assert kind == "request"
+        assert kwargs["request_id"] == request.extensions["llm_request_id"]
+
+    def test_trace_callback_emits_lifecycle_events(self):
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        _log_request_tui(request)
+        trace = request.extensions["trace"]
+        request_id = request.extensions["llm_request_id"]
+
+        with patch("llm.utils._log_tui_event") as mock_log:
+            trace("http11.connect_tcp.started", {"host": "api.openai.com", "port": 443})
+            trace("http11.send_request_headers.started", {"request": request})
+            trace("http11.receive_response_body.started", {})
+            trace("http11.receive_response_body.complete", {})
+            trace("http11.response_closed.complete", {})
+
+        calls = [(call.args[0], call.kwargs) for call in mock_log.call_args_list]
+        assert [kind for kind, _ in calls] == [
+            "connect",
+            "request_sent",
+            "stream_start",
+            "stream_end",
+            "response_complete",
+        ]
+        assert all(kwargs["request_id"] == request_id for _, kwargs in calls)
+
+    def test_log_response_tui_emits_response_start(self):
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        request.extensions["llm_request_id"] = "req-123"
+        response = httpx.Response(
+            200,
+            headers={"x-request-id": "req_openai"},
+            request=request,
+        )
+        with patch("llm.utils._log_tui_event") as mock_log:
+            _log_response_tui(response)
+
+        assert mock_log.call_args.args[0] == "response_start"
+        kwargs = mock_log.call_args.kwargs
+        assert kwargs["request_id"] == "req-123"
+        assert kwargs["status"].startswith("200")
+        assert kwargs["headers"]["x-request-id"] == "req_openai"
+
+    def test_async_hooks_mirror_sync_hooks(self):
+        async def run():
+            request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            await _log_request_tui_async(request)
+            trace = request.extensions["trace"]
+            await trace("http11.receive_response_body.started", {})
+            response = httpx.Response(200, request=request)
+            await _log_response_tui_async(response)
+            return request
+
+        with patch("llm.utils._log_tui_event") as mock_log:
+            request = asyncio.run(run())
+
+        assert request.extensions["llm_request_id"].startswith("req-")
+        kinds = [call.args[0] for call in mock_log.call_args_list]
+        assert kinds[0] == "request"
+        assert "stream_start" in kinds
+        assert "response_start" in kinds
+
+
+class TestStructuredTUIFormatting:
+    def setup_method(self):
+        self.fmt = HTTPColorFormatter(use_colors=False)
+
+    def _record(self, payload):
+        record = logging.LogRecord(
+            "llm.http",
+            logging.DEBUG,
+            "",
+            0,
+            f"TUI Event: {json.dumps(payload)}",
+            (),
+            None,
+        )
+        record.msecs = 222
+        return record
+
+    def test_formats_connect_event(self):
+        output = self.fmt.format(
+            self._record(
+                {"kind": "connect", "request_id": "req-001", "host": "api.openai.com", "port": 443}
+            )
+        )
+        assert "Connection [req-001]" in output
+        assert "host: api.openai.com" in output
+
+    def test_formats_tls_event(self):
+        output = self.fmt.format(
+            self._record(
+                {"kind": "tls", "request_id": "req-001", "server_hostname": "api.openai.com"}
+            )
+        )
+        assert "TLS Handshake [req-001]" in output
+        assert "server_hostname: api.openai.com" in output
+
+    def test_formats_request_sent_event(self):
+        output = self.fmt.format(
+            self._record({"kind": "request_sent", "request_id": "req-001", "method": "POST"})
+        )
+        assert "Request [req-001]" in output
+        assert "Sending POST Request" in output
+
+    def test_formats_response_start_event(self):
+        output = self.fmt.format(
+            self._record(
+                {
+                    "kind": "response_start",
+                    "request_id": "req-001",
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/chat/completions",
+                    "status": "200 OK",
+                    "headers": {"x-request-id": "req_openai"},
+                }
+            )
+        )
+        assert "Response Start [req-001]" in output
+        assert "x-request-id: req_openai" in output
+
+
+class TestSpinnerLogHandler:
+    class FakeSpinner:
+        def __init__(self):
+            self.states = []
+            self.started = 0
+            self.stopped = 0
+            self._running = False
+
+        def start(self):
+            self.started += 1
+            self._running = True
+
+        def stop(self):
+            self.stopped += 1
+            self._running = False
+
+        def set_state(self, state, **kwargs):
+            self.states.append((state, kwargs))
+
+        @property
+        def is_running(self):
+            return self._running
+
+    def test_llm_http_events_drive_spinner_lifecycle(self):
+        spinner = self.FakeSpinner()
+        handler = SpinnerLogHandler(spinner)
+        events = [
+            'TUI Event: {"kind": "request", "request_id": "req-001"}',
+            'TUI Event: {"kind": "connect", "request_id": "req-001"}',
+            'TUI Event: {"kind": "request_sent", "request_id": "req-001"}',
+            'TUI Event: {"kind": "response_start", "request_id": "req-001"}',
+        ]
+        for message in events:
+            record = logging.LogRecord("llm.http", logging.DEBUG, "", 0, message, (), None)
+            handler.emit(record)
+
+        assert spinner.started == 1
+        assert spinner.states == [
+            ("starting", {}),
+            ("connecting", {}),
+            ("waiting", {}),
+        ]
+        assert spinner.stopped == 1
+
+    def test_httpcore_fallback_still_updates_spinner(self):
+        spinner = self.FakeSpinner()
+        handler = SpinnerLogHandler(spinner)
+        connect = logging.LogRecord(
+            "httpcore.connection",
+            logging.DEBUG,
+            "",
+            0,
+            "connect_tcp.started host='api.openai.com' port=443",
+            (),
+            None,
+        )
+        request = logging.LogRecord(
+            "httpcore.http11",
+            logging.DEBUG,
+            "",
+            0,
+            "send_request_headers.started request=<Request [b'POST']>",
+            (),
+            None,
+        )
+        handler.emit(connect)
+        handler.emit(request)
+        assert spinner.states == [("connecting", {}), ("waiting", {})]
+
+    def test_suppresses_raw_httpcore_lifecycle_when_tui_request_active(self):
+        llm.utils._active_tui_request_ids.set(("req-001",))
+        record = logging.LogRecord(
+            "httpcore.http11",
+            logging.DEBUG,
+            "",
+            0,
+            "receive_response_body.started request=<>",
+            (),
+            None,
+        )
+        assert SafeHTTPCoreFilter().filter(record) is False
 
 
 if __name__ == "__main__":
