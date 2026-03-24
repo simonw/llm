@@ -89,6 +89,99 @@ def test_nested_blockquotes_and_lists():
     assert deep == "  │ │   1. nested\n"
 
 
+def test_nested_unordered_lists_use_depth_specific_bullets():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    rendered = [
+        strip_ansi(renderer.render_line("- one\n")),
+        strip_ansi(renderer.render_line("  - two\n")),
+        strip_ansi(renderer.render_line("    - three\n")),
+        strip_ansi(renderer.render_line("      - four\n")),
+    ]
+
+    assert rendered == [
+        "  • one\n",
+        "  │ ◦ two\n",
+        "  │ │ ▪ three\n",
+        "  │ │ │ ‣ four\n",
+    ]
+
+
+def test_nested_ordered_lists_render_hierarchical_markers():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    rendered = [
+        strip_ansi(renderer.render_line("1. one\n")),
+        strip_ansi(renderer.render_line("  1. two\n")),
+        strip_ansi(renderer.render_line("    1. three\n")),
+        strip_ansi(renderer.render_line("      2. four\n")),
+    ]
+
+    assert rendered == [
+        "  1. one\n",
+        "  │ 1.1 two\n",
+        "  │ │ 1.1.1 three\n",
+        "  │ │ │ 1.1.1.2 four\n",
+    ]
+
+
+def test_vertical_list_guides_are_on_by_default_and_opt_out_via_env(monkeypatch):
+    monkeypatch.delenv("MDSTREAM_NO_LIST_GUIDES", raising=False)
+    default_renderer = StreamingMarkdownRenderer(padding=0)
+    default_rendered = "".join(
+        strip_ansi(default_renderer.render_line(line))
+        for line in [
+            "1. launch\n",
+            "  1. plan\n",
+            "    1. build\n",
+        ]
+    )
+
+    monkeypatch.setenv("MDSTREAM_NO_LIST_GUIDES", "1")
+    opted_out_renderer = StreamingMarkdownRenderer(padding=0)
+    opted_out_rendered = "".join(
+        strip_ansi(opted_out_renderer.render_line(line))
+        for line in [
+            "1. launch\n",
+            "  1. plan\n",
+            "    1. build\n",
+        ]
+    )
+
+    assert "│" in default_rendered
+    assert "│" not in opted_out_rendered
+
+
+def test_hierarchical_ordered_lists_emphasize_only_last_segment():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    strip_ansi(renderer.render_line("1. launch\n"))
+    strip_ansi(renderer.render_line("  2. plan\n"))
+    strip_ansi(renderer.render_line("    1. build\n"))
+    rendered = renderer.render_line("      4. verify\n")
+
+    assert strip_ansi(rendered) == "  │ │ │ 1.2.1.4 verify\n"
+    assert re.search(r"\x1b\[2m1\.2\.1\x1b\[0m\x1b\[1m\.4\x1b\[0m", rendered)
+
+
+def test_list_continuation_lines_align_under_item_text():
+    renderer = StreamingMarkdownRenderer(padding=0)
+
+    rendered = [
+        strip_ansi(renderer.render_line("- one\n")),
+        strip_ansi(renderer.render_line("  continuation\n")),
+        strip_ansi(renderer.render_line("  still same item\n")),
+        strip_ansi(renderer.render_line("- two\n")),
+    ]
+
+    assert rendered == [
+        "  • one\n",
+        "    continuation\n",
+        "    still same item\n",
+        "  • two\n",
+    ]
+
+
 def test_headings_do_not_add_extra_blank_lines():
     renderer = StreamingMarkdownRenderer(padding=0)
 

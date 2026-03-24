@@ -38,7 +38,8 @@ Usage:
     cat README.md | mdstream         # render any markdown
 
 Environment:
-    MDSTREAM_PADDING  Left padding in spaces (default: 0)
+    MDSTREAM_PADDING             Left padding in spaces (default: 0)
+    MDSTREAM_NO_LIST_GUIDES      Disable nested list guides
 """
 
 import math
@@ -147,9 +148,10 @@ _BARE_URL_RE = re.compile(r"(?<![\w/])https?://[^\s<>()]+")
 _ESCAPE_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!>~|])")
 _TASK_RE = re.compile(r"^(\s*)([-*+])\s+\[([ xX])\]\s+(.*)")
 _LIST_RE = re.compile(r"^(\s*)([-*+])\s+(.*)")
-_ORDERED_RE = re.compile(r"^(\s*)(\d+)\.\s+(.*)")
+_ORDERED_RE = re.compile(r"^(\s*)((?:\d+\.)*\d+)\.?\s+(.*)")
 _TABLE_CANDIDATE_RE = re.compile(r"^\s*\|?.+\|.+\|?\s*$")
 _TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
+_LIST_BULLETS = ("•", "◦", "▪", "‣")
 
 
 def _get_lexer(lang: str):
@@ -288,6 +290,16 @@ def _block_prefix(base_pad: str, quote_depth: int) -> str:
     return base_pad + "  " + "".join(f"{DIM}│{RESET} " for _ in range(quote_depth))
 
 
+def _indent_columns(indent: str) -> int:
+    total = 0
+    for char in indent:
+        if char == "\t":
+            total = ((total // 4) + 1) * 4
+        else:
+            total += 1
+    return total
+
+
 class StreamingMarkdownRenderer:
     """
     Stateful markdown renderer for terminal streaming.
@@ -334,12 +346,16 @@ class StreamingMarkdownRenderer:
         self.table_lines: list[str] = []
         self.table_alignments: list[str] = []
         self.table_render_rows = 0
+        self.list_indent_stack: list[int] = []
+        self.list_level_meta: list[dict[str, object]] = []
+        self.active_list_context: dict[str, object] | None = None
         if padding is None:
             # Default to 0 — no left padding. Override with MDSTREAM_PADDING=N.
             padding = int(os.environ.get("MDSTREAM_PADDING", "0"))
         self.pad = " " * padding
         # Line numbers in code blocks: enabled by default, disable with MDSTREAM_NO_LINENO=1
         self.show_lineno = not os.environ.get("MDSTREAM_NO_LINENO")
+        self.show_list_guides = not os.environ.get("MDSTREAM_NO_LIST_GUIDES")
 
     def render_line(self, line: str) -> str:
         """
@@ -432,18 +448,138 @@ class StreamingMarkdownRenderer:
     def _render_noncode_line(self, stripped: str) -> str:
         fence_match = re.match(r"^(\s*)(```+|~~~+)(.*)", stripped)
         if fence_match:
+            self._clear_list_state()
             return self._render_code_fence(fence_match)
 
         if _looks_like_table_row(stripped):
             # Render the line immediately so streaming stays snappy. If the
             # next line proves this is really a table separator, we will
             # repaint this bottom block in-place as a formatted table.
+            self._clear_list_state()
             rendered = self._render_structured_line(stripped)
             self.pending_table_header = stripped
             self.pending_table_rows = self._measure_rendered_rows(rendered)
             return rendered
 
         return self._render_structured_line(stripped)
+
+    def _clear_list_state(self) -> None:
+        self.list_indent_stack = []
+        self.list_level_meta = []
+        self.active_list_context = None
+
+    def _list_depth(self, indent: str) -> tuple[int, int]:
+        width = _indent_columns(indent)
+        if not self.list_indent_stack:
+            self.list_indent_stack = [width]
+            return 0, width
+
+        while len(self.list_indent_stack) > 1 and width < self.list_indent_stack[-1]:
+            self.list_indent_stack.pop()
+
+        if width < self.list_indent_stack[0]:
+            self.list_indent_stack = [width]
+            return 0, width
+
+        if width > self.list_indent_stack[-1]:
+            self.list_indent_stack.append(width)
+
+        return max(0, len(self.list_indent_stack) - 1), width
+
+    def _list_level_prefix(self, depth: int) -> str:
+        if depth <= 0 or not self.show_list_guides:
+            return "  " * (depth + 1)
+        return "  " + "".join(f"{DIM}│{RESET} " for _ in range(depth))
+
+    def _set_list_context(
+        self, rendered_prefix: str, source_indent_width: int, marker_width: int
+    ) -> None:
+        self.active_list_context = {
+            "source_indent_width": source_indent_width,
+            "continuation_prefix": rendered_prefix + (" " * (marker_width + 1)),
+        }
+
+    def _remember_list_level(
+        self, depth: int, *, kind: str, path: list[str] | None = None
+    ) -> None:
+        self.list_level_meta = self.list_level_meta[:depth]
+        entry: dict[str, object] = {"kind": kind}
+        if path is not None:
+            entry["path"] = list(path)
+        self.list_level_meta.append(entry)
+
+    def _ordered_path(self, depth: int, marker: str) -> list[str]:
+        parts = marker.split(".")
+        if len(parts) > 1:
+            return parts
+
+        if (
+            depth > 0
+            and depth <= len(self.list_level_meta)
+            and self.list_level_meta[depth - 1].get("kind") == "ordered"
+        ):
+            parent_path = list(self.list_level_meta[depth - 1]["path"])
+            return [*parent_path, parts[0]]
+
+        return parts
+
+    def _format_ordered_marker(self, path: list[str]) -> tuple[str, int]:
+        if len(path) == 1:
+            marker = f"{path[0]}."
+            return f"{BOLD}{path[0]}{RESET}.", len(marker)
+
+        faded = ".".join(path[:-1])
+        bright = f".{path[-1]}"
+        return (
+            f"{DIM}{faded}{RESET}{BOLD}{bright}{RESET}",
+            len(faded) + len(bright),
+        )
+
+    def _render_list_item(
+        self,
+        prefix: str,
+        indent: str,
+        marker: str,
+        body: str,
+        *,
+        kind: str,
+    ) -> str:
+        depth, source_indent_width = self._list_depth(indent)
+        rendered_prefix = prefix + self._list_level_prefix(depth)
+
+        marker_text = marker
+        marker_width = _visible_width(marker_text)
+        if kind == "unordered":
+            marker_text = _LIST_BULLETS[depth % len(_LIST_BULLETS)]
+            marker_width = len(marker_text)
+            self._remember_list_level(depth, kind=kind)
+        elif kind == "ordered":
+            ordered_path = self._ordered_path(depth, marker)
+            marker_text, marker_width = self._format_ordered_marker(ordered_path)
+            self._remember_list_level(depth, kind=kind, path=ordered_path)
+        else:
+            self._remember_list_level(depth, kind=kind)
+
+        self._set_list_context(rendered_prefix, source_indent_width, marker_width)
+        rendered_body = _format_inline(body)
+        return f"{rendered_prefix}{marker_text} {rendered_body}\n"
+
+    def _render_list_continuation(self, prefix: str, text: str) -> str | None:
+        if not self.active_list_context or not text.strip():
+            return None
+
+        match = re.match(r"^(\s+)(.*)$", text)
+        if not match:
+            return None
+
+        indent_width = _indent_columns(match.group(1))
+        source_indent_width = int(self.active_list_context["source_indent_width"])
+        if indent_width <= source_indent_width:
+            return None
+
+        body = match.group(2)
+        continuation_prefix = str(self.active_list_context["continuation_prefix"])
+        return f"{continuation_prefix}{_format_inline(body)}\n"
 
     def _render_code_fence(self, fence_match: re.Match[str]) -> str:
         p = self.pad
@@ -558,6 +694,7 @@ class StreamingMarkdownRenderer:
         if allow_headings:
             heading_match = re.match(r"^(#{1,6})\s+(.*)", text)
             if heading_match:
+                self._clear_list_state()
                 level = len(heading_match.group(1))
                 value = heading_match.group(2).rstrip("#").rstrip()
                 style = HEADING_STYLES[min(level - 1, len(HEADING_STYLES) - 1)]
@@ -571,6 +708,7 @@ class StreamingMarkdownRenderer:
                 return heading
 
         if re.match(r"^(\s*[-*_]\s*){3,}$", text):
+            self._clear_list_state()
             return f"{prefix}{DIM}{'─' * 40}{RESET}\n"
 
         task_match = _TASK_RE.match(text)
@@ -581,21 +719,29 @@ class StreamingMarkdownRenderer:
                 if status.lower() == "x"
                 else f"{DIM}☐{RESET}"
             )
-            return f"{prefix}{indent}  {checkbox} {_format_inline(body)}\n"
+            return self._render_list_item(
+                prefix, indent, checkbox, body, kind="task"
+            )
 
         list_match = _LIST_RE.match(text)
         if list_match:
-            indent = list_match.group(1)
-            return f"{prefix}{indent}  • {_format_inline(list_match.group(3))}\n"
+            indent, _, body = list_match.groups()
+            return self._render_list_item(prefix, indent, "•", body, kind="unordered")
 
         ordered_match = _ORDERED_RE.match(text)
         if ordered_match:
             indent, number, body = ordered_match.groups()
-            return f"{prefix}{indent}  {DIM}{number}.{RESET} {_format_inline(body)}\n"
+            return self._render_list_item(prefix, indent, number, body, kind="ordered")
+
+        continuation = self._render_list_continuation(prefix, text)
+        if continuation is not None:
+            return continuation
 
         if text:
+            self._clear_list_state()
             return f"{prefix}{_format_inline(text)}\n"
 
+        self._clear_list_state()
         return "\n"
 
     def _render_table(self) -> str:
@@ -752,7 +898,8 @@ def main():
         print("  cat README.md | mdstream", file=sys.stderr)
         print("", file=sys.stderr)
         print("Environment:", file=sys.stderr)
-        print("  MDSTREAM_PADDING  Left padding in spaces (default: 4)", file=sys.stderr)
+        print("  MDSTREAM_PADDING             Left padding in spaces (default: 0)", file=sys.stderr)
+        print("  MDSTREAM_NO_LIST_GUIDES      Disable nested list guides", file=sys.stderr)
         sys.exit(1)
 
     renderer = StreamingMarkdownRenderer()
