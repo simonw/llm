@@ -372,7 +372,7 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        client = openai.OpenAI(api_key=self.get_key())
+        client = openai.OpenAI(api_key=self.get_key(), timeout=60.0, max_retries=3)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
 
