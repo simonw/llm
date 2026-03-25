@@ -106,9 +106,7 @@ def test_fragments_list(user_path):
         )
         result = runner.invoke(cli, ["fragments", "list"])
         assert result.exit_code == 0
-        assert result.output.strip() == (
-            textwrap.dedent(
-                """
+        assert result.output.strip() == (textwrap.dedent("""
                 - hash: hash2
                   aliases: []
                   datetime_utc: '2022-10-01T00:00:00Z'
@@ -125,9 +123,7 @@ def test_fragments_list(user_path):
                   datetime_utc: '2024-10-01T00:00:00Z'
                   source: file3.txt
                   content: '3'
-                """
-            ).strip()
-        )
+                """).strip())
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})

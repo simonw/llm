@@ -11,7 +11,6 @@ import pytest
 import sqlite_utils
 import time
 
-
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 

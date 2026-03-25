@@ -4,7 +4,6 @@ from llm.embeddings_migrations import embeddings_migrations
 import pytest
 import sqlite_utils
 
-
 EXPECTED = {
     "id": str,
     "model": str,

@@ -233,6 +233,32 @@ def register_models(register):
         )
         # "gpt-5.2-pro" is Responses API only
 
+    # GPT-5.4
+    for model_id in (
+        "gpt-5.4",
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini",
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-nano",
+        "gpt-5.4-nano-2026-03-17",
+    ):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -483,10 +509,12 @@ class SharedOptions(llm.Options):
 
 
 class ReasoningEffortEnum(str, Enum):
+    none = "none"
     minimal = "minimal"
     low = "low"
     medium = "medium"
     high = "high"
+    xhigh = "xhigh"
 
 
 class OptionsForReasoning(SharedOptions):
