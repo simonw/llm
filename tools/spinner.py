@@ -28,19 +28,27 @@ import time
 SPINNERS = {
     "toggle3": {
         "frames": ["□", "■"],
+        "persist": "◦",
         "interval": 0.12,
     },
     "dots": {
         "frames": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+        "persist": "•",
         "interval": 0.08,
     },
     "line": {
         "frames": ["-", "\\", "|", "/"],
+        "persist": "│",
         "interval": 0.13,
+    },
+    "dot": {
+        "frames": ["●", "○"],
+        "persist": "●",
+        "interval": 0.12,
     },
 }
 
-DEFAULT_SPINNER = "toggle3"
+DEFAULT_SPINNER = "dot"
 
 
 # ── ANSI helpers ───────────────────────────────────────────────────────
@@ -71,31 +79,26 @@ SPINNER_STATES = {
     "starting": {
         "label": "Starting...",
         "color": "cyan",
-        "spinner": "toggle3",
         "timeout": 10,
     },
     "connecting": {
         "label": "Connecting...",
         "color": "cyan",
-        "spinner": "toggle3",
         "timeout": 10,
     },
     "waiting": {
         "label": "Waiting for response...",
         "color": "cyan",
-        "spinner": "toggle3",
         "timeout": 30,
     },
     "tool_calling": {
         "label": "Calling {tool_name}...",
         "color": "yellow",
-        "spinner": "toggle3",
         "timeout": 30,
     },
     "tool_running": {
         "label": "Running {tool_name}...",
         "color": "yellow",
-        "spinner": "toggle3",
         "timeout": 60,
     },
 }
@@ -131,7 +134,11 @@ def _should_persist_spinner() -> bool:
         return _env_flag("LLM_SPINNER_PERSIST", default=False)
     if "LLM_SPINNER_CLEAR" in os.environ:
         return not _env_flag("LLM_SPINNER_CLEAR", default=False)
-    return False
+    raw_http_debug = (os.environ.get("LLM_HTTP_DEBUG") or "").strip()
+    try:
+        return int(raw_http_debug) >= 2
+    except ValueError:
+        return False
 
 
 # ── Spinner class ──────────────────────────────────────────────────────
@@ -159,7 +166,7 @@ class Spinner:
         self._frame_idx = 0
         self._use_color = not os.environ.get("NO_COLOR")
         self._persist_on_stop = _should_persist_spinner()
-        self._persist_text = os.environ.get("LLM_SPINNER_PERSIST_TEXT", ">")
+        self._persist_text = os.environ.get("LLM_SPINNER_PERSIST_TEXT")
         self._padding_before = _env_int(
             "LLM_SPINNER_PADDING_BEFORE", 1 if self._persist_on_stop else 0
         )
@@ -197,6 +204,8 @@ class Spinner:
 
         By default the spinner clears on stop.  Set
         ``LLM_SPINNER_PERSIST=1`` to keep a static line in scrollback.
+        ``LLM_HTTP_DEBUG=2`` enables persistence by default so verbose
+        request/response blocks keep their request-phase markers.
         ``LLM_SPINNER_CLEAR`` is supported as a legacy inverse alias.
 
         Idempotent — safe to call multiple times or on a stopped spinner.
@@ -210,7 +219,7 @@ class Spinner:
         if self._persist_on_stop:
             self._persist()
         else:
-            self._erase()
+            self._erase(leave_blank_line=True)
         self._detach_log_handler()
         self._thread = None
         self._state = None
@@ -361,10 +370,15 @@ class Spinner:
         if not cfg:
             self._erase()
             return
+        spinner_name = cfg.get("spinner", DEFAULT_SPINNER)
+        spinner_def = SPINNERS.get(spinner_name, SPINNERS[DEFAULT_SPINNER])
         label = cfg["label"].format(**self._state_kwargs)
         padding_before = "\n" * self._padding_before
         padding_after = "\n" * self._padding_after
-        line_body = f"{self._persist_text} {label}".rstrip()
+        persist_text = self._persist_text
+        if persist_text is None:
+            persist_text = spinner_def.get("persist", spinner_def["frames"][0])
+        line_body = f"{persist_text} {label}".strip() if persist_text else label
         try:
             if self._use_color:
                 line = (
@@ -378,10 +392,11 @@ class Spinner:
         except (BrokenPipeError, OSError):
             pass
 
-    def _erase(self) -> None:
+    def _erase(self, leave_blank_line: bool = False) -> None:
         """Clear the spinner line from the terminal."""
         try:
-            sys.stdout.write(ERASE_LINE)
+            suffix = "\n" if leave_blank_line else ""
+            sys.stdout.write(f"{ERASE_LINE}{suffix}")
             sys.stdout.flush()
         except (BrokenPipeError, OSError):
             pass
