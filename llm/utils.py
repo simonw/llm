@@ -1283,19 +1283,52 @@ class HTTPColorFormatter(logging.Formatter):
             return f"  {self.COLORS['MAGENTA']}• Tool Call:{self.COLORS['RESET']} {payload}"
         return f"  Tool Call: {payload}"
 
-    def _truncate_body(self, text: str, max_chars: int = 500) -> str:
-        """Truncate body text with indicator showing total length.
-        Set LLM_HTTP_NO_TRUNCATE=1 to disable truncation."""
+    def _get_truncation_limit(self, env_var: str, default: int) -> Optional[int]:
+        """Return a truncation limit from the environment.
+
+        ``LLM_HTTP_NO_TRUNCATE`` disables all truncation.
+        Negative values for per-limit env vars disable that specific limit.
+        Invalid values fall back to the provided default.
+        """
         if os.environ.get("LLM_HTTP_NO_TRUNCATE"):
+            return None
+        raw = os.environ.get(env_var)
+        if raw in (None, ""):
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        if value < 0:
+            return None
+        return value
+
+    def _truncate_body(self, text: str, max_chars: int = 500) -> str:
+        """Truncate body text with indicator showing total length."""
+        max_chars = self._get_truncation_limit("LLM_HTTP_MAX_BODY_CHARS", max_chars)
+        if max_chars is None:
             return text
         if len(text) <= max_chars:
             return text
         return f"{text[:max_chars]}...\n[truncated, {len(text)} chars total]"
 
+    def _truncate_string_value(self, value: str, max_chars: int = 160) -> str:
+        """Truncate oversized JSON string values before whole-body truncation."""
+        max_chars = self._get_truncation_limit("LLM_HTTP_MAX_VALUE_CHARS", max_chars)
+        if max_chars is None:
+            return value
+        if len(value) <= max_chars:
+            return value
+        return f"{value[:max_chars]}... [truncated, {len(value)} chars total]"
+
     def _format_json(self, data: Any, colored: bool, indent: str = "", truncate: bool = True) -> str:
         """Format JSON with optional colorization and truncation."""
         try:
-            text = json.dumps(self._sanitize(data), indent=2, ensure_ascii=False)
+            text = json.dumps(
+                self._sanitize(data, truncate_strings=truncate),
+                indent=2,
+                ensure_ascii=False,
+            )
 
             # Apply truncation before colorization
             if truncate:
@@ -1315,20 +1348,27 @@ class HTTPColorFormatter(logging.Formatter):
             return text
         except TypeError:
             from pprint import pformat
-            text = pformat(self._sanitize(data), indent=2, compact=True)
+            text = pformat(
+                self._sanitize(data, truncate_strings=truncate), indent=2, compact=True
+            )
             if truncate:
                 text = self._truncate_body(text)
             if indent:
                 return textwrap.indent(text, indent)
             return text
 
-    def _sanitize(self, data: Any) -> Any:
+    def _sanitize(self, data: Any, truncate_strings: bool = False) -> Any:
         if isinstance(data, dict):
-            return {k: self._sanitize(v) for k, v in data.items()}
+            return {
+                k: self._sanitize(v, truncate_strings=truncate_strings)
+                for k, v in data.items()
+            }
         if isinstance(data, list):
-            return [self._sanitize(v) for v in data]
+            return [self._sanitize(v, truncate_strings=truncate_strings) for v in data]
         if isinstance(data, (bytes, bytearray)):
             return data.decode(errors="replace")
+        if truncate_strings and isinstance(data, str):
+            return self._truncate_string_value(data)
         return data
 
     def _parse_literal(self, value: str):

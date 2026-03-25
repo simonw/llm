@@ -1575,6 +1575,7 @@ class _BaseChainResponse:
         self.chain_limit = chain_limit
         self.before_call = before_call
         self.after_call = after_call
+        self._chain_limit_hit = False
 
     def log_to_db(self, db):
         for response in self._responses:
@@ -1604,10 +1605,27 @@ class ChainResponse(_BaseChainResponse):
         )
         while current_response:
             count += 1
+
+            # Chain limit guard: prevent runaway tool-call loops.
+            #
+            # Models can return text AND tool_calls in the same response.
+            # If we checked the limit AFTER yielding (the old behavior),
+            # the text would already be streamed to the terminal, then
+            # the ValueError would skip writer.finish() and append a raw
+            # "Error:" to stdout mid-output.
+            #
+            # By checking BEFORE yielding, we refuse to stream a round
+            # that we know we can't follow through on (its tool calls
+            # would never execute).  The caller gets a clean
+            # StopIteration and can finish rendering normally.
+            #
+            # chain_limit=0 means unlimited (no guard).
+            if self.chain_limit and count > self.chain_limit:
+                self._chain_limit_hit = True
+                break
+
             yield current_response
             self._responses.append(current_response)
-            if self.chain_limit and count >= self.chain_limit:
-                raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
             tool_results = current_response.execute_tool_calls(
@@ -1660,11 +1678,16 @@ class AsyncChainResponse(_BaseChainResponse):
         )
         while current_response:
             count += 1
+
+            # Same chain limit guard as ChainResponse.responses() —
+            # check BEFORE yielding so the caller gets a clean end
+            # instead of a ValueError after text has already streamed.
+            if self.chain_limit and count > self.chain_limit:
+                self._chain_limit_hit = True
+                break
+
             yield current_response
             self._responses.append(current_response)
-
-            if self.chain_limit and count >= self.chain_limit:
-                raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
             tool_results = await current_response.execute_tool_calls(

@@ -1028,6 +1028,26 @@ def prompt(
             raise
         raise click.ClickException(str(ex))
 
+    # Chain limit reached: the model wanted more tool rounds but we
+    # stopped it.  The last response's text was already streamed and
+    # writer.finish() ran cleanly.  Print a notice so the user knows
+    # the output may be incomplete.
+    #
+    # LLM_CHAIN_LIMIT_STDERR=1 sends the message to stderr instead
+    # of stdout (useful when piping output to another program).
+    if isinstance(response, ChainResponse) and response._chain_limit_hit:
+        msg = "\n[Chain limit of {} reached, further tool calls stopped]".format(
+            response.chain_limit
+        )
+        use_stderr = bool(os.environ.get("LLM_CHAIN_LIMIT_STDERR"))
+        if color:
+            click.echo(
+                click.style(msg, fg="yellow", dim=True),
+                err=use_stderr,
+            )
+        else:
+            click.echo(msg, err=use_stderr)
+
     if usage:
         if isinstance(response, ChainResponse):
             responses = response._responses

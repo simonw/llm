@@ -118,8 +118,8 @@ curl -s https://raw.githubusercontent.com/.../README.md | mdstream
 | `MDSTREAM_PADDING` | `0` | Left padding in spaces |
 | `MDSTREAM_NO_LINENO` | unset | Set to `1` to disable line numbers in code blocks |
 | `LLM_SPINNER` | auto | Enable/disable the interactive spinner (`0` disables, `1` forces on) |
-| `LLM_SPINNER_PERSIST` | `0` | Keep a static spinner line in scrollback when the spinner stops |
-| `LLM_SPINNER_PERSIST_TEXT` | `>` | Prefix/string used for the persisted spinner line |
+| `LLM_SPINNER_PERSIST` | `0` (`1` automatically for `LLM_HTTP_DEBUG=2`) | Keep a static spinner line in scrollback when the spinner stops |
+| `LLM_SPINNER_PERSIST_TEXT` | auto | Override the default persisted symbol/string |
 | `LLM_SPINNER_PADDING_BEFORE` | `1` when persisting | Blank lines before the persisted spinner line |
 | `LLM_SPINNER_PADDING_AFTER` | `1` when persisting | Blank lines after the persisted spinner line |
 
@@ -130,7 +130,9 @@ In interactive color mode, `llm` shows a spinner while requests are in flight.
 - Request-phase spinner states track connection and waiting phases
 - The spinner stops at response start, before streamed content begins
 - By default the spinner clears on stop
+- In `LLM_HTTP_DEBUG=2`, a dim persisted history line is kept by default
 - Set `LLM_SPINNER_PERSIST=1` to keep a static history line instead
+- Set `LLM_SPINNER_PERSIST=0` or `LLM_SPINNER_CLEAR=1` to opt out of persistence
 
 Example:
 

@@ -211,15 +211,37 @@ NO_COLOR=1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 LLM_HTTP_UI_MINIMAL=1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 ```
 
-### Spinner Controls
+### Truncation Controls
 
-Interactive color mode uses a request-phase spinner by default. It clears on stop unless you opt into persistence.
+HTTP debug output truncates long payloads by default, but it now does that in two stages:
+
+- long JSON string values are truncated first, so nearby fields like `model` stay visible
+- the final rendered body is still capped to avoid flooding the terminal
 
 ```bash
-# Keep a static spinner line in history
-LLM_SPINNER_PERSIST=1 llm -C "Test"
+# Change the final rendered body limit (default: 500 chars)
+LLM_HTTP_MAX_BODY_CHARS=1200 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 
-# Customize the persisted prefix and spacing
+# Change the per-string JSON value limit (default: 160 chars)
+LLM_HTTP_MAX_VALUE_CHARS=300 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+
+# Disable all HTTP debug truncation
+LLM_HTTP_NO_TRUNCATE=1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+
+# Or disable one limit at a time using -1
+LLM_HTTP_MAX_BODY_CHARS=-1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+LLM_HTTP_MAX_VALUE_CHARS=-1 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+```
+
+### Spinner Controls
+
+Interactive color mode uses a request-phase spinner by default. With `LLM_HTTP_DEBUG=2`, the spinner also leaves a dim history line in scrollback by default so each request phase stays visible between debug blocks.
+
+```bash
+# Opt out of persisted spinner history
+LLM_SPINNER_PERSIST=0 LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
+
+# Customize the persisted symbol/string and spacing
 LLM_SPINNER_PERSIST=1 \
 LLM_SPINNER_PERSIST_TEXT=">" \
 LLM_SPINNER_PADDING_BEFORE=1 \

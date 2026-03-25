@@ -605,6 +605,62 @@ class TestStructuredTUIFormatting:
         assert "x-request-id: req_openai" in output
 
 
+class TestHTTPColorFormatterTruncation:
+    def setup_method(self):
+        self.fmt = HTTPColorFormatter(use_colors=False)
+
+    def test_truncates_long_json_values_before_whole_body(self):
+        payload = {
+            "model": "gpt-5.4",
+            "messages": [
+                {"role": "system", "content": "x" * 900},
+                {"role": "user", "content": "what models do you use?"},
+            ],
+            "stream": True,
+        }
+
+        output = self.fmt._format_json(payload, colored=False)
+
+        assert '"model": "gpt-5.4"' in output
+        assert '"stream": true' in output
+        assert "[truncated, 900 chars total]" in output
+
+    def test_no_truncate_env_disables_value_and_body_truncation(self):
+        payload = {"content": "x" * 900}
+
+        with patch.dict(os.environ, {"LLM_HTTP_NO_TRUNCATE": "1"}, clear=True):
+            output = self.fmt._format_json(payload, colored=False)
+
+        assert "[truncated," not in output
+        assert '"content": "' + ("x" * 900) + '"' in output
+
+    def test_body_limit_can_be_configured_with_env_var(self):
+        payload = {"model": "gpt-5.4", "content": "x" * 300}
+
+        with patch.dict(
+            os.environ,
+            {"LLM_HTTP_MAX_BODY_CHARS": "80", "LLM_HTTP_MAX_VALUE_CHARS": "80"},
+            clear=True,
+        ):
+            output = self.fmt._format_json(payload, colored=False)
+
+        assert "[truncated, " in output
+        assert len(output.splitlines()[0]) <= 81
+
+    def test_value_limit_can_be_disabled_with_negative_env_var(self):
+        payload = {"content": "x" * 200}
+
+        with patch.dict(
+            os.environ,
+            {"LLM_HTTP_MAX_VALUE_CHARS": "-1", "LLM_HTTP_MAX_BODY_CHARS": "-1"},
+            clear=True,
+        ):
+            output = self.fmt._format_json(payload, colored=False)
+
+        assert "[truncated," not in output
+        assert '"content": "' + ("x" * 200) + '"' in output
+
+
 class TestSpinnerLogHandler:
     class FakeSpinner:
         def __init__(self):
