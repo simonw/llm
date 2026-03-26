@@ -418,3 +418,26 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_plugin_events(db):
+    db["plugin_events"].create(
+        {
+            "id": int,
+            "plugin": str,
+            "phase": str,
+            "kind": str,
+            "level": str,
+            "logger_name": str,
+            "message": str,
+            "details_json": str,
+            "response_id": str,
+            "datetime_utc": str,
+        },
+        pk="id",
+        foreign_keys=(("response_id", "responses", "id"),),
+    )
+    db["plugin_events"].create_index(["plugin"])
+    db["plugin_events"].create_index(["phase"])
+    db["plugin_events"].create_index(["datetime_utc"])

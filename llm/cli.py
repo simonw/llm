@@ -45,7 +45,7 @@ from llm.models import _BaseConversation, ChainResponse
 from llm.utils import buffered_stream_end
 
 from .migrations import migrate
-from .plugins import pm, load_plugins
+from .plugins import load_plugins, register_commands as register_plugin_commands
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
@@ -1566,6 +1566,8 @@ def logs_status():
     click.echo("Found log database at {}".format(path))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
     click.echo("Number of responses logged:\t{}".format(db["responses"].count))
+    if db["plugin_events"].exists():
+        click.echo("Number of plugin events logged:\t{}".format(db["plugin_events"].count))
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
@@ -1655,6 +1657,38 @@ join prompt_attachments
     on attachments.id = prompt_attachments.attachment_id
 where prompt_attachments.response_id in ({})
 order by prompt_attachments."order"
+"""
+
+PLUGIN_EVENTS_SQL = """
+select
+    response_id,
+    plugin,
+    phase,
+    kind,
+    level,
+    logger_name,
+    message,
+    details_json,
+    datetime_utc
+from plugin_events
+where response_id in ({})
+order by datetime_utc, id
+"""
+
+PLUGIN_EVENTS_ALL_SQL = """
+select
+    id,
+    plugin,
+    phase,
+    kind,
+    level,
+    logger_name,
+    message,
+    details_json,
+    response_id,
+    datetime_utc
+from plugin_events{extra_where}
+order by {order_by}{limit}
 """
 
 
@@ -1968,6 +2002,23 @@ def logs_list(
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
 
+    plugin_events_by_id = {}
+    for event in db.query(PLUGIN_EVENTS_SQL.format(",".join("?" * len(ids))), ids):
+        plugin_events_by_id.setdefault(event["response_id"], []).append(
+            {
+                "plugin": event["plugin"],
+                "phase": event["phase"],
+                "kind": event["kind"],
+                "level": event["level"],
+                "logger_name": event["logger_name"],
+                "message": event["message"],
+                "details": (
+                    json.loads(event["details_json"]) if event["details_json"] else None
+                ),
+                "datetime_utc": event["datetime_utc"],
+            }
+        )
+
     FRAGMENTS_SQL = """
     select
         {table}.response_id,
@@ -2132,6 +2183,7 @@ def logs_list(
                 else:
                     row[key] = json.loads(row[key])
         row.update(tool_info_by_id[row["id"]])
+        row["plugin_events"] = plugin_events_by_id.get(row["id"], [])
 
     output = None
     if json_output:
@@ -2206,6 +2258,16 @@ def logs_list(
                             tool_result["name"], truncate_string(tool_result["output"])
                         )
                         for tool_result in row["tool_results"]
+                    ]
+                if row["plugin_events"]:
+                    obj["plugin_events"] = [
+                        "{} {} {}: {}".format(
+                            event["plugin"],
+                            event["phase"],
+                            event["kind"],
+                            truncate_string(event["message"]),
+                        )
+                        for event in row["plugin_events"]
                     ]
                 if system:
                     obj["system"] = system
@@ -2327,6 +2389,23 @@ def logs_list(
                             attachments,
                         )
                     )
+            if row["plugin_events"]:
+                click.echo("\n### Plugin events\n")
+                for event in row["plugin_events"]:
+                    logger_name = (
+                        " [{}]".format(event["logger_name"])
+                        if event["logger_name"]
+                        else ""
+                    )
+                    click.echo(
+                        "- **{}** `{}` {}{}<br>\n{}".format(
+                            event["plugin"],
+                            event["phase"],
+                            event["kind"],
+                            logger_name,
+                            textwrap.indent(event["message"], "    "),
+                        )
+                    )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -2381,6 +2460,125 @@ def logs_list(
                 )
                 if token_usage:
                     click.echo("## Token usage\n\n{}\n".format(token_usage))
+
+
+@logs.command(name="events")
+@click.option(
+    "-n",
+    "--count",
+    type=int,
+    default=10,
+    help="Number of events to show, use 0 for all",
+)
+@click.option(
+    "-p",
+    "--path",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option("--plugin", help="Filter by plugin name")
+@click.option("--phase", help="Filter by event phase")
+@click.option("--kind", help="Filter by event kind")
+@click.option("--level", help="Filter by event level")
+@click.option("-q", "--query", help="Search event messages")
+@click.option("json_output", "--json", is_flag=True, help="Output events as JSON")
+@click.option("-s", "--short", is_flag=True, help="Shorter YAML output")
+def logs_events(count, path, database, plugin, phase, kind, level, query, json_output, short):
+    "Show persisted plugin diagnostics and other non-response events"
+    if database and not path:
+        path = database
+    path = pathlib.Path(path or logs_db_path())
+    if not path.exists():
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    migrate(db)
+
+    limit = ""
+    if count is not None and count > 0:
+        limit = " limit {}".format(count)
+
+    where_bits = []
+    params = {}
+    if plugin:
+        where_bits.append("plugin = :plugin")
+        params["plugin"] = plugin
+    if phase:
+        where_bits.append("phase = :phase")
+        params["phase"] = phase
+    if kind:
+        where_bits.append("kind = :kind")
+        params["kind"] = kind
+    if level:
+        where_bits.append("level = :level")
+        params["level"] = level
+    if query:
+        where_bits.append("message like :query")
+        params["query"] = f"%{query}%"
+
+    sql = PLUGIN_EVENTS_ALL_SQL.format(
+        extra_where=(" where " + " and ".join(where_bits)) if where_bits else "",
+        order_by="id desc",
+        limit=limit,
+    )
+    rows = list(db.query(sql, params))
+    rows.reverse()
+
+    for row in rows:
+        if row["details_json"]:
+            row["details"] = json.loads(row["details_json"])
+        del row["details_json"]
+
+    if json_output:
+        click.echo(json.dumps(rows, indent=2))
+        return
+
+    if short:
+        for row in rows:
+            obj = {
+                "datetime": row["datetime_utc"].split(".")[0],
+                "plugin": row["plugin"],
+                "phase": row["phase"],
+                "kind": row["kind"],
+                "level": row["level"],
+                "message": truncate_string(
+                    row["message"], 120, normalize_whitespace=True, keep_end=True
+                ),
+            }
+            if row["response_id"]:
+                obj["response_id"] = row["response_id"]
+            if row.get("logger_name"):
+                obj["logger_name"] = row["logger_name"]
+            click.echo(yaml.dump([obj], sort_keys=False).strip())
+        return
+
+    for row in rows:
+        header = "# {}    plugin: {} phase: {} kind: {}".format(
+            row["datetime_utc"].split(".")[0],
+            row["plugin"],
+            row["phase"],
+            row["kind"],
+        )
+        if row["response_id"]:
+            header += " response: {}".format(row["response_id"])
+        click.echo(header)
+        click.echo("\nLevel: **{}**".format(row["level"]))
+        if row.get("logger_name"):
+            click.echo("\nLogger: `{}`".format(row["logger_name"]))
+        click.echo("\n## Message\n\n{}".format(row["message"]))
+        if row.get("details"):
+            click.echo(
+                "\n## Details\n\n```json\n{}\n```".format(
+                    json.dumps(row["details"], indent=2)
+                )
+            )
+        click.echo("")
 
 
 @cli.group(
@@ -3946,7 +4144,7 @@ def render_errors(errors):
 
 load_plugins()
 
-pm.hook.register_commands(cli=cli)
+register_plugin_commands(cli=cli)
 
 
 def _human_readable_size(size_bytes):
