@@ -914,9 +914,8 @@ def prompt(
     # Spinner: shows loading state until the first content chunk arrives.
     # Enabled when --color is active and stdout is a TTY (or LLM_SPINNER=1).
     spinner_env = os.environ.get("LLM_SPINNER")
-    spinner_enabled = (
-        (spinner_env == "1")
-        or (spinner_env != "0" and bool(color) and sys.stdout.isatty())
+    spinner_enabled = (spinner_env == "1") or (
+        spinner_env != "0" and bool(color) and sys.stdout.isatty()
     )
     spinner = _make_spinner(spinner_enabled)
 
@@ -927,9 +926,7 @@ def prompt(
     # Blank line between command and response.  Only in colored
     # interactive mode.  Opt out with LLM_COMPACT=1.
     show_separator = (
-        bool(color)
-        and sys.stdout.isatty()
-        and not os.environ.get("LLM_COMPACT")
+        bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
     )
 
     spinner.start()
@@ -1402,13 +1399,9 @@ def chat(
         system = None
         argument_system_fragments = []
         chat_writer = _ColorWriter(color)
-        chat_spinner = _make_spinner(
-            bool(color) and sys.stdout.isatty()
-        )
+        chat_spinner = _make_spinner(bool(color) and sys.stdout.isatty())
         chat_show_sep = (
-            bool(color)
-            and sys.stdout.isatty()
-            and not os.environ.get("LLM_COMPACT")
+            bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
         )
         chat_spinner.start()
         with buffered_stream_end() as get_pending:
@@ -1567,7 +1560,9 @@ def logs_status():
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
     click.echo("Number of responses logged:\t{}".format(db["responses"].count))
     if db["plugin_events"].exists():
-        click.echo("Number of plugin events logged:\t{}".format(db["plugin_events"].count))
+        click.echo(
+            "Number of plugin events logged:\t{}".format(db["plugin_events"].count)
+        )
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
@@ -1942,14 +1937,16 @@ def logs_list(
 
     if any_tools:
         # Any response that involved at least one tool result
-        where_bits.append("""
+        where_bits.append(
+            """
             exists (
               select 1
                 from tool_results
               where
                 tool_results.response_id = responses.id
             )
-        """)
+        """
+        )
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1960,7 +1957,8 @@ def logs_list(
             except KeyError:
                 raise click.ClickException(f"Unknown tool: {tool_name}")
 
-            tool_clauses.append(f"""
+            tool_clauses.append(
+                f"""
             exists (
               select 1
                 from tool_results
@@ -1969,7 +1967,8 @@ def logs_list(
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
-            """)
+            """
+            )
             sql_params[f"tool{i}"] = tool_name
             sql_params[f"plugin{i}"] = plugin_name
 
@@ -2490,7 +2489,9 @@ def logs_list(
 @click.option("-q", "--query", help="Search event messages")
 @click.option("json_output", "--json", is_flag=True, help="Output events as JSON")
 @click.option("-s", "--short", is_flag=True, help="Shorter YAML output")
-def logs_events(count, path, database, plugin, phase, kind, level, query, json_output, short):
+def logs_events(
+    count, path, database, plugin, phase, kind, level, query, json_output, short
+):
     "Show persisted plugin diagnostics and other non-response events"
     if database and not path:
         path = database
@@ -2863,7 +2864,9 @@ def schemas_list(path, database, queries, full, json_, nl):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(where_sql)
+    """.format(
+        where_sql
+    )
     rows = db.query(sql, params)
 
     if json_ or nl:
@@ -3202,11 +3205,13 @@ def fragments_list(queries, aliases, json_):
         param_count += 1
         p = f"p{param_count}"
         params[p] = q
-        where_bits.append(f"""
+        where_bits.append(
+            f"""
             (fragments.hash = :{p} or fragment_aliases.alias = :{p}
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
-        """)
+        """
+        )
     where = "\n      and\n  ".join(where_bits)
     if where:
         where = " where " + where
@@ -3228,7 +3233,9 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(where=where)
+    """.format(
+        where=where
+    )
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3918,7 +3925,8 @@ def embed_db_collections(database, json_):
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
-    rows = db.query("""
+    rows = db.query(
+        """
     select
         collections.name,
         collections.model,
@@ -3928,7 +3936,8 @@ def embed_db_collections(database, json_):
         on collections.id = embeddings.collection_id
     group by
         collections.name, collections.model
-    """)
+    """
+    )
     if json_:
         click.echo(json.dumps(list(rows), indent=4))
     else:
@@ -4449,12 +4458,16 @@ class _ColorWriter:
                 except ImportError:
                     # Fallback: try importing from the tools directory relative to llm
                     import importlib.util
+
                     spec_path = os.path.join(
                         os.path.dirname(os.path.dirname(__file__)),
-                        "tools", "mdstream.py",
+                        "tools",
+                        "mdstream.py",
                     )
                     if os.path.exists(spec_path):
-                        spec = importlib.util.spec_from_file_location("mdstream", spec_path)
+                        spec = importlib.util.spec_from_file_location(
+                            "mdstream", spec_path
+                        )
                         mod = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(mod)
                         self.renderer = mod.StreamingMarkdownRenderer()

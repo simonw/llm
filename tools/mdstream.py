@@ -688,9 +688,7 @@ class StreamingMarkdownRenderer:
             return self._render_content_line(inner, prefix, allow_headings=False)
         return self._render_content_line(stripped, prefix, allow_headings=True)
 
-    def _render_content_line(
-        self, text: str, prefix: str, allow_headings: bool
-    ) -> str:
+    def _render_content_line(self, text: str, prefix: str, allow_headings: bool) -> str:
         if allow_headings:
             heading_match = re.match(r"^(#{1,6})\s+(.*)", text)
             if heading_match:
@@ -704,7 +702,9 @@ class StreamingMarkdownRenderer:
                 if level == 1:
                     return heading + f"{self.pad}{color}{'━' * len(value)}{RESET}\n"
                 if level == 2:
-                    return heading + f"{self.pad}{DIM}{color}{'─' * len(value)}{RESET}\n"
+                    return (
+                        heading + f"{self.pad}{DIM}{color}{'─' * len(value)}{RESET}\n"
+                    )
                 return heading
 
         if re.match(r"^(\s*[-*_]\s*){3,}$", text):
@@ -719,9 +719,7 @@ class StreamingMarkdownRenderer:
                 if status.lower() == "x"
                 else f"{DIM}☐{RESET}"
             )
-            return self._render_list_item(
-                prefix, indent, checkbox, body, kind="task"
-            )
+            return self._render_list_item(prefix, indent, checkbox, body, kind="task")
 
         list_match = _LIST_RE.match(text)
         if list_match:
@@ -889,8 +887,13 @@ def main():
     if sys.stdin.isatty():
         print("mdstream — Streaming Markdown Renderer", file=sys.stderr)
         print("", file=sys.stderr)
-        print("  Real-time token streaming with rendered markdown output.", file=sys.stderr)
-        print("  Partial lines stream raw; completed lines render fully.", file=sys.stderr)
+        print(
+            "  Real-time token streaming with rendered markdown output.",
+            file=sys.stderr,
+        )
+        print(
+            "  Partial lines stream raw; completed lines render fully.", file=sys.stderr
+        )
         print("", file=sys.stderr)
         print("Usage:", file=sys.stderr)
         print('  llm "prompt" | mdstream', file=sys.stderr)
@@ -898,8 +901,13 @@ def main():
         print("  cat README.md | mdstream", file=sys.stderr)
         print("", file=sys.stderr)
         print("Environment:", file=sys.stderr)
-        print("  MDSTREAM_PADDING             Left padding in spaces (default: 0)", file=sys.stderr)
-        print("  MDSTREAM_NO_LIST_GUIDES      Disable nested list guides", file=sys.stderr)
+        print(
+            "  MDSTREAM_PADDING             Left padding in spaces (default: 0)",
+            file=sys.stderr,
+        )
+        print(
+            "  MDSTREAM_NO_LIST_GUIDES      Disable nested list guides", file=sys.stderr
+        )
         sys.exit(1)
 
     renderer = StreamingMarkdownRenderer()

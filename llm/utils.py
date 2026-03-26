@@ -156,6 +156,7 @@ def logging_client() -> httpx.Client:
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
+
 def _log_request_tui(request: httpx.Request):
     """Log request details to llm.http logger for TUI display."""
     request_id = request.extensions.get("llm_request_id") or _get_request_id()
@@ -191,10 +192,12 @@ def _log_response_tui(response: httpx.Response):
         headers=dict(response.headers),
     )
 
+
 def tui_logging_client() -> httpx.Client:
     return httpx.Client(
         event_hooks={"request": [_log_request_tui], "response": [_log_response_tui]}
     )
+
 
 async def _log_request_tui_async(request: httpx.Request):
     request_id = request.extensions.get("llm_request_id") or _get_request_id()
@@ -220,6 +223,7 @@ async def _log_request_tui_async(request: httpx.Request):
 async def _log_response_tui_async(response: httpx.Response):
     _log_response_tui(response)
 
+
 def async_tui_logging_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         event_hooks={
@@ -227,7 +231,6 @@ def async_tui_logging_client() -> httpx.AsyncClient:
             "response": [_log_response_tui_async],
         }
     )
-
 
 
 # --- Universal HTTP Logging System ---
@@ -241,7 +244,7 @@ _active_tui_request_ids = contextvars.ContextVar(
 
 def _get_request_id() -> str:
     """Generate a short request ID for correlation."""
-    if not hasattr(_request_context, 'counter'):
+    if not hasattr(_request_context, "counter"):
         _request_context.counter = 0
     _request_context.counter += 1
     return f"req-{_request_context.counter:03d}"
@@ -249,14 +252,14 @@ def _get_request_id() -> str:
 
 def _start_request_timer(request_id: str) -> None:
     """Record start time for a request."""
-    if not hasattr(_request_context, 'timings'):
+    if not hasattr(_request_context, "timings"):
         _request_context.timings = {}
     _request_context.timings[request_id] = time.time()
 
 
 def _get_request_elapsed(request_id: str) -> Optional[float]:
     """Get elapsed time in milliseconds for a request."""
-    if not hasattr(_request_context, 'timings'):
+    if not hasattr(_request_context, "timings"):
         return None
     start = _request_context.timings.get(request_id)
     if start is None:
@@ -421,9 +424,8 @@ class SafeHTTPCoreFilter(logging.Filter):
             return False
 
         # Suppress openai's "Sending HTTP Request" (redundant with Request options)
-        if (
-            record.name == "openai._base_client"
-            and message.startswith("Sending HTTP Request")
+        if record.name == "openai._base_client" and message.startswith(
+            "Sending HTTP Request"
         ):
             return False
 
@@ -536,9 +538,16 @@ class HTTPColorFormatter(logging.Formatter):
 
     # Box drawing characters
     BOX = {
-        "tl": "╭", "tr": "╮", "bl": "╰", "br": "╯",
-        "h": "─", "v": "│",
-        "vr": "├", "vl": "┤", "ht": "┬", "hb": "┴",
+        "tl": "╭",
+        "tr": "╮",
+        "bl": "╰",
+        "br": "╯",
+        "h": "─",
+        "v": "│",
+        "vr": "├",
+        "vl": "┤",
+        "ht": "┬",
+        "hb": "┴",
     }
 
     def __init__(self, use_colors=True):
@@ -642,7 +651,6 @@ class HTTPColorFormatter(logging.Formatter):
         msg = record.getMessage()
         return "response_body.complete" in msg or "response_closed.complete" in msg
 
-
     def _format_plain(self, record):
         """Plain formatting without colors."""
         if self._is_stream_start(record) or self._is_stream_end(record):
@@ -737,7 +745,11 @@ class HTTPColorFormatter(logging.Formatter):
 
             # Build title with request ID
             if colored:
-                id_part = f"{self.COLORS['DIM']}[{request_id}]{self.COLORS['RESET']} " if request_id else ""
+                id_part = (
+                    f"{self.COLORS['DIM']}[{request_id}]{self.COLORS['RESET']} "
+                    if request_id
+                    else ""
+                )
                 title = f"{id_part}{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}"
             else:
                 id_part = f"[{request_id}] " if request_id else ""
@@ -749,7 +761,9 @@ class HTTPColorFormatter(logging.Formatter):
             lines.append(self._format_mapping(headers, colored))
 
             content = "\n".join(lines)
-            return self._draw_section(f"➔ REQUEST {title}", content, self.COLORS["BLUE"])
+            return self._draw_section(
+                f"➔ REQUEST {title}", content, self.COLORS["BLUE"]
+            )
         except Exception:
             return message
 
@@ -913,7 +927,11 @@ class HTTPColorFormatter(logging.Formatter):
         if model_name:
             title += f" [{model_name}]"
         if colored:
-            model_part = f" {self.COLORS['YELLOW']}[{model_name}]{self.COLORS['RESET']}" if model_name else ""
+            model_part = (
+                f" {self.COLORS['YELLOW']}[{model_name}]{self.COLORS['RESET']}"
+                if model_name
+                else ""
+            )
             title = f"{self.COLORS['BOLD']}{method}{self.COLORS['RESET']} {self.COLORS['BLUE']}{url}{self.COLORS['RESET']}{model_part}"
 
         # Headers
@@ -1025,7 +1043,9 @@ class HTTPColorFormatter(logging.Formatter):
 
         return None
 
-    def _format_httpcore_message(self, message: str, colored: bool, record=None) -> Optional[str]:
+    def _format_httpcore_message(
+        self, message: str, colored: bool, record=None
+    ) -> Optional[str]:
         """Format httpcore lifecycle events.
 
         httpcore emits paired .started/.complete events for each phase.
@@ -1082,7 +1102,9 @@ class HTTPColorFormatter(logging.Formatter):
                 return ""
 
             kv_dict = {}
-            for match in re.finditer(r"(\w+)=((?:<[^>]+>)|(?:'[^']*')|(?:[^,\s]+))", rest):
+            for match in re.finditer(
+                r"(\w+)=((?:<[^>]+>)|(?:'[^']*')|(?:[^,\s]+))", rest
+            ):
                 k, v = match.group(1), match.group(2).strip("'")
                 kv_dict[k] = v
 
@@ -1189,9 +1211,7 @@ class HTTPColorFormatter(logging.Formatter):
                 f"{self.COLORS['BOLD']}{status}{self.COLORS['RESET']}"
             )
             if method and url:
-                title += (
-                    f" {self.COLORS['DIM']}({method} {url}){self.COLORS['RESET']}"
-                )
+                title += f" {self.COLORS['DIM']}({method} {url}){self.COLORS['RESET']}"
         else:
             title = f"{status_icon} {status}" if status else "Response"
             if method and url:
@@ -1211,7 +1231,9 @@ class HTTPColorFormatter(logging.Formatter):
                 )
             else:
                 id_part = f" [{request_id}]" if request_id else ""
-            return self._draw_section(f"↓ Response Start{id_part} {title}", content, color)
+            return self._draw_section(
+                f"↓ Response Start{id_part} {title}", content, color
+            )
         return self._format_response_status_line(title, request_id, color, colored)
 
     def _format_request_line(self, method, url, colored):
@@ -1270,7 +1292,9 @@ class HTTPColorFormatter(logging.Formatter):
         lines = []
         for key, value in mapping.items():
             # Show all headers including auth - useful for debugging which key is being used
-            k_str = f"{self.COLORS['DIM']}{key}{self.COLORS['RESET']}" if colored else key
+            k_str = (
+                f"{self.COLORS['DIM']}{key}{self.COLORS['RESET']}" if colored else key
+            )
             lines.append(f"{indent}{k_str}: {value}")
         return "\n".join(lines)
 
@@ -1282,8 +1306,16 @@ class HTTPColorFormatter(logging.Formatter):
             d = {}
             for item in headers:
                 if isinstance(item, (list, tuple)) and len(item) == 2:
-                    k = item[0].decode('utf-8') if isinstance(item[0], bytes) else str(item[0])
-                    v = item[1].decode('utf-8') if isinstance(item[1], bytes) else str(item[1])
+                    k = (
+                        item[0].decode("utf-8")
+                        if isinstance(item[0], bytes)
+                        else str(item[0])
+                    )
+                    v = (
+                        item[1].decode("utf-8")
+                        if isinstance(item[1], bytes)
+                        else str(item[1])
+                    )
                     d[k] = v
             return d
         return {}
@@ -1335,7 +1367,9 @@ class HTTPColorFormatter(logging.Formatter):
             return value
         return f"{value[:max_chars]}... [truncated, {len(value)} chars total]"
 
-    def _format_json(self, data: Any, colored: bool, indent: str = "", truncate: bool = True) -> str:
+    def _format_json(
+        self, data: Any, colored: bool, indent: str = "", truncate: bool = True
+    ) -> str:
         """Format JSON with optional colorization and truncation."""
         try:
             text = json.dumps(
@@ -1351,17 +1385,31 @@ class HTTPColorFormatter(logging.Formatter):
             if colored:
                 # Colorize JSON
                 # Keys
-                text = re.sub(r'^\s*"([^"]+)":', f'  {self.COLORS["CYAN"]}"\\1"{self.COLORS["RESET"]}:', text, flags=re.MULTILINE)
+                text = re.sub(
+                    r'^\s*"([^"]+)":',
+                    f'  {self.COLORS["CYAN"]}"\\1"{self.COLORS["RESET"]}:',
+                    text,
+                    flags=re.MULTILINE,
+                )
                 # String values
-                text = re.sub(r': "([^"]*)"', f': {self.COLORS["GREEN"]}"\\1"{self.COLORS["RESET"]}', text)
+                text = re.sub(
+                    r': "([^"]*)"',
+                    f': {self.COLORS["GREEN"]}"\\1"{self.COLORS["RESET"]}',
+                    text,
+                )
                 # Numbers/Booleans/Null
-                text = re.sub(r': (true|false|null|[0-9\.]+)', f': {self.COLORS["YELLOW"]}\\1{self.COLORS["RESET"]}', text)
+                text = re.sub(
+                    r": (true|false|null|[0-9\.]+)",
+                    f': {self.COLORS["YELLOW"]}\\1{self.COLORS["RESET"]}',
+                    text,
+                )
 
             if indent:
                 return textwrap.indent(text, indent)
             return text
         except TypeError:
             from pprint import pformat
+
             text = pformat(
                 self._sanitize(data, truncate_strings=truncate), indent=2, compact=True
             )

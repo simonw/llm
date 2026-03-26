@@ -308,11 +308,13 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_tools(logs_db):
     runner = CliRunner()
-    functions = textwrap.dedent("""
+    functions = textwrap.dedent(
+        """
     def upper(text: str) -> str:
         "Convert text to upper case"
         return text.upper()                         
-    """)
+    """
+    )
     result = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "echo", "--functions", functions],

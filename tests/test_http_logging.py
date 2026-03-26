@@ -248,11 +248,16 @@ class TestSafeHTTPCoreFilter:
         return logging.LogRecord(name, logging.DEBUG, "", 0, msg, (), None)
 
     def test_allows_stream_start(self):
-        r = self._record("httpcore.http11", "receive_response_body.started request=<Request [b'POST']>")
+        r = self._record(
+            "httpcore.http11",
+            "receive_response_body.started request=<Request [b'POST']>",
+        )
         assert self.f.filter(r) is True
 
     def test_allows_stream_end(self):
-        r = self._record("httpcore.http11", "receive_response_body.complete return_value=None")
+        r = self._record(
+            "httpcore.http11", "receive_response_body.complete return_value=None"
+        )
         assert self.f.filter(r) is True
 
     def test_allows_response_complete(self):
@@ -260,11 +265,15 @@ class TestSafeHTTPCoreFilter:
         assert self.f.filter(r) is True
 
     def test_suppresses_request_body(self):
-        r = self._record("httpcore.http11", "send_request_body.started request=<Request [b'POST']>")
+        r = self._record(
+            "httpcore.http11", "send_request_body.started request=<Request [b'POST']>"
+        )
         assert self.f.filter(r) is False
 
     def test_suppresses_response_headers(self):
-        r = self._record("httpcore.http11", "receive_response_headers.complete return_value=(...)")
+        r = self._record(
+            "httpcore.http11", "receive_response_headers.complete return_value=(...)"
+        )
         assert self.f.filter(r) is False
 
     def test_suppresses_response_closed_started(self):
@@ -272,11 +281,15 @@ class TestSafeHTTPCoreFilter:
         assert self.f.filter(r) is False
 
     def test_allows_connection_events(self):
-        r = self._record("httpcore.connection", "connect_tcp.started host='api.openai.com' port=443")
+        r = self._record(
+            "httpcore.connection", "connect_tcp.started host='api.openai.com' port=443"
+        )
         assert self.f.filter(r) is True
 
     def test_allows_tls_events(self):
-        r = self._record("httpcore.connection", "start_tls.started server_hostname='api.openai.com'")
+        r = self._record(
+            "httpcore.connection", "start_tls.started server_hostname='api.openai.com'"
+        )
         assert self.f.filter(r) is True
 
 
@@ -292,13 +305,18 @@ class TestHTTPColorFormatterMarkers:
         return r
 
     def test_stream_start_marker(self):
-        r = self._record("httpcore.http11", "receive_response_body.started request=<Request [b'POST']>")
+        r = self._record(
+            "httpcore.http11",
+            "receive_response_body.started request=<Request [b'POST']>",
+        )
         output = self.fmt.format(r)
         assert "Stream Start" in output
         assert "▼" in output
 
     def test_stream_end_marker(self):
-        r = self._record("httpcore.http11", "receive_response_body.complete return_value=None")
+        r = self._record(
+            "httpcore.http11", "receive_response_body.complete return_value=None"
+        )
         output = self.fmt.format(r)
         assert "Stream End" in output
         assert "■" in output
@@ -528,7 +546,9 @@ class TestTUIEventHooks:
 
     def test_async_hooks_mirror_sync_hooks(self):
         async def run():
-            request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            request = httpx.Request(
+                "POST", "https://api.openai.com/v1/chat/completions"
+            )
             await _log_request_tui_async(request)
             trace = request.extensions["trace"]
             await trace("http11.receive_response_body.started", {})
@@ -566,7 +586,12 @@ class TestStructuredTUIFormatting:
     def test_formats_connect_event(self):
         output = self.fmt.format(
             self._record(
-                {"kind": "connect", "request_id": "req-001", "host": "api.openai.com", "port": 443}
+                {
+                    "kind": "connect",
+                    "request_id": "req-001",
+                    "host": "api.openai.com",
+                    "port": 443,
+                }
             )
         )
         assert "Connection [req-001]" in output
@@ -575,7 +600,11 @@ class TestStructuredTUIFormatting:
     def test_formats_tls_event(self):
         output = self.fmt.format(
             self._record(
-                {"kind": "tls", "request_id": "req-001", "server_hostname": "api.openai.com"}
+                {
+                    "kind": "tls",
+                    "request_id": "req-001",
+                    "server_hostname": "api.openai.com",
+                }
             )
         )
         assert "TLS Handshake [req-001]" in output
@@ -583,7 +612,9 @@ class TestStructuredTUIFormatting:
 
     def test_formats_request_sent_event(self):
         output = self.fmt.format(
-            self._record({"kind": "request_sent", "request_id": "req-001", "method": "POST"})
+            self._record(
+                {"kind": "request_sent", "request_id": "req-001", "method": "POST"}
+            )
         )
         assert "Request [req-001]" in output
         assert "Sending POST Request" in output
@@ -694,7 +725,9 @@ class TestSpinnerLogHandler:
             'TUI Event: {"kind": "response_start", "request_id": "req-001"}',
         ]
         for message in events:
-            record = logging.LogRecord("llm.http", logging.DEBUG, "", 0, message, (), None)
+            record = logging.LogRecord(
+                "llm.http", logging.DEBUG, "", 0, message, (), None
+            )
             handler.emit(record)
 
         assert spinner.started == 1

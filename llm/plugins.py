@@ -195,16 +195,16 @@ class PluginQuarantine:
                 kind="exception",
                 level="ERROR",
                 message=str(exc),
-                details={"traceback": "".join(traceback.format_exception(exc_type, exc, tb))},
+                details={
+                    "traceback": "".join(traceback.format_exception(exc_type, exc, tb))
+                },
                 response_id=self.response_id,
             )
         return False
 
 
 def _plugin_name(plugin) -> str:
-    return pm.get_name(plugin) or getattr(
-        plugin, "__name__", plugin.__class__.__name__
-    )
+    return pm.get_name(plugin) or getattr(plugin, "__name__", plugin.__class__.__name__)
 
 
 def _register_loaded_plugin(mod, name, distribution=None):

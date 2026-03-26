@@ -246,9 +246,7 @@ class Spinner:
             old_spinner = SPINNER_STATES.get(self._state, {}).get(
                 "spinner", DEFAULT_SPINNER
             )
-            new_spinner = SPINNER_STATES.get(name, {}).get(
-                "spinner", DEFAULT_SPINNER
-            )
+            new_spinner = SPINNER_STATES.get(name, {}).get("spinner", DEFAULT_SPINNER)
             if old_spinner != new_spinner:
                 self._frame_idx = 0
             self._state = name

@@ -66,7 +66,9 @@ def test_task_lists_images_links_and_escaping():
     unchecked = strip_ansi(renderer.render_line("- [ ] todo\n"))
     image = strip_ansi(renderer.render_line("![Alt](https://example.com/image.png)\n"))
     link = strip_ansi(renderer.render_line("[OpenAI](https://openai.com)\n"))
-    escaped = strip_ansi(renderer.render_line("\\*not italic\\* and https://example.com\n"))
+    escaped = strip_ansi(
+        renderer.render_line("\\*not italic\\* and https://example.com\n")
+    )
 
     assert checked == "  ☑ done\n"
     assert unchecked == "  ☐ todo\n"

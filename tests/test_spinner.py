@@ -5,7 +5,15 @@ import logging
 import sys
 import time
 
-from tools.spinner import COLORS, DEFAULT_SPINNER, DIM, RESET, Spinner, SPINNER_STATES, SPINNERS
+from tools.spinner import (
+    COLORS,
+    DEFAULT_SPINNER,
+    DIM,
+    RESET,
+    Spinner,
+    SPINNER_STATES,
+    SPINNERS,
+)
 
 
 class TestSpinnerDisabled:
@@ -97,9 +105,9 @@ class TestSpinnerLabels:
     def test_state_spinner_refs_are_valid(self):
         for name, cfg in SPINNER_STATES.items():
             spinner_ref = cfg.get("spinner", DEFAULT_SPINNER)
-            assert spinner_ref in SPINNERS, (
-                f"State {name!r} references unknown spinner {spinner_ref!r}"
-            )
+            assert (
+                spinner_ref in SPINNERS
+            ), f"State {name!r} references unknown spinner {spinner_ref!r}"
 
 
 class TestSpinnerStale:
@@ -183,7 +191,10 @@ class TestSpinnerPersist:
         s.stop()
         monkeypatch.undo()
         output = buf.getvalue()
-        assert f"\n{SPINNERS[DEFAULT_SPINNER]['persist']} Waiting for response...\n\n" in output
+        assert (
+            f"\n{SPINNERS[DEFAULT_SPINNER]['persist']} Waiting for response...\n\n"
+            in output
+        )
 
     def test_http_debug_2_persist_can_be_opted_out(self, monkeypatch):
         monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
@@ -232,7 +243,9 @@ class TestSpinnerPersist:
         output = buf.getvalue()
         assert "\n> Waiting for response...\n\n" in output
 
-    def test_persisted_symbol_uses_dim_text_style_without_spinner_color(self, monkeypatch):
+    def test_persisted_symbol_uses_dim_text_style_without_spinner_color(
+        self, monkeypatch
+    ):
         monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
         monkeypatch.delenv("NO_COLOR", raising=False)
         s = Spinner(enabled=True)
@@ -274,7 +287,13 @@ class TestSpinnerLogCoordination:
 
     def _make_record(self, msg="test log line"):
         return logging.LogRecord(
-            "httpcore.http11", logging.DEBUG, "", 0, msg, (), None,
+            "httpcore.http11",
+            logging.DEBUG,
+            "",
+            0,
+            msg,
+            (),
+            None,
         )
 
     def test_hide_unhide_called_around_emit(self):
@@ -363,9 +382,9 @@ class TestSpinnerLogCoordination:
             handler._spinner = spinner_b
             # spinner_a stops — should NOT clear spinner_b's reference
             spinner_a.stop()
-            assert handler._spinner is spinner_b, (
-                "detach cleared another spinner's reference"
-            )
+            assert (
+                handler._spinner is spinner_b
+            ), "detach cleared another spinner's reference"
         finally:
             spinner_a.stop()
             spinner_b.stop()

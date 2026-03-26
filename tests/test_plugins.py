@@ -72,7 +72,12 @@ def test_register_commands_quarantines_and_persists_plugin_output(logs_db, capsy
         assert captured.err == ""
 
         rows = list(logs_db["plugin_events"].rows)
-        assert {row["kind"] for row in rows} == {"logging", "warning", "stdout", "stderr"}
+        assert {row["kind"] for row in rows} == {
+            "logging",
+            "warning",
+            "stdout",
+            "stderr",
+        }
         assert {row["phase"] for row in rows} == {"register_commands"}
         assert {row["plugin"] for row in rows} == {"NoisyPlugin"}
 
@@ -220,7 +225,8 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
-        result3.output.strip == textwrap.dedent("""\
+        result3.output.strip == textwrap.dedent(
+            """\
             system:
 
 
@@ -229,7 +235,8 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
 
             attachments:
             - https://example.com/attachment.png
-            """).strip()
+            """
+        ).strip()
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")

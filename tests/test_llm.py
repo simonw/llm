@@ -81,7 +81,9 @@ def test_wrap_tool_callbacks_for_spinner_drives_spinner():
     spinner = FakeSpinner()
     kwargs = {
         "before_call": lambda tool, tool_call: seen.append(("before", tool_call.name)),
-        "after_call": lambda tool, tool_call, tool_result: seen.append(("after", tool_call.name, tool_result)),
+        "after_call": lambda tool, tool_call, tool_result: seen.append(
+            ("after", tool_call.name, tool_result)
+        ),
     }
     _wrap_tool_callbacks_for_spinner(kwargs, spinner)
     kwargs["before_call"](None, FakeCall())
