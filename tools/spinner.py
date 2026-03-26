@@ -4,7 +4,9 @@ TUI loading spinner for the llm CLI.
 Shows a single-line animated spinner with contextual state labels while
 the CLI waits for network responses, tool execution, etc.  The spinner
 writes to stdout via ``\\r\\033[K`` (carriage return + clear to EOL) so it
-never pollutes scrollback.
+never pollutes scrollback.  When HTTP debug logging is active, the spinner
+coordinates with ``_QuietStreamHandler`` via ``hide()``/``unhide()`` so that
+stderr log lines don't strand spinner frames in scrollback.
 
 Usage::
 
@@ -273,12 +275,17 @@ class Spinner:
     def _attach_log_handler(self) -> None:
         """Add a SpinnerLogHandler to HTTP loggers for auto state transitions."""
         import logging
-        from llm.utils import SpinnerLogHandler
+        from llm.utils import SpinnerLogHandler, _QuietStreamHandler
 
         self._log_handler = SpinnerLogHandler(self)
         for name in self._LOG_TARGETS:
             logger = logging.getLogger(name)
             logger.addHandler(self._log_handler)
+            # Register on existing stream handlers so they hide/unhide
+            # the spinner around stderr writes, preventing scrollback pollution.
+            for h in logger.handlers:
+                if isinstance(h, _QuietStreamHandler):
+                    h._spinner = self
             # Ensure DEBUG events reach us even if HTTP debug is off
             if logger.level == 0 or logger.level > logging.DEBUG:
                 self._original_levels[name] = logger.level
@@ -287,12 +294,18 @@ class Spinner:
     def _detach_log_handler(self) -> None:
         """Remove the SpinnerLogHandler and restore original log levels."""
         import logging
+        from llm.utils import _QuietStreamHandler
 
         if self._log_handler is None:
             return
         for name in self._LOG_TARGETS:
             logger = logging.getLogger(name)
             logger.removeHandler(self._log_handler)
+            # Unregister only if we are the current spinner (avoid clearing
+            # a reference to a different spinner instance).
+            for h in logger.handlers:
+                if isinstance(h, _QuietStreamHandler) and h._spinner is self:
+                    h._spinner = None
             if name in self._original_levels:
                 logger.setLevel(self._original_levels[name])
         self._original_levels.clear()

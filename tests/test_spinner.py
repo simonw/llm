@@ -1,6 +1,7 @@
 """Tests for the TUI loading spinner."""
 
 import io
+import logging
 import sys
 import time
 
@@ -245,3 +246,163 @@ class TestSpinnerPersist:
         expected = f"{DIM}{SPINNERS[DEFAULT_SPINNER]['persist']} Waiting for response...{RESET}"
         assert expected in output
         assert COLORS["cyan"] not in output
+
+
+class TestSpinnerLogCoordination:
+    """Verify _QuietStreamHandler hides/unhides the spinner around stderr writes."""
+
+    class FakeSpinner:
+        """Records hide/unhide calls in order."""
+
+        enabled = True
+
+        def __init__(self):
+            self.calls = []
+
+        def hide(self):
+            self.calls.append("hide")
+
+        def unhide(self):
+            self.calls.append("unhide")
+
+    def _make_handler(self):
+        from llm.utils import _QuietStreamHandler
+
+        handler = _QuietStreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        return handler
+
+    def _make_record(self, msg="test log line"):
+        return logging.LogRecord(
+            "httpcore.http11", logging.DEBUG, "", 0, msg, (), None,
+        )
+
+    def test_hide_unhide_called_around_emit(self):
+        handler = self._make_handler()
+        spinner = self.FakeSpinner()
+        handler._spinner = spinner
+
+        handler.emit(self._make_record())
+
+        assert spinner.calls == ["hide", "unhide"]
+
+    def test_unhide_called_on_write_exception(self):
+        """unhide() must be called even if the stream write raises."""
+        handler = self._make_handler()
+        spinner = self.FakeSpinner()
+        handler._spinner = spinner
+
+        # Replace stream with one that raises on write
+        class BadStream:
+            def write(self, _):
+                raise OSError("broken pipe")
+
+            def flush(self):
+                pass
+
+        handler.stream = BadStream()
+        handler.emit(self._make_record())
+
+        assert spinner.calls == ["hide", "unhide"]
+
+    def test_no_spinner_no_crash(self):
+        """When _spinner is None, emit works normally without hiding."""
+        handler = self._make_handler()
+        assert handler._spinner is None
+        # Should not raise
+        handler.emit(self._make_record())
+
+    def test_empty_message_skips_hide(self):
+        """Empty messages are suppressed entirely — no hide/unhide needed."""
+        handler = self._make_handler()
+        spinner = self.FakeSpinner()
+        handler._spinner = spinner
+
+        class EmptyFormatter(logging.Formatter):
+            def format(self, record):
+                return ""
+
+        handler.setFormatter(EmptyFormatter())
+
+        handler.emit(self._make_record())
+
+        assert spinner.calls == []
+
+    def test_attach_registers_spinner_on_quiet_handlers(self):
+        """_attach_log_handler sets _spinner on existing _QuietStreamHandler instances."""
+        from llm.utils import _QuietStreamHandler
+
+        handler = _QuietStreamHandler()
+        logger = logging.getLogger("httpcore")
+        logger.addHandler(handler)
+
+        spinner = Spinner(enabled=True)
+        try:
+            spinner.start()
+            assert handler._spinner is spinner
+            spinner.stop()
+            assert handler._spinner is None
+        finally:
+            spinner.stop()
+            logger.removeHandler(handler)
+
+    def test_detach_preserves_other_spinners_reference(self):
+        """_detach_log_handler won't clear a reference belonging to a different spinner."""
+        from llm.utils import _QuietStreamHandler
+
+        handler = _QuietStreamHandler()
+        logger = logging.getLogger("httpcore")
+        logger.addHandler(handler)
+
+        spinner_a = Spinner(enabled=True)
+        spinner_b = Spinner(enabled=True)
+        try:
+            spinner_a.start()
+            assert handler._spinner is spinner_a
+            # Simulate spinner_b taking over (e.g. in chat mode, new prompt)
+            handler._spinner = spinner_b
+            # spinner_a stops — should NOT clear spinner_b's reference
+            spinner_a.stop()
+            assert handler._spinner is spinner_b, (
+                "detach cleared another spinner's reference"
+            )
+        finally:
+            spinner_a.stop()
+            spinner_b.stop()
+            handler._spinner = None
+            logger.removeHandler(handler)
+
+    def test_hide_unhide_surrounds_stderr_write(self):
+        """Integration: hide() happens before stderr write, unhide() after."""
+        from llm.utils import _QuietStreamHandler
+
+        operations = []
+
+        class RecordingStream:
+            def write(self, data):
+                operations.append(("stderr_write", data.strip()))
+
+            def flush(self):
+                pass
+
+        class RecordingSpinner:
+            enabled = True
+
+            def hide(self):
+                operations.append(("hide",))
+
+            def unhide(self):
+                operations.append(("unhide",))
+
+        handler = _QuietStreamHandler(RecordingStream())
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler._spinner = RecordingSpinner()
+
+        record = self._make_record("connect_tcp.started host='example.com'")
+        handler.emit(record)
+
+        assert len(operations) == 3
+        assert operations[0] == ("hide",)
+        assert operations[1][0] == "stderr_write"
+        assert "connect_tcp" in operations[1][1]
+        assert operations[2] == ("unhide",)

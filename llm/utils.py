@@ -375,24 +375,38 @@ def _build_async_tui_trace_callback(request_id: str, existing_trace=None):
 
 
 class _QuietStreamHandler(logging.StreamHandler):
-    """StreamHandler that suppresses empty messages.
+    """StreamHandler that suppresses empty messages and coordinates with the spinner.
 
     Python's default StreamHandler always writes ``msg + "\\n"``, even
     when *msg* is empty.  This produces phantom blank lines on stderr
     that displace the terminal cursor and break mdstream's in-place
     re-rendering.  This handler skips the write entirely when the
     formatted message is empty.
+
+    When a :class:`Spinner` is registered via ``_spinner``, the handler
+    hides the spinner before writing and unhides it after, preventing
+    stderr newlines from stranding spinner frames in terminal scrollback.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._spinner = None  # Set by Spinner._attach_log_handler
 
     def emit(self, record):
         msg = self.format(record)
         if not msg:
             return
+        spinner = self._spinner  # Local ref — safe if cleared concurrently
+        if spinner is not None:
+            spinner.hide()
         try:
             self.stream.write(msg + self.terminator)
             self.flush()
         except Exception:
             self.handleError(record)
+        finally:
+            if spinner is not None:
+                spinner.unhide()
 
 
 class SafeHTTPCoreFilter(logging.Filter):
