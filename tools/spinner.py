@@ -24,7 +24,6 @@ import sys
 import threading
 import time
 
-
 # ── Spinner frame sequences ────────────────────────────────────────────
 
 SPINNERS = {

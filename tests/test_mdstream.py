@@ -5,7 +5,6 @@ import llm.cli
 
 from tools.mdstream import StreamingMarkdownRenderer
 
-
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 

@@ -1937,16 +1937,14 @@ def logs_list(
 
     if any_tools:
         # Any response that involved at least one tool result
-        where_bits.append(
-            """
+        where_bits.append("""
             exists (
               select 1
                 from tool_results
               where
                 tool_results.response_id = responses.id
             )
-        """
-        )
+        """)
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1957,8 +1955,7 @@ def logs_list(
             except KeyError:
                 raise click.ClickException(f"Unknown tool: {tool_name}")
 
-            tool_clauses.append(
-                f"""
+            tool_clauses.append(f"""
             exists (
               select 1
                 from tool_results
@@ -1967,8 +1964,7 @@ def logs_list(
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
-            """
-            )
+            """)
             sql_params[f"tool{i}"] = tool_name
             sql_params[f"plugin{i}"] = plugin_name
 
@@ -2864,9 +2860,7 @@ def schemas_list(path, database, queries, full, json_, nl):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(
-        where_sql
-    )
+    """.format(where_sql)
     rows = db.query(sql, params)
 
     if json_ or nl:
@@ -3205,13 +3199,11 @@ def fragments_list(queries, aliases, json_):
         param_count += 1
         p = f"p{param_count}"
         params[p] = q
-        where_bits.append(
-            f"""
+        where_bits.append(f"""
             (fragments.hash = :{p} or fragment_aliases.alias = :{p}
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
-        """
-        )
+        """)
     where = "\n      and\n  ".join(where_bits)
     if where:
         where = " where " + where
@@ -3233,9 +3225,7 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(
-        where=where
-    )
+    """.format(where=where)
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3925,8 +3915,7 @@ def embed_db_collections(database, json_):
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
-    rows = db.query(
-        """
+    rows = db.query("""
     select
         collections.name,
         collections.model,
@@ -3936,8 +3925,7 @@ def embed_db_collections(database, json_):
         on collections.id = embeddings.collection_id
     group by
         collections.name, collections.model
-    """
-    )
+    """)
     if json_:
         click.echo(json.dumps(list(rows), indent=4))
     else:

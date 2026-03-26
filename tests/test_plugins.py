@@ -225,8 +225,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
-        result3.output.strip == textwrap.dedent(
-            """\
+        result3.output.strip == textwrap.dedent("""\
             system:
 
 
@@ -235,8 +234,7 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
 
             attachments:
             - https://example.com/attachment.png
-            """
-        ).strip()
+            """).strip()
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")
