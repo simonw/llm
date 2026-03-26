@@ -312,6 +312,7 @@ Options:
 Commands:
   list*   Show logged prompts and their responses
   backup  Backup your logs database to this file
+  events  Show persisted plugin diagnostics and other non-response events
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
@@ -409,6 +410,26 @@ Options:
   --json                      Output logs as JSON
   -e, --expand                Expand fragments to show their content
   -h, --help                  Show this message and exit.
+```
+
+(help-logs-events)=
+#### llm logs events --help
+```
+Usage: llm logs events [OPTIONS]
+
+  Show persisted plugin diagnostics and other non-response events
+
+Options:
+  -n, --count INTEGER  Number of events to show, use 0 for all
+  -d, --database FILE  Path to log database
+  --plugin TEXT        Filter by plugin name
+  --phase TEXT         Filter by event phase
+  --kind TEXT          Filter by event kind
+  --level TEXT         Filter by event level
+  -q, --query TEXT     Search event messages
+  --json               Output events as JSON
+  -s, --short          Shorter YAML output
+  -h, --help           Show this message and exit.
 ```
 
 (help-models)=
