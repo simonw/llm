@@ -89,6 +89,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-python](https://github.com/simonw/llm-python)** adds a `llm python` command for running a Python interpreter in the same virtual environment as LLM. This is useful for debugging, and also provides a convenient way to interact with the LLM {ref}`python-api` if you installed LLM using Homebrew or `pipx`.
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
+- **[llm-prompt-lint](https://github.com/HadiFrt20/llm-prompt-lint)** adds `prompt-lint`, `prompt-score`, and `prompt-diff` commands for linting system prompts (conflicting constraints, vague language, role confusion), scoring quality 0-100, and semantic diffing between prompt versions.
 
 (plugin-directory-fun)=
 ## Just for fun
