@@ -237,8 +237,8 @@ def async_tui_logging_client() -> httpx.AsyncClient:
 
 # Thread-local storage for request timing correlation
 _request_context = threading.local()
-_active_tui_request_ids = contextvars.ContextVar(
-    "llm_active_tui_request_ids", default=()
+_active_tui_request_ids: contextvars.ContextVar[tuple[str, ...]] = (
+    contextvars.ContextVar("llm_active_tui_request_ids", default=())
 )
 
 
@@ -684,7 +684,7 @@ class HTTPColorFormatter(logging.Formatter):
 
         return f"[{timestamp}] {record.name}"
 
-    def _structured_message(self, record, *, colored: bool) -> str:
+    def _structured_message(self, record, *, colored: bool) -> Optional[str]:
         message = record.getMessage()
 
         parsed_tui_event = self._parse_tui_event(message)
@@ -797,8 +797,8 @@ class HTTPColorFormatter(logging.Formatter):
             )
 
         if kind == "response_start":
-            method = data.get("method")
-            url = data.get("url")
+            method = data.get("method", "")
+            url = data.get("url", "")
             status = data.get("status")
             headers = data.get("headers") or {}
             return self._format_response_start_event(
@@ -822,7 +822,7 @@ class HTTPColorFormatter(logging.Formatter):
             return self._draw_section(title, content, self.COLORS["CYAN"])
 
         if kind == "tls":
-            show_keys = ("server_hostname",)
+            show_keys = ("server_hostname",)  # type: ignore[assignment]
             content = self._format_mapping(
                 {k: data.get(k) for k in show_keys if data.get(k) is not None},
                 colored,
@@ -1117,9 +1117,9 @@ class HTTPColorFormatter(logging.Formatter):
         # 4. Request Headers
         if "send_request_headers" in event:
             content = "➔ Sending Request Headers"
-            match = re.search(r"request=<Request \[b'(\w+)'\]>", rest)
-            if match:
-                content = f"➔ Sending {match.group(1)} Request"
+            req_match = re.search(r"request=<Request \[b'(\w+)'\]>", rest)
+            if req_match:
+                content = f"➔ Sending {req_match.group(1)} Request"
 
             return self._draw_section("Request", content, self.COLORS["BLUE"])
 
@@ -1342,7 +1342,7 @@ class HTTPColorFormatter(logging.Formatter):
         if raw in (None, ""):
             return default
         try:
-            value = int(raw)
+            value = int(raw)  # type: ignore[arg-type]
         except ValueError:
             return default
         if value < 0:
@@ -1351,21 +1351,21 @@ class HTTPColorFormatter(logging.Formatter):
 
     def _truncate_body(self, text: str, max_chars: int = 500) -> str:
         """Truncate body text with indicator showing total length."""
-        max_chars = self._get_truncation_limit("LLM_HTTP_MAX_BODY_CHARS", max_chars)
-        if max_chars is None:
+        limit = self._get_truncation_limit("LLM_HTTP_MAX_BODY_CHARS", max_chars)
+        if limit is None:
             return text
-        if len(text) <= max_chars:
+        if len(text) <= limit:
             return text
-        return f"{text[:max_chars]}...\n[truncated, {len(text)} chars total]"
+        return f"{text[:limit]}...\n[truncated, {len(text)} chars total]"
 
     def _truncate_string_value(self, value: str, max_chars: int = 160) -> str:
         """Truncate oversized JSON string values before whole-body truncation."""
-        max_chars = self._get_truncation_limit("LLM_HTTP_MAX_VALUE_CHARS", max_chars)
-        if max_chars is None:
+        limit = self._get_truncation_limit("LLM_HTTP_MAX_VALUE_CHARS", max_chars)
+        if limit is None:
             return value
-        if len(value) <= max_chars:
+        if len(value) <= limit:
             return value
-        return f"{value[:max_chars]}... [truncated, {len(value)} chars total]"
+        return f"{value[:limit]}... [truncated, {len(value)} chars total]"
 
     def _format_json(
         self, data: Any, colored: bool, indent: str = "", truncate: bool = True

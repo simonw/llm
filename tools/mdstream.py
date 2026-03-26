@@ -42,14 +42,16 @@ Environment:
     MDSTREAM_NO_LIST_GUIDES      Disable nested list guides
 """
 
+from __future__ import annotations
+
 import math
 import os
 import re
 import sys
 
-from pygments import highlight as _pygments_highlight
-from pygments.formatters import TerminalTrueColorFormatter
-from pygments.lexers import TextLexer, get_lexer_by_name
+from pygments import highlight as _pygments_highlight  # type: ignore[import-untyped]
+from pygments.formatters import TerminalTrueColorFormatter  # type: ignore[import-untyped]
+from pygments.lexers import TextLexer, get_lexer_by_name  # type: ignore[import-untyped]
 
 # ── ANSI escape codes ────────────────────────────────────────────────────────
 # Standard SGR attributes
@@ -318,7 +320,7 @@ class StreamingMarkdownRenderer:
     earlier output.
     """
 
-    def __init__(self, padding: int = None):
+    def __init__(self, padding: int | None = None):
         # Code fence state. We keep every prior line in the current fenced
         # block so Pygments can re-highlight with full lexer context and we
         # can emit only the latest rendered line.
@@ -518,7 +520,7 @@ class StreamingMarkdownRenderer:
             and depth <= len(self.list_level_meta)
             and self.list_level_meta[depth - 1].get("kind") == "ordered"
         ):
-            parent_path = list(self.list_level_meta[depth - 1]["path"])
+            parent_path = list(self.list_level_meta[depth - 1]["path"])  # type: ignore[call-overload]
             return [*parent_path, parts[0]]
 
         return parts
@@ -573,7 +575,7 @@ class StreamingMarkdownRenderer:
             return None
 
         indent_width = _indent_columns(match.group(1))
-        source_indent_width = int(self.active_list_context["source_indent_width"])
+        source_indent_width = int(self.active_list_context["source_indent_width"])  # type: ignore[call-overload]
         if indent_width <= source_indent_width:
             return None
 

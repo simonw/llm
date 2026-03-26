@@ -19,14 +19,18 @@ The spinner is thread-safe: ``set_state`` can be called from any thread
 (e.g. a logging handler watching structured TUI lifecycle events).
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import sys
 import threading
 import time
+from typing import Any
 
 # ── Spinner frame sequences ────────────────────────────────────────────
 
-SPINNERS = {
+SPINNERS: dict[str, dict[str, Any]] = {
     "toggle3": {
         "frames": ["□", "■"],
         "persist": "◦",
@@ -76,7 +80,7 @@ COLORS = {
 #   spinner  — key into SPINNERS dict
 #   timeout  — seconds before "(stale)" suffix appears
 
-SPINNER_STATES = {
+SPINNER_STATES: dict[str, dict[str, Any]] = {
     "starting": {
         "label": "Starting...",
         "color": "cyan",
@@ -159,9 +163,9 @@ class Spinner:
         self.enabled = enabled
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread = None
-        self._state = None
-        self._state_kwargs = {}
+        self._thread: threading.Thread | None = None
+        self._state: str | None = None
+        self._state_kwargs: dict[str, str] = {}
         self._state_entered_at = 0.0
         self._hidden = False
         self._frame_idx = 0
@@ -174,8 +178,8 @@ class Spinner:
         self._padding_after = _env_int(
             "LLM_SPINNER_PADDING_AFTER", 1 if self._persist_on_stop else 0
         )
-        self._log_handler = None
-        self._original_levels = {}
+        self._log_handler: "logging.Handler | None" = None
+        self._original_levels: dict[str, int] = {}
 
     # ── Public API ─────────────────────────────────────────────────
 
@@ -242,7 +246,7 @@ class Spinner:
             # (e.g. switching from "dot" to "dots").  When the same spinner
             # is used across states, the animation continues smoothly and
             # rapid state changes don't restart it.
-            old_spinner = SPINNER_STATES.get(self._state, {}).get(
+            old_spinner = SPINNER_STATES.get(self._state or "", {}).get(
                 "spinner", DEFAULT_SPINNER
             )
             new_spinner = SPINNER_STATES.get(name, {}).get("spinner", DEFAULT_SPINNER)
@@ -346,13 +350,15 @@ class Spinner:
 
     def _render_frame(self) -> None:
         """Write one spinner frame to stdout.  Must be called with lock held."""
+        if self._state is None:
+            return
         cfg = SPINNER_STATES.get(self._state)
         if cfg is None:
             return
 
         spinner_name = cfg.get("spinner", DEFAULT_SPINNER)
         spinner_def = SPINNERS.get(spinner_name, SPINNERS[DEFAULT_SPINNER])
-        frames = spinner_def["frames"]
+        frames: list[str] = spinner_def["frames"]
         frame = frames[self._frame_idx % len(frames)]
 
         # Build the label
@@ -387,7 +393,7 @@ class Spinner:
 
     def _persist(self) -> None:
         """Replace the animated spinner with a dim static line in scrollback."""
-        cfg = SPINNER_STATES.get(self._state)
+        cfg = SPINNER_STATES.get(self._state or "")
         if not cfg:
             self._erase()
             return
