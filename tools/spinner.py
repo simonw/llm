@@ -85,22 +85,22 @@ SPINNER_STATES = {
     },
     "connecting": {
         "label": "Connecting...",
-        "color": "cyan",
+        "color": "green",
         "timeout": 10,
     },
     "waiting": {
         "label": "Waiting for response...",
-        "color": "cyan",
+        "color": "yellow",
         "timeout": 30,
     },
     "tool_calling": {
         "label": "Calling {tool_name}...",
-        "color": "yellow",
+        "color": "green",
         "timeout": 30,
     },
     "tool_running": {
         "label": "Running {tool_name}...",
-        "color": "yellow",
+        "color": "green",
         "timeout": 60,
     },
 }
