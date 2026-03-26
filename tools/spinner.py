@@ -44,9 +44,9 @@ SPINNERS = {
         "interval": 0.13,
     },
     "dot": {
-        "frames": ["●", "○"],
+        "frames": ["●", " "],
         "persist": "●",
-        "interval": 0.12,
+        "interval": 0.25,
     },
 }
 
@@ -239,12 +239,23 @@ class Spinner:
         if not self.enabled:
             return
         with self._lock:
+            # Only reset the frame index when the spinner definition changes
+            # (e.g. switching from "dot" to "dots").  When the same spinner
+            # is used across states, the animation continues smoothly and
+            # rapid state changes don't restart it.
+            old_spinner = SPINNER_STATES.get(self._state, {}).get(
+                "spinner", DEFAULT_SPINNER
+            )
+            new_spinner = SPINNER_STATES.get(name, {}).get(
+                "spinner", DEFAULT_SPINNER
+            )
+            if old_spinner != new_spinner:
+                self._frame_idx = 0
             self._state = name
             self._state_kwargs = kwargs
             self._state_entered_at = time.monotonic()
-            self._frame_idx = 0
             self._hidden = False
-            # Render immediately so the user sees the transition
+            # Render immediately so the user sees the label transition
             # without waiting up to one interval.
             self._render_frame()
 
