@@ -7,6 +7,7 @@ import time
 
 from tools.spinner import (
     COLORS,
+    CURSOR_UP_ONE,
     DEFAULT_SPINNER,
     DIM,
     ERASE_LINE,
@@ -142,6 +143,28 @@ class TestSpinnerHide:
         s.unhide()
         assert not s._hidden
         s.stop()
+
+    def test_unhide_renders_with_ephemeral_separator(self, monkeypatch):
+        s = Spinner(enabled=True)
+        s._state = "waiting"
+        s._state_entered_at = time.monotonic()
+        s._separator_before_next_frame = True
+        buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", buf)
+        with s._lock:
+            s._render_frame()
+        monkeypatch.undo()
+        assert buf.getvalue().startswith(f"\n{ERASE_LINE}")
+        assert s._separator_visible is True
+
+    def test_hide_with_separator_repositions_for_log_output(self, monkeypatch):
+        s = Spinner(enabled=True)
+        s._separator_visible = True
+        buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", buf)
+        s.hide()
+        monkeypatch.undo()
+        assert buf.getvalue() == f"{ERASE_LINE}{CURSOR_UP_ONE}\r"
 
 
 class TestSpinnerPersist:
@@ -331,9 +354,13 @@ class TestSpinnerLogCoordination:
     def test_no_spinner_no_crash(self):
         """When _spinner is None, emit works normally without hiding."""
         handler = self._make_handler()
+        buf = io.StringIO()
+        handler.stream = buf
+
         assert handler._spinner is None
-        # Should not raise
         handler.emit(self._make_record())
+
+        assert buf.getvalue() == "test log line\n"
 
     def test_empty_message_skips_hide(self):
         """Empty messages are suppressed entirely — no hide/unhide needed."""

@@ -564,6 +564,7 @@ class HTTPColorFormatter(logging.Formatter):
         super().__init__()
         self.use_colors = use_colors and self._supports_color()
         self.show_gutter = not os.environ.get("LLM_HTTP_UI_MINIMAL")
+        self._has_rendered_block = False
 
     def _supports_color(self):
         """Check if the terminal supports color output."""
@@ -588,13 +589,13 @@ class HTTPColorFormatter(logging.Formatter):
         # "[timestamp] httpcore.http11" header — that's noise for the user.
         if self._is_stream_start(record):
             body = self._structured_message(record, colored=True)
-            return f"\n{body}" if body else ""
+            return self._format_block(body)
 
         # Post-stream markers (Stream End, Response Complete) are also
         # headerless, and are deferred when mdstream is active.
         if self._is_stream_end(record):
             body = self._structured_message(record, colored=True)
-            formatted = f"\n{body}" if body else ""
+            formatted = self._format_block(body)
             if self._defer_stream_end:
                 HTTPColorFormatter._pending_stream_end.append(formatted)
                 return ""
@@ -608,9 +609,7 @@ class HTTPColorFormatter(logging.Formatter):
         if not body:
             return ""
 
-        # Add a blank line before every record with body content so
-        # sections don't appear packed together in the terminal.
-        return f"\n{header}\n{body}"
+        return self._format_block(f"{header}\n{body}")
 
     # When True, the formatter buffers post-stream markers (Stream End
     # and Response Complete) instead of emitting them immediately.  This
@@ -662,12 +661,21 @@ class HTTPColorFormatter(logging.Formatter):
         """Plain formatting without colors."""
         if self._is_stream_start(record) or self._is_stream_end(record):
             body = self._structured_message(record, colored=False)
-            return f"\n{body}" if body else ""
+            return self._format_block(body)
         header = self._format_header(record, colored=False)
         body = self._structured_message(record, colored=False)
         if not body:
             return ""
-        return f"\n{header}\n{body}"
+        return self._format_block(f"{header}\n{body}")
+
+    def _format_block(self, body: Optional[str]) -> str:
+        """Apply inter-block spacing, except before the first rendered block."""
+        if not body:
+            return ""
+        if not self._has_rendered_block:
+            self._has_rendered_block = True
+            return body
+        return f"\n{body}"
 
     def _format_header(self, record, *, colored: bool) -> str:
         timestamp = self.formatTime(record, "%H:%M:%S")

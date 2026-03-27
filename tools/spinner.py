@@ -60,6 +60,7 @@ DEFAULT_SPINNER = "dot"
 # ── ANSI helpers ───────────────────────────────────────────────────────
 
 ERASE_LINE = "\r\033[K"
+CURSOR_UP_ONE = "\033[1A"
 RESET = "\033[0m"
 DIM = "\033[2m"
 
@@ -167,6 +168,8 @@ class Spinner:
         self._state_entered_at = 0.0
         self._hidden = False
         self._frame_idx = 0
+        self._separator_before_next_frame = False
+        self._separator_visible = False
         self._use_color = not os.environ.get("NO_COLOR")
         self._persist_on_stop = _should_persist_spinner()
         self._persist_text = os.environ.get("LLM_SPINNER_PERSIST_TEXT")
@@ -188,6 +191,8 @@ class Spinner:
         self._stop_event.clear()
         self._hidden = False
         self._frame_idx = 0
+        self._separator_before_next_frame = False
+        self._separator_visible = False
         self.set_state("starting")
         self._attach_log_handler()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -214,6 +219,8 @@ class Spinner:
             self._persist()
         else:
             self._erase()
+        self._separator_before_next_frame = False
+        self._separator_visible = False
         self._detach_log_handler()
         self._thread = None
         self._state = None
@@ -259,7 +266,13 @@ class Spinner:
             return
         with self._lock:
             self._hidden = True
-        self._erase()
+            separator_visible = self._separator_visible
+            self._separator_visible = False
+            self._separator_before_next_frame = False
+        if separator_visible:
+            self._erase_for_log()
+        else:
+            self._erase()
 
     def unhide(self) -> None:
         """Re-show the spinner after a ``hide()`` call."""
@@ -267,6 +280,7 @@ class Spinner:
             return
         with self._lock:
             self._hidden = False
+            self._separator_before_next_frame = True
 
     @property
     def is_running(self) -> bool:
@@ -355,7 +369,9 @@ class Spinner:
         frame = frames[self._frame_idx % len(frames)]
 
         # Build the label
-        label = cfg["label"].format_map(collections.defaultdict(str, self._state_kwargs))
+        label = cfg["label"].format_map(
+            collections.defaultdict(str, self._state_kwargs)
+        )
 
         # Stale indicator
         elapsed = time.monotonic() - self._state_entered_at
@@ -364,11 +380,17 @@ class Spinner:
             label += f" {DIM}(stale){RESET}" if self._use_color else " (stale)"
 
         # Format: [colored icon] [dim label]
+        prefix = ""
+        if self._separator_before_next_frame:
+            prefix = "\n"
+            self._separator_before_next_frame = False
+            self._separator_visible = True
+
         if self._use_color:
             color = COLORS.get(cfg.get("color", "cyan"), COLORS["cyan"])
-            line = f"{ERASE_LINE}{color}{frame}{RESET} {DIM}{label}{RESET}"
+            line = f"{prefix}{ERASE_LINE}{color}{frame}{RESET} {DIM}{label}{RESET}"
         else:
-            line = f"{ERASE_LINE}{frame} {label}"
+            line = f"{prefix}{ERASE_LINE}{frame} {label}"
 
         try:
             sys.stdout.write(line)
@@ -385,7 +407,9 @@ class Spinner:
             return
         spinner_name = cfg.get("spinner", DEFAULT_SPINNER)
         spinner_def = SPINNERS.get(spinner_name, SPINNERS[DEFAULT_SPINNER])
-        label = cfg["label"].format_map(collections.defaultdict(str, self._state_kwargs))
+        label = cfg["label"].format_map(
+            collections.defaultdict(str, self._state_kwargs)
+        )
         padding_before = "\n" * self._padding_before
         padding_after = "\n" * self._padding_after
         persist_text = self._persist_text
@@ -409,6 +433,14 @@ class Spinner:
         """Clear the spinner line from the terminal."""
         try:
             sys.stdout.write(ERASE_LINE)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def _erase_for_log(self) -> None:
+        """Clear the spinner and reposition to the separator row for log output."""
+        try:
+            sys.stdout.write(f"{ERASE_LINE}{CURSOR_UP_ONE}\r")
             sys.stdout.flush()
         except (BrokenPipeError, OSError):
             pass

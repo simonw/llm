@@ -923,14 +923,6 @@ def prompt(
     if tool_implementations and spinner.enabled:
         _wrap_tool_callbacks_for_spinner(kwargs, spinner)
 
-    # Blank line between command and response.  Only in colored
-    # interactive mode.  Opt out with LLM_COMPACT=1.
-    show_separator = (
-        bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
-    )
-
-    if show_separator:
-        print()
     spinner.start()
 
     try:
@@ -952,8 +944,6 @@ def prompt(
                         async for chunk in response:
                             if first_chunk:
                                 spinner.stop()
-                                if show_separator:
-                                    print()
                                 first_chunk = False
                             writer.write(chunk)
                         writer.finish()
@@ -971,8 +961,6 @@ def prompt(
                         **kwargs,
                     )
                     spinner.stop()
-                    if show_separator:
-                        print()
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -998,8 +986,6 @@ def prompt(
                     for chunk in response:
                         if first_chunk:
                             spinner.stop()
-                            if show_separator:
-                                print()
                             first_chunk = False
                         writer.write(chunk)
                     writer.finish()
@@ -1008,8 +994,6 @@ def prompt(
                             click.echo(pending, err=True, nl=False)
             else:
                 spinner.stop()
-                if show_separator:
-                    print()
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
@@ -1402,19 +1386,12 @@ def chat(
         argument_system_fragments = []
         chat_writer = _ColorWriter(color)
         chat_spinner = _make_spinner(bool(color) and sys.stdout.isatty())
-        chat_show_sep = (
-            bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
-        )
-        if chat_show_sep:
-            print()
         chat_spinner.start()
         with buffered_stream_end() as get_pending:
             first_chunk = True
             for chunk in response:
                 if first_chunk:
                     chat_spinner.stop()
-                    if chat_show_sep:
-                        print()
                     first_chunk = False
                 chat_writer.write(chunk)
             chat_writer.finish()
@@ -1941,14 +1918,16 @@ def logs_list(
 
     if any_tools:
         # Any response that involved at least one tool result
-        where_bits.append("""
+        where_bits.append(
+            """
             exists (
               select 1
                 from tool_results
               where
                 tool_results.response_id = responses.id
             )
-        """)
+        """
+        )
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1959,7 +1938,8 @@ def logs_list(
             except KeyError:
                 raise click.ClickException(f"Unknown tool: {tool_name}")
 
-            tool_clauses.append(f"""
+            tool_clauses.append(
+                f"""
             exists (
               select 1
                 from tool_results
@@ -1968,7 +1948,8 @@ def logs_list(
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
-            """)
+            """
+            )
             sql_params[f"tool{i}"] = tool_name
             sql_params[f"plugin{i}"] = plugin_name
 
@@ -2864,7 +2845,9 @@ def schemas_list(path, database, queries, full, json_, nl):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(where_sql)
+    """.format(
+        where_sql
+    )
     rows = db.query(sql, params)
 
     if json_ or nl:
@@ -3203,11 +3186,13 @@ def fragments_list(queries, aliases, json_):
         param_count += 1
         p = f"p{param_count}"
         params[p] = q
-        where_bits.append(f"""
+        where_bits.append(
+            f"""
             (fragments.hash = :{p} or fragment_aliases.alias = :{p}
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
-        """)
+        """
+        )
     where = "\n      and\n  ".join(where_bits)
     if where:
         where = " where " + where
@@ -3229,7 +3214,9 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(where=where)
+    """.format(
+        where=where
+    )
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3919,7 +3906,8 @@ def embed_db_collections(database, json_):
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
-    rows = db.query("""
+    rows = db.query(
+        """
     select
         collections.name,
         collections.model,
@@ -3929,7 +3917,8 @@ def embed_db_collections(database, json_):
         on collections.id = embeddings.collection_id
     group by
         collections.name, collections.model
-    """)
+    """
+    )
     if json_:
         click.echo(json.dumps(list(rows), indent=4))
     else:
@@ -4490,6 +4479,7 @@ def _make_spinner(enabled):
     """Create a Spinner instance, handling import errors gracefully."""
     if not enabled:
         from tools.spinner import Spinner
+
         return Spinner(enabled=False)
     try:
         from tools.spinner import Spinner

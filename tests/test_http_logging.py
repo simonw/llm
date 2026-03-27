@@ -347,13 +347,19 @@ class TestHTTPColorFormatterMarkers:
 
     def test_marker_spacing_single_leading_newline(self):
         """Markers should have exactly 1 leading \\n (one blank line before) and no trailing \\n."""
+        self.fmt.format(self._record("httpcore.connection", "connect_tcp.started host='x'"))
         r = self._record("httpcore.http11", "response_closed.complete")
         output = self.fmt.format(r)
-        # format() owns the single leading \n; marker body has none
+        # Internal markers keep a single leading \n; marker body has none
         assert output.startswith("\n")
         assert not output.startswith("\n\n")
         # No trailing newline — handler's terminator provides that
         assert not output.endswith("\n")
+
+    def test_first_rendered_block_has_no_leading_newline(self):
+        r = self._record("httpcore.http11", "receive_response_body.started request=<>")
+        output = self.fmt.format(r)
+        assert not output.startswith("\n")
 
     def test_markers_include_request_id(self):
         """Correlated TUI events should carry their own request ID."""
