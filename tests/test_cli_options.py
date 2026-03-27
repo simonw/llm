@@ -136,3 +136,45 @@ def test_prompt_uses_model_options(user_path):
         "previous": [],
         "options": {"example_bool": True},
     }
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["-m", "echo", "-C", "showcase your markdown\n  rendering"],
+        ["--prompt", "showcase your markdown\n  rendering", "-m", "echo", "-C"],
+        ["showcase your markdown\n  rendering", "-C", "--model", "echo"],
+    ),
+)
+def test_prompt_option_matches_positional_prompt(args):
+    runner = CliRunner()
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["prompt"] == "showcase your markdown\n  rendering"
+    assert payload["stream"] is True
+
+
+def test_prompt_option_rejects_duplicate_prompt_inputs():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "positional prompt",
+            "--prompt",
+            "option prompt",
+            "--model",
+            "echo",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Cannot use both [PROMPT] and --prompt" in result.output
+
+
+def test_root_debug_does_not_steal_prompt_database_option(tmpdir):
+    database = str(tmpdir / "custom.db")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-d", database, "--model", "echo", "prompt"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["prompt"] == "prompt"
+    assert (tmpdir / "custom.db").exists()

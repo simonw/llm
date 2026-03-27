@@ -28,7 +28,7 @@ from .models import (
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
-from .plugins import pm, load_plugins
+from .plugins import call_hook, call_hook_impl, load_plugins, pm
 import click
 from typing import Any, Dict, List, Optional, Callable, Type, Union
 import inspect
@@ -108,12 +108,12 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
         model_aliases.append(ModelWithAliases(model, async_model, alias_list))
 
     load_plugins()
-    pm.hook.register_models(register=register)
+    call_hook("register_models", register=register)
 
     return model_aliases
 
 
-def _get_loaders(hook_method) -> Dict[str, Callable]:
+def _get_loaders(hook_name: str) -> Dict[str, Callable]:
     load_plugins()
     loaders = {}
 
@@ -125,13 +125,13 @@ def _get_loaders(hook_method) -> Dict[str, Callable]:
             prefix_to_try = f"{prefix}_{suffix}"
         loaders[prefix_to_try] = loader
 
-    hook_method(register=register)
+    call_hook(hook_name, register=register)
     return loaders
 
 
 def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
     """Get template loaders registered by plugins."""
-    return _get_loaders(pm.hook.register_template_loaders)
+    return _get_loaders("register_template_loaders")
 
 
 def get_fragment_loaders() -> Dict[
@@ -139,7 +139,7 @@ def get_fragment_loaders() -> Dict[
     Callable[[str], Union[Fragment, Attachment, List[Union[Fragment, Attachment]]]],
 ]:
     """Get fragment loaders registered by plugins."""
-    return _get_loaders(pm.hook.register_fragment_loaders)
+    return _get_loaders("register_fragment_loaders")
 
 
 def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
@@ -210,7 +210,7 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
             impl for impl in hook_caller.get_hookimpls() if impl.plugin is plugin
         ]
         for impl in plugin_impls:
-            impl.function(register=register)
+            call_hook_impl(impl, "register_tools", register=register)
 
     return tools
 
@@ -233,7 +233,7 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
         model_aliases.append(EmbeddingModelWithAliases(model, alias_list))
 
     load_plugins()
-    pm.hook.register_embedding_models(register=register)
+    call_hook("register_embedding_models", register=register)
 
     return model_aliases
 
@@ -245,7 +245,7 @@ def get_embedding_models():
         models.append(model)
 
     load_plugins()
-    pm.hook.register_embedding_models(register=register)
+    call_hook("register_embedding_models", register=register)
     return models
 
 

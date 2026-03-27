@@ -42,9 +42,10 @@ from llm import (
     remove_alias,
 )
 from llm.models import _BaseConversation, ChainResponse
+from llm.utils import buffered_stream_end
 
 from .migrations import migrate
-from .plugins import pm, load_plugins
+from .plugins import load_plugins, register_commands as register_plugin_commands
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
@@ -62,6 +63,7 @@ from .utils import (
     schema_summary,
     token_usage_string,
     truncate_string,
+    configure_http_logging,
 )
 import base64
 import httpx
@@ -315,7 +317,22 @@ def schema_option(fn):
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.version_option()
-def cli():
+@click.option(
+    "--debug",
+    "debug_level",
+    type=int,
+    default=0,
+    envvar="LLM_HTTP_DEBUG",
+    help="HTTP debug level (1=requests/responses, 2=verbose with headers)",
+)
+@click.option(
+    "--no-color",
+    is_flag=True,
+    help="Disable colored output in HTTP logging",
+    envvar="NO_COLOR",
+)
+@click.pass_context
+def cli(ctx, debug_level, no_color):
     """
     Access Large Language Models from the command-line
 
@@ -332,18 +349,50 @@ def cli():
         $ llm keys set openai
         Enter key: ...
 
-    Then execute a prompt like this:
+    Prompting shortcuts:
 
+    \b
         llm 'Five outrageous names for a pet pelican'
+        llm --prompt 'Five outrageous names for a pet pelican'
+        llm -m gpt-4o -C 'Show me a Markdown table'
+        cat notes.txt | llm -s 'Summarize this'
 
-    For a full list of prompting options run:
+    `prompt` is the default command, so `llm ...` and
+    `llm prompt ...` accept the same prompting options.
 
+    Common follow-up commands:
+
+    \b
         llm prompt --help
+        llm chat --help
+        llm models --help
+        llm logs --help
+
+    \b
+    HTTP debugging:
+        --debug 1 / LLM_HTTP_DEBUG=1   Show requests and responses
+        --debug 2 / LLM_HTTP_DEBUG=2   Verbose (includes headers, connections)
     """
+    # Set environment variable if CLI flag is provided
+    if debug_level:
+        os.environ["LLM_HTTP_DEBUG"] = str(debug_level)
+    if no_color:
+        os.environ["NO_COLOR"] = "1"
+
+    # Configure HTTP logging early in CLI initialization
+    configure_http_logging()
+
+    # Ensure context object exists for subcommands
+    ctx.ensure_object(dict)
 
 
-@cli.command(name="prompt")
+@cli.command(name="prompt", short_help="Execute a one-shot prompt (default command)")
 @click.argument("prompt", required=False)
+@click.option(
+    "prompt_option",
+    "--prompt",
+    help="Prompt text. Equivalent to [PROMPT]; use one or the other.",
+)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -476,8 +525,18 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "color",
+    "-C",
+    "--color",
+    help="Render streamed Markdown using mdstream formatting",
+    is_flag=True,
+    flag_value="mdstream",
+    default=None,
+)
 def prompt(
     prompt,
+    prompt_option,
     system,
     model_id,
     database,
@@ -507,26 +566,36 @@ def prompt(
     usage,
     extract,
     extract_last,
+    color,
 ):
     """
     Execute a prompt
 
     Documentation: https://llm.datasette.io/en/stable/usage.html
 
-    Examples:
+    Prompt input:
 
     \b
         llm 'Capital of France?'
         llm 'Capital of France?' -m gpt-4o
-        llm 'Capital of France?' -s 'answer in Spanish'
+        llm --prompt 'Capital of France?'
+        cat article.txt | llm -s 'Summarize this'
 
-    Multi-modal models can be called with attachments like this:
+    Use either [PROMPT] or --prompt, not both.
+    The positional [PROMPT] can appear before or after other options.
+
+    Common workflows:
 
     \b
+        llm 'Capital of France?' -s 'answer in Spanish'
+        llm 'Show me a Markdown table' -C
         llm 'Extract text from this image' -a image.jpg
         llm 'Describe' -a https://static.simonwillison.net/static/2024/pelicans.jpg
         cat image | llm 'describe image' -a -
-        # With an explicit mimetype:
+        llm 'Extract countries' --schema schema.json
+        llm 'Use the weather tool' -T weather
+        llm -t release-notes -p version 0.29
+        llm -c 'one more'
         cat image | llm 'describe image' --at - image/jpeg
 
     The -x/--extract option returns just the content of the first ``` fenced code
@@ -535,6 +604,11 @@ def prompt(
     \b
         llm 'JavaScript function for reversing a string' -x
     """
+    if prompt is not None and prompt_option is not None:
+        raise click.ClickException("Cannot use both [PROMPT] and --prompt")
+    if prompt is None:
+        prompt = prompt_option
+
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
@@ -835,6 +909,22 @@ def prompt(
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
 
+    writer = _ColorWriter(color)
+
+    # Spinner: shows loading state until the first content chunk arrives.
+    # Enabled when --color is active and stdout is a TTY (or LLM_SPINNER=1).
+    spinner_env = os.environ.get("LLM_SPINNER")
+    spinner_enabled = (spinner_env == "1") or (
+        spinner_env != "0" and bool(color) and sys.stdout.isatty()
+    )
+    spinner = _make_spinner(spinner_enabled)
+
+    # Wrap tool callbacks to drive spinner state during tool chains.
+    if tool_implementations and spinner.enabled:
+        _wrap_tool_callbacks_for_spinner(kwargs, spinner)
+
+    spinner.start()
+
     try:
         if async_:
 
@@ -849,10 +939,17 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
-                    print("")
+                    with buffered_stream_end() as get_pending:
+                        first_chunk = True
+                        async for chunk in response:
+                            if first_chunk:
+                                spinner.stop()
+                                first_chunk = False
+                            writer.write(chunk)
+                        writer.finish()
+                        for pending in get_pending():
+                            if pending:
+                                click.echo(pending, err=True, nl=False)
                 else:
                     response = prompt_method(
                         prompt,
@@ -863,6 +960,7 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
+                    spinner.stop()
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -883,25 +981,55 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
-                print("")
+                with buffered_stream_end() as get_pending:
+                    first_chunk = True
+                    for chunk in response:
+                        if first_chunk:
+                            spinner.stop()
+                            first_chunk = False
+                        writer.write(chunk)
+                    writer.finish()
+                    for pending in get_pending():
+                        if pending:
+                            click.echo(pending, err=True, nl=False)
             else:
+                spinner.stop()
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
                 print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
+        spinner.stop()
         raise click.ClickException(str(ex))
     except Exception as ex:
+        spinner.stop()
         # All other exceptions should raise in pytest, show to user otherwise
         if getattr(sys, "_called_from_test", False) or os.environ.get(
             "LLM_RAISE_ERRORS", None
         ):
             raise
         raise click.ClickException(str(ex))
+
+    # Chain limit reached: the model wanted more tool rounds but we
+    # stopped it.  The last response's text was already streamed and
+    # writer.finish() ran cleanly.  Print a notice so the user knows
+    # the output may be incomplete.
+    #
+    # LLM_CHAIN_LIMIT_STDERR=1 sends the message to stderr instead
+    # of stdout (useful when piping output to another program).
+    if isinstance(response, ChainResponse) and response._chain_limit_hit:
+        msg = "\n[Chain limit of {} reached, further tool calls stopped]".format(
+            response.chain_limit
+        )
+        use_stderr = bool(os.environ.get("LLM_CHAIN_LIMIT_STDERR"))
+        if color:
+            click.echo(
+                click.style(msg, fg="yellow", dim=True),
+                err=use_stderr,
+            )
+        else:
+            click.echo(msg, err=use_stderr)
 
     if usage:
         if isinstance(response, ChainResponse):
@@ -928,7 +1056,7 @@ def prompt(
         response.log_to_db(db)
 
 
-@cli.command()
+@cli.command(short_help="Hold an interactive multi-turn chat")
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
@@ -1019,6 +1147,15 @@ def prompt(
     default=5,
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
+@click.option(
+    "color",
+    "-C",
+    "--color",
+    help="Render streamed Markdown using mdstream formatting",
+    is_flag=True,
+    flag_value="mdstream",
+    default=None,
+)
 def chat(
     system,
     model_id,
@@ -1037,9 +1174,22 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    color,
 ):
     """
     Hold an ongoing chat with a model.
+
+    Examples:
+
+    \b
+        llm chat
+        llm chat -m gpt-4o -s 'Answer in JSON'
+        llm chat -t code-review
+        llm chat -c
+        llm chat -T my_tool -C
+
+    The chat command reuses templates, fragments, options, tools and color
+    rendering from `llm prompt`, but keeps the conversation open until you exit.
     """
     # Left and right arrow keys to move cursor:
     if sys.platform != "win32":
@@ -1234,11 +1384,21 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+        chat_writer = _ColorWriter(color)
+        chat_spinner = _make_spinner(bool(color) and sys.stdout.isatty())
+        chat_spinner.start()
+        with buffered_stream_end() as get_pending:
+            first_chunk = True
+            for chunk in response:
+                if first_chunk:
+                    chat_spinner.stop()
+                    first_chunk = False
+                chat_writer.write(chunk)
+            chat_writer.finish()
+            for pending in get_pending():
+                if pending:
+                    click.echo(pending, err=True, nl=False)
         response.log_to_db(db)
-        print("")
 
 
 def load_conversation(
@@ -1380,6 +1540,10 @@ def logs_status():
     click.echo("Found log database at {}".format(path))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
     click.echo("Number of responses logged:\t{}".format(db["responses"].count))
+    if db["plugin_events"].exists():
+        click.echo(
+            "Number of plugin events logged:\t{}".format(db["plugin_events"].count)
+        )
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
@@ -1469,6 +1633,38 @@ join prompt_attachments
     on attachments.id = prompt_attachments.attachment_id
 where prompt_attachments.response_id in ({})
 order by prompt_attachments."order"
+"""
+
+PLUGIN_EVENTS_SQL = """
+select
+    response_id,
+    plugin,
+    phase,
+    kind,
+    level,
+    logger_name,
+    message,
+    details_json,
+    datetime_utc
+from plugin_events
+where response_id in ({})
+order by datetime_utc, id
+"""
+
+PLUGIN_EVENTS_ALL_SQL = """
+select
+    id,
+    plugin,
+    phase,
+    kind,
+    level,
+    logger_name,
+    message,
+    details_json,
+    response_id,
+    datetime_utc
+from plugin_events{extra_where}
+order by {order_by}{limit}
 """
 
 
@@ -1722,14 +1918,16 @@ def logs_list(
 
     if any_tools:
         # Any response that involved at least one tool result
-        where_bits.append("""
+        where_bits.append(
+            """
             exists (
               select 1
                 from tool_results
               where
                 tool_results.response_id = responses.id
             )
-        """)
+        """
+        )
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1740,7 +1938,8 @@ def logs_list(
             except KeyError:
                 raise click.ClickException(f"Unknown tool: {tool_name}")
 
-            tool_clauses.append(f"""
+            tool_clauses.append(
+                f"""
             exists (
               select 1
                 from tool_results
@@ -1749,7 +1948,8 @@ def logs_list(
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
-            """)
+            """
+            )
             sql_params[f"tool{i}"] = tool_name
             sql_params[f"plugin{i}"] = plugin_name
 
@@ -1781,6 +1981,23 @@ def logs_list(
     attachments_by_id = {}
     for attachment in attachments:
         attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+
+    plugin_events_by_id = {}
+    for event in db.query(PLUGIN_EVENTS_SQL.format(",".join("?" * len(ids))), ids):
+        plugin_events_by_id.setdefault(event["response_id"], []).append(
+            {
+                "plugin": event["plugin"],
+                "phase": event["phase"],
+                "kind": event["kind"],
+                "level": event["level"],
+                "logger_name": event["logger_name"],
+                "message": event["message"],
+                "details": (
+                    json.loads(event["details_json"]) if event["details_json"] else None
+                ),
+                "datetime_utc": event["datetime_utc"],
+            }
+        )
 
     FRAGMENTS_SQL = """
     select
@@ -1946,6 +2163,7 @@ def logs_list(
                 else:
                     row[key] = json.loads(row[key])
         row.update(tool_info_by_id[row["id"]])
+        row["plugin_events"] = plugin_events_by_id.get(row["id"], [])
 
     output = None
     if json_output:
@@ -2020,6 +2238,16 @@ def logs_list(
                             tool_result["name"], truncate_string(tool_result["output"])
                         )
                         for tool_result in row["tool_results"]
+                    ]
+                if row["plugin_events"]:
+                    obj["plugin_events"] = [
+                        "{} {} {}: {}".format(
+                            event["plugin"],
+                            event["phase"],
+                            event["kind"],
+                            truncate_string(event["message"]),
+                        )
+                        for event in row["plugin_events"]
                     ]
                 if system:
                     obj["system"] = system
@@ -2141,6 +2369,23 @@ def logs_list(
                             attachments,
                         )
                     )
+            if row["plugin_events"]:
+                click.echo("\n### Plugin events\n")
+                for event in row["plugin_events"]:
+                    logger_name = (
+                        " [{}]".format(event["logger_name"])
+                        if event["logger_name"]
+                        else ""
+                    )
+                    click.echo(
+                        "- **{}** `{}` {}{}<br>\n{}".format(
+                            event["plugin"],
+                            event["phase"],
+                            event["kind"],
+                            logger_name,
+                            textwrap.indent(event["message"], "    "),
+                        )
+                    )
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -2195,6 +2440,127 @@ def logs_list(
                 )
                 if token_usage:
                     click.echo("## Token usage\n\n{}\n".format(token_usage))
+
+
+@logs.command(name="events")
+@click.option(
+    "-n",
+    "--count",
+    type=int,
+    default=10,
+    help="Number of events to show, use 0 for all",
+)
+@click.option(
+    "-p",
+    "--path",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+    hidden=True,
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option("--plugin", help="Filter by plugin name")
+@click.option("--phase", help="Filter by event phase")
+@click.option("--kind", help="Filter by event kind")
+@click.option("--level", help="Filter by event level")
+@click.option("-q", "--query", help="Search event messages")
+@click.option("json_output", "--json", is_flag=True, help="Output events as JSON")
+@click.option("-s", "--short", is_flag=True, help="Shorter YAML output")
+def logs_events(
+    count, path, database, plugin, phase, kind, level, query, json_output, short
+):
+    "Show persisted plugin diagnostics and other non-response events"
+    if database and not path:
+        path = database
+    path = pathlib.Path(path or logs_db_path())
+    if not path.exists():
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    migrate(db)
+
+    limit = ""
+    if count is not None and count > 0:
+        limit = " limit {}".format(count)
+
+    where_bits = []
+    params = {}
+    if plugin:
+        where_bits.append("plugin = :plugin")
+        params["plugin"] = plugin
+    if phase:
+        where_bits.append("phase = :phase")
+        params["phase"] = phase
+    if kind:
+        where_bits.append("kind = :kind")
+        params["kind"] = kind
+    if level:
+        where_bits.append("level = :level")
+        params["level"] = level
+    if query:
+        where_bits.append("message like :query")
+        params["query"] = f"%{query}%"
+
+    sql = PLUGIN_EVENTS_ALL_SQL.format(
+        extra_where=(" where " + " and ".join(where_bits)) if where_bits else "",
+        order_by="id desc",
+        limit=limit,
+    )
+    rows = list(db.query(sql, params))
+    rows.reverse()
+
+    for row in rows:
+        if row["details_json"]:
+            row["details"] = json.loads(row["details_json"])
+        del row["details_json"]
+
+    if json_output:
+        click.echo(json.dumps(rows, indent=2))
+        return
+
+    if short:
+        for row in rows:
+            obj = {
+                "datetime": row["datetime_utc"].split(".")[0],
+                "plugin": row["plugin"],
+                "phase": row["phase"],
+                "kind": row["kind"],
+                "level": row["level"],
+                "message": truncate_string(
+                    row["message"], 120, normalize_whitespace=True, keep_end=True
+                ),
+            }
+            if row["response_id"]:
+                obj["response_id"] = row["response_id"]
+            if row.get("logger_name"):
+                obj["logger_name"] = row["logger_name"]
+            click.echo(yaml.dump([obj], sort_keys=False).strip())
+        return
+
+    for row in rows:
+        header = "# {}    plugin: {} phase: {} kind: {}".format(
+            row["datetime_utc"].split(".")[0],
+            row["plugin"],
+            row["phase"],
+            row["kind"],
+        )
+        if row["response_id"]:
+            header += " response: {}".format(row["response_id"])
+        click.echo(header)
+        click.echo("\nLevel: **{}**".format(row["level"]))
+        if row.get("logger_name"):
+            click.echo("\nLogger: `{}`".format(row["logger_name"]))
+        click.echo("\n## Message\n\n{}".format(row["message"]))
+        if row.get("details"):
+            click.echo(
+                "\n## Details\n\n```json\n{}\n```".format(
+                    json.dumps(row["details"], indent=2)
+                )
+            )
+        click.echo("")
 
 
 @cli.group(
@@ -2479,7 +2845,9 @@ def schemas_list(path, database, queries, full, json_, nl):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(where_sql)
+    """.format(
+        where_sql
+    )
     rows = db.query(sql, params)
 
     if json_ or nl:
@@ -2818,11 +3186,13 @@ def fragments_list(queries, aliases, json_):
         param_count += 1
         p = f"p{param_count}"
         params[p] = q
-        where_bits.append(f"""
+        where_bits.append(
+            f"""
             (fragments.hash = :{p} or fragment_aliases.alias = :{p}
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
-        """)
+        """
+        )
     where = "\n      and\n  ".join(where_bits)
     if where:
         where = " where " + where
@@ -2844,7 +3214,9 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(where=where)
+    """.format(
+        where=where
+    )
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3534,7 +3906,8 @@ def embed_db_collections(database, json_):
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
-    rows = db.query("""
+    rows = db.query(
+        """
     select
         collections.name,
         collections.model,
@@ -3544,7 +3917,8 @@ def embed_db_collections(database, json_):
         on collections.id = embeddings.collection_id
     group by
         collections.name, collections.model
-    """)
+    """
+    )
     if json_:
         click.echo(json.dumps(list(rows), indent=4))
     else:
@@ -3760,7 +4134,7 @@ def render_errors(errors):
 
 load_plugins()
 
-pm.hook.register_commands(cli=cli)
+register_plugin_commands(cli=cli)
 
 
 def _human_readable_size(size_bytes):
@@ -4039,6 +4413,118 @@ def _gather_tools(
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
     return tools
+
+
+class _ColorWriter:
+    """
+    Wraps streaming output through a markdown renderer.
+
+    Intercepts chunks written via write(), displays them raw for instant
+    streaming feedback, then re-renders completed lines with full markdown
+    formatting (headings, code highlighting, inline styles).
+
+    When color_mode is None or stdout is not a TTY, acts as a plain
+    passthrough to sys.stdout.
+
+    The renderer owns all stream state so the integrated CLI path and the
+    standalone `mdstream` script follow the same chunk-handling rules.
+    """
+
+    def __init__(self, color_mode):
+        self.renderer = None
+        if color_mode and sys.stdout.isatty():
+            if color_mode == "mdstream":
+                try:
+                    from tools.mdstream import StreamingMarkdownRenderer
+                except ImportError:
+                    # Fallback: try importing from the tools directory relative to llm
+                    import importlib.util
+
+                    spec_path = os.path.join(
+                        os.path.dirname(os.path.dirname(__file__)),
+                        "tools",
+                        "mdstream.py",
+                    )
+                    if os.path.exists(spec_path):
+                        spec = importlib.util.spec_from_file_location(
+                            "mdstream", spec_path
+                        )
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        self.renderer = mod.StreamingMarkdownRenderer()
+                    return
+                self.renderer = StreamingMarkdownRenderer()
+
+    def write(self, chunk):
+        """Write a streaming chunk — renders if a renderer is active."""
+        if not self.renderer:
+            print(chunk, end="")
+            sys.stdout.flush()
+            return
+
+        self.renderer.write_chunk(chunk, sys.stdout)
+        sys.stdout.flush()
+
+    def finish(self):
+        """Flush any remaining partial line at end of stream."""
+        if self.renderer:
+            self.renderer.finish(sys.stdout)
+            sys.stdout.flush()
+        # Print trailing newline for non-rendered output
+        if not self.renderer:
+            print("")
+
+
+def _make_spinner(enabled):
+    """Create a Spinner instance, handling import errors gracefully."""
+    if not enabled:
+        from tools.spinner import Spinner
+
+        return Spinner(enabled=False)
+    try:
+        from tools.spinner import Spinner
+
+        return Spinner(enabled=True)
+    except ImportError:
+        # Fallback: return a no-op object if spinner module unavailable
+        class _NoopSpinner:
+            enabled = False
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def set_state(self, *a, **kw):
+                pass
+
+            @property
+            def is_running(self):
+                return False
+
+        return _NoopSpinner()
+
+
+def _wrap_tool_callbacks_for_spinner(kwargs, spinner):
+    """Wrap before_call / after_call in kwargs to drive spinner state."""
+    original_before = kwargs.get("before_call")
+    original_after = kwargs.get("after_call")
+
+    def spinner_before_call(tool, tool_call):
+        spinner.set_state("tool_calling", tool_name=tool_call.name)
+        if not spinner.is_running:
+            spinner.start()
+        if original_before:
+            return original_before(tool, tool_call)
+
+    def spinner_after_call(tool, tool_call, tool_result):
+        spinner.set_state("starting")
+        if original_after:
+            return original_after(tool, tool_call, tool_result)
+
+    kwargs["before_call"] = spinner_before_call
+    kwargs["after_call"] = spinner_after_call
 
 
 def _get_conversation_tools(conversation, tools):

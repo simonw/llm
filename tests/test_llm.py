@@ -1,6 +1,6 @@
 from click.testing import CliRunner
 import llm
-from llm.cli import cli
+from llm.cli import cli, _make_spinner, _wrap_tool_callbacks_for_spinner
 from llm.models import Usage
 import json
 import os
@@ -17,6 +17,84 @@ def test_version():
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
         assert result.output.startswith("cli, version ")
+
+
+def test_root_help_documents_default_prompt_workflows():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--help"])
+    assert result.exit_code == 0
+    assert "Prompting shortcuts:" in result.output
+    assert "llm --prompt 'Five outrageous names for a pet pelican'" in result.output
+    assert "`prompt` is the default command" in result.output
+    assert "llm chat --help" in result.output
+    assert "Execute a one-shot prompt (default command)" in result.output
+
+
+def test_prompt_help_documents_input_forms_and_features():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["prompt", "--help"])
+    assert result.exit_code == 0
+    assert "Prompt input:" in result.output
+    assert "llm --prompt 'Capital of France?'" in result.output
+    assert "Use either [PROMPT] or --prompt, not both." in result.output
+    assert "llm 'Extract countries' --schema schema.json" in result.output
+    assert "Render streamed Markdown using mdstream" in result.output
+    assert "formatting" in result.output
+
+
+def test_chat_help_documents_interactive_workflows():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["chat", "--help"])
+    assert result.exit_code == 0
+    assert "Examples:" in result.output
+    assert "llm chat -t code-review" in result.output
+    assert "llm chat -T my_tool -C" in result.output
+    assert "reuses templates, fragments, options, tools and color" in result.output
+
+
+def test_make_spinner_disabled_returns_disabled_spinner():
+    spinner = _make_spinner(False)
+    assert spinner.enabled is False
+
+
+def test_wrap_tool_callbacks_for_spinner_drives_spinner():
+    class FakeSpinner:
+        def __init__(self):
+            self.events = []
+            self._running = False
+
+        def set_state(self, state, **kwargs):
+            self.events.append((state, kwargs))
+
+        def start(self):
+            self._running = True
+            self.events.append(("start", {}))
+
+        @property
+        def is_running(self):
+            return self._running
+
+    class FakeCall:
+        name = "weather"
+
+    seen = []
+    spinner = FakeSpinner()
+    kwargs = {
+        "before_call": lambda tool, tool_call: seen.append(("before", tool_call.name)),
+        "after_call": lambda tool, tool_call, tool_result: seen.append(
+            ("after", tool_call.name, tool_result)
+        ),
+    }
+    _wrap_tool_callbacks_for_spinner(kwargs, spinner)
+    kwargs["before_call"](None, FakeCall())
+    kwargs["after_call"](None, FakeCall(), "ok")
+
+    assert spinner.events == [
+        ("tool_calling", {"tool_name": "weather"}),
+        ("start", {}),
+        ("starting", {}),
+    ]
+    assert seen == [("before", "weather"), ("after", "weather", "ok")]
 
 
 @pytest.mark.parametrize("custom_database_path", (False, True))

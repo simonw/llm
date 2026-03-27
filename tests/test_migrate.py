@@ -28,7 +28,13 @@ def test_migrate_blank():
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     assert set(db.table_names()).issuperset(
-        {"_llm_migrations", "conversations", "responses", "responses_fts"}
+        {
+            "_llm_migrations",
+            "conversations",
+            "responses",
+            "responses_fts",
+            "plugin_events",
+        }
     )
     assert db["responses"].columns_dict == EXPECTED
 
@@ -80,7 +86,13 @@ def test_migrate_from_original_schema(has_record):
             }
         )
     migrate(db)
-    expected_tables = {"_llm_migrations", "conversations", "responses", "responses_fts"}
+    expected_tables = {
+        "_llm_migrations",
+        "conversations",
+        "responses",
+        "responses_fts",
+        "plugin_events",
+    }
     if has_record:
         expected_tables.add("logs")
     assert set(db.table_names()).issuperset(expected_tables)

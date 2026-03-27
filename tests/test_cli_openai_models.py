@@ -1,7 +1,9 @@
 from click.testing import CliRunner
 from llm.cli import cli
+from llm.default_plugins.openai_models import Chat
 import pytest
 import sqlite_utils
+from unittest.mock import sentinel
 
 
 @pytest.fixture
@@ -39,6 +41,58 @@ def test_openai_models(mocked_models):
         "ada:2020-05-03        openai      2020-05-03T20:26:40+00:00\n"
         "babbage:2020-05-03    openai      2020-05-03T20:26:40+00:00\n"
     )
+
+
+def test_get_client_uses_sync_tui_http_client_for_http_debug(monkeypatch):
+    model = Chat("gpt-4o-mini")
+    captured = {}
+    monkeypatch.setenv("LLM_HTTP_DEBUG", "1")
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.tui_logging_client",
+        lambda: sentinel.sync_tui_client,
+    )
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.openai.OpenAI",
+        lambda **kwargs: captured.setdefault("kwargs", kwargs)
+        or sentinel.openai_client,
+    )
+    model.get_client("x")
+    assert captured["kwargs"]["http_client"] is sentinel.sync_tui_client
+
+
+def test_get_client_uses_async_tui_http_client_for_http_debug(monkeypatch):
+    model = Chat("gpt-4o-mini")
+    captured = {}
+    monkeypatch.setenv("LLM_HTTP_DEBUG", "1")
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.async_tui_logging_client",
+        lambda: sentinel.async_tui_client,
+    )
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.openai.AsyncOpenAI",
+        lambda **kwargs: captured.setdefault("kwargs", kwargs)
+        or sentinel.async_openai_client,
+    )
+    model.get_client("x", async_=True)
+    assert captured["kwargs"]["http_client"] is sentinel.async_tui_client
+
+
+def test_get_client_prefers_legacy_logging_client_over_tui_client(monkeypatch):
+    model = Chat("gpt-4o-mini")
+    captured = {}
+    monkeypatch.setenv("LLM_OPENAI_SHOW_RESPONSES", "1")
+    monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.logging_client",
+        lambda: sentinel.legacy_logging_client,
+    )
+    monkeypatch.setattr(
+        "llm.default_plugins.openai_models.openai.OpenAI",
+        lambda **kwargs: captured.setdefault("kwargs", kwargs)
+        or sentinel.openai_client,
+    )
+    model.get_client("x")
+    assert captured["kwargs"]["http_client"] is sentinel.legacy_logging_client
 
 
 def test_openai_options_min_max():

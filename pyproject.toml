@@ -39,6 +39,7 @@ dependencies = [
     "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
+    "pygments",
 ]
 
 [dependency-groups]
@@ -77,7 +78,14 @@ Changelog = "https://github.com/simonw/llm/releases"
 
 [project.scripts]
 llm = "llm.cli:cli"
+mdstream = "tools.mdstream:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["llm", "llm.default_plugins", "tools", "tui", "tui.renderers"]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]

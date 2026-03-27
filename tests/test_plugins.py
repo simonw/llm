@@ -2,12 +2,15 @@ from click.testing import CliRunner
 import click
 import importlib
 import json
+import logging
 import llm
 from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import pytest
+import sys
 import textwrap
+import warnings
 
 
 def test_register_commands():
@@ -43,6 +46,54 @@ def test_register_commands():
         plugins.pm.unregister(name="HelloWorldPlugin")
         importlib.reload(cli)
         assert "HelloWorldPlugin" not in plugin_names()
+
+
+def test_register_commands_quarantines_and_persists_plugin_output(logs_db, capsys):
+    class NoisyPlugin:
+        __name__ = "NoisyPlugin"
+
+        @hookimpl
+        def register_commands(self, cli):
+            logging.warning("logging warning from plugin")
+            warnings.warn("python warning from plugin")
+            print("stdout from plugin")
+            sys.stderr.write("stderr from plugin\n")
+
+            @cli.command(name="quiet-plugin")
+            def quiet_plugin():
+                click.echo("quiet")
+
+    try:
+        plugins.pm.register(NoisyPlugin(), name="NoisyPlugin")
+        importlib.reload(cli)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+        rows = list(logs_db["plugin_events"].rows)
+        assert {row["kind"] for row in rows} == {
+            "logging",
+            "warning",
+            "stdout",
+            "stderr",
+        }
+        assert {row["phase"] for row in rows} == {"register_commands"}
+        assert {row["plugin"] for row in rows} == {"NoisyPlugin"}
+
+        messages = {row["kind"]: row["message"] for row in rows}
+        assert messages["logging"] == "logging warning from plugin"
+        assert messages["warning"] == "python warning from plugin"
+        assert messages["stdout"] == "stdout from plugin"
+        assert messages["stderr"] == "stderr from plugin"
+
+        runner = CliRunner()
+        result = runner.invoke(cli.cli, ["quiet-plugin"])
+        assert result.exit_code == 0
+        assert result.output == "quiet\n"
+    finally:
+        plugins.pm.unregister(name="NoisyPlugin")
+        importlib.reload(cli)
 
 
 def test_register_template_loaders():

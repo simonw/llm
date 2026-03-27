@@ -171,6 +171,181 @@ def test_logs_text_with_options(user_path):
     assert "- media_resolution: low" in output
 
 
+def test_logs_json_includes_plugin_events(user_path):
+    log_path = str(user_path / "logs_with_plugin_events.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    response_id = str(monotonic_ulid()).lower()
+    db["responses"].insert(
+        {
+            "id": response_id,
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+        }
+    )
+    db["plugin_events"].insert(
+        {
+            "plugin": "NoisyPlugin",
+            "phase": "register_commands",
+            "kind": "warning",
+            "level": "WARNING",
+            "logger_name": "warnings",
+            "message": "python warning from plugin",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "response_id": response_id,
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "-p", str(log_path), "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert rows[0]["plugin_events"] == [
+        {
+            "plugin": "NoisyPlugin",
+            "phase": "register_commands",
+            "kind": "warning",
+            "level": "WARNING",
+            "logger_name": "warnings",
+            "message": "python warning from plugin",
+            "details": None,
+            "datetime_utc": rows[0]["plugin_events"][0]["datetime_utc"],
+        }
+    ]
+
+
+def test_logs_text_includes_plugin_events(user_path):
+    log_path = str(user_path / "logs_text_plugin_events.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    response_id = str(monotonic_ulid()).lower()
+    db["responses"].insert(
+        {
+            "id": response_id,
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+        }
+    )
+    db["plugin_events"].insert(
+        {
+            "plugin": "NoisyPlugin",
+            "phase": "register_commands",
+            "kind": "stderr",
+            "level": "WARNING",
+            "logger_name": None,
+            "message": "stderr from plugin",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "response_id": response_id,
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "### Plugin events" in result.output
+    assert "**NoisyPlugin** `register_commands` stderr" in result.output
+    assert "stderr from plugin" in result.output
+
+
+def test_logs_events_json_includes_unattached_plugin_event(user_path):
+    log_path = str(user_path / "logs_events_json.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["plugin_events"].insert(
+        {
+            "plugin": "llm-cerebras",
+            "phase": "import",
+            "kind": "logging",
+            "level": "WARNING",
+            "logger_name": "root",
+            "message": "jsonschema not installed, schema validation will be limited",
+            "details_json": json.dumps({"source": "import"}),
+            "response_id": None,
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "events", "-p", str(log_path), "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert rows == [
+        {
+            "id": rows[0]["id"],
+            "plugin": "llm-cerebras",
+            "phase": "import",
+            "kind": "logging",
+            "level": "WARNING",
+            "logger_name": "root",
+            "message": "jsonschema not installed, schema validation will be limited",
+            "response_id": None,
+            "datetime_utc": rows[0]["datetime_utc"],
+            "details": {"source": "import"},
+        }
+    ]
+
+
+def test_logs_events_text_renders_response_linkage(user_path):
+    log_path = str(user_path / "logs_events_text.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    response_id = str(monotonic_ulid()).lower()
+    db["responses"].insert(
+        {
+            "id": response_id,
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+        }
+    )
+    db["plugin_events"].insert(
+        {
+            "plugin": "NoisyPlugin",
+            "phase": "register_tools",
+            "kind": "exception",
+            "level": "ERROR",
+            "logger_name": None,
+            "message": "boom",
+            "details_json": json.dumps({"traceback": "Traceback..."}),
+            "response_id": response_id,
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "events", "-p", str(log_path)], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert "plugin: NoisyPlugin phase: register_tools kind: exception" in result.output
+    assert f"response: {response_id}" in result.output
+    assert "Level: **ERROR**" in result.output
+    assert "## Message" in result.output
+    assert "boom" in result.output
+    assert "## Details" in result.output
+
+
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs_json(n, log_path):
     "Test that logs command correctly returns requested -n records"

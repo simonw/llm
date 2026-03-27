@@ -10,3 +10,7 @@ venv
 .idea/
 .vscode/
 uv.lock
+build/
+dist/
+.node-net-dbg/
+tmp/
