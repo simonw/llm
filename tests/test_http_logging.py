@@ -734,8 +734,11 @@ class TestSpinnerLogHandler:
             ("starting", {}),
             ("connecting", {}),
             ("waiting", {}),
+            ("waiting", {}),  # response_start keeps spinner in waiting state
         ]
-        assert spinner.stopped == 1
+        # Spinner is NOT stopped by response_start — cli.py stops it on
+        # first content chunk.
+        assert spinner.stopped == 0
 
     def test_httpcore_fallback_still_updates_spinner(self):
         spinner = self.FakeSpinner()

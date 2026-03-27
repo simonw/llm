@@ -136,15 +136,12 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _should_persist_spinner() -> bool:
+    """Persist is always opt-in via LLM_SPINNER_PERSIST=1."""
     if "LLM_SPINNER_PERSIST" in os.environ:
         return _env_flag("LLM_SPINNER_PERSIST", default=False)
     if "LLM_SPINNER_CLEAR" in os.environ:
         return not _env_flag("LLM_SPINNER_CLEAR", default=False)
-    raw_http_debug = (os.environ.get("LLM_HTTP_DEBUG") or "").strip()
-    try:
-        return int(raw_http_debug) >= 2
-    except ValueError:
-        return False
+    return False
 
 
 # ── Spinner class ──────────────────────────────────────────────────────
@@ -184,22 +181,13 @@ class Spinner:
 
     # ── Public API ─────────────────────────────────────────────────
 
-    def start(self, leading_newline: bool = False) -> None:
-        """Start the animation thread.  First state is ``starting``.
-
-        Parameters
-        ----------
-        leading_newline : bool
-            If True, prepend ``\\n`` to the very first frame so the blank
-            line and the spinner icon appear as one atomic write (no
-            visible cursor jump).
-        """
+    def start(self) -> None:
+        """Start the animation thread.  First state is ``starting``."""
         if not self.enabled:
             return
         self._stop_event.clear()
         self._hidden = False
         self._frame_idx = 0
-        self._leading_newline = leading_newline
         self.set_state("starting")
         self._attach_log_handler()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -225,7 +213,7 @@ class Spinner:
         if self._persist_on_stop:
             self._persist()
         else:
-            self._erase(leave_blank_line=True)
+            self._erase()
         self._detach_log_handler()
         self._thread = None
         self._state = None
@@ -243,6 +231,10 @@ class Spinner:
         if not self.enabled:
             return
         with self._lock:
+            # Persist the outgoing state before switching (if enabled).
+            if self._persist_on_stop and self._state is not None:
+                self._persist()
+
             # Only reset the frame index when the spinner definition changes
             # (e.g. switching from "dot" to "dots").  When the same spinner
             # is used across states, the animation continues smoothly and
@@ -371,19 +363,12 @@ class Spinner:
         if elapsed > timeout:
             label += f" {DIM}(stale){RESET}" if self._use_color else " (stale)"
 
-        # Optional leading newline on the very first frame so the blank
-        # line and spinner icon appear as one atomic stdout write.
-        prefix = ""
-        if getattr(self, "_leading_newline", False):
-            prefix = "\n"
-            self._leading_newline = False
-
         # Format: [colored icon] [dim label]
         if self._use_color:
             color = COLORS.get(cfg.get("color", "cyan"), COLORS["cyan"])
-            line = f"{prefix}{ERASE_LINE}{color}{frame}{RESET} {DIM}{label}{RESET}"
+            line = f"{ERASE_LINE}{color}{frame}{RESET} {DIM}{label}{RESET}"
         else:
-            line = f"{prefix}{ERASE_LINE}{frame} {label}"
+            line = f"{ERASE_LINE}{frame} {label}"
 
         try:
             sys.stdout.write(line)
@@ -420,11 +405,10 @@ class Spinner:
         except (BrokenPipeError, OSError):
             pass
 
-    def _erase(self, leave_blank_line: bool = False) -> None:
+    def _erase(self) -> None:
         """Clear the spinner line from the terminal."""
         try:
-            suffix = "\n" if leave_blank_line else ""
-            sys.stdout.write(f"{ERASE_LINE}{suffix}")
+            sys.stdout.write(ERASE_LINE)
             sys.stdout.flush()
         except (BrokenPipeError, OSError):
             pass

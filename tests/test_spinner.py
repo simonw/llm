@@ -9,6 +9,7 @@ from tools.spinner import (
     COLORS,
     DEFAULT_SPINNER,
     DIM,
+    ERASE_LINE,
     RESET,
     Spinner,
     SPINNER_STATES,
@@ -147,7 +148,7 @@ class TestSpinnerPersist:
     """Persist vs clear behavior on stop()."""
 
     def test_clear_default(self, monkeypatch):
-        """Without HTTP debug, stop() clears the spinner instead of persisting it."""
+        """Without HTTP debug, stop() clears the spinner line (no trailing newline)."""
         monkeypatch.delenv("LLM_SPINNER_PERSIST", raising=False)
         monkeypatch.delenv("LLM_SPINNER_CLEAR", raising=False)
         monkeypatch.delenv("LLM_HTTP_DEBUG", raising=False)
@@ -161,7 +162,7 @@ class TestSpinnerPersist:
         monkeypatch.undo()
         output = buf.getvalue()
         assert "Waiting for response..." not in output
-        assert output.endswith("\n")
+        assert ERASE_LINE in output
 
     def test_persist_mode(self, monkeypatch):
         """LLM_SPINNER_PERSIST=1 keeps a static line in scrollback."""
@@ -178,8 +179,9 @@ class TestSpinnerPersist:
         output = buf.getvalue()
         assert "\n> Waiting for response...\n\n" in output
 
-    def test_http_debug_2_persists_by_default(self, monkeypatch):
-        monkeypatch.delenv("LLM_SPINNER_PERSIST", raising=False)
+    def test_explicit_persist_with_http_debug(self, monkeypatch):
+        """Persist requires LLM_SPINNER_PERSIST=1 even with HTTP debug."""
+        monkeypatch.setenv("LLM_SPINNER_PERSIST", "1")
         monkeypatch.delenv("LLM_SPINNER_CLEAR", raising=False)
         monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
         monkeypatch.setenv("NO_COLOR", "1")
@@ -196,9 +198,11 @@ class TestSpinnerPersist:
             in output
         )
 
-    def test_http_debug_2_persist_can_be_opted_out(self, monkeypatch):
+    def test_http_debug_2_does_not_auto_persist(self, monkeypatch):
+        """LLM_HTTP_DEBUG=2 alone does NOT enable persist."""
         monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
-        monkeypatch.setenv("LLM_SPINNER_PERSIST", "0")
+        monkeypatch.delenv("LLM_SPINNER_PERSIST", raising=False)
+        monkeypatch.delenv("LLM_SPINNER_CLEAR", raising=False)
         monkeypatch.setenv("NO_COLOR", "1")
         s = Spinner(enabled=True)
         s.start()
@@ -209,7 +213,7 @@ class TestSpinnerPersist:
         monkeypatch.undo()
         output = buf.getvalue()
         assert "Waiting for response..." not in output
-        assert output.endswith("\n")
+        assert ERASE_LINE in output
 
     def test_legacy_clear_alias_true(self, monkeypatch):
         monkeypatch.setenv("LLM_SPINNER_CLEAR", "1")
@@ -246,7 +250,7 @@ class TestSpinnerPersist:
     def test_persisted_symbol_uses_dim_text_style_without_spinner_color(
         self, monkeypatch
     ):
-        monkeypatch.setenv("LLM_HTTP_DEBUG", "2")
+        monkeypatch.setenv("LLM_SPINNER_PERSIST", "1")
         monkeypatch.delenv("NO_COLOR", raising=False)
         s = Spinner(enabled=True)
         s.start()

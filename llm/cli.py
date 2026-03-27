@@ -929,6 +929,8 @@ def prompt(
         bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
     )
 
+    if show_separator:
+        print()
     spinner.start()
 
     try:
@@ -1403,6 +1405,8 @@ def chat(
         chat_show_sep = (
             bool(color) and sys.stdout.isatty() and not os.environ.get("LLM_COMPACT")
         )
+        if chat_show_sep:
+            print()
         chat_spinner.start()
         with buffered_stream_end() as get_pending:
             first_chunk = True
@@ -4486,7 +4490,6 @@ def _make_spinner(enabled):
     """Create a Spinner instance, handling import errors gracefully."""
     if not enabled:
         from tools.spinner import Spinner
-
         return Spinner(enabled=False)
     try:
         from tools.spinner import Spinner

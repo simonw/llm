@@ -1583,7 +1583,8 @@ class SpinnerLogHandler(logging.Handler):
             elif kind == "request_sent":
                 self._spinner.set_state("waiting")
             elif kind == "response_start":
-                self._spinner.stop()
+                # Keep waiting spinner active until first content chunk arrives.
+                self._spinner.set_state("waiting")
             return
 
         if record.name.startswith("httpcore"):
