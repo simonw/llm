@@ -215,7 +215,11 @@ def _register_loaded_plugin(mod, name, distribution=None):
 
 def _load_entrypoint(entry_point, distribution=None):
     with PluginQuarantine(entry_point.name, "import"):
-        mod = entry_point.load()
+        try:
+            mod = entry_point.load()
+        except Exception as e:
+            warnings.warn(f"Failed to load plugin {entry_point.name}: {e}")
+            return
     _register_loaded_plugin(mod, entry_point.name, distribution)
 
 

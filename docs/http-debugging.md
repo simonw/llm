@@ -22,7 +22,7 @@ LLM_HTTP_DEBUG=1 uv run llm -m gpt-4o "Test prompt"
 
 ## Configuration
 
-### Environment Variable
+### Environment Variables
 
 | Value | Level | Description |
 |-------|-------|-------------|
@@ -30,7 +30,7 @@ LLM_HTTP_DEBUG=1 uv run llm -m gpt-4o "Test prompt"
 | `LLM_HTTP_DEBUG=2` | DEBUG | Verbose: connection info, headers, timing |
 | `LLM_OPENAI_SHOW_RESPONSES=1` | INFO | Legacy OpenAI-only debugging (still supported) |
 
-### CLI Flag
+### CLI Flags
 
 ```bash
 llm --debug 1 [command]     # INFO-level HTTP logging
@@ -177,7 +177,7 @@ LLM_HTTP_DEBUG=2 llm -m gpt-4o "Test"
 HTTP logging works alongside LLM's built-in SQLite logging:
 
 ```bash
-LLM_HTTP_DEBUG=1 llm logs on
+llm logs on
 LLM_HTTP_DEBUG=1 llm -m gpt-4o "Test prompt"
 llm logs list --json
 ```
@@ -262,7 +262,7 @@ LLM_SPINNER_CLEAR=1 llm -C "Test"
 
 **Too much output:**
 - Use level 1 instead of level 2: `LLM_HTTP_DEBUG=1`
-- Redirect stderr: `llm prompt "test" 2>/dev/null`
+- Redirect stderr: `llm "test" 2>/dev/null`
 
 **Missing reasoning details:**
 - Reasoning chains are generated server-side and not exposed in HTTP logs

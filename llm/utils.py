@@ -10,6 +10,7 @@ import logging
 import pathlib
 import puremagic
 import re
+import sys
 import sqlite_utils
 import textwrap
 from typing import Any, List, Dict, Optional, Tuple, Type
@@ -123,15 +124,24 @@ def _no_accept_encoding(request: httpx.Request):
     request.headers.pop("accept-encoding", None)
 
 
+_REDACT_HEADERS = {"authorization", "cookie", "x-api-key", "api-key"}
+
+
+def _redact_headers(headers: dict) -> dict:
+    redacted = {}
+    for key, value in headers.items():
+        if key.lower() in _REDACT_HEADERS:
+            redacted[key] = "[redacted]"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def _log_response(response: httpx.Response):
     request = response.request
     click.echo(f"Request: {request.method} {request.url}", err=True)
     click.echo("  Headers:", err=True)
-    for key, value in request.headers.items():
-        if key.lower() == "authorization":
-            value = "[...]"
-        if key.lower() == "cookie":
-            value = value.split("=")[0] + "=..."
+    for key, value in _redact_headers(dict(request.headers)).items():
         click.echo(f"    {key}: {value}", err=True)
     click.echo("  Body:", err=True)
     try:
@@ -173,7 +183,7 @@ def _log_request_tui(request: httpx.Request):
         request_id=request_id,
         method=request.method,
         url=str(request.url),
-        headers=dict(request.headers),
+        headers=_redact_headers(dict(request.headers)),
     )
 
 
@@ -189,7 +199,7 @@ def _log_response_tui(response: httpx.Response):
         method=request.method,
         url=str(request.url),
         status=status,
-        headers=dict(response.headers),
+        headers=_redact_headers(dict(response.headers)),
     )
 
 
@@ -216,7 +226,7 @@ async def _log_request_tui_async(request: httpx.Request):
         request_id=request_id,
         method=request.method,
         url=str(request.url),
-        headers=dict(request.headers),
+        headers=_redact_headers(dict(request.headers)),
     )
 
 
@@ -557,15 +567,12 @@ class HTTPColorFormatter(logging.Formatter):
 
     def _supports_color(self):
         """Check if the terminal supports color output."""
-        import os
-        import sys
-
+        if os.environ.get("NO_COLOR"):
+            return False
         if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
             term = os.environ.get("TERM", "")
             if "color" in term or term in ("xterm", "xterm-256color", "screen", "tmux"):
                 return True
-            if os.environ.get("NO_COLOR"):
-                return False
             return True
         return False
 
@@ -661,13 +668,6 @@ class HTTPColorFormatter(logging.Formatter):
         if not body:
             return ""
         return f"\n{header}\n{body}"
-
-    def _colorize_message(self, message, logger_name):
-        """Add color highlights to generic message content."""
-        if not self.use_colors:
-            return message
-        # Basic highlighting for unstructured messages
-        return message
 
     def _format_header(self, record, *, colored: bool) -> str:
         timestamp = self.formatTime(record, "%H:%M:%S")
@@ -1280,11 +1280,6 @@ class HTTPColorFormatter(logging.Formatter):
             return f"\n{self.COLORS['DIM']}{self.COLORS['BOLD']}{title}:{self.COLORS['RESET']}"
         return f"\n{title}:"
 
-    def _kv_line(self, key, value, colored):
-        if colored:
-            return f"  {self.COLORS['DIM']}{key}:{self.COLORS['RESET']} {value}"
-        return f"  {key}: {value}"
-
     def _format_mapping(self, mapping, colored, indent=""):
         if not isinstance(mapping, dict):
             return f"{indent}{str(mapping)}"
@@ -1451,8 +1446,6 @@ def _get_http_logging_config():
     Returns:
         dict: Configuration with 'enabled', 'level', and 'use_colors' keys
     """
-    import os
-
     # Read debug level: 0=off, 1=INFO, 2=DEBUG
     raw = os.environ.get("LLM_HTTP_DEBUG") or ""
     try:

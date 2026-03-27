@@ -163,14 +163,14 @@ class TestCLIIntegration:
         result = runner.invoke(cli, ["--debug", "1", "--help"])
         assert result.exit_code == 0
 
-    def test_cli_calls_configure_http_logging(self):
-        """CLI should call configure_http_logging on startup."""
+    def test_cli_help_succeeds(self):
+        """CLI --help should exit 0."""
         runner = CliRunner()
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
 
-    def test_env_var_enables_logging_in_cli(self):
-        """Environment variable should enable logging in CLI."""
+    def test_cli_help_succeeds_with_http_debug_env(self):
+        """CLI --help should exit 0 with LLM_HTTP_DEBUG set."""
         runner = CliRunner()
         with patch.dict(os.environ, {"LLM_HTTP_DEBUG": "1"}):
             result = runner.invoke(cli, ["--help"])
@@ -469,8 +469,7 @@ class TestConfigureIdempotent:
             configure_http_logging()
             assert logging.getLogger("httpcore").level == logging.INFO
 
-        # Simulate changing the env var and calling again
-        llm.utils._http_logging_configured = True  # latch already set
+        # Call again with level 2 — latch is already set from the first call
         with patch.dict(os.environ, {"LLM_HTTP_DEBUG": "2"}, clear=True):
             configure_http_logging()
             assert logging.getLogger("httpcore").level == logging.DEBUG

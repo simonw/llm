@@ -11,6 +11,7 @@ state, threading, and IO into one object.
 
 from __future__ import annotations
 
+import collections
 import os
 import time
 import threading
@@ -163,7 +164,7 @@ class SpinnerState:
             frame = frames[self._frame_idx % len(frames)]
             self._frame_idx += 1
 
-            label = cfg["label"].format(**self._state_kwargs)
+            label = cfg["label"].format_map(collections.defaultdict(str, self._state_kwargs))
 
             # Stale indicator
             elapsed = time.monotonic() - self._state_entered_at

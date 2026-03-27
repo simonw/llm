@@ -21,6 +21,7 @@ The spinner is thread-safe: ``set_state`` can be called from any thread
 
 from __future__ import annotations
 
+import collections
 import logging
 import os
 import sys
@@ -362,7 +363,7 @@ class Spinner:
         frame = frames[self._frame_idx % len(frames)]
 
         # Build the label
-        label = cfg["label"].format(**self._state_kwargs)
+        label = cfg["label"].format_map(collections.defaultdict(str, self._state_kwargs))
 
         # Stale indicator
         elapsed = time.monotonic() - self._state_entered_at
@@ -399,7 +400,7 @@ class Spinner:
             return
         spinner_name = cfg.get("spinner", DEFAULT_SPINNER)
         spinner_def = SPINNERS.get(spinner_name, SPINNERS[DEFAULT_SPINNER])
-        label = cfg["label"].format(**self._state_kwargs)
+        label = cfg["label"].format_map(collections.defaultdict(str, self._state_kwargs))
         padding_before = "\n" * self._padding_before
         padding_after = "\n" * self._padding_after
         persist_text = self._persist_text

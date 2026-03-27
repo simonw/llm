@@ -1,3 +1,4 @@
+(uv)=
 # Using LLM with uv
 
 [uv](https://docs.astral.sh/uv/) is a fast Python package installer and resolver. It provides several ways to install and run LLM.
@@ -33,7 +34,7 @@ uvx llm "A joke about a pelican"
 If you want to use a plugin with `uvx`, use the `--with` flag:
 
 ```bash
-uvx --with llm-anthropic llm -m claude-3.5-sonnet "Hello"
+uvx --with llm-anthropic llm -m claude-3.5-haiku "Hello"
 ```
 
 You can even specify multiple plugins:
@@ -96,7 +97,7 @@ uv run llm --help
 
 ### One-off prompt with a specific plugin
 ```bash
-uvx --with llm-anthropic llm -m claude-3-opus "Explain quantum entanglement"
+uvx --with llm-anthropic llm -m claude-3.5-sonnet "Explain quantum entanglement"
 ```
 
 ### Setting up keys via uvx
