@@ -1,8 +1,10 @@
 import json
 import pytest
+import puremagic
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
+    mimetype_from_path,
     maybe_fenced_code,
     schema_dsl,
     simplify_usage_dict,
@@ -51,6 +53,27 @@ from llm import get_key, Toolbox
 def test_simplify_usage_dict(input_data, expected_output):
     # This utility function is used by at least one plugin - llm-openai-plugin
     assert simplify_usage_dict(input_data) == expected_output
+
+
+def test_mimetype_from_path_falls_back_to_extension_when_puremagic_returns_empty(tmp_path, monkeypatch):
+    path = tmp_path / "video.mp4"
+    path.write_bytes(b"not really an mp4")
+
+    monkeypatch.setattr("llm.utils.puremagic.from_file", lambda *args, **kwargs: "")
+
+    assert mimetype_from_path(str(path)) == "video/mp4"
+
+
+def test_mimetype_from_path_falls_back_to_extension_on_puremagic_error(tmp_path, monkeypatch):
+    path = tmp_path / "image.jpg"
+    path.write_bytes(b"not really a jpeg")
+
+    def raise_pureerror(*args, **kwargs):
+        raise puremagic.PureError("no match")
+
+    monkeypatch.setattr("llm.utils.puremagic.from_file", raise_pureerror)
+
+    assert mimetype_from_path(str(path)) == "image/jpeg"
 
 
 @pytest.mark.parametrize(
