@@ -3,7 +3,7 @@
 (v0_30)=
 ## 0.30 (2026-03-31)
 
-- The {ref}`register_models() plugin hook <plugin-hooks-register-models>` now takes an optional `model_aliases` parameter listing all of the models, async models and aliases that have been registered so far by other plugins. A plugin with `@hookimpl(trylast=True)` can use this to take previously registered models into account.
+- The {ref}`register_models() plugin hook <plugin-hooks-register-models>` now takes an optional `model_aliases` parameter listing all of the models, async models and aliases that have been registered so far by other plugins. A plugin with `@hookimpl(trylast=True)` can use this to take previously registered models into account. [#1389](https://github.com/simonw/llm/issues/1389)
 - Added docstrings to public classes and methods and included those directly in the documentation.
 
 (v0_29)=
