@@ -1,7 +1,13 @@
 # Changelog
 
+(v0_30)=
+## 0.30 (2026-03-31)
+
+- The {ref}`register_models() plugin hook <plugin-hooks-register-models>` now takes an optional `model_aliases` parameter listing all of the models, async models and aliases that have been registered so far by other plugins. A plugin with `@hookimpl(trylast=True)` can use this to take previously registered models into account.
+- Added docstrings to public classes and methods and included those directly in the documentation.
+
 (v0_29)=
-## 0.29 (2025-03-17)
+## 0.29 (2026-03-17)
 
 - The `-t/--template` option now works correctly with the `-x/--extract` and `--xl/--extract-last` flags.
 - `llm logs` now shows any additional model options in the Markdown output. [#1322](https://github.com/simonw/llm/issues/1322)
