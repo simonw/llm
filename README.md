@@ -238,6 +238,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Retrieving similar items](https://llm.datasette.io/en/stable/embeddings/python-api.html#retrieving-similar-items)
     * [SQL schema](https://llm.datasette.io/en/stable/embeddings/python-api.html#sql-schema)
   * [Writing plugins to add new embedding models](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html)
+    * [`EmbeddingModel`](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html#llm.EmbeddingModel)
     * [Embedding binary content](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html#embedding-binary-content)
   * [Embedding storage format](https://llm.datasette.io/en/stable/embeddings/storage.html)
 * [Plugins](https://llm.datasette.io/en/stable/plugins/index.html)

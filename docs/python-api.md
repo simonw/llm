@@ -222,6 +222,10 @@ def generate_image(prompt: str) -> llm.ToolOutput:
     )
 ```
 
+```{eval-rst}
+.. autoclass:: llm.ToolOutput
+```
+
 (python-api-toolbox)=
 
 #### Toolbox classes
@@ -263,6 +267,12 @@ class Memory(llm.Toolbox):
         "Return a list of keys"
         return list(self._get_memory().keys())
 ```
+
+```{eval-rst}
+.. autoclass:: llm.Toolbox
+   :members: tools, add_tool, prepare, prepare_async
+```
+
 You can then use that from Python like this:
 ```python
 model = llm.get_model("gpt-4.1-mini")

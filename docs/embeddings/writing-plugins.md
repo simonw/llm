@@ -14,6 +14,11 @@ There are two components to an embedding model plugin:
 
 The following example uses the [sentence-transformers](https://github.com/UKPLab/sentence-transformers) package to provide access to the [MiniLM-L6](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) embedding model.
 
+```{eval-rst}
+.. autoclass:: llm.EmbeddingModel
+   :members: embed, embed_multi, embed_batch
+```
+
 ```python
 import llm
 from sentence_transformers import SentenceTransformer

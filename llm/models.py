@@ -77,6 +77,7 @@ class Attachment:
         return self._id
 
     def resolve_type(self):
+        "Return the content type, guessing from content if not specified."
         if self.type:
             return self.type
         # Derive it from path or url or content
@@ -91,6 +92,7 @@ class Attachment:
         raise ValueError("Attachment has no type and no content to derive it from")
 
     def content_bytes(self):
+        "Return the binary content, reading from path or URL if needed."
         content = self.content
         if not content:
             if self.path:
@@ -102,6 +104,7 @@ class Attachment:
         return content
 
     def base64_content(self):
+        "Return the content as a base64-encoded string."
         return base64.b64encode(self.content_bytes()).decode("utf-8")
 
     def __repr__(self):
@@ -129,6 +132,8 @@ class Attachment:
 
 @dataclass
 class Tool:
+    "A tool that can be called by a model."
+
     name: str
     description: Optional[str] = None
     input_schema: Dict = field(default_factory=dict)
@@ -293,6 +298,8 @@ class Toolbox:
 
 @dataclass
 class ToolCall:
+    "A request by the model to call a tool."
+
     name: str
     arguments: dict
     tool_call_id: Optional[str] = None
@@ -300,6 +307,8 @@ class ToolCall:
 
 @dataclass
 class ToolResult:
+    "The result of executing a tool call."
+
     name: str
     output: str
     attachments: List[Attachment] = field(default_factory=list)
@@ -374,10 +383,12 @@ class Prompt:
 
     @property
     def prompt(self):
+        "The text of the prompt, with any fragments concatenated."
         return "\n".join(self.fragments + ([self._prompt] if self._prompt else []))
 
     @property
     def system(self):
+        "The system prompt, with any system fragments concatenated."
         bits = [
             bit.strip()
             for bit in (self.system_fragments + [self._system or ""])
@@ -2086,6 +2097,8 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
 @dataclass
 class ModelWithAliases:
+    "A model with its optional async counterpart and aliases."
+
     model: Model
     async_model: AsyncModel
     aliases: Set[str]
