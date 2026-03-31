@@ -302,6 +302,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Token usage](https://llm.datasette.io/en/stable/python-api.html#token-usage)
     * [Streaming responses](https://llm.datasette.io/en/stable/python-api.html#streaming-responses)
   * [Async models](https://llm.datasette.io/en/stable/python-api.html#async-models)
+    * [`AsyncResponse`](https://llm.datasette.io/en/stable/python-api.html#llm.AsyncResponse)
     * [Tool functions can be sync or async](https://llm.datasette.io/en/stable/python-api.html#tool-functions-can-be-sync-or-async)
     * [Tool use for async models](https://llm.datasette.io/en/stable/python-api.html#tool-use-for-async-models)
   * [Conversations](https://llm.datasette.io/en/stable/python-api.html#conversations)

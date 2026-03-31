@@ -79,6 +79,11 @@ response = model.prompt(
 ```
 Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly.
 
+```{eval-rst}
+.. autoclass:: llm.Attachment
+   :members: resolve_type, content_bytes, base64_content
+```
+
 You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
 
 ```python
@@ -486,7 +491,9 @@ Usage(input=5,
                                             'tokenCount': 2}],
                'promptTokensDetails': [{'modality': 'TEXT', 'tokenCount': 5}]})
 ```
-The `.input` and `.output` properties are integers representing the number of input and output tokens. The `.details` property may be a dictionary with additional custom values that vary by model.
+```{eval-rst}
+.. autoclass:: llm.Usage
+```
 
 (python-api-streaming-responses)=
 
@@ -502,6 +509,12 @@ for chunk in response:
 The `response.text()` method described earlier does this for you - it runs through the iterator and gathers the results into a string.
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
+
+```{eval-rst}
+.. autoclass:: llm.Response
+   :members: text, json, usage, tool_calls, on_done
+   :exclude-members: fake, from_row, log_to_db
+```
 
 (python-api-async)=
 
@@ -529,6 +542,13 @@ async for chunk in model.prompt(
 ):
     print(chunk, end="", flush=True)
 ```
+
+```{eval-rst}
+.. autoclass:: llm.AsyncResponse
+   :members: text, json, usage, tool_calls, on_done
+   :exclude-members: fake, from_row, log_to_db
+```
+
 This `await model.prompt()` method takes the same arguments as the synchronous `model.prompt()` method, for options and attachments and `key=` and suchlike.
 
 (python-api-async-tools)=

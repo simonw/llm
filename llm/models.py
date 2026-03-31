@@ -46,6 +46,8 @@ CONVERSATION_NAME_LENGTH = 32
 
 @dataclass
 class Usage:
+    "Token usage information from a model response."
+
     input: Optional[int] = None
     output: Optional[int] = None
     details: Optional[Dict[str, Any]] = None
@@ -53,6 +55,8 @@ class Usage:
 
 @dataclass
 class Attachment:
+    "An attachment (image, audio, etc) to include with a prompt."
+
     type: Optional[str] = None
     path: Optional[str] = None
     url: Optional[str] = None
@@ -325,6 +329,8 @@ class CancelToolCall(Exception):
 
 @dataclass
 class Prompt:
+    "The prompt being sent to the model."
+
     _prompt: Optional[str]
     model: "Model"
     fragments: Optional[List[Union[str, Fragment]]]
@@ -1001,10 +1007,13 @@ class _BaseResponse:
 
 
 class Response(_BaseResponse):
+    "Sync response from a model."
+
     model: "Model"
     conversation: Optional["Conversation"] = None
 
     def on_done(self, callback):
+        "Register a callback to be called when the response is complete."
         if not self._done:
             self.done_callbacks.append(callback)
         else:
@@ -1022,6 +1031,7 @@ class Response(_BaseResponse):
             list(self)
 
     def text(self) -> str:
+        "Return the full text of the response, executing the prompt if needed."
         self._force()
         return "".join(self._chunks)
 
@@ -1127,6 +1137,7 @@ class Response(_BaseResponse):
         return tool_results
 
     def tool_calls(self) -> List[ToolCall]:
+        "Return the list of tool calls made during this response."
         self._force()
         return self._tool_calls
 
@@ -1134,6 +1145,7 @@ class Response(_BaseResponse):
         return self.tool_calls()
 
     def json(self) -> Optional[Dict[str, Any]]:
+        "Return the raw JSON response from the model, if available."
         self._force()
         return self.response_json
 
@@ -1146,6 +1158,7 @@ class Response(_BaseResponse):
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
     def usage(self) -> Usage:
+        "Return token usage information for this response."
         self._force()
         return Usage(
             input=self.input_tokens,
@@ -1198,6 +1211,8 @@ class Response(_BaseResponse):
 
 
 class AsyncResponse(_BaseResponse):
+    "Async response from a model."
+
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
@@ -1206,6 +1221,7 @@ class AsyncResponse(_BaseResponse):
         return super().from_row(db, row, _async=True)
 
     async def on_done(self, callback):
+        "Register a callback to be called when the response is complete."
         if not self._done:
             self.done_callbacks.append(callback)
         else:
@@ -1443,10 +1459,12 @@ class AsyncResponse(_BaseResponse):
         return "".join(self._chunks)
 
     async def text(self) -> str:
+        "Return the full text of the response, executing the prompt if needed."
         await self._force()
         return "".join(self._chunks)
 
     async def tool_calls(self) -> List[ToolCall]:
+        "Return the list of tool calls made during this response."
         await self._force()
         return self._tool_calls
 
@@ -1456,6 +1474,7 @@ class AsyncResponse(_BaseResponse):
         return self._tool_calls
 
     async def json(self) -> Optional[Dict[str, Any]]:
+        "Return the raw JSON response from the model, if available."
         await self._force()
         return self.response_json
 
@@ -1468,6 +1487,7 @@ class AsyncResponse(_BaseResponse):
         return self._start_utcnow.isoformat() if self._start_utcnow else ""
 
     async def usage(self) -> Usage:
+        "Return token usage information for this response."
         await self._force()
         return Usage(
             input=self.input_tokens,

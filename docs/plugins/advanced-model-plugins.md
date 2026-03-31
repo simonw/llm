@@ -105,6 +105,14 @@ def register_models(register):
     )
 ```
 
+The `prompt` object passed to your `execute()` method is an instance of {class}`~llm.Prompt`:
+
+```{eval-rst}
+.. autoclass:: llm.Prompt
+   :members: prompt, system
+   :exclude-members: model, options
+```
+
 (advanced-model-plugins-schemas)=
 
 ## Supporting schemas

@@ -24,6 +24,7 @@ from .models import (
     ToolCall,
     ToolOutput,
     ToolResult,
+    Usage,
 )
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
