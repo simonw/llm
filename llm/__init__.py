@@ -65,6 +65,7 @@ __all__ = [
     "ToolCall",
     "ToolOutput",
     "ToolResult",
+    "Usage",
     "user_dir",
     "schema_dsl",
 ]
