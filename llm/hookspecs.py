@@ -11,7 +11,7 @@ def register_commands(cli):
 
 
 @hookspec
-def register_models(register):
+def register_models(register, model_aliases):
     "Register additional model instances representing LLM models that can be called"
 
 

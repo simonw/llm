@@ -254,7 +254,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Just for fun](https://llm.datasette.io/en/stable/plugins/directory.html#just-for-fun)
   * [Plugin hooks](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html)
     * [register_commands(cli)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-commands-cli)
-    * [register_models(register)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-models-register)
+    * [register_models(register, model_aliases)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-models-register-model-aliases)
     * [register_embedding_models(register)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-embedding-models-register)
     * [register_tools(register)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-tools-register)
     * [register_template_loaders(register)](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-template-loaders-register)
