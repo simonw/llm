@@ -238,6 +238,25 @@ class TestSpinnerPersist:
         assert "Waiting for response..." not in output
         assert ERASE_LINE in output
 
+    def test_stop_cleans_up_separator(self, monkeypatch):
+        """stop() clears both spinner line and separator when separator is visible."""
+        monkeypatch.delenv("LLM_SPINNER_PERSIST", raising=False)
+        monkeypatch.delenv("LLM_SPINNER_CLEAR", raising=False)
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        s = Spinner(enabled=True)
+        s.start()
+        s.set_state("waiting")
+        # Simulate hide/unhide cycle leaving a separator
+        s._separator_visible = True
+        buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", buf)
+        s.stop()
+        monkeypatch.undo()
+        output = buf.getvalue()
+        # Should clear spinner line AND go up to clear separator
+        assert CURSOR_UP_ONE in output
+        assert output.count(ERASE_LINE) >= 2
+
     def test_legacy_clear_alias_true(self, monkeypatch):
         monkeypatch.setenv("LLM_SPINNER_CLEAR", "1")
         s = Spinner(enabled=True)

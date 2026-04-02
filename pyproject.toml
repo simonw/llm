@@ -78,7 +78,7 @@ Changelog = "https://github.com/simonw/llm/releases"
 
 [project.scripts]
 llm = "llm.cli:cli"
-mdstream = "tools.mdstream:main"
+mdstream = "tui.renderers.mdstream:main"
 
 [build-system]
 requires = ["setuptools"]

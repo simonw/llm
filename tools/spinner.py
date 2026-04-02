@@ -217,6 +217,8 @@ class Spinner:
         self._thread.join(timeout=1.0)
         if self._persist_on_stop:
             self._persist()
+        elif self._separator_visible:
+            self._erase_with_separator()
         else:
             self._erase()
         self._separator_before_next_frame = False
@@ -441,6 +443,14 @@ class Spinner:
         """Clear the spinner and reposition to the separator row for log output."""
         try:
             sys.stdout.write(f"{ERASE_LINE}{CURSOR_UP_ONE}\r")
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def _erase_with_separator(self) -> None:
+        """Clear spinner line and the separator blank line above it."""
+        try:
+            sys.stdout.write(f"{ERASE_LINE}{CURSOR_UP_ONE}{ERASE_LINE}")
             sys.stdout.flush()
         except (BrokenPipeError, OSError):
             pass

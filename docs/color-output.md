@@ -29,7 +29,7 @@ This gives you the best of both worlds: instant token-by-token streaming feedbac
 
 1. **Model streaming**: `llm` models yield raw text chunks as they arrive.
 2. **CLI adapter**: `llm.cli._ColorWriter` forwards those chunks into the renderer when `--color` is enabled.
-3. **Renderer state machine**: `tools/mdstream.py` tracks the current partial line, code-fence state, and live table state, then converts completed lines into ANSI-formatted output.
+3. **Renderer state machine**: `tui/renderers/mdstream.py` tracks the current partial line, code-fence state, and live table state, then converts completed lines into ANSI-formatted output.
 
 That split matters because `mdstream` does not participate in model execution, API calls, or tool use. It is purely a terminal presentation layer.
 

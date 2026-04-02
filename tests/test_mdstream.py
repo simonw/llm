@@ -3,7 +3,7 @@ import re
 
 import llm.cli
 
-from tools.mdstream import StreamingMarkdownRenderer
+from tui.renderers.mdstream import StreamingMarkdownRenderer
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
@@ -290,9 +290,9 @@ def test_run_handles_chunked_utf8_and_flushes_final_partial(monkeypatch):
     out = FakeStreamTerminal()
     chunks = iter([b"caf\xc3", b"\xa9\nna", b"\xc3\xafve", b""])
 
-    monkeypatch.setattr("tools.mdstream.sys.stdout", out)
+    monkeypatch.setattr("tui.renderers.mdstream.sys.stdout", out)
     monkeypatch.setattr(
-        "tools.mdstream.os.read",
+        "tui.renderers.mdstream.os.read",
         lambda _fd, _size: next(chunks),
     )
 

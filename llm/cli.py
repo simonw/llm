@@ -940,11 +940,9 @@ def prompt(
                         **kwargs,
                     )
                     with buffered_stream_end() as get_pending:
-                        first_chunk = True
                         async for chunk in response:
-                            if first_chunk:
+                            if spinner.is_running:
                                 spinner.stop()
-                                first_chunk = False
                             writer.write(chunk)
                         writer.finish()
                         for pending in get_pending():
@@ -982,11 +980,9 @@ def prompt(
             )
             if should_stream:
                 with buffered_stream_end() as get_pending:
-                    first_chunk = True
                     for chunk in response:
-                        if first_chunk:
+                        if spinner.is_running:
                             spinner.stop()
-                            first_chunk = False
                         writer.write(chunk)
                     writer.finish()
                     for pending in get_pending():
@@ -1010,6 +1006,12 @@ def prompt(
         ):
             raise
         raise click.ClickException(str(ex))
+    finally:
+        # Belt-and-suspenders: ensure spinner is always cleaned up
+        # (e.g. on KeyboardInterrupt or other BaseException subclasses).
+        # stop() is idempotent.
+        if spinner.is_running:
+            spinner.stop()
 
     # Chain limit reached: the model wanted more tool rounds but we
     # stopped it.  The last response's text was already streamed and
@@ -1387,17 +1389,19 @@ def chat(
         chat_writer = _ColorWriter(color)
         chat_spinner = _make_spinner(bool(color) and sys.stdout.isatty())
         chat_spinner.start()
-        with buffered_stream_end() as get_pending:
-            first_chunk = True
-            for chunk in response:
-                if first_chunk:
-                    chat_spinner.stop()
-                    first_chunk = False
-                chat_writer.write(chunk)
-            chat_writer.finish()
-            for pending in get_pending():
-                if pending:
-                    click.echo(pending, err=True, nl=False)
+        try:
+            with buffered_stream_end() as get_pending:
+                for chunk in response:
+                    if chat_spinner.is_running:
+                        chat_spinner.stop()
+                    chat_writer.write(chunk)
+                chat_writer.finish()
+                for pending in get_pending():
+                    if pending:
+                        click.echo(pending, err=True, nl=False)
+        finally:
+            if chat_spinner.is_running:
+                chat_spinner.stop()
         response.log_to_db(db)
 
 
@@ -1918,16 +1922,14 @@ def logs_list(
 
     if any_tools:
         # Any response that involved at least one tool result
-        where_bits.append(
-            """
+        where_bits.append("""
             exists (
               select 1
                 from tool_results
               where
                 tool_results.response_id = responses.id
             )
-        """
-        )
+        """)
     if tools:
         tools_by_name = get_tools()
         # Filter responses by tools (must have ALL of the named tools, including plugin)
@@ -1938,8 +1940,7 @@ def logs_list(
             except KeyError:
                 raise click.ClickException(f"Unknown tool: {tool_name}")
 
-            tool_clauses.append(
-                f"""
+            tool_clauses.append(f"""
             exists (
               select 1
                 from tool_results
@@ -1948,8 +1949,7 @@ def logs_list(
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
-            """
-            )
+            """)
             sql_params[f"tool{i}"] = tool_name
             sql_params[f"plugin{i}"] = plugin_name
 
@@ -2845,9 +2845,7 @@ def schemas_list(path, database, queries, full, json_, nl):
       on responses.schema_id = schemas.id
     {} group by responses.schema_id
     order by recently_used
-    """.format(
-        where_sql
-    )
+    """.format(where_sql)
     rows = db.query(sql, params)
 
     if json_ or nl:
@@ -3186,13 +3184,11 @@ def fragments_list(queries, aliases, json_):
         param_count += 1
         p = f"p{param_count}"
         params[p] = q
-        where_bits.append(
-            f"""
+        where_bits.append(f"""
             (fragments.hash = :{p} or fragment_aliases.alias = :{p}
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
-        """
-        )
+        """)
     where = "\n      and\n  ".join(where_bits)
     if where:
         where = " where " + where
@@ -3214,9 +3210,7 @@ def fragments_list(queries, aliases, json_):
     group by
         fragments.id, fragments.hash, fragments.content, fragments.datetime_utc, fragments.source
     order by fragments.datetime_utc
-    """.format(
-        where=where
-    )
+    """.format(where=where)
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
@@ -3906,8 +3900,7 @@ def embed_db_collections(database, json_):
     db = sqlite_utils.Database(str(database))
     if not db["collections"].exists():
         raise click.ClickException("No collections table found in {}".format(database))
-    rows = db.query(
-        """
+    rows = db.query("""
     select
         collections.name,
         collections.model,
@@ -3917,8 +3910,7 @@ def embed_db_collections(database, json_):
         on collections.id = embeddings.collection_id
     group by
         collections.name, collections.model
-    """
-    )
+    """)
     if json_:
         click.echo(json.dumps(list(rows), indent=4))
     else:
@@ -4434,25 +4426,8 @@ class _ColorWriter:
         self.renderer = None
         if color_mode and sys.stdout.isatty():
             if color_mode == "mdstream":
-                try:
-                    from tools.mdstream import StreamingMarkdownRenderer
-                except ImportError:
-                    # Fallback: try importing from the tools directory relative to llm
-                    import importlib.util
+                from tui.renderers.mdstream import StreamingMarkdownRenderer
 
-                    spec_path = os.path.join(
-                        os.path.dirname(os.path.dirname(__file__)),
-                        "tools",
-                        "mdstream.py",
-                    )
-                    if os.path.exists(spec_path):
-                        spec = importlib.util.spec_from_file_location(
-                            "mdstream", spec_path
-                        )
-                        mod = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(mod)
-                        self.renderer = mod.StreamingMarkdownRenderer()
-                    return
                 self.renderer = StreamingMarkdownRenderer()
 
     def write(self, chunk):
