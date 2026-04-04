@@ -18,6 +18,21 @@ Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>
 ```bash
 brew install llm
 ```
+Or for NixOS users, example for `configuration.nix` with Ollama plugin:
+> See the [Nix source file](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/python-modules/llm/default.nix) for available plugins, make sure to match the branch to your `nixpkgs` version
+```nix
+{ config, pkgs, ... }:
+{
+  environment.systemPackages = with pkgs; [
+    # other packages here
+    # ...
+    # install with llm and its plugins
+    (llm.withPlugins ({
+      llm-ollama = true;
+    }))
+  ]
+}
+```
 
 ## Upgrading to the latest version
 
