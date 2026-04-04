@@ -4,6 +4,7 @@ from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
+    mimetype_from_path,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
@@ -516,3 +517,26 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_mimetype_from_path_falls_back_to_stdlib(tmp_path):
+    """When puremagic returns empty string, fall back to mimetypes.guess_type().
+
+    Regression test for https://github.com/simonw/llm/issues/1340
+    """
+    # Create a file with a known extension but content that puremagic may
+    # not recognise (e.g. an empty .mp4 file).
+    mp4_file = tmp_path / "video.mp4"
+    mp4_file.write_bytes(b"\x00" * 16)
+
+    result = mimetype_from_path(str(mp4_file))
+    assert result == "video/mp4"
+
+
+def test_mimetype_from_path_returns_none_for_unknown(tmp_path):
+    """Unknown extension and unrecognisable content returns None."""
+    unknown = tmp_path / "data.xyzzy123"
+    unknown.write_bytes(b"\x00" * 16)
+
+    result = mimetype_from_path(str(unknown))
+    assert result is None
