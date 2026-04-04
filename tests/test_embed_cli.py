@@ -1,6 +1,6 @@
 from click.testing import CliRunner
 from llm.cli import cli
-from llm import Collection
+from llm import Collection, get_default_embeddings_db
 import json
 import pathlib
 import pytest
@@ -153,7 +153,7 @@ def test_embed_store_binary(user_path):
     args = ["embed", "-m", "embed-demo", "items", "2", "--binary", "--store"]
     result = runner.invoke(cli, args, input=b"\x00\x01\x02")
     assert result.exit_code == 0
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = get_default_embeddings_db()
     rows = list(db["embeddings"].rows)
     assert rows == [
         {
@@ -682,7 +682,7 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         result3 = runner.invoke(cli, args, input=input, catch_exceptions=False)
         assert result3.exit_code == 0
     # At the end of this, there should be 2 embeddings
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = get_default_embeddings_db()
     assert db["embeddings"].count == 1
 
 
