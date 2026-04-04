@@ -140,15 +140,15 @@ def register_models(register):
         AsyncChat("o1-mini", allows_system_prompt=False),
     )
     register(
-        Chat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
-        AsyncChat("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        Chat("o3-mini", is_o3=True, supports_schema=True, supports_tools=True),
+        AsyncChat("o3-mini", is_o3=True, supports_schema=True, supports_tools=True),
     )
     register(
         Chat(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3", vision=True, is_o3=True, supports_schema=True, supports_tools=True
         ),
         AsyncChat(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3", vision=True, is_o3=True, supports_schema=True, supports_tools=True
         ),
     )
     register(
@@ -541,6 +541,23 @@ class OptionsForReasoning(SharedOptions):
     )
 
 
+class OptionsForO3(llm.Options):
+    """Options for o3 and o3-mini models which only support max_completion_tokens and reasoning_effort."""
+
+    max_completion_tokens: Optional[int] = Field(
+        description="Maximum number of tokens to generate (including reasoning tokens).",
+        default=None,
+    )
+    reasoning_effort: Optional[ReasoningEffortEnum] = Field(
+        description=(
+            "Constraints effort on reasoning for reasoning models. Currently supported "
+            "values are low, medium, and high. Reducing reasoning effort can result in "
+            "faster responses and fewer tokens used on reasoning in a response."
+        ),
+        default=None,
+    )
+
+
 def _attachment(attachment):
     url = attachment.url
     base64_content = ""
@@ -588,6 +605,7 @@ class _Shared:
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        is_o3=False,
     ):
         self.model_id = model_id
         self.key = key
@@ -605,7 +623,9 @@ class _Shared:
 
         self.attachment_types = set()
 
-        if reasoning:
+        if is_o3:
+            self.Options = OptionsForO3
+        elif reasoning:
             self.Options = OptionsForReasoning
 
         if vision:
