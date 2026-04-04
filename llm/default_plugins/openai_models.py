@@ -294,10 +294,12 @@ def register_models(register):
             kwargs["audio"] = True
         if extra_model.get("completion"):
             klass = Completion
+            async_klass = None
         else:
             klass = Chat
-        chat_model = klass(
-            model_id,
+            async_klass = AsyncChat
+        model_kwargs = dict(
+            model_id=model_id,
             model_name=model_name,
             api_base=api_base,
             api_type=api_type,
@@ -307,12 +309,19 @@ def register_models(register):
             reasoning=reasoning,
             **kwargs,
         )
+        chat_model = klass(**model_kwargs)
+        async_model = async_klass(**model_kwargs) if async_klass else None
         if api_base:
             chat_model.needs_key = None
+            if async_model:
+                async_model.needs_key = None
         if extra_model.get("api_key_name"):
             chat_model.needs_key = extra_model["api_key_name"]
+            if async_model:
+                async_model.needs_key = extra_model["api_key_name"]
         register(
             chat_model,
+            async_model,
             aliases=aliases,
         )
 

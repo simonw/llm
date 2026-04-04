@@ -431,6 +431,22 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+def test_extra_openai_models_async(user_path):
+    from llm.default_plugins.openai_models import AsyncChat
+
+    config_path = user_path / "extra-openai-models.yaml"
+    config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
+    async_model = llm.get_async_model("orca")
+    assert isinstance(async_model, AsyncChat)
+    assert async_model.model_id == "orca"
+    assert async_model.model_name == "orca-mini-3b"
+    assert async_model.api_base == "http://localai.localhost"
+    assert async_model.needs_key is None
+    # Completion models should not have an async variant
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_async_model("completion-babbage")
+
+
 @pytest.mark.parametrize(
     "args,exit_code",
     (
