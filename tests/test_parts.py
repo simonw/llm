@@ -1,6 +1,18 @@
 """Tests for Part types, StreamEvent, and Response integration."""
 import pytest
-from dataclasses import dataclass
+
+
+class TestExports:
+    def test_part_types_exported_from_llm(self):
+        import llm
+
+        assert llm.Part is not None
+        assert llm.TextPart is not None
+        assert llm.ReasoningPart is not None
+        assert llm.ToolCallPart is not None
+        assert llm.ToolResultPart is not None
+        assert llm.AttachmentPart is not None
+        assert llm.StreamEvent is not None
 
 # Phase 1: Part types and serialization
 

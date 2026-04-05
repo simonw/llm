@@ -26,6 +26,15 @@ from .models import (
     ToolResult,
     Usage,
 )
+from .parts import (
+    AttachmentPart,
+    Part,
+    ReasoningPart,
+    StreamEvent,
+    TextPart,
+    ToolCallPart,
+    ToolResultPart,
+)
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
@@ -44,6 +53,7 @@ __all__ = [
     "AsyncModel",
     "AsyncResponse",
     "Attachment",
+    "AttachmentPart",
     "CancelToolCall",
     "Collection",
     "Conversation",
@@ -57,14 +67,20 @@ __all__ = [
     "ModelError",
     "NeedsKeyException",
     "Options",
+    "Part",
     "Prompt",
+    "ReasoningPart",
     "Response",
+    "StreamEvent",
     "Template",
+    "TextPart",
     "Tool",
     "Toolbox",
     "ToolCall",
+    "ToolCallPart",
     "ToolOutput",
     "ToolResult",
+    "ToolResultPart",
     "Usage",
     "user_dir",
     "schema_dsl",
