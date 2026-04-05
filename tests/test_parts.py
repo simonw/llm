@@ -460,18 +460,21 @@ class TestPhase2StreamEventHandling:
                 chunk="code_exec",
                 part_index=0,
                 tool_call_id="call_1",
+                server_executed=True,
             ),
             StreamEvent(
                 type="tool_call_args",
                 chunk='{"code": "1+1"}',
                 part_index=0,
                 tool_call_id="call_1",
+                server_executed=True,
             ),
             StreamEvent(
                 type="tool_result",
                 chunk="2",
                 part_index=1,
                 tool_call_id="call_1",
+                server_executed=True,
             ),
             StreamEvent(type="text", chunk="The answer is 2", part_index=2),
         ])
@@ -577,3 +580,258 @@ class TestPhase2AsyncStreamEventHandling:
         assert parts[0].text == "hmm"
         assert isinstance(parts[1], TextPart)
         assert parts[1].text == "yes"
+
+
+# Phase 3: OpenAI plugin StreamEvent integration
+
+import json
+import os
+from pytest_httpx import IteratorStream
+
+API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
+
+
+def _openai_sse_chunks(deltas, usage=None):
+    """Build SSE byte chunks from a list of delta dicts."""
+    for i, (delta, finish_reason) in enumerate(deltas):
+        chunk = {
+            "id": "chat-test",
+            "object": "chat.completion.chunk",
+            "created": 1700000000,
+            "model": "gpt-5.4-mini",
+            "choices": [
+                {"index": 0, "delta": delta, "finish_reason": finish_reason}
+            ],
+        }
+        if usage and i == len(deltas) - 1:
+            chunk["usage"] = usage
+        yield ("data: " + json.dumps(chunk) + "\n\n").encode("utf-8")
+    # Final usage-only chunk if usage provided
+    if usage:
+        yield (
+            "data: "
+            + json.dumps(
+                {
+                    "id": "chat-test",
+                    "object": "chat.completion.chunk",
+                    "created": 1700000000,
+                    "model": "gpt-5.4-mini",
+                    "choices": [],
+                    "usage": usage,
+                }
+            )
+            + "\n\n"
+        ).encode("utf-8")
+    yield b"data: [DONE]\n\n"
+
+
+class TestOpenAIPluginStreamEvents:
+    """Test that the OpenAI plugin yields StreamEvent objects."""
+
+    def test_openai_text_stream_events(self, httpx_mock):
+        """OpenAI streaming text yields StreamEvents via stream_events()."""
+        from llm.parts import StreamEvent, TextPart
+
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                _openai_sse_chunks([
+                    ({"role": "assistant", "content": ""}, None),
+                    ({"content": "Hello"}, None),
+                    ({"content": " world"}, None),
+                    ({}, "stop"),
+                ])
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-5.4-mini")
+        response = model.prompt("hi", key=API_KEY)
+        events = list(response.stream_events())
+        text_events = [e for e in events if e.type == "text"]
+        assert len(text_events) >= 2
+        assert "Hello" in [e.chunk for e in text_events]
+        assert " world" in [e.chunk for e in text_events]
+
+        # Parts should have a single TextPart
+        parts = response.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "Hello world"
+
+    def test_openai_iter_still_yields_str(self, httpx_mock):
+        """Backward compat: iterating Response still yields str."""
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                _openai_sse_chunks([
+                    ({"role": "assistant", "content": ""}, None),
+                    ({"content": "Hi"}, None),
+                    ({}, "stop"),
+                ])
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-5.4-mini")
+        response = model.prompt("hi", key=API_KEY)
+        chunks = list(response)
+        assert all(isinstance(c, str) for c in chunks)
+        assert "Hi" in chunks
+
+    def test_openai_tool_call_stream_events(self, httpx_mock):
+        """OpenAI streaming tool calls yield tool_call StreamEvents."""
+        from llm.parts import StreamEvent, ToolCallPart
+
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                _openai_sse_chunks([
+                    (
+                        {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call_abc",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": "",
+                                    },
+                                    "type": "function",
+                                }
+                            ],
+                        },
+                        None,
+                    ),
+                    (
+                        {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "function": {"arguments": '{"city"'},
+                                }
+                            ]
+                        },
+                        None,
+                    ),
+                    (
+                        {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "function": {"arguments": ': "Paris"}'},
+                                }
+                            ]
+                        },
+                        None,
+                    ),
+                    ({}, "stop"),
+                ])
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-5.4-mini")
+        response = model.prompt("weather in Paris?", key=API_KEY)
+
+        events = list(response.stream_events())
+        name_events = [e for e in events if e.type == "tool_call_name"]
+        args_events = [e for e in events if e.type == "tool_call_args"]
+        assert len(name_events) == 1
+        assert name_events[0].chunk == "get_weather"
+        assert name_events[0].tool_call_id == "call_abc"
+        assert len(args_events) >= 1
+
+        # Parts should include a ToolCallPart
+        parts = response.parts
+        tool_parts = [p for p in parts if isinstance(p, ToolCallPart)]
+        assert len(tool_parts) == 1
+        assert tool_parts[0].name == "get_weather"
+        assert tool_parts[0].arguments == {"city": "Paris"}
+        assert tool_parts[0].tool_call_id == "call_abc"
+
+    def test_openai_reasoning_tokens_in_parts(self, httpx_mock):
+        """When usage has reasoning_tokens > 0, parts include a redacted ReasoningPart."""
+        from llm.parts import ReasoningPart, TextPart
+
+        usage = {
+            "prompt_tokens": 20,
+            "completion_tokens": 50,
+            "total_tokens": 70,
+            "completion_tokens_details": {
+                "reasoning_tokens": 16,
+                "accepted_prediction_tokens": 0,
+                "audio_tokens": 0,
+                "rejected_prediction_tokens": 0,
+            },
+            "prompt_tokens_details": {
+                "audio_tokens": 0,
+                "cached_tokens": 0,
+            },
+        }
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                _openai_sse_chunks(
+                    [
+                        ({"role": "assistant", "content": ""}, None),
+                        ({"content": "Answer"}, None),
+                        ({}, "stop"),
+                    ],
+                    usage=usage,
+                )
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-5.4-mini")
+        response = model.prompt("think hard", key=API_KEY)
+        response.text()
+
+        parts = response.parts
+        # Should have ReasoningPart (redacted) + TextPart
+        reasoning_parts = [p for p in parts if isinstance(p, ReasoningPart)]
+        text_parts = [p for p in parts if isinstance(p, TextPart)]
+        assert len(reasoning_parts) == 1
+        assert reasoning_parts[0].redacted is True
+        assert reasoning_parts[0].token_count == 16
+        assert len(text_parts) == 1
+        assert text_parts[0].text == "Answer"
+
+    def test_openai_non_streaming_parts(self, httpx_mock):
+        """Non-streaming OpenAI response produces correct parts."""
+        from llm.parts import TextPart
+
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "id": "chat-test",
+                "object": "chat.completion",
+                "model": "gpt-5.4-mini",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Hello!",
+                            "tool_calls": None,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                },
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        model = llm.get_model("gpt-5.4-mini")
+        response = model.prompt("hi", key=API_KEY, stream=False)
+        assert response.text() == "Hello!"
+        parts = response.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "Hello!"

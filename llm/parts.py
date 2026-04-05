@@ -160,9 +160,12 @@ class StreamEvent:
     chunk: The raw text fragment
     part_index: Which part this contributes to (monotonically increasing)
     tool_call_id: Set for tool_call events
+    server_executed: True for server-side tool calls/results
     """
 
     type: str
     chunk: str
     part_index: int
     tool_call_id: Optional[str] = None
+    server_executed: bool = False
+    tool_name: Optional[str] = None

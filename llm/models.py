@@ -761,7 +761,7 @@ class _BaseResponse:
                         name=name,
                         arguments=arguments,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
-                        server_executed=True,
+                        server_executed=server_executed_buf[0] if server_executed_buf else False,
                     )
                 )
             elif current_type == "tool_result":
@@ -769,16 +769,17 @@ class _BaseResponse:
                 parts.append(
                     ToolResultPart(
                         role="tool",
-                        name="",
+                        name=tool_name_buf[0] if tool_name_buf else "",
                         output=output,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
-                        server_executed=True,
+                        server_executed=server_executed_buf[0] if server_executed_buf else False,
                     )
                 )
 
         tool_name_buf = []
         tool_args_buf = []
         tool_call_id_buf = []
+        server_executed_buf = []
 
         for event in self._stream_events:
             if event.part_index != current_index:
@@ -789,6 +790,7 @@ class _BaseResponse:
                 tool_name_buf = []
                 tool_args_buf = []
                 tool_call_id_buf = []
+                server_executed_buf = []
 
             if event.type == "text":
                 current_type = "text"
@@ -801,18 +803,40 @@ class _BaseResponse:
                 tool_name_buf.append(event.chunk)
                 if event.tool_call_id:
                     tool_call_id_buf = [event.tool_call_id]
+                if event.server_executed:
+                    server_executed_buf = [True]
             elif event.type == "tool_call_args":
                 current_type = "tool_call_args"
                 tool_args_buf.append(event.chunk)
                 if event.tool_call_id and not tool_call_id_buf:
                     tool_call_id_buf = [event.tool_call_id]
+                if event.server_executed and not server_executed_buf:
+                    server_executed_buf = [True]
             elif event.type == "tool_result":
                 current_type = "tool_result"
                 buffer.append(event.chunk)
                 if event.tool_call_id and not tool_call_id_buf:
                     tool_call_id_buf = [event.tool_call_id]
+                if event.server_executed and not server_executed_buf:
+                    server_executed_buf = [True]
+                if event.tool_name:
+                    tool_name_buf = [event.tool_name]
 
         finalize()
+
+        # Add redacted reasoning part if the model reported reasoning token usage
+        reasoning_token_count = getattr(self, "_reasoning_token_count", 0)
+        if reasoning_token_count:
+            parts.insert(
+                0,
+                ReasoningPart(
+                    role="assistant",
+                    text="",
+                    redacted=True,
+                    token_count=reasoning_token_count,
+                ),
+            )
+
         return parts
 
     def add_tool_call(self, tool_call: ToolCall):
