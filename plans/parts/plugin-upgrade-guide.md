@@ -48,6 +48,8 @@ After:
 yield StreamEvent(type="text", chunk=content, part_index=part_index)
 ```
 
+**Filter empty chunks:** Many APIs send empty string content in their final delta (e.g., `"content": ""`). Skip these — only yield a text StreamEvent when the content is non-empty. The old pattern of yielding bare empty strings was harmless but with StreamEvents it creates unnecessary noise.
+
 `part_index` is a counter that increments each time the model starts a new logical part (e.g., switches from reasoning to text, or from text to a tool call). For simple text-only responses, `part_index=0` for all chunks is fine.
 
 ### Reasoning / thinking tokens
@@ -92,6 +94,8 @@ yield StreamEvent(
     tool_call_id=tool_call_id,
 )
 ```
+
+**Important:** You must **also** call `response.add_tool_call()` for each tool call, in addition to yielding the StreamEvent objects. The chain mechanism (`execute_tool_calls()`) reads from `response.tool_calls()` which uses the `_tool_calls` list populated by `add_tool_call()` — it does not automatically extract tool calls from stream events. For streaming, accumulate tool call data during the loop and call `response.add_tool_call()` after the loop finishes. For non-streaming, call it inline.
 
 ### Server-side tool results
 
@@ -142,11 +146,18 @@ yield StreamEvent(type="text", chunk=response_text, part_index=0)
 
 Apply the same changes to the async `execute()` method. The pattern is identical — `yield StreamEvent(...)` instead of `yield str`.
 
+**Note:** In an `async def execute()` generator, you cannot use `yield from` on a synchronous generator. If you have a helper method that yields StreamEvents (e.g., for tool call processing), use an explicit loop:
+
+```python
+for ev in self._emit_tool_call_events(delta, ...):
+    yield ev
+```
+
 ## Step 5: Add tests
 
 Add tests that verify:
 
-1. **`stream_events()` yields correct event types:** Call `response.stream_events()` and check that you get the expected event types (text, reasoning, tool_call_name, etc.).
+1. **`stream_events()` yields correct event types:** Call `response.stream_events()` (sync) or `response.astream_events()` (async) and check that you get the expected event types (text, reasoning, tool_call_name, etc.).
 
 2. **`response.parts` assembles correctly:** After `response.text()`, check that `response.parts` contains the right `TextPart`, `ReasoningPart`, `ToolCallPart` objects.
 
