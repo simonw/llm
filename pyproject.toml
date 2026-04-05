@@ -44,7 +44,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "build",
-    "click<8.2.0", # https://github.com/simonw/llm/issues/1024
+    "click>=8.2.0",
     "pytest",
     "numpy",
     "pytest-httpx>=0.33.0",
