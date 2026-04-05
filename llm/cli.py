@@ -447,9 +447,10 @@ def cli():
     type=(str, str),
     help="Parameters for template",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
-@click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
+@click.option("-S", "--no-stream", is_flag=True, help="Do not stream output")
+@click.option("-n", "-L", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--log", is_flag=True, help="Log prompt and response to the database")
+@click.option("-R", "--no-reasoning", is_flag=True, help="Don't display reasoning output")
 @click.option(
     "_continue",
     "-c",
@@ -499,6 +500,7 @@ def prompt(
     no_stream,
     no_log,
     log,
+    no_reasoning,
     _continue,
     conversation_id,
     key,
@@ -849,9 +851,16 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
+                    async for event in response.astream_events():
+                        if event.type == "text":
+                            print(event.chunk, end="")
+                            sys.stdout.flush()
+                        elif event.type == "reasoning" and not no_reasoning:
+                            click.echo(
+                                click.style(event.chunk, dim=True),
+                                nl=False,
+                                err=True,
+                            )
                     print("")
                 else:
                     response = prompt_method(
@@ -883,9 +892,16 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
+                for event in response.stream_events():
+                    if event.type == "text":
+                        print(event.chunk, end="")
+                        sys.stdout.flush()
+                    elif event.type == "reasoning" and not no_reasoning:
+                        click.echo(
+                            click.style(event.chunk, dim=True),
+                            nl=False,
+                            err=True,
+                        )
                 print("")
             else:
                 text = response.text()
@@ -981,7 +997,8 @@ def prompt(
     type=click.Path(readable=True, dir_okay=False),
     help="Path to log database",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
+@click.option("-S", "--no-stream", is_flag=True, help="Do not stream output")
+@click.option("-R", "--no-reasoning", is_flag=True, help="Don't display reasoning output")
 @click.option("--key", help="API key to use")
 @click.option(
     "tools",
@@ -1030,6 +1047,7 @@ def chat(
     param,
     options,
     no_stream,
+    no_reasoning,
     key,
     database,
     tools,
@@ -1234,9 +1252,16 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+        for event in response.stream_events():
+            if event.type == "text":
+                print(event.chunk, end="")
+                sys.stdout.flush()
+            elif event.type == "reasoning" and not no_reasoning:
+                click.echo(
+                    click.style(event.chunk, dim=True),
+                    nl=False,
+                    err=True,
+                )
         response.log_to_db(db)
         print("")
 

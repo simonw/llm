@@ -2126,6 +2126,11 @@ class ChainResponse(_BaseChainResponse):
         for response_item in self.responses():
             yield from response_item
 
+    def stream_events(self):
+        "Yield StreamEvents from all responses in the chain."
+        for response_item in self.responses():
+            yield from response_item.stream_events()
+
     def text(self) -> str:
         return "".join(self)
 
@@ -2184,6 +2189,12 @@ class AsyncChainResponse(_BaseChainResponse):
         async for response_item in self.responses():
             async for chunk in response_item:
                 yield chunk
+
+    async def astream_events(self):
+        "Yield StreamEvents from all responses in the chain."
+        async for response_item in self.responses():
+            async for event in response_item.astream_events():
+                yield event
 
     async def text(self) -> str:
         all_chunks = []
