@@ -1103,6 +1103,64 @@ class TestCLIReasoningDisplay:
         assert stdout_chunks == ["the answer"]
         assert stderr_chunks == ["thinking hard"]
 
+    def test_reasoning_to_text_newline(self):
+        """A newline is emitted on stderr when switching from reasoning to text."""
+        from llm.parts import StreamEvent
+        from llm.cli import display_stream_events
+        import io
+
+        events = [
+            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+            StreamEvent(type="reasoning", chunk=" more", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        display_stream_events(events, stdout=stdout, stderr=stderr, show_reasoning=True)
+        assert stdout.getvalue() == "answer"
+        stderr_val = stderr.getvalue()
+        assert "thinking" in stderr_val
+        assert " more" in stderr_val
+        assert stderr_val.endswith("\n"), "Should end with newline at transition"
+
+    def test_reasoning_to_text_no_newline_when_suppressed(self):
+        """No reasoning or newline when show_reasoning=False."""
+        from llm.parts import StreamEvent
+        from llm.cli import display_stream_events
+        import io
+
+        events = [
+            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        display_stream_events(events, stdout=stdout, stderr=stderr, show_reasoning=False)
+        assert stdout.getvalue() == "answer"
+        assert stderr.getvalue() == ""
+
+    def test_multiple_reasoning_text_transitions(self):
+        """Newlines on each reasoning-to-text transition."""
+        from llm.parts import StreamEvent
+        from llm.cli import display_stream_events
+        import io
+
+        events = [
+            StreamEvent(type="reasoning", chunk="think1", part_index=0),
+            StreamEvent(type="text", chunk="text1", part_index=1),
+            StreamEvent(type="reasoning", chunk="think2", part_index=2),
+            StreamEvent(type="text", chunk="text2", part_index=3),
+        ]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        display_stream_events(events, stdout=stdout, stderr=stderr, show_reasoning=True)
+        assert stdout.getvalue() == "text1text2"
+        stderr_val = stderr.getvalue()
+        # Two reasoning-to-text transitions = two newlines
+        assert stderr_val.count("\n") == 2
+        assert "think1" in stderr_val
+        assert "think2" in stderr_val
+
     def test_cli_no_reasoning_flag_exists(self):
         """--no-reasoning / -R flag is accepted by the prompt command."""
         runner = CliRunner()

@@ -89,6 +89,31 @@ class FragmentNotFound(Exception):
     pass
 
 
+def display_stream_events(events, *, stdout=None, stderr=None, show_reasoning=True):
+    """Write stream events to stdout/stderr with reasoning-to-text newlines.
+
+    Text events go to stdout. Reasoning events go to stderr (dim).
+    A newline is written to stderr at each reasoning-to-text transition.
+    """
+    if stdout is None:
+        stdout = sys.stdout
+    if stderr is None:
+        stderr = sys.stderr
+    was_reasoning = False
+    for event in events:
+        if event.type == "text":
+            if was_reasoning and show_reasoning:
+                stderr.write("\n")
+                stderr.flush()
+                was_reasoning = False
+            stdout.write(event.chunk)
+            stdout.flush()
+        elif event.type == "reasoning" and show_reasoning:
+            was_reasoning = True
+            stderr.write(click.style(event.chunk, dim=True))
+            stderr.flush()
+
+
 def validate_fragment_alias(ctx, param, value):
     if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise click.BadParameter("Fragment alias must be alphanumeric")
@@ -851,11 +876,16 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
+                    was_reasoning = False
                     async for event in response.astream_events():
                         if event.type == "text":
+                            if was_reasoning and not no_reasoning:
+                                click.echo("", err=True)
+                                was_reasoning = False
                             print(event.chunk, end="")
                             sys.stdout.flush()
                         elif event.type == "reasoning" and not no_reasoning:
+                            was_reasoning = True
                             click.echo(
                                 click.style(event.chunk, dim=True),
                                 nl=False,
@@ -892,16 +922,10 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
-                for event in response.stream_events():
-                    if event.type == "text":
-                        print(event.chunk, end="")
-                        sys.stdout.flush()
-                    elif event.type == "reasoning" and not no_reasoning:
-                        click.echo(
-                            click.style(event.chunk, dim=True),
-                            nl=False,
-                            err=True,
-                        )
+                display_stream_events(
+                    response.stream_events(),
+                    show_reasoning=not no_reasoning,
+                )
                 print("")
             else:
                 text = response.text()
@@ -1252,16 +1276,10 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        for event in response.stream_events():
-            if event.type == "text":
-                print(event.chunk, end="")
-                sys.stdout.flush()
-            elif event.type == "reasoning" and not no_reasoning:
-                click.echo(
-                    click.style(event.chunk, dim=True),
-                    nl=False,
-                    err=True,
-                )
+        display_stream_events(
+            response.stream_events(),
+            show_reasoning=not no_reasoning,
+        )
         response.log_to_db(db)
         print("")
 
