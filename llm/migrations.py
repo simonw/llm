@@ -418,3 +418,24 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_parts_table(db):
+    db["parts"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "direction": str,  # "input" or "output"
+            "role": str,  # "user", "assistant", "system", "tool"
+            "part_type": str,  # "text", "reasoning", "tool_call", "tool_result", "attachment"
+            "order": int,
+            "content": str,  # Text content for text/reasoning parts
+            "content_json": str,  # JSON for structured data
+            "tool_call_id": str,
+            "server_executed": int,  # 1 for server-side tool calls/results
+        },
+        pk="id",
+        foreign_keys=[("response_id", "responses", "id")],
+    )
+    db.execute('CREATE UNIQUE INDEX "idx_parts_response_order" ON parts (response_id, direction, "order")')

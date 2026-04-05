@@ -933,3 +933,95 @@ class TestPartsParameter:
         # Round-trip
         restored = [Part.from_dict(d) for d in dicts]
         assert len(restored) == len(response.prompt.input_parts)
+
+
+# Phase 5: Database migration for parts
+
+import sqlite_utils
+
+
+class TestDatabaseParts:
+    """Test that parts are stored and loaded from the database."""
+
+    def test_parts_table_created(self, logs_db):
+        """The parts table is created by migration."""
+        from llm.migrations import migrate
+
+        migrate(logs_db)
+        assert "parts" in logs_db.table_names()
+        columns = {col.name for col in logs_db["parts"].columns}
+        assert "response_id" in columns
+        assert "role" in columns
+        assert "part_type" in columns
+        assert "content" in columns
+        assert "content_json" in columns
+
+    def test_log_to_db_writes_parts(self, mock_model, logs_db):
+        """log_to_db() writes output parts to the parts table."""
+        from llm.migrations import migrate
+        from llm.parts import StreamEvent, TextPart, ReasoningPart
+
+        migrate(logs_db)
+
+        # Use a model that yields StreamEvents (has reasoning + text)
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        response = model.prompt("question")
+        response.text()
+        response.log_to_db(logs_db)
+
+        parts_rows = [
+            r for r in logs_db["parts"].rows if r["direction"] == "output"
+        ]
+        assert len(parts_rows) == 2
+        # First part: reasoning
+        assert parts_rows[0]["part_type"] == "reasoning"
+        assert parts_rows[0]["role"] == "assistant"
+        assert parts_rows[0]["content"] == "thinking..."
+        # Second part: text
+        assert parts_rows[1]["part_type"] == "text"
+        assert parts_rows[1]["role"] == "assistant"
+        assert parts_rows[1]["content"] == "answer"
+
+    def test_log_to_db_writes_input_parts(self, mock_model, logs_db):
+        """log_to_db() writes input parts to the parts table."""
+        from llm.migrations import migrate
+
+        migrate(logs_db)
+
+        mock_model.enqueue(["Hi"])
+        response = mock_model.prompt("Hello", system="Be helpful")
+        response.text()
+        response.log_to_db(logs_db)
+
+        parts_rows = list(
+            logs_db.execute(
+                "select * from parts where response_id = ? order by \"order\"",
+                [response.id],
+            ).fetchall()
+        )
+        # Should have: input system part, input user part, output text part
+        assert len(parts_rows) >= 3
+
+    def test_from_row_loads_parts(self, mock_model, logs_db):
+        """from_row() loads parts from the parts table."""
+        from llm.migrations import migrate
+        from llm.parts import TextPart
+
+        migrate(logs_db)
+
+        mock_model.enqueue(["Hello world"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(logs_db)
+
+        # Load from DB
+        row = list(logs_db["responses"].rows)[0]
+        loaded = llm.Response.from_row(logs_db, row)
+        assert loaded.parts is not None
+        text_parts = [p for p in loaded.parts if isinstance(p, TextPart)]
+        assert len(text_parts) >= 1
+        assert text_parts[0].text == "Hello world"

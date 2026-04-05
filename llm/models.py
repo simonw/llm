@@ -1001,7 +1001,74 @@ class _BaseResponse:
             )
         ]
 
+        # Load parts from the parts table if it exists
+        if "parts" in db.table_names():
+            response._loaded_parts = cls._load_parts_from_db(db, row["id"])
+        else:
+            response._loaded_parts = None
+
         return response
+
+    @staticmethod
+    def _load_parts_from_db(db, response_id):
+        from .parts import (
+            TextPart,
+            ReasoningPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        parts_rows = list(
+            db.execute(
+                'SELECT * FROM parts WHERE response_id = ? AND direction = ? ORDER BY "order"',
+                [response_id, "output"],
+            ).fetchall()
+        )
+        if not parts_rows:
+            return None
+
+        columns = [desc[0] for desc in db.execute("SELECT * FROM parts LIMIT 0").description]
+        parts = []
+        for row_tuple in parts_rows:
+            r = dict(zip(columns, row_tuple))
+            part_type = r["part_type"]
+            role = r["role"]
+            content = r.get("content")
+            content_json = r.get("content_json")
+
+            if part_type == "text":
+                parts.append(TextPart(role=role, text=content or ""))
+            elif part_type == "reasoning":
+                kwargs = {}
+                if content_json:
+                    data = json.loads(content_json)
+                    kwargs["redacted"] = data.get("redacted", False)
+                    kwargs["token_count"] = data.get("token_count")
+                parts.append(ReasoningPart(role=role, text=content or "", **kwargs))
+            elif part_type == "tool_call":
+                data = json.loads(content_json) if content_json else {}
+                parts.append(
+                    ToolCallPart(
+                        role=role,
+                        name=data.get("name", ""),
+                        arguments=data.get("arguments", {}),
+                        tool_call_id=r.get("tool_call_id"),
+                        server_executed=bool(r.get("server_executed")),
+                    )
+                )
+            elif part_type == "tool_result":
+                data = json.loads(content_json) if content_json else {}
+                parts.append(
+                    ToolResultPart(
+                        role=role,
+                        name=data.get("name", ""),
+                        output=content or "",
+                        tool_call_id=r.get("tool_call_id"),
+                        server_executed=bool(r.get("server_executed")),
+                        exception=data.get("exception"),
+                    )
+                )
+        return parts
 
     def token_usage(self) -> str:
         return token_usage_string(
@@ -1198,6 +1265,95 @@ class _BaseResponse:
                         "order": index,
                     },
                 )
+
+        # Persist parts (input and output) to the parts table
+        if "parts" in db.table_names():
+            self._log_parts_to_db(db, response_id)
+
+    def _log_parts_to_db(self, db, response_id):
+        from .parts import (
+            TextPart,
+            ReasoningPart,
+            ToolCallPart,
+            ToolResultPart,
+            AttachmentPart,
+        )
+
+        order = 0
+
+        # Write input parts
+        for part in self.prompt.input_parts:
+            row = {
+                "response_id": response_id,
+                "direction": "input",
+                "role": part.role,
+                "order": order,
+            }
+            if isinstance(part, TextPart):
+                row["part_type"] = "text"
+                row["content"] = part.text
+            elif isinstance(part, ReasoningPart):
+                row["part_type"] = "reasoning"
+                row["content"] = part.text
+                if part.redacted or part.token_count:
+                    row["content_json"] = json.dumps(
+                        {"redacted": part.redacted, "token_count": part.token_count}
+                    )
+            elif isinstance(part, AttachmentPart):
+                row["part_type"] = "attachment"
+                if part.attachment:
+                    att_data = {}
+                    if part.attachment.type:
+                        att_data["type"] = part.attachment.type
+                    if part.attachment.url:
+                        att_data["url"] = part.attachment.url
+                    if part.attachment.path:
+                        att_data["path"] = part.attachment.path
+                    row["content_json"] = json.dumps(att_data)
+            else:
+                row["part_type"] = "unknown"
+                row["content_json"] = json.dumps(part.to_dict())
+            db["parts"].insert(row)
+            order += 1
+
+        # Write output parts
+        for part in self.parts:
+            row = {
+                "response_id": response_id,
+                "direction": "output",
+                "role": part.role,
+                "order": order,
+            }
+            if isinstance(part, TextPart):
+                row["part_type"] = "text"
+                row["content"] = part.text
+            elif isinstance(part, ReasoningPart):
+                row["part_type"] = "reasoning"
+                row["content"] = part.text
+                if part.redacted or part.token_count:
+                    row["content_json"] = json.dumps(
+                        {"redacted": part.redacted, "token_count": part.token_count}
+                    )
+            elif isinstance(part, ToolCallPart):
+                row["part_type"] = "tool_call"
+                row["content_json"] = json.dumps(
+                    {"name": part.name, "arguments": part.arguments}
+                )
+                row["tool_call_id"] = part.tool_call_id
+                row["server_executed"] = 1 if part.server_executed else 0
+            elif isinstance(part, ToolResultPart):
+                row["part_type"] = "tool_result"
+                row["content"] = part.output
+                row["content_json"] = json.dumps(
+                    {"name": part.name, "exception": part.exception}
+                )
+                row["tool_call_id"] = part.tool_call_id
+                row["server_executed"] = 1 if part.server_executed else 0
+            else:
+                row["part_type"] = "unknown"
+                row["content_json"] = json.dumps(part.to_dict())
+            db["parts"].insert(row)
+            order += 1
 
 
 class Response(_BaseResponse):
@@ -1454,6 +1610,8 @@ class Response(_BaseResponse):
     @property
     def parts(self):
         "Return the list of Part objects for this response."
+        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
+            return self._loaded_parts
         self._force()
         return self._build_parts()
 
@@ -1798,6 +1956,8 @@ class AsyncResponse(_BaseResponse):
     @property
     def parts(self):
         "Return the list of Part objects for this response."
+        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
+            return self._loaded_parts
         if not self._done:
             raise ValueError("Response not yet awaited - use 'await response' first")
         return self._build_parts()
