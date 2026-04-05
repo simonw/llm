@@ -3,6 +3,7 @@ import hashlib
 import httpx
 import itertools
 import json
+import mimetypes
 import pathlib
 import puremagic
 import re
@@ -37,6 +38,9 @@ class Fragment(str):
 def mimetype_from_string(content) -> Optional[str]:
     try:
         type_ = puremagic.from_string(content, mime=True)
+        # puremagic can return empty string if it can't detect the type
+        if not type_:
+            return None
         return MIME_TYPE_FIXES.get(type_, type_)
     except puremagic.PureError:
         return None
@@ -45,9 +49,17 @@ def mimetype_from_string(content) -> Optional[str]:
 def mimetype_from_path(path) -> Optional[str]:
     try:
         type_ = puremagic.from_file(path, mime=True)
+        # puremagic can return empty string if it can't detect the type
+        if not type_:
+            # Fall back to Python's standard mimetypes module
+            type_, _ = mimetypes.guess_type(path)
+            if not type_:
+                return None
         return MIME_TYPE_FIXES.get(type_, type_)
     except puremagic.PureError:
-        return None
+        # Fall back to Python's standard mimetypes module
+        type_, _ = mimetypes.guess_type(path)
+        return MIME_TYPE_FIXES.get(type_, type_) if type_ else None
 
 
 def dicts_to_table_string(
