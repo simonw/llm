@@ -171,3 +171,97 @@ class TestStreamEvent:
             tool_call_id="call_123",
         )
         assert event.tool_call_id == "call_123"
+
+
+# Phase 1: stream_events() and parts property on Response
+
+
+class TestResponseStreamEvents:
+    """Test that Response.stream_events() wraps plain str chunks as text StreamEvents."""
+
+    def test_stream_events_from_plain_str_chunks(self, mock_model):
+        mock_model.enqueue(["Hello", " world"])
+        response = mock_model.prompt("hi")
+        events = list(response.stream_events())
+        assert len(events) == 2
+        assert all(e.type == "text" for e in events)
+        assert events[0].chunk == "Hello"
+        assert events[1].chunk == " world"
+        assert all(e.part_index == 0 for e in events)
+
+    def test_stream_events_after_text(self, mock_model):
+        """stream_events() works even after text() has been called (response is done)."""
+        mock_model.enqueue(["Hello", " world"])
+        response = mock_model.prompt("hi")
+        assert response.text() == "Hello world"
+        events = list(response.stream_events())
+        # After completion, stream_events replays from parts
+        assert len(events) == 1
+        assert events[0].type == "text"
+        assert events[0].chunk == "Hello world"
+
+    def test_parts_from_plain_str_response(self, mock_model):
+        """response.parts returns a list of Part objects after completion."""
+        from llm.parts import TextPart
+
+        mock_model.enqueue(["Hello", " world"])
+        response = mock_model.prompt("hi")
+        response.text()  # Force completion
+        parts = response.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].role == "assistant"
+        assert parts[0].text == "Hello world"
+
+    def test_parts_not_done_forces(self, mock_model):
+        """Accessing parts forces the response to complete."""
+        from llm.parts import TextPart
+
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("hi")
+        # Don't call text() or iterate - just access parts directly
+        parts = response.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "Hello"
+
+
+class TestResponsePartsIterAndText:
+    """Verify that iterating and text() still work as before (backward compat)."""
+
+    def test_iter_yields_str(self, mock_model):
+        mock_model.enqueue(["a", "b", "c"])
+        response = mock_model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["a", "b", "c"]
+        assert all(isinstance(c, str) for c in chunks)
+
+    def test_text_returns_joined(self, mock_model):
+        mock_model.enqueue(["Hello", " ", "world"])
+        response = mock_model.prompt("hi")
+        assert response.text() == "Hello world"
+
+
+@pytest.mark.asyncio
+class TestAsyncResponseStreamEvents:
+    async def test_async_stream_events(self, async_mock_model):
+        async_mock_model.enqueue(["Hello", " world"])
+        response = async_mock_model.prompt("hi")
+        events = []
+        async for event in response.astream_events():
+            events.append(event)
+        assert len(events) == 2
+        assert all(e.type == "text" for e in events)
+        assert events[0].chunk == "Hello"
+        assert events[1].chunk == " world"
+
+    async def test_async_parts(self, async_mock_model):
+        from llm.parts import TextPart
+
+        async_mock_model.enqueue(["Hello", " world"])
+        response = async_mock_model.prompt("hi")
+        await response.text()
+        parts = response.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "Hello world"

@@ -1214,6 +1214,31 @@ class Response(_BaseResponse):
         self._done = True
         self._on_done()
 
+    def stream_events(self):
+        "Yield StreamEvents for this response."
+        from .parts import StreamEvent, TextPart
+
+        if self._done:
+            # Already completed - synthesize events from parts
+            for part in self.parts:
+                if isinstance(part, TextPart):
+                    yield StreamEvent(type="text", chunk=part.text, part_index=0)
+            return
+
+        for chunk in self:
+            yield StreamEvent(type="text", chunk=chunk, part_index=0)
+
+    @property
+    def parts(self):
+        "Return the list of Part objects for this response."
+        from .parts import TextPart
+
+        self._force()
+        text = "".join(self._chunks)
+        if text:
+            return [TextPart(role="assistant", text=text)]
+        return []
+
     def __repr__(self):
         text = "... not yet done ..."
         if self._done:
@@ -1505,6 +1530,31 @@ class AsyncResponse(_BaseResponse):
             output=self.output_tokens,
             details=self.token_details,
         )
+
+    async def astream_events(self):
+        "Yield StreamEvents for this response (async)."
+        from .parts import StreamEvent, TextPart
+
+        if self._done:
+            for part in self.parts:
+                if isinstance(part, TextPart):
+                    yield StreamEvent(type="text", chunk=part.text, part_index=0)
+            return
+
+        async for chunk in self:
+            yield StreamEvent(type="text", chunk=chunk, part_index=0)
+
+    @property
+    def parts(self):
+        "Return the list of Part objects for this response."
+        from .parts import TextPart
+
+        if not self._done:
+            raise ValueError("Response not yet awaited - use 'await response' first")
+        text = "".join(self._chunks)
+        if text:
+            return [TextPart(role="assistant", text=text)]
+        return []
 
     def __await__(self):
         return self._force().__await__()
