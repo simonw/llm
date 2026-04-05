@@ -835,3 +835,101 @@ class TestOpenAIPluginStreamEvents:
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello!"
+
+
+# Phase 4: parts=[] prompt parameter
+
+class TestPartsParameter:
+    """Test the parts=[] parameter on model.prompt()."""
+
+    def test_prompt_creates_input_parts(self, mock_model):
+        """prompt= creates input_parts on the Prompt."""
+        from llm.parts import TextPart
+
+        mock_model.enqueue(["Hi"])
+        response = mock_model.prompt("Hello")
+        response.text()
+        input_parts = response.prompt.input_parts
+        assert len(input_parts) == 1
+        assert isinstance(input_parts[0], TextPart)
+        assert input_parts[0].role == "user"
+        assert input_parts[0].text == "Hello"
+
+    def test_parts_parameter(self, mock_model):
+        """parts=[] parameter works and creates input_parts."""
+        from llm.parts import TextPart, AttachmentPart
+
+        mock_model.enqueue(["Hi"])
+        parts = [
+            TextPart(role="user", text="What's in this image?"),
+        ]
+        response = mock_model.prompt(parts=parts)
+        response.text()
+        input_parts = response.prompt.input_parts
+        assert len(input_parts) == 1
+        assert isinstance(input_parts[0], TextPart)
+        assert input_parts[0].text == "What's in this image?"
+
+    def test_prompt_and_parts_combine(self, mock_model):
+        """prompt= and parts= combine: parts first, then prompt appended."""
+        from llm.parts import TextPart
+
+        mock_model.enqueue(["Hi"])
+        parts = [TextPart(role="system", text="You are helpful")]
+        response = mock_model.prompt("Hello", parts=parts)
+        response.text()
+        input_parts = response.prompt.input_parts
+        assert len(input_parts) == 2
+        assert input_parts[0].role == "system"
+        assert input_parts[0].text == "You are helpful"
+        assert input_parts[1].role == "user"
+        assert input_parts[1].text == "Hello"
+
+    def test_system_creates_system_part(self, mock_model):
+        """system= creates a system-role TextPart in input_parts."""
+        from llm.parts import TextPart
+
+        mock_model.enqueue(["Hi"])
+        response = mock_model.prompt("Hello", system="Be helpful")
+        response.text()
+        input_parts = response.prompt.input_parts
+        # Should have system part + user prompt part
+        system_parts = [p for p in input_parts if p.role == "system"]
+        user_parts = [p for p in input_parts if p.role == "user"]
+        assert len(system_parts) == 1
+        assert system_parts[0].text == "Be helpful"
+        assert len(user_parts) == 1
+
+    def test_attachments_create_attachment_parts(self, mock_model):
+        """attachments= creates AttachmentPart in input_parts."""
+        from llm.parts import TextPart, AttachmentPart
+
+        mock_model.enqueue(["Described"])
+        att = llm.Attachment(type="image/png", content=b"fake")
+        response = mock_model.prompt("Describe", attachments=[att])
+        response.text()
+        input_parts = response.prompt.input_parts
+        att_parts = [p for p in input_parts if isinstance(p, AttachmentPart)]
+        assert len(att_parts) == 1
+        assert att_parts[0].attachment is att
+
+    def test_prompt_backward_compat(self, mock_model):
+        """prompt.prompt still works as before (backward compat)."""
+        mock_model.enqueue(["Hi"])
+        response = mock_model.prompt("Hello world")
+        response.text()
+        assert response.prompt.prompt == "Hello world"
+
+    def test_input_parts_serialization(self, mock_model):
+        """input_parts can be serialized to dicts."""
+        from llm.parts import TextPart, Part
+
+        mock_model.enqueue(["Hi"])
+        response = mock_model.prompt("Hello", system="Be helpful")
+        response.text()
+        dicts = [p.to_dict() for p in response.prompt.input_parts]
+        assert any(d["role"] == "system" for d in dicts)
+        assert any(d["role"] == "user" for d in dicts)
+        # Round-trip
+        restored = [Part.from_dict(d) for d in dicts]
+        assert len(restored) == len(response.prompt.input_parts)

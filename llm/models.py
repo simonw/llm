@@ -351,6 +351,7 @@ class Prompt:
     tools: List[Tool]
     tool_results: List[ToolResult]
     options: "Options"
+    _parts: Optional[List[Any]]  # List of Part objects
 
     def __init__(
         self,
@@ -366,6 +367,7 @@ class Prompt:
         schema=None,
         tools=None,
         tool_results=None,
+        parts=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -380,6 +382,7 @@ class Prompt:
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
         self.options = options or {}
+        self._parts = parts
 
     @property
     def prompt(self):
@@ -395,6 +398,36 @@ class Prompt:
             if bit.strip()
         ]
         return "\n\n".join(bits)
+
+    @property
+    def input_parts(self):
+        """Return the list of input Part objects for this prompt.
+
+        Synthesized from prompt=, system=, attachments=, and parts= parameters.
+        """
+        from .parts import TextPart, AttachmentPart
+
+        result = []
+
+        # Start with any explicitly provided parts
+        if self._parts:
+            result.extend(self._parts)
+
+        # Add system prompt as a system-role TextPart
+        system_text = self.system
+        if system_text:
+            result.insert(0, TextPart(role="system", text=system_text))
+
+        # Add prompt text as a user-role TextPart
+        prompt_text = self.prompt
+        if prompt_text:
+            result.append(TextPart(role="user", text=prompt_text))
+
+        # Add attachments as user-role AttachmentParts
+        for attachment in self.attachments:
+            result.append(AttachmentPart(role="user", attachment=attachment))
+
+        return result
 
 
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
@@ -435,6 +468,7 @@ class Conversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
+        parts: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -449,6 +483,7 @@ class Conversation(_BaseConversation):
         return Response(
             Prompt(
                 prompt,
+                parts=parts,
                 model=self.model,
                 fragments=fragments,
                 attachments=attachments,
@@ -572,6 +607,7 @@ class AsyncConversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
+        parts: Optional[List[Any]] = None,
         fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -586,6 +622,7 @@ class AsyncConversation(_BaseConversation):
         return AsyncResponse(
             Prompt(
                 prompt,
+                parts=parts,
                 model=self.model,
                 fragments=fragments,
                 attachments=attachments,
@@ -2091,6 +2128,7 @@ class _Model(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
+        parts: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -2106,6 +2144,7 @@ class _Model(_BaseModel):
         return Response(
             Prompt(
                 prompt,
+                parts=parts,
                 fragments=fragments,
                 attachments=attachments,
                 system=system,
@@ -2200,6 +2239,7 @@ class _AsyncModel(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
+        parts: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -2215,6 +2255,7 @@ class _AsyncModel(_BaseModel):
         return AsyncResponse(
             Prompt(
                 prompt,
+                parts=parts,
                 fragments=fragments,
                 attachments=attachments,
                 system=system,
