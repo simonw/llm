@@ -38,9 +38,33 @@ After completion, both work fine: `__iter__` replays `_chunks`, `stream_events()
 
 - **`stream_events()` vs `__iter__` mutual exclusion**: Currently if you call `stream_events()` the response gets consumed there. If someone then tries to iterate with `for chunk in response`, it'll see `_done=True` and replay `_chunks`. This works but is subtle. May want to document this.
 
+## Phase 3 observations
+
+### OpenAI plugin
+- **set_usage mutates the dict**: `set_usage()` calls `pop()` which destroys `completion_tokens_details`. Must extract `reasoning_tokens` BEFORE calling `set_usage()`.
+- **Reasoning tokens are opaque**: gpt-5.4-mini reports `reasoning_tokens` in usage but never streams reasoning content. Only appears with `reasoning_effort='high'` or harder problems.
+- **Tool call part_index tracking**: When OpenAI streams tool calls after text, need to track whether text was emitted to assign correct part indices.
+
+### Anthropic plugin (llm-anthropic)
+- **Thinking tokens are streamed**: Unlike OpenAI/Gemini, Anthropic streams actual thinking text as `thinking_delta` events. This gives us real `ReasoningPart(text=...)` content, not redacted.
+- **Server-side tools have distinct types**: `server_tool_use` vs regular `tool_use` in content block types. `web_search_tool_result` is a separate block type with nested content.
+- **Web search results only in final message**: The `web_search_tool_result` blocks aren't streamed — they appear in the final message. We extract them post-stream.
+- **Schema streaming uses partial_json**: When a schema is set, Anthropic sends `partial_json` deltas instead of text deltas. Currently we treat these as text events (they build up JSON that gets parsed by the schema handler).
+
+### Gemini plugin (llm-gemini)
+- **Thinking tokens are opaque**: Like OpenAI, Gemini reports `thoughtsTokenCount` in usage but doesn't stream thinking text. Uses `_reasoning_token_count` pattern.
+- **Complete parts per chunk**: Gemini doesn't stream partial tool arguments — each chunk contains complete parts. This simplifies the tool call event emission.
+- **Code execution as server-side tool**: `executableCode` and `codeExecutionResult` parts become `tool_result` StreamEvents with `server_executed=True`.
+- **Thought signatures**: Gemini 3 models include `thoughtSignature` on tool call parts, required for round-tripping. Stored as attribute on ToolCall object.
+
+### StreamEvent additions
+- Added `server_executed` and `tool_name` fields to StreamEvent dataclass for plugins with server-side tool execution.
+
 ## Implementation stats
 
 - Phase 1 + 2: ~300 lines of new code in `llm/parts.py` and `llm/models.py`
-- 36 unit tests, all passing
-- 508 total tests (including existing), zero regressions
-- 6 live tests against gpt-5.4-mini, all passing
+- Phase 3: ~500 lines changed across 3 plugins (OpenAI, Anthropic, Gemini)
+- 41 unit tests in llm core, 513 total tests passing
+- llm-anthropic: 22 tests passing (4 new)
+- llm-gemini: 37 tests passing (3 new)
+- Live tested against gpt-5.4-mini, claude-haiku-4.5, gemini-3-flash-preview
