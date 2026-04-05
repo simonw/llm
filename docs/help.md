@@ -111,6 +111,10 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       cat image | llm 'describe image' -a -
       # With an explicit mimetype:
       cat image | llm 'describe image' --at - image/jpeg
+      # Attach image from clipboard:
+      llm 'Describe this image' --clipboard
+      # Attach text from clipboard (if no image present):
+      llm 'Summarize this' -C
 
   The -x/--extract option returns just the content of the first ``` fenced code
   block, if one is present. If none are present it returns the full response.
@@ -152,6 +156,7 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  -C, --clipboard                 Attach clipboard content (image or text)
   -h, --help                      Show this message and exit.
 ```
 
