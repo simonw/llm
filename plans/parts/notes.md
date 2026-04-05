@@ -68,3 +68,26 @@ After completion, both work fine: `__iter__` replays `_chunks`, `stream_events()
 - llm-anthropic: 22 tests passing (4 new)
 - llm-gemini: 37 tests passing (3 new)
 - Live tested against gpt-5.4-mini, claude-haiku-4.5, gemini-3-flash-preview
+
+## Phase 4 observations
+
+- `prompt=` is sugar for `TextPart(role="user", text=...)` in `input_parts`
+- `system=` becomes `TextPart(role="system", text=...)` in `input_parts`
+- `parts=` and `prompt=` combine (parts first, then system, then prompt, then attachments)
+- Existing model plugins still read `prompt.prompt` and `prompt.system` — they don't read `input_parts` yet. Plugin migration to read from `input_parts` is a future step.
+- `input_parts` is computed on-demand (property), not stored on the Prompt
+
+## Phase 5 observations
+
+- Parts table uses `direction` column ("input"/"output") to distinguish prompt vs response parts
+- Both input parts and output parts stored in the same table with a unique index on `(response_id, direction, order)`
+- `from_row()` only loads output parts into `_loaded_parts` — input parts are still reconstructed from the existing prompt/system/attachments columns
+- The `parts` property checks for `_loaded_parts` first (from DB), then falls back to `_build_parts()` (from stream events)
+- Old databases without the parts table still work — `log_to_db` checks for table existence before writing
+
+## Final stats
+
+- 524 total tests in llm core, all passing
+- 22 tests in llm-anthropic, all passing  
+- 37 tests in llm-gemini, all passing
+- 12 commits across all repos
