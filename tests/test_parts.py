@@ -1,5 +1,6 @@
 """Tests for Part types, StreamEvent, and Response integration."""
 import pytest
+import llm
 
 
 class TestExports:
@@ -277,3 +278,302 @@ class TestAsyncResponseStreamEvents:
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello world"
+
+
+# Phase 2: Response handles StreamEvent from plugins
+
+
+class StreamEventModel(llm.Model):
+    """A mock model that yields StreamEvents from execute()."""
+
+    model_id = "stream-event-mock"
+
+    def __init__(self):
+        self._queue = []
+
+    def enqueue(self, items):
+        """Enqueue items to yield. Can be str or StreamEvent."""
+        self._queue.append(items)
+
+    def execute(self, prompt, stream, response, conversation):
+        while self._queue:
+            items = self._queue.pop(0)
+            for item in items:
+                yield item
+
+
+class AsyncStreamEventModel(llm.AsyncModel):
+    """Async mock model that yields StreamEvents from execute()."""
+
+    model_id = "stream-event-mock"
+
+    def __init__(self):
+        self._queue = []
+
+    def enqueue(self, items):
+        self._queue.append(items)
+
+    async def execute(self, prompt, stream, response, conversation):
+        while self._queue:
+            items = self._queue.pop(0)
+            for item in items:
+                yield item
+
+
+class TestPhase2StreamEventHandling:
+    """Response.__iter__ handles str | StreamEvent from execute()."""
+
+    def test_plain_str_backward_compat(self):
+        """Plain str chunks still work as before."""
+        model = StreamEventModel()
+        model.enqueue(["Hello", " world"])
+        response = model.prompt("hi")
+        assert list(response) == ["Hello", " world"]
+        assert response.text() == "Hello world"
+
+    def test_stream_event_text_yields_str(self):
+        """StreamEvent(type='text') yields the chunk as str to iterators."""
+        from llm.parts import StreamEvent
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="text", chunk="Hello", part_index=0),
+            StreamEvent(type="text", chunk=" world", part_index=0),
+        ])
+        response = model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["Hello", " world"]
+        assert response.text() == "Hello world"
+
+    def test_mixed_str_and_stream_events(self):
+        """Mix of str and StreamEvent in same execute() works."""
+        from llm.parts import StreamEvent
+
+        model = StreamEventModel()
+        model.enqueue([
+            "plain ",
+            StreamEvent(type="text", chunk="event", part_index=0),
+        ])
+        response = model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["plain ", "event"]
+
+    def test_reasoning_events_not_in_iter(self):
+        """Reasoning StreamEvents are silently filtered from __iter__ but appear in stream_events()."""
+        from llm.parts import StreamEvent
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="Let me think...", part_index=0),
+            StreamEvent(type="text", chunk="The answer is 42", part_index=1),
+        ])
+        response = model.prompt("question")
+        # Regular iteration only yields text
+        chunks = list(response)
+        assert chunks == ["The answer is 42"]
+
+    def test_stream_events_yields_all_types(self):
+        """stream_events() yields ALL event types including reasoning."""
+        from llm.parts import StreamEvent
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        response = model.prompt("question")
+        events = list(response.stream_events())
+        assert len(events) == 2
+        assert events[0].type == "reasoning"
+        assert events[0].chunk == "thinking..."
+        assert events[1].type == "text"
+        assert events[1].chunk == "answer"
+
+    def test_parts_assembled_from_stream_events(self):
+        """response.parts assembles Part objects from StreamEvents."""
+        from llm.parts import StreamEvent, TextPart, ReasoningPart
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="Let me ", part_index=0),
+            StreamEvent(type="reasoning", chunk="think...", part_index=0),
+            StreamEvent(type="text", chunk="The ", part_index=1),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        response = model.prompt("question")
+        response.text()  # Force completion
+        parts = response.parts
+        assert len(parts) == 2
+        assert isinstance(parts[0], ReasoningPart)
+        assert parts[0].text == "Let me think..."
+        assert parts[0].role == "assistant"
+        assert isinstance(parts[1], TextPart)
+        assert parts[1].text == "The answer"
+        assert parts[1].role == "assistant"
+
+    def test_tool_call_parts_assembled(self):
+        """Tool call StreamEvents are assembled into ToolCallPart."""
+        from llm.parts import StreamEvent, TextPart, ToolCallPart
+        import json
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="text", chunk="Let me search", part_index=0),
+            StreamEvent(
+                type="tool_call_name",
+                chunk="search",
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(
+                type="tool_call_args",
+                chunk='{"query": ',
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(
+                type="tool_call_args",
+                chunk='"weather"}',
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+        ])
+        response = model.prompt("what's the weather?")
+        response.text()
+        parts = response.parts
+        assert len(parts) == 2
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "Let me search"
+        assert isinstance(parts[1], ToolCallPart)
+        assert parts[1].name == "search"
+        assert parts[1].arguments == {"query": "weather"}
+        assert parts[1].tool_call_id == "call_1"
+
+    def test_tool_result_part_assembled(self):
+        """Server-side tool result StreamEvents assembled into ToolResultPart."""
+        from llm.parts import StreamEvent, ToolCallPart, ToolResultPart
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(
+                type="tool_call_name",
+                chunk="code_exec",
+                part_index=0,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(
+                type="tool_call_args",
+                chunk='{"code": "1+1"}',
+                part_index=0,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(
+                type="tool_result",
+                chunk="2",
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(type="text", chunk="The answer is 2", part_index=2),
+        ])
+        response = model.prompt("compute")
+        response.text()
+        parts = response.parts
+        assert len(parts) == 3
+        assert isinstance(parts[0], ToolCallPart)
+        assert parts[0].server_executed is True
+        assert isinstance(parts[1], ToolResultPart)
+        assert parts[1].output == "2"
+        assert parts[1].server_executed is True
+        assert parts[1].tool_call_id == "call_1"
+
+    def test_tool_call_events_not_in_iter(self):
+        """Tool call StreamEvents are filtered from __iter__."""
+        from llm.parts import StreamEvent
+
+        model = StreamEventModel()
+        model.enqueue([
+            StreamEvent(type="text", chunk="searching...", part_index=0),
+            StreamEvent(
+                type="tool_call_name",
+                chunk="search",
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+            StreamEvent(
+                type="tool_call_args",
+                chunk='{"q": "test"}',
+                part_index=1,
+                tool_call_id="call_1",
+            ),
+        ])
+        response = model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["searching..."]
+
+
+@pytest.mark.asyncio
+class TestPhase2AsyncStreamEventHandling:
+    async def test_async_stream_event_text(self):
+        """Async: StreamEvent(type='text') yields str chunks."""
+        from llm.parts import StreamEvent
+
+        model = AsyncStreamEventModel()
+        model.enqueue([
+            StreamEvent(type="text", chunk="Hello", part_index=0),
+            StreamEvent(type="text", chunk=" world", part_index=0),
+        ])
+        response = model.prompt("hi")
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        assert chunks == ["Hello", " world"]
+
+    async def test_async_reasoning_filtered_from_iter(self):
+        """Async: reasoning events filtered from __aiter__."""
+        from llm.parts import StreamEvent
+
+        model = AsyncStreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        response = model.prompt("hi")
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        assert chunks == ["answer"]
+
+    async def test_async_astream_events_all_types(self):
+        """Async: astream_events() yields all event types."""
+        from llm.parts import StreamEvent
+
+        model = AsyncStreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+            StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        response = model.prompt("hi")
+        events = []
+        async for event in response.astream_events():
+            events.append(event)
+        assert len(events) == 2
+        assert events[0].type == "reasoning"
+        assert events[1].type == "text"
+
+    async def test_async_parts_from_stream_events(self):
+        """Async: parts assembled from StreamEvents."""
+        from llm.parts import StreamEvent, TextPart, ReasoningPart
+
+        model = AsyncStreamEventModel()
+        model.enqueue([
+            StreamEvent(type="reasoning", chunk="hmm", part_index=0),
+            StreamEvent(type="text", chunk="yes", part_index=1),
+        ])
+        response = model.prompt("hi")
+        await response.text()
+        parts = response.parts
+        assert len(parts) == 2
+        assert isinstance(parts[0], ReasoningPart)
+        assert parts[0].text == "hmm"
+        assert isinstance(parts[1], TextPart)
+        assert parts[1].text == "yes"

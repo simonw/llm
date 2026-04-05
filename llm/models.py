@@ -674,6 +674,8 @@ class _BaseResponse:
         self.stream = stream
         self._key = key
         self._chunks: List[str] = []
+        self._stream_events: List[Any] = []  # StreamEvent objects
+        self._has_stream_events = False  # True if any StreamEvents were yielded
         self._done = False
         self._tool_calls: List[ToolCall] = []
         self.response_json: Optional[Dict[str, Any]] = None
@@ -692,6 +694,126 @@ class _BaseResponse:
 
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
+
+    def _process_chunk(self, chunk):
+        """Process a chunk from execute(), handling str or StreamEvent.
+
+        Returns the text str to yield to __iter__ callers, or None if the
+        chunk should be filtered (e.g. reasoning, tool_call events).
+        """
+        from .parts import StreamEvent
+
+        if isinstance(chunk, StreamEvent):
+            self._has_stream_events = True
+            self._stream_events.append(chunk)
+            if chunk.type == "text":
+                self._chunks.append(chunk.chunk)
+                return chunk.chunk
+            return None
+        else:
+            # Plain str — backward compat
+            self._chunks.append(chunk)
+            return chunk
+
+    def _build_parts(self):
+        """Assemble Part objects from accumulated _stream_events."""
+        from .parts import (
+            TextPart,
+            ReasoningPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        if not self._has_stream_events:
+            # No StreamEvents were used — synthesize from plain text chunks
+            text = "".join(self._chunks)
+            if text:
+                return [TextPart(role="assistant", text=text)]
+            return []
+
+        parts = []
+        current_index = None
+        current_type = None
+        buffer = []
+
+        def finalize():
+            if current_type is None:
+                return
+            if current_type == "text":
+                text = "".join(buffer)
+                if text:
+                    parts.append(TextPart(role="assistant", text=text))
+            elif current_type == "reasoning":
+                text = "".join(buffer)
+                if text:
+                    parts.append(ReasoningPart(role="assistant", text=text))
+            elif current_type in ("tool_call_name", "tool_call_args"):
+                # Finalize tool call from accumulated name/args
+                name = tool_name_buf[0] if tool_name_buf else ""
+                args_str = "".join(tool_args_buf)
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {"_raw": args_str}
+                parts.append(
+                    ToolCallPart(
+                        role="assistant",
+                        name=name,
+                        arguments=arguments,
+                        tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
+                        server_executed=True,
+                    )
+                )
+            elif current_type == "tool_result":
+                output = "".join(buffer)
+                parts.append(
+                    ToolResultPart(
+                        role="tool",
+                        name="",
+                        output=output,
+                        tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
+                        server_executed=True,
+                    )
+                )
+
+        tool_name_buf = []
+        tool_args_buf = []
+        tool_call_id_buf = []
+
+        for event in self._stream_events:
+            if event.part_index != current_index:
+                finalize()
+                current_index = event.part_index
+                current_type = event.type
+                buffer = []
+                tool_name_buf = []
+                tool_args_buf = []
+                tool_call_id_buf = []
+
+            if event.type == "text":
+                current_type = "text"
+                buffer.append(event.chunk)
+            elif event.type == "reasoning":
+                current_type = "reasoning"
+                buffer.append(event.chunk)
+            elif event.type == "tool_call_name":
+                current_type = "tool_call_name"
+                tool_name_buf.append(event.chunk)
+                if event.tool_call_id:
+                    tool_call_id_buf = [event.tool_call_id]
+            elif event.type == "tool_call_args":
+                current_type = "tool_call_args"
+                tool_args_buf.append(event.chunk)
+                if event.tool_call_id and not tool_call_id_buf:
+                    tool_call_id_buf = [event.tool_call_id]
+            elif event.type == "tool_result":
+                current_type = "tool_result"
+                buffer.append(event.chunk)
+                if event.tool_call_id and not tool_call_id_buf:
+                    tool_call_id_buf = [event.tool_call_id]
+
+        finalize()
+        return parts
 
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(tool_call)
@@ -1185,28 +1307,28 @@ class Response(_BaseResponse):
             return
 
         if isinstance(self.model, Model):
-            for chunk in self.model.execute(
+            generator = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
+            )
         elif isinstance(self.model, KeyModel):
-            for chunk in self.model.execute(
+            generator = self.model.execute(
                 self.prompt,
                 stream=self.stream,
                 response=self,
                 conversation=self.conversation,
                 key=self.model.get_key(self._key),
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
+            )
         else:
             raise Exception("self.model must be a Model or KeyModel")
+
+        for chunk in generator:
+            assert chunk is not None
+            text = self._process_chunk(chunk)
+            if text is not None:
+                yield text
 
         if self.conversation:
             self.conversation.responses.append(self)
@@ -1216,28 +1338,63 @@ class Response(_BaseResponse):
 
     def stream_events(self):
         "Yield StreamEvents for this response."
-        from .parts import StreamEvent, TextPart
+        from .parts import StreamEvent
 
         if self._done:
-            # Already completed - synthesize events from parts
-            for part in self.parts:
-                if isinstance(part, TextPart):
-                    yield StreamEvent(type="text", chunk=part.text, part_index=0)
+            if self._has_stream_events:
+                yield from self._stream_events
+            else:
+                # Synthesize text events from plain chunks
+                text = "".join(self._chunks)
+                if text:
+                    yield StreamEvent(type="text", chunk=text, part_index=0)
             return
 
-        for chunk in self:
-            yield StreamEvent(type="text", chunk=chunk, part_index=0)
+        # Live streaming - process chunks and yield all events
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+
+        if isinstance(self.model, Model):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+            )
+        elif isinstance(self.model, KeyModel):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+                key=self.model.get_key(self._key),
+            )
+        else:
+            raise Exception("self.model must be a Model or KeyModel")
+
+        for chunk in generator:
+            assert chunk is not None
+            if isinstance(chunk, StreamEvent):
+                self._has_stream_events = True
+                self._stream_events.append(chunk)
+                if chunk.type == "text":
+                    self._chunks.append(chunk.chunk)
+                yield chunk
+            else:
+                self._chunks.append(chunk)
+                yield StreamEvent(type="text", chunk=chunk, part_index=0)
+
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+        self._on_done()
 
     @property
     def parts(self):
         "Return the list of Part objects for this response."
-        from .parts import TextPart
-
         self._force()
-        text = "".join(self._chunks)
-        if text:
-            return [TextPart(role="assistant", text=text)]
-        return []
+        return self._build_parts()
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -1441,12 +1598,7 @@ class AsyncResponse(_BaseResponse):
             self._iter_chunks = list(self._chunks)  # Make a copy for iteration
         return self
 
-    async def __anext__(self) -> str:
-        if self._done:
-            if hasattr(self, "_iter_chunks") and self._iter_chunks:
-                return self._iter_chunks.pop(0)
-            raise StopAsyncIteration
-
+    def _ensure_generator(self):
         if not hasattr(self, "_generator"):
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
@@ -1466,11 +1618,21 @@ class AsyncResponse(_BaseResponse):
             else:
                 raise ValueError("self.model must be an AsyncModel or AsyncKeyModel")
 
+    async def __anext__(self) -> str:
+        if self._done:
+            if hasattr(self, "_iter_chunks") and self._iter_chunks:
+                return self._iter_chunks.pop(0)
+            raise StopAsyncIteration
+
+        self._ensure_generator()
+
         try:
-            chunk = await self._generator.__anext__()
-            assert chunk is not None
-            self._chunks.append(chunk)
-            return chunk
+            while True:
+                chunk = await self._generator.__anext__()
+                assert chunk is not None
+                text = self._process_chunk(chunk)
+                if text is not None:
+                    return text
         except StopAsyncIteration:
             if self.conversation:
                 self.conversation.responses.append(self)
@@ -1533,28 +1695,51 @@ class AsyncResponse(_BaseResponse):
 
     async def astream_events(self):
         "Yield StreamEvents for this response (async)."
-        from .parts import StreamEvent, TextPart
+        from .parts import StreamEvent
 
         if self._done:
-            for part in self.parts:
-                if isinstance(part, TextPart):
-                    yield StreamEvent(type="text", chunk=part.text, part_index=0)
+            if self._has_stream_events:
+                for event in self._stream_events:
+                    yield event
+            else:
+                text = "".join(self._chunks)
+                if text:
+                    yield StreamEvent(type="text", chunk=text, part_index=0)
             return
 
-        async for chunk in self:
-            yield StreamEvent(type="text", chunk=chunk, part_index=0)
+        # Live streaming
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        self._ensure_generator()
+
+        try:
+            while True:
+                chunk = await self._generator.__anext__()
+                assert chunk is not None
+                if isinstance(chunk, StreamEvent):
+                    self._has_stream_events = True
+                    self._stream_events.append(chunk)
+                    if chunk.type == "text":
+                        self._chunks.append(chunk.chunk)
+                    yield chunk
+                else:
+                    self._chunks.append(chunk)
+                    yield StreamEvent(type="text", chunk=chunk, part_index=0)
+        except StopAsyncIteration:
+            if self.conversation:
+                self.conversation.responses.append(self)
+            self._end = time.monotonic()
+            self._done = True
+            if hasattr(self, "_generator"):
+                del self._generator
+            await self._on_done()
 
     @property
     def parts(self):
         "Return the list of Part objects for this response."
-        from .parts import TextPart
-
         if not self._done:
             raise ValueError("Response not yet awaited - use 'await response' first")
-        text = "".join(self._chunks)
-        if text:
-            return [TextPart(role="assistant", text=text)]
-        return []
+        return self._build_parts()
 
     def __await__(self):
         return self._force().__await__()
