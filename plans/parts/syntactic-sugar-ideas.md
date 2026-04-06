@@ -226,24 +226,61 @@ response = model.prompt(messages=[
 
 ---
 
+## 8. Short names in `llm.parts` module
+
+Drop `Part` from the class names since `llm.parts` already provides the namespace:
+
+```python
+from llm.parts import Text, Reasoning, ToolCall, ToolResult, Attachment
+
+response = model.prompt(parts=[
+    Text.system("You are a pirate."),
+    Text.user("What's in this image?"),
+    Attachment.user(llm.Attachment(path="map.jpg")),
+])
+```
+
+The module import provides the context — `from llm.parts import Text` reads as "text part" without needing it in the class name. Combined with the role classmethods from option 1, this is very concise.
+
+These could be aliases for the existing classes (keeping `TextPart` etc. for backward compat):
+
+```python
+# In llm/parts.py
+Text = TextPart
+Reasoning = ReasoningPart
+ToolCall = ToolCallPart
+ToolResult = ToolResultPart
+# Attachment would shadow llm.Attachment — needs care, maybe InputAttachment?
+```
+
+The `Attachment` name collision with `llm.Attachment` is the one wrinkle. Options:
+- `from llm.parts import Attachment as PartAttachment` — ugly
+- Name it `Media` or `FileAttachment` in `llm.parts`
+- Just use `AttachmentPart` for that one since it's less common
+- Accept the shadowing — `llm.parts.Attachment` is a part, `llm.Attachment` is the content object, they serve different roles
+
+**Pros:** Very clean, module name does the work, no redundancy.
+**Cons:** `ToolCall` collides with the existing `llm.ToolCall` dataclass (the one used by `response.add_tool_call()`). Same issue as Attachment — two different things with the same short name in different modules.
+
+---
+
 ## Recommendation
 
-Start with **option 1** (role-based classmethods) — it's the smallest change, fully backward compatible, and makes the common case meaningfully better:
+**Option 8 + option 1** is the sweet spot. Add role classmethods to the Part classes, and add short aliases in `llm.parts`:
 
 ```python
+from llm.parts import Text
+
 response = model.prompt(parts=[
-    TextPart.system("You are a pirate."),
-    TextPart.user("What's in this image?"),
+    Text.system("You are a pirate."),
+    Text.user("What's in this image?"),
 ])
 ```
 
-Then consider adding **option 2** (top-level shortcuts) as a second layer if the pattern proves popular:
+This is concise, self-documenting, zero magic, and plays well with IDE autocomplete. The long names (`TextPart`, `ReasoningPart`) stay as backward-compatible aliases.
 
-```python
-response = model.prompt(parts=[
-    llm.system("You are a pirate."),
-    llm.user("What's in this image?"),
-])
-```
+The name collision issue (`ToolCall`, `Attachment`) can be solved pragmatically — keep those two as `ToolCallPart` and `AttachmentPart` in the short-name scheme, or accept that `llm.parts.ToolCall` and `llm.ToolCall` are different things in different namespaces (which is actually fine — Python developers deal with this routinely).
 
-Avoid options 5-7 initially — they pull toward mimicking the OpenAI messages format, which is a different abstraction level. LLM's parts are meant to be provider-agnostic and richer than raw messages.
+Then consider **option 2** (top-level `llm.system()`, `llm.user()`) as a possible future convenience layer, but only if the pattern proves popular enough to justify adding to the top-level namespace.
+
+Avoid options 5-7 — they pull toward mimicking the OpenAI messages format, which is a different abstraction level. LLM's parts are meant to be provider-agnostic and richer than raw messages.
