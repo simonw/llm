@@ -526,6 +526,165 @@ If a response has been evaluated, `response.text()` will continue to return the 
    :exclude-members: fake, from_row, log_to_db
 ```
 
+(python-api-parts)=
+
+### Parts and stream events
+
+After a response completes, `response.parts` provides a structured list of everything the model produced — text, reasoning, tool calls, and tool results — as typed Python objects.
+
+```python
+response = model.prompt("Five names for a pet pelican")
+response.text()  # Force completion
+for part in response.parts:
+    print(type(part).__name__, part.to_dict())
+```
+Output:
+```python
+TextPart {'role': 'assistant', 'type': 'text', 'text': '1. Captain...'}
+```
+
+For models that support extended thinking (such as Claude with `thinking=True`), reasoning appears as a separate part:
+
+```python
+model = llm.get_model("claude-sonnet-4.5")
+response = model.prompt("Count the Rs in strawberry", thinking=True)
+response.text()
+for part in response.parts:
+    print(type(part).__name__, repr(part.text)[:80])
+```
+Output:
+```python
+ReasoningPart "Let me count the Rs in 'strawberry': s-t-r-a-w-b-e-r-r-y. I see..."
+TextPart 'There are 3 Rs in "strawberry".'
+```
+
+Some models (like OpenAI's GPT-5 series) use reasoning internally but don't expose the text. In that case you'll see a redacted reasoning part with a token count:
+
+```python
+model = llm.get_model("gpt-5.4-mini")
+response = model.prompt("What is 13 * 17?", reasoning_effort="high")
+response.text()
+for part in response.parts:
+    if hasattr(part, 'redacted') and part.redacted:
+        print(f"ReasoningPart (redacted, {part.token_count} tokens)")
+    else:
+        print(type(part).__name__, repr(part.text)[:60])
+```
+
+Tool calls and their results also appear as parts:
+
+```python
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"Sunny, 72°F in {city}"
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.prompt("Weather in Paris?", tools=[get_weather])
+response.text()
+for part in response.parts:
+    print(type(part).__name__, part.to_dict())
+```
+Output:
+```python
+ToolCallPart {'role': 'assistant', 'type': 'tool_call', 'name': 'get_weather', 'arguments': {'city': 'Paris'}, 'tool_call_id': 'call_...'}
+```
+
+The available part types are:
+
+- **`llm.TextPart`** — text content from the model
+- **`llm.ReasoningPart`** — reasoning/thinking tokens (may be `redacted=True` with only a `token_count`)
+- **`llm.ToolCallPart`** — a tool call request with `name`, `arguments`, `tool_call_id`
+- **`llm.ToolResultPart`** — a tool result with `output`, `tool_call_id`
+- **`llm.AttachmentPart`** — an inline attachment
+
+All part types have `to_dict()` for JSON serialization and can be restored with `llm.Part.from_dict(d)`.
+
+(python-api-stream-events)=
+
+#### Streaming events
+
+While iterating a response with `for chunk in response` gives you text strings, the `response.stream_events()` method provides a richer view of what the model is producing in real time — including reasoning tokens and tool calls as they stream:
+
+```python
+model = llm.get_model("claude-sonnet-4.5")
+response = model.prompt("Count the Rs in strawberry", thinking=True)
+for event in response.stream_events():
+    if event.type == "reasoning":
+        print(f"[thinking] {event.chunk}", end="", flush=True)
+    elif event.type == "text":
+        print(event.chunk, end="", flush=True)
+```
+
+Each `StreamEvent` has:
+
+- **`type`** — one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`
+- **`chunk`** — the text fragment
+- **`part_index`** — which part this contributes to (increments at boundaries)
+- **`tool_call_id`** — set for tool call and tool result events
+
+For async models, use `response.astream_events()`:
+
+```python
+async for event in response.astream_events():
+    if event.type == "text":
+        print(event.chunk, end="", flush=True)
+```
+
+Regular iteration (`for chunk in response`) continues to yield only text strings — reasoning and tool call events are filtered out. This ensures backward compatibility. Use `stream_events()` when you need the full picture.
+
+(python-api-parts-parameter)=
+
+#### Prompting with parts
+
+The `parts=` parameter on `model.prompt()` lets you construct prompts with explicit typed parts instead of just a text string. This is useful for building multi-message prompts or passing structured conversation history:
+
+```python
+import llm
+from llm.parts import TextPart
+
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt(parts=[
+    TextPart(role="system", text="You are a helpful pirate."),
+    TextPart(role="user", text="What's the weather like?"),
+])
+print(response.text())
+```
+
+You can combine `parts=` with `prompt=` — the prompt text is appended as a user-role `TextPart`:
+
+```python
+response = model.prompt(
+    "Now tell me about parrots",
+    parts=[TextPart(role="system", text="You are a helpful pirate.")],
+)
+```
+
+The `system=` and `attachments=` parameters also combine with `parts=`:
+
+```python
+from llm.parts import TextPart, AttachmentPart
+
+response = model.prompt(
+    "Describe this image in pirate speak",
+    parts=[TextPart(role="system", text="You are a pirate.")],
+    attachments=[llm.Attachment(path="treasure_map.jpg")],
+)
+```
+
+The `prompt.input_parts` property provides a unified view of all input parts, regardless of how they were specified:
+
+```python
+response = model.prompt("Hello", system="Be brief")
+response.text()
+for part in response.prompt.input_parts:
+    print(part.to_dict())
+```
+Output:
+```python
+{'role': 'system', 'type': 'text', 'text': 'Be brief'}
+{'role': 'user', 'type': 'text', 'text': 'Hello'}
+```
+
 (python-api-async)=
 
 ## Async models
