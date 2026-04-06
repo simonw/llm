@@ -78,6 +78,9 @@ Changelog = "https://github.com/simonw/llm/releases"
 [project.scripts]
 llm = "llm.cli:cli"
 
+[tool.setuptools.packages.find]
+include = ["llm", "llm.*"]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
