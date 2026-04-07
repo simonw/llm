@@ -1175,3 +1175,82 @@ class TestCLIReasoningDisplay:
         runner = CliRunner()
         result = runner.invoke(cli, ["prompt", "-R", "--help"])
         assert result.exit_code == 0
+
+
+# Phase 7: OpenAI build_messages supports parts=[]
+
+
+class TestBuildMessagesWithParts:
+    """Test that OpenAI build_messages correctly handles parts=[] parameter."""
+
+    def test_build_messages_uses_parts(self, mocked_openai_chat, user_path):
+        """When parts=[] is passed, build_messages should use them to construct messages."""
+        from llm.parts import TextPart
+
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        response = model.prompt(
+            parts=[
+                TextPart(role="system", text="You are a geography expert."),
+                TextPart(role="user", text="What is the capital of France?"),
+                TextPart(role="assistant", text="The capital of France is Paris."),
+                TextPart(role="user", text="What about Germany?"),
+            ]
+        )
+        response.text()
+        last_request = mocked_openai_chat.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "You are a geography expert."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."},
+            {"role": "user", "content": "What about Germany?"},
+        ]
+
+    def test_build_messages_parts_with_prompt(self, mocked_openai_chat, user_path):
+        """parts=[] combined with prompt= should append prompt as final user message."""
+        from llm.parts import TextPart
+
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        response = model.prompt(
+            "What about Germany?",
+            parts=[
+                TextPart(role="system", text="You are a geography expert."),
+                TextPart(role="user", text="What is the capital of France?"),
+                TextPart(role="assistant", text="The capital of France is Paris."),
+            ],
+        )
+        response.text()
+        last_request = mocked_openai_chat.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "You are a geography expert."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."},
+            {"role": "user", "content": "What about Germany?"},
+        ]
+
+    def test_build_messages_parts_with_system(self, mocked_openai_chat, user_path):
+        """parts=[] combined with system= should prepend system message."""
+        from llm.parts import TextPart
+
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        response = model.prompt(
+            parts=[
+                TextPart(role="user", text="What is the capital of France?"),
+                TextPart(role="assistant", text="The capital of France is Paris."),
+                TextPart(role="user", text="What about Germany?"),
+            ],
+            system="You are a geography expert.",
+        )
+        response.text()
+        last_request = mocked_openai_chat.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "You are a geography expert."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."},
+            {"role": "user", "content": "What about Germany?"},
+        ]

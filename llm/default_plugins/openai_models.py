@@ -632,6 +632,8 @@ class _Shared:
         return "OpenAI Chat: {}".format(self.model_id)
 
     def build_messages(self, prompt, conversation):
+        from llm.parts import TextPart, AttachmentPart
+
         messages = []
         current_system = None
         if conversation is not None:
@@ -686,26 +688,36 @@ class _Shared:
                             ],
                         }
                     )
-        if prompt.system and prompt.system != current_system:
-            messages.append({"role": "system", "content": prompt.system})
-        for tool_result in prompt.tool_results:
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.output,
-                }
-            )
-        if not prompt.attachments:
-            if prompt.prompt:
-                messages.append({"role": "user", "content": prompt.prompt or ""})
+        # Use input_parts if parts= was explicitly provided
+        if prompt._parts:
+            for part in prompt.input_parts:
+                if isinstance(part, TextPart):
+                    messages.append({"role": part.role, "content": part.text})
+                elif isinstance(part, AttachmentPart) and part.attachment:
+                    messages.append(
+                        {"role": part.role, "content": [_attachment(part.attachment)]}
+                    )
         else:
-            attachment_message = []
-            if prompt.prompt:
-                attachment_message.append({"type": "text", "text": prompt.prompt})
-            for attachment in prompt.attachments:
-                attachment_message.append(_attachment(attachment))
-            messages.append({"role": "user", "content": attachment_message})
+            if prompt.system and prompt.system != current_system:
+                messages.append({"role": "system", "content": prompt.system})
+            for tool_result in prompt.tool_results:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_result.tool_call_id,
+                        "content": tool_result.output,
+                    }
+                )
+            if not prompt.attachments:
+                if prompt.prompt:
+                    messages.append({"role": "user", "content": prompt.prompt or ""})
+            else:
+                attachment_message = []
+                if prompt.prompt:
+                    attachment_message.append({"type": "text", "text": prompt.prompt})
+                for attachment in prompt.attachments:
+                    attachment_message.append(_attachment(attachment))
+                messages.append({"role": "user", "content": attachment_message})
         return messages
 
     def set_usage(self, response, usage):
