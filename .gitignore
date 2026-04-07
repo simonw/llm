@@ -10,3 +10,4 @@ venv
 .idea/
 .vscode/
 uv.lock
+*.db
