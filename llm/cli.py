@@ -1955,7 +1955,7 @@ def logs_list(
                 {k: v for k, v in attachment.items() if k != "response_id"}
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
-        output = json.dumps(list(rows), indent=2)
+        output = json.dumps(list(rows), indent=2, ensure_ascii=False)
     elif extract or extract_last:
         # Extract and return first code block
         for row in rows:
@@ -2010,7 +2010,7 @@ def logs_list(
                 if row["tool_calls"]:
                     obj["tool_calls"] = [
                         "{}({})".format(
-                            tool_call["name"], json.dumps(tool_call["arguments"])
+                            tool_call["name"], json.dumps(tool_call["arguments"], ensure_ascii=False)
                         )
                         for tool_call in row["tool_calls"]
                     ]
@@ -2045,7 +2045,7 @@ def logs_list(
                     if row["token_details"]:
                         usage_details["details"] = json.loads(row["token_details"])
                     obj["usage"] = usage_details
-                click.echo(yaml.dump([obj], sort_keys=False).strip())
+                click.echo(yaml.dump([obj], sort_keys=False, allow_unicode=True).strip())
                 continue
             # Not short, output Markdown
             click.echo(
@@ -2096,7 +2096,7 @@ def logs_list(
             if row["schema_json"]:
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
-                        json.dumps(row["schema_json"], indent=2)
+                        json.dumps(row["schema_json"], indent=2, ensure_ascii=False)
                     )
                 )
             # Show tool calls and results
@@ -2108,7 +2108,7 @@ def logs_list(
                             tool["name"],
                             tool["hash"],
                             tool["description"],
-                            json.dumps(tool["input_schema"]["properties"]),
+                            json.dumps(tool["input_schema"]["properties"], ensure_ascii=False),
                         )
                     )
             if row["tool_results"]:
@@ -2170,7 +2170,7 @@ def logs_list(
             if row["schema_json"]:
                 try:
                     parsed = json.loads(response)
-                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
+                    response = "```json\n{}\n```".format(json.dumps(parsed, indent=2, ensure_ascii=False))
                 except ValueError:
                     pass
             click.echo("\n## Response\n")
@@ -2181,7 +2181,7 @@ def logs_list(
                         "- **{}**: `{}`<br>\n    Arguments: {}".format(
                             tool_call["name"],
                             tool_call["tool_call_id"],
-                            json.dumps(tool_call["arguments"]),
+                            json.dumps(tool_call["arguments"], ensure_ascii=False),
                         )
                     )
                 click.echo("")
@@ -2380,6 +2380,7 @@ def templates_show(name):
             dict((k, v) for k, v in template.model_dump().items() if v is not None),
             indent=4,
             default_flow_style=False,
+            allow_unicode=True,
         )
     )
 
@@ -2493,7 +2494,7 @@ def schemas_list(path, database, queries, full, json_, nl):
             click.echo(
                 "  schema: |\n{}".format(
                     textwrap.indent(
-                        json.dumps(json.loads(row["content"]), indent=2), "    "
+                        json.dumps(json.loads(row["content"]), indent=2, ensure_ascii=False), "    "
                     )
                 )
             )
@@ -2541,7 +2542,7 @@ def schemas_show(schema_id, path, database):
         row = db["schemas"].get(schema_id)
     except sqlite_utils.db.NotFoundError:
         raise click.ClickException("Invalid schema ID")
-    click.echo(json.dumps(json.loads(row["content"]), indent=2))
+    click.echo(json.dumps(json.loads(row["content"]), indent=2, ensure_ascii=False))
 
 
 @schemas.command(name="dsl")
@@ -2555,7 +2556,7 @@ def schemas_dsl_debug(input, multi):
         llm schema dsl 'name, age int, bio: their bio'
     """
     schema = schema_dsl(input, multi)
-    click.echo(json.dumps(schema, indent=2))
+    click.echo(json.dumps(schema, indent=2, ensure_ascii=False))
 
 
 @cli.group(
@@ -2641,6 +2642,7 @@ def tools_list(tool_defs, json_, python_tools):
             json.dumps(
                 {"tools": output_tools, "toolboxes": output_toolboxes},
                 indent=2,
+                ensure_ascii=False,
             )
         )
     else:
@@ -2697,7 +2699,7 @@ def aliases_list(json_):
             to_output.append((alias, embedding_model.model_id, "embedding"))
     if json_:
         click.echo(
-            json.dumps({key: value for key, value, type_ in to_output}, indent=4)
+            json.dumps({key: value for key, value, type_ in to_output}, indent=4, ensure_ascii=False)
         )
         return
     max_alias_length = max(len(a) for a, _, _ in to_output)
@@ -2849,7 +2851,7 @@ def fragments_list(queries, aliases, json_):
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
     if json_:
-        click.echo(json.dumps(results, indent=4))
+        click.echo(json.dumps(results, indent=4, ensure_ascii=False))
     else:
         yaml.add_representer(
             str,
@@ -2859,7 +2861,7 @@ def fragments_list(queries, aliases, json_):
         )
         for result in results:
             result["content"] = truncate_string(result["content"])
-            click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize).strip())
+            click.echo(yaml.dump([result], sort_keys=False, width=sys.maxsize, allow_unicode=True).strip())
 
 
 @fragments.command(name="set")
@@ -2962,7 +2964,7 @@ def plugins_list(all, hooks):
     hooks = set(hooks)
     if hooks:
         plugins = [plugin for plugin in plugins if hooks.intersection(plugin["hooks"])]
-    click.echo(json.dumps(plugins, indent=2))
+    click.echo(json.dumps(plugins, indent=2, ensure_ascii=False))
 
 
 def display_truncated(text):
@@ -3133,7 +3135,7 @@ def embed(
 
     if show_output:
         if format_ == "json" or format_ is None:
-            click.echo(json.dumps(embedding))
+            click.echo(json.dumps(embedding, ensure_ascii=False))
         elif format_ == "blob":
             click.echo(encode(embedding))
         elif format_ == "base64":
@@ -3443,10 +3445,10 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
             if result.content:
                 click.echo(textwrap.indent(result.content, "  "))
             if result.metadata:
-                click.echo(textwrap.indent(json.dumps(result.metadata), "  "))
+                click.echo(textwrap.indent(json.dumps(result.metadata, ensure_ascii=False), "  "))
             click.echo("")
         else:
-            click.echo(json.dumps(asdict(result)))
+            click.echo(json.dumps(asdict(result), ensure_ascii=False))
 
 
 @cli.group(
@@ -3546,7 +3548,7 @@ def embed_db_collections(database, json_):
         collections.name, collections.model
     """)
     if json_:
-        click.echo(json.dumps(list(rows), indent=4))
+        click.echo(json.dumps(list(rows), indent=4, ensure_ascii=False))
     else:
         for row in rows:
             click.echo("{}: {}".format(row["name"], row["model"]))
@@ -3973,7 +3975,7 @@ def _debug_tool_call(_, tool_call, tool_result):
             attachments += f"  {repr(attachment)}\n"
 
     try:
-        output = json.dumps(json.loads(tool_result.output), indent=2)
+        output = json.dumps(json.loads(tool_result.output), indent=2, ensure_ascii=False)
     except ValueError:
         output = tool_result.output
     output += attachments
