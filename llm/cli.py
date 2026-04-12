@@ -43,6 +43,7 @@ from llm import (
 )
 from llm.models import _BaseConversation, ChainResponse
 
+from .clipboard import ClipboardError, resolve_clipboard
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
@@ -476,6 +477,13 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "clipboard",
+    "--clipboard",
+    "-C",
+    is_flag=True,
+    help="Attach clipboard content (image or text)",
+)
 def prompt(
     prompt,
     system,
@@ -507,6 +515,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    clipboard,
 ):
     """
     Execute a prompt
@@ -528,6 +537,10 @@ def prompt(
         cat image | llm 'describe image' -a -
         # With an explicit mimetype:
         cat image | llm 'describe image' --at - image/jpeg
+        # Attach image from clipboard:
+        llm 'Describe this image' --clipboard
+        # Attach text from clipboard (if no image present):
+        llm 'Summarize this' -C
 
     The -x/--extract option returns just the content of the first ``` fenced code
     block, if one is present. If none are present it returns the full response.
@@ -788,6 +801,19 @@ def prompt(
 
     resolved_attachments = [*attachments, *attachment_types]
 
+    # Handle clipboard content
+    clipboard_text_to_prepend = None
+    if clipboard:
+        try:
+            clipboard_content = resolve_clipboard()
+            if isinstance(clipboard_content, Attachment):
+                resolved_attachments.append(clipboard_content)
+            else:
+                # It's text - will be prepended to the prompt
+                clipboard_text_to_prepend = clipboard_content
+        except ClipboardError as ex:
+            raise click.ClickException(str(ex))
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         kwargs["stream"] = False
@@ -796,6 +822,14 @@ def prompt(
         kwargs["key"] = key
 
     prompt = read_prompt()
+
+    # If clipboard contained text, prepend it to the prompt
+    if clipboard_text_to_prepend:
+        if prompt:
+            prompt = clipboard_text_to_prepend + "\n\n" + prompt
+        else:
+            prompt = clipboard_text_to_prepend
+
     response = None
 
     try:
@@ -1157,6 +1191,7 @@ def chat(
     click.echo(
         "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
     )
+    click.echo("Type '!clipboard' to attach clipboard contents (image or text)")
     in_multi = False
 
     accumulated = []
@@ -1188,6 +1223,26 @@ def chat(
             prompt = edited_prompt.strip()
         if prompt.strip().startswith("!fragment "):
             prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+        if prompt.strip() == "!clipboard":
+            try:
+                clipboard_content = resolve_clipboard()
+                if isinstance(clipboard_content, Attachment):
+                    attachments.append(clipboard_content)
+                    click.echo("Attached image from clipboard", err=True)
+                else:
+                    # It's text - prepend to the next prompt
+                    click.echo(
+                        "Clipboard contains text. Enter your prompt to include it:",
+                        err=True,
+                    )
+                    continue_prompt = click.prompt("", prompt_suffix="> ")
+                    if continue_prompt:
+                        prompt = clipboard_content + "\n\n" + continue_prompt
+                    else:
+                        prompt = clipboard_content
+            except ClipboardError as ex:
+                click.echo(f"Clipboard error: {ex}", err=True)
+                continue
 
         if in_multi:
             if prompt.strip() == end_token:
