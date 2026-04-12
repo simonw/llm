@@ -182,7 +182,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
         },
         headers={"Content-Type": "application/json"},
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
     if usage:
         args.append(usage)
@@ -190,7 +190,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
         args.append("--async")
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
-    assert result.output == "Ho ho ho\n"
+    assert result.stdout == "Ho ho ho\n"
     if usage:
         assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
     # Confirm it was correctly logged
