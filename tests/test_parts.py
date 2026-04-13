@@ -2008,3 +2008,35 @@ class TestResponseMessages:
         r = mock_model.prompt("hi")
         r.text()
         assert r.messages == []
+
+
+class TestConversationHistoryViaMessages:
+    """OpenAI build_messages reconstructs history via prev_response.messages."""
+
+    def test_two_turn_history(self, httpx_mock, user_path):
+        for text in ["Paris.", "Berlin."]:
+            httpx_mock.add_response(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "usage": {},
+                    "choices": [{"message": {"content": text}}],
+                },
+                headers={"Content-Type": "application/json"},
+            )
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        conv = model.conversation()
+        r1 = conv.prompt("Capital of France?", system="Be brief.", stream=False)
+        r1.text()
+        r2 = conv.prompt("And Germany?", stream=False)
+        r2.text()
+        last_request = httpx_mock.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "Be brief."},
+            {"role": "user", "content": "Capital of France?"},
+            {"role": "assistant", "content": "Paris."},
+            {"role": "user", "content": "And Germany?"},
+        ]

@@ -700,39 +700,22 @@ class _Shared:
         messages.append(msg)
 
     def build_messages(self, prompt, conversation):
-        messages = []
-        current_system = None
+        messages: List[Dict[str, Any]] = []
+        current_system: Optional[str] = None
         if conversation is not None:
             for prev_response in conversation.responses:
-                if (
-                    prev_response.prompt.system
-                    and prev_response.prompt.system != current_system
-                ):
-                    messages.append(
-                        {"role": "system", "content": prev_response.prompt.system}
-                    )
-                    current_system = prev_response.prompt.system
-                if prev_response.attachments:
-                    attachment_message = []
-                    if prev_response.prompt.prompt:
-                        attachment_message.append(
-                            {"type": "text", "text": prev_response.prompt.prompt}
-                        )
-                    for attachment in prev_response.attachments:
-                        attachment_message.append(_attachment(attachment))
-                    messages.append({"role": "user", "content": attachment_message})
-                elif prev_response.prompt.prompt:
-                    messages.append(
-                        {"role": "user", "content": prev_response.prompt.prompt}
-                    )
-                for tool_result in prev_response.prompt.tool_results:
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_result.tool_call_id,
-                            "content": tool_result.output,
-                        }
-                    )
+                # Input side: emit each Message on prev_response.prompt.messages
+                for message in prev_response.prompt.messages:
+                    if message.role == "system" and message.parts:
+                        text = getattr(message.parts[0], "text", None)
+                        if text == current_system:
+                            continue
+                        current_system = text
+                    self._append_message_from_message(messages, message)
+                # Output side: use the flat text+tool_calls accumulators that
+                # the plugin populates during streaming. This avoids calling
+                # _build_parts, which can be strict about provider stream
+                # shapes that mix text and tool_calls at the same index.
                 prev_text = prev_response.text_or_raise()
                 if prev_text:
                     messages.append({"role": "assistant", "content": prev_text})
@@ -754,16 +737,14 @@ class _Shared:
                             ],
                         }
                     )
-        # Single code path: consume prompt.messages (auto-synthesized from
+
+        # Current prompt: consume prompt.messages (auto-synthesized from
         # legacy inputs when messages= was not explicitly passed).
         for message in prompt.messages:
-            # Skip re-emitting a system message we've already emitted from
-            # conversation history.
             if (
                 message.role == "system"
                 and message.parts
                 and current_system
-                and len(message.parts) == 1
                 and getattr(message.parts[0], "text", None) == current_system
             ):
                 continue
