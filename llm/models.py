@@ -356,6 +356,7 @@ class Prompt:
     tool_results: List[ToolResult]
     options: "Options"
     _parts: Optional[List[Any]]  # List of Part objects
+    messages: List[Any]  # List of Message objects
 
     def __init__(
         self,
@@ -372,6 +373,7 @@ class Prompt:
         tools=None,
         tool_results=None,
         parts=None,
+        messages=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -387,6 +389,7 @@ class Prompt:
         self.tool_results = tool_results or []
         self.options = options or {}
         self._parts = parts
+        self.messages = list(messages) if messages else []
 
     @property
     def prompt(self):
@@ -473,6 +476,7 @@ class Conversation(_BaseConversation):
         prompt: Optional[str] = None,
         *,
         parts: Optional[List[Any]] = None,
+        messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -488,6 +492,7 @@ class Conversation(_BaseConversation):
             Prompt(
                 prompt,
                 parts=parts,
+                messages=messages,
                 model=self.model,
                 fragments=fragments,
                 attachments=attachments,
@@ -612,6 +617,7 @@ class AsyncConversation(_BaseConversation):
         prompt: Optional[str] = None,
         *,
         parts: Optional[List[Any]] = None,
+        messages: Optional[List[Any]] = None,
         fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -627,6 +633,7 @@ class AsyncConversation(_BaseConversation):
             Prompt(
                 prompt,
                 parts=parts,
+                messages=messages,
                 model=self.model,
                 fragments=fragments,
                 attachments=attachments,
@@ -2375,6 +2382,7 @@ class _Model(_BaseModel):
         prompt: Optional[str] = None,
         *,
         parts: Optional[List[Any]] = None,
+        messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -2391,6 +2399,7 @@ class _Model(_BaseModel):
             Prompt(
                 prompt,
                 parts=parts,
+                messages=messages,
                 fragments=fragments,
                 attachments=attachments,
                 system=system,
@@ -2486,6 +2495,7 @@ class _AsyncModel(_BaseModel):
         prompt: Optional[str] = None,
         *,
         parts: Optional[List[Any]] = None,
+        messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
@@ -2502,6 +2512,7 @@ class _AsyncModel(_BaseModel):
             Prompt(
                 prompt,
                 parts=parts,
+                messages=messages,
                 fragments=fragments,
                 attachments=attachments,
                 system=system,

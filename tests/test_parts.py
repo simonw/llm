@@ -1843,3 +1843,44 @@ class TestRoleHelpers:
 
         for name in ("user", "assistant", "system", "tool_message", "Message"):
             assert hasattr(llm, name), f"llm.{name} missing"
+
+
+class TestMessagesParameter:
+    """model.prompt(messages=[...]) is accepted and reaches the provider."""
+
+    def test_messages_simple_text(self, mocked_openai_chat, user_path):
+        from llm import user, assistant, system as system_helper
+
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        response = model.prompt(
+            messages=[
+                system_helper("Answer briefly."),
+                user("What is the capital of France?"),
+                assistant("Paris."),
+                user("And Germany?"),
+            ]
+        )
+        response.text()
+        last_request = mocked_openai_chat.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "Answer briefly."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "Paris."},
+            {"role": "user", "content": "And Germany?"},
+        ]
+
+    def test_messages_attribute_is_preserved_on_prompt(self):
+        from llm import user, Message
+
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt(None, model, messages=[user("hi")])
+        assert len(prompt.messages) == 1
+        assert isinstance(prompt.messages[0], Message)
+        assert prompt.messages[0].role == "user"
+
+    def test_prompt_without_messages_has_empty_messages(self):
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt("hi", model)
+        assert prompt.messages == []

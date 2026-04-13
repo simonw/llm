@@ -26,7 +26,17 @@ import os
 
 from pydantic import field_validator, Field
 
-from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    cast,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Union,
+)
 import json
 import yaml
 
@@ -631,6 +641,64 @@ class _Shared:
     def __str__(self) -> str:
         return "OpenAI Chat: {}".format(self.model_id)
 
+    def _append_message_from_message(self, messages, message):
+        """Translate one llm.Message into one (or more) OpenAI message dict(s)."""
+        from llm.parts import TextPart, AttachmentPart, ToolCallPart, ToolResultPart
+
+        role = message.role
+        text_bits: List[str] = []
+        attachment_items: List[dict] = []
+        tool_calls: List[dict] = []
+        tool_result_messages: List[dict] = []
+
+        for part in message.parts:
+            if isinstance(part, TextPart):
+                text_bits.append(part.text)
+            elif isinstance(part, AttachmentPart) and part.attachment:
+                attachment_items.append(_attachment(part.attachment))
+            elif isinstance(part, ToolCallPart):
+                tool_calls.append(
+                    {
+                        "type": "function",
+                        "id": part.tool_call_id,
+                        "function": {
+                            "name": part.name,
+                            "arguments": json.dumps(part.arguments),
+                        },
+                    }
+                )
+            elif isinstance(part, ToolResultPart):
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.tool_call_id,
+                        "content": part.output,
+                    }
+                )
+
+        # Tool role: emit one OpenAI "tool" message per ToolResultPart.
+        if role == "tool":
+            messages.extend(tool_result_messages)
+            return
+
+        if attachment_items:
+            content: Any = []
+            if text_bits:
+                content.append({"type": "text", "text": "".join(text_bits)})
+            content.extend(attachment_items)
+            msg: Dict[str, Any] = {"role": role, "content": content}
+        else:
+            msg = {
+                "role": role,
+                "content": "".join(text_bits) if text_bits else None,
+            }
+        if tool_calls:
+            msg["tool_calls"] = tool_calls
+            # OpenAI expects null content when only tool_calls are present
+            if not text_bits:
+                msg["content"] = None
+        messages.append(msg)
+
     def build_messages(self, prompt, conversation):
         from llm.parts import TextPart, AttachmentPart, ToolCallPart, ToolResultPart
 
@@ -688,8 +756,11 @@ class _Shared:
                             ],
                         }
                     )
-        # Use input_parts if parts= was explicitly provided
-        if prompt._parts:
+        # Use messages= if explicitly provided
+        if prompt.messages:
+            for message in prompt.messages:
+                self._append_message_from_message(messages, message)
+        elif prompt._parts:
             for part in prompt.parts:
                 if isinstance(part, TextPart):
                     messages.append({"role": part.role, "content": part.text})
