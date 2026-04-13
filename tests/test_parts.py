@@ -31,15 +31,13 @@ class TestPartTypes:
     def test_text_part_creation(self):
         from llm.parts import TextPart
 
-        part = TextPart(role="assistant", text="Hello world")
-        assert part.role == "assistant"
+        part = TextPart(text="Hello world")
         assert part.text == "Hello world"
 
     def test_reasoning_part_creation(self):
         from llm.parts import ReasoningPart
 
-        part = ReasoningPart(role="assistant", text="Let me think...")
-        assert part.role == "assistant"
+        part = ReasoningPart(text="Let me think...")
         assert part.text == "Let me think..."
         assert part.redacted is False
         assert part.token_count is None
@@ -47,7 +45,7 @@ class TestPartTypes:
     def test_reasoning_part_redacted(self):
         from llm.parts import ReasoningPart
 
-        part = ReasoningPart(role="assistant", text="", redacted=True, token_count=150)
+        part = ReasoningPart(text="", redacted=True, token_count=150)
         assert part.redacted is True
         assert part.token_count == 150
 
@@ -55,12 +53,10 @@ class TestPartTypes:
         from llm.parts import ToolCallPart
 
         part = ToolCallPart(
-            role="assistant",
             name="search",
             arguments={"query": "weather"},
             tool_call_id="call_123",
         )
-        assert part.role == "assistant"
         assert part.name == "search"
         assert part.arguments == {"query": "weather"}
         assert part.tool_call_id == "call_123"
@@ -70,12 +66,10 @@ class TestPartTypes:
         from llm.parts import ToolResultPart
 
         part = ToolResultPart(
-            role="tool",
             name="search",
             output="Sunny, 72F",
             tool_call_id="call_123",
         )
-        assert part.role == "tool"
         assert part.name == "search"
         assert part.output == "Sunny, 72F"
         assert part.tool_call_id == "call_123"
@@ -88,8 +82,7 @@ class TestPartTypes:
         from llm import Attachment
 
         att = Attachment(type="image/png", content=b"fake png")
-        part = AttachmentPart(role="user", attachment=att)
-        assert part.role == "user"
+        part = AttachmentPart(attachment=att)
         assert part.attachment is att
 
 
@@ -97,20 +90,19 @@ class TestPartSerialization:
     def test_text_part_roundtrip(self):
         from llm.parts import TextPart, Part
 
-        part = TextPart(role="user", text="Hello")
+        part = TextPart(text="Hello")
         d = part.to_dict()
-        assert d == {"role": "user", "type": "text", "text": "Hello"}
+        assert d == {"type": "text", "text": "Hello"}
         restored = Part.from_dict(d)
         assert isinstance(restored, TextPart)
-        assert restored.role == "user"
         assert restored.text == "Hello"
 
     def test_reasoning_part_roundtrip(self):
         from llm.parts import ReasoningPart, Part
 
-        part = ReasoningPart(role="assistant", text="thinking...")
+        part = ReasoningPart(text="thinking...")
         d = part.to_dict()
-        assert d == {"role": "assistant", "type": "reasoning", "text": "thinking..."}
+        assert d == {"type": "reasoning", "text": "thinking..."}
         restored = Part.from_dict(d)
         assert isinstance(restored, ReasoningPart)
         assert restored.text == "thinking..."
@@ -119,7 +111,7 @@ class TestPartSerialization:
     def test_reasoning_part_redacted_roundtrip(self):
         from llm.parts import ReasoningPart, Part
 
-        part = ReasoningPart(role="assistant", text="", redacted=True, token_count=42)
+        part = ReasoningPart(text="", redacted=True, token_count=42)
         d = part.to_dict()
         assert d["redacted"] is True
         assert d["token_count"] == 42
@@ -132,7 +124,6 @@ class TestPartSerialization:
         from llm.parts import ToolCallPart, Part
 
         part = ToolCallPart(
-            role="assistant",
             name="search",
             arguments={"q": "test"},
             tool_call_id="call_1",
@@ -153,7 +144,6 @@ class TestPartSerialization:
         from llm.parts import ToolResultPart, Part
 
         part = ToolResultPart(
-            role="tool",
             name="search",
             output="result",
             tool_call_id="call_1",
@@ -170,7 +160,7 @@ class TestPartSerialization:
         from llm.parts import Part
 
         with pytest.raises(ValueError, match="Unknown part type"):
-            Part.from_dict({"role": "user", "type": "unknown_thing"})
+            Part.from_dict({"type": "unknown_thing"})
 
 
 class TestStreamEvent:
@@ -232,7 +222,6 @@ class TestResponseStreamEvents:
         parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
-        assert parts[0].role == "assistant"
         assert parts[0].text == "Hello world"
 
     def test_parts_not_done_forces(self, mock_model):
@@ -425,10 +414,8 @@ class TestPhase2StreamEventHandling:
         assert len(parts) == 2
         assert isinstance(parts[0], ReasoningPart)
         assert parts[0].text == "Let me think..."
-        assert parts[0].role == "assistant"
         assert isinstance(parts[1], TextPart)
         assert parts[1].text == "The answer"
-        assert parts[1].role == "assistant"
 
     def test_tool_call_parts_assembled(self):
         """Tool call StreamEvents are assembled into ToolCallPart."""
@@ -1144,7 +1131,7 @@ class TestPhaseBFixes:
         from llm.parts import AttachmentPart, Part
 
         att = llm.Attachment(type="image/png", content=b"hello-bytes")
-        d = AttachmentPart(role="user", attachment=att).to_dict()
+        d = AttachmentPart(attachment=att).to_dict()
         assert d["type"] == "attachment"
         restored = Part.from_dict(d)
         assert isinstance(restored, AttachmentPart)
@@ -1155,7 +1142,7 @@ class TestPhaseBFixes:
         from llm.parts import AttachmentPart, Part
 
         att = llm.Attachment(type="image/png", url="https://example.com/x.png")
-        restored = Part.from_dict(AttachmentPart(role="user", attachment=att).to_dict())
+        restored = Part.from_dict(AttachmentPart(attachment=att).to_dict())
         assert restored.attachment.url == "https://example.com/x.png"
         assert restored.attachment.type == "image/png"
 
@@ -1164,7 +1151,6 @@ class TestPhaseBFixes:
 
         att = llm.Attachment(type="text/plain", content=b"xx")
         tr = ToolResultPart(
-            role="tool",
             name="f",
             output="out",
             tool_call_id="c1",
@@ -1234,7 +1220,6 @@ class TestPhaseBFixes:
                 user("search please"),
                 assistant(
                     ToolCallPart(
-                        role="assistant",
                         name="search",
                         arguments={"q": "x"},
                         tool_call_id="c1",
@@ -1242,7 +1227,6 @@ class TestPhaseBFixes:
                 ),
                 tool_message(
                     ToolResultPart(
-                        role="tool",
                         tool_call_id="c1",
                         name="search",
                         output="result",
@@ -1282,7 +1266,6 @@ class TestProviderMetadata:
         from llm.parts import TextPart, Part
 
         p = TextPart(
-            role="assistant",
             text="hi",
             provider_metadata={"anthropic": {"citations": [{"encrypted_index": "z"}]}},
         )
@@ -1298,7 +1281,6 @@ class TestProviderMetadata:
         from llm.parts import ReasoningPart, Part
 
         p = ReasoningPart(
-            role="assistant",
             text="thinking",
             provider_metadata={"anthropic": {"signature": "sig-bytes"}},
         )
@@ -1309,7 +1291,6 @@ class TestProviderMetadata:
         from llm.parts import ToolCallPart, Part
 
         p = ToolCallPart(
-            role="assistant",
             name="search",
             arguments={"q": "x"},
             tool_call_id="c1",
@@ -1322,7 +1303,6 @@ class TestProviderMetadata:
         from llm.parts import ToolResultPart, Part
 
         p = ToolResultPart(
-            role="tool",
             name="web_search",
             output="ok",
             tool_call_id="c1",
@@ -1343,7 +1323,7 @@ class TestProviderMetadata:
     def test_provider_metadata_omitted_when_none(self):
         from llm.parts import TextPart
 
-        assert "provider_metadata" not in TextPart(role="user", text="hi").to_dict()
+        assert "provider_metadata" not in TextPart(text="hi").to_dict()
 
     def test_stream_event_provider_metadata_flows_to_part(self):
         from llm.parts import StreamEvent, ReasoningPart
@@ -1487,14 +1467,12 @@ class TestProviderMetadataDatabase:
             messages=[
                 user(
                     TextPart(
-                        role="user",
                         text="hi",
                         provider_metadata={"anthropic": {"x": 1}},
                     )
                 ),
                 assistant(
                     ToolCallPart(
-                        role="assistant",
                         name="f",
                         arguments={},
                         tool_call_id="c1",
@@ -1529,7 +1507,7 @@ class TestMessageClass:
         from llm import Message
         from llm.parts import TextPart
 
-        m = Message(role="user", parts=[TextPart(role="user", text="hi")])
+        m = Message(role="user", parts=[TextPart(text="hi")])
         assert m.role == "user"
         assert len(m.parts) == 1
         assert m.provider_metadata is None
@@ -1541,9 +1519,8 @@ class TestMessageClass:
         m = Message(
             role="assistant",
             parts=[
-                TextPart(role="assistant", text="I'll check."),
+                TextPart(text="I'll check."),
                 ToolCallPart(
-                    role="assistant",
                     name="search",
                     arguments={"q": "x"},
                     tool_call_id="c1",
@@ -1558,7 +1535,6 @@ class TestMessageClass:
         assert d["provider_metadata"] == {"anthropic": {"message_id": "m1"}}
 
         restored = Message.from_dict(d)
-        assert restored.role == "assistant"
         assert len(restored.parts) == 2
         assert isinstance(restored.parts[0], TextPart)
         assert restored.parts[0].text == "I'll check."
@@ -1577,17 +1553,16 @@ class TestNormalizeParts:
     def test_string_becomes_text_part(self):
         from llm.parts import normalize_parts, TextPart
 
-        parts = normalize_parts(["hello"], role="user")
+        parts = normalize_parts(["hello"])
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "hello"
-        assert parts[0].role == "user"
 
     def test_attachment_becomes_attachment_part(self):
         from llm.parts import normalize_parts, AttachmentPart
 
         att = llm.Attachment(type="image/png", content=b"x")
-        parts = normalize_parts([att], role="user")
+        parts = normalize_parts([att])
         assert len(parts) == 1
         assert isinstance(parts[0], AttachmentPart)
         assert parts[0].attachment is att
@@ -1595,28 +1570,28 @@ class TestNormalizeParts:
     def test_existing_part_passes_through(self):
         from llm.parts import normalize_parts, TextPart
 
-        p = TextPart(role="user", text="x")
-        assert normalize_parts([p], role="user") == [p]
+        p = TextPart(text="x")
+        assert normalize_parts([p]) == [p]
 
     def test_list_is_flattened_one_level(self):
         from llm.parts import normalize_parts, TextPart
 
-        inner = [TextPart(role="user", text="a"), TextPart(role="user", text="b")]
-        parts = normalize_parts(["prefix", inner, "suffix"], role="user")
+        inner = [TextPart(text="a"), TextPart(text="b")]
+        parts = normalize_parts(["prefix", inner, "suffix"])
         assert [p.text for p in parts] == ["prefix", "a", "b", "suffix"]
 
     def test_tuple_is_flattened_one_level(self):
         from llm.parts import normalize_parts, TextPart
 
-        inner = (TextPart(role="user", text="a"),)
-        parts = normalize_parts([inner], role="user")
+        inner = (TextPart(text="a"),)
+        parts = normalize_parts([inner])
         assert [p.text for p in parts] == ["a"]
 
     def test_invalid_raises_type_error(self):
         from llm.parts import normalize_parts
 
         with pytest.raises(TypeError, match="Cannot convert"):
-            normalize_parts([123], role="user")
+            normalize_parts([123])
 
 
 class TestRoleHelpers:
@@ -1636,7 +1611,6 @@ class TestRoleHelpers:
         from llm.parts import TextPart, ToolCallPart
 
         tc = ToolCallPart(
-            role="assistant",
             name="get_weather",
             arguments={"location": "Paris"},
             tool_call_id="c1",
@@ -1653,13 +1627,11 @@ class TestRoleHelpers:
 
         calls = [
             ToolCallPart(
-                role="assistant",
                 name="get_weather",
                 arguments={"location": "Paris"},
                 tool_call_id="c1",
             ),
             ToolCallPart(
-                role="assistant",
                 name="get_weather",
                 arguments={"location": "Tokyo"},
                 tool_call_id="c2",
@@ -1683,7 +1655,6 @@ class TestRoleHelpers:
         from llm.parts import ToolResultPart
 
         tr = ToolResultPart(
-            role="tool",
             name="search",
             output="ok",
             tool_call_id="c1",

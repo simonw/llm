@@ -40,9 +40,7 @@ def _attachment_from_dict(d: Dict[str, Any]) -> Attachment:
 
 @dataclass
 class Part:
-    """Base class for all parts."""
-
-    role: str  # "user", "assistant", "system", "tool"
+    """Base class for all parts. Role lives on the enclosing Message."""
 
     def to_dict(self) -> Dict[str, Any]:
         raise NotImplementedError
@@ -52,10 +50,9 @@ class Part:
         type_ = d.get("type")
         pm = d.get("provider_metadata")
         if type_ == "text":
-            return TextPart(role=d["role"], text=d["text"], provider_metadata=pm)
+            return TextPart(text=d["text"], provider_metadata=pm)
         elif type_ == "reasoning":
             return ReasoningPart(
-                role=d["role"],
                 text=d.get("text", ""),
                 redacted=d.get("redacted", False),
                 token_count=d.get("token_count"),
@@ -63,7 +60,6 @@ class Part:
             )
         elif type_ == "tool_call":
             return ToolCallPart(
-                role=d["role"],
                 name=d["name"],
                 arguments=d["arguments"],
                 tool_call_id=d.get("tool_call_id"),
@@ -72,7 +68,6 @@ class Part:
             )
         elif type_ == "tool_result":
             return ToolResultPart(
-                role=d["role"],
                 name=d["name"],
                 output=d["output"],
                 tool_call_id=d.get("tool_call_id"),
@@ -86,7 +81,7 @@ class Part:
         elif type_ == "attachment":
             att_dict = d.get("attachment")
             attachment = _attachment_from_dict(att_dict) if att_dict else None
-            return AttachmentPart(role=d["role"], attachment=attachment)
+            return AttachmentPart(attachment=attachment)
         else:
             raise ValueError(f"Unknown part type: {type_!r}")
 
@@ -97,7 +92,7 @@ class TextPart(Part):
     provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"role": self.role, "type": "text", "text": self.text}
+        d: Dict[str, Any] = {"type": "text", "text": self.text}
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
         return d
@@ -113,11 +108,7 @@ class ReasoningPart(Part):
     provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
-            "role": self.role,
-            "type": "reasoning",
-            "text": self.text,
-        }
+        d: Dict[str, Any] = {"type": "reasoning", "text": self.text}
         if self.redacted:
             d["redacted"] = True
         if self.token_count is not None:
@@ -139,7 +130,6 @@ class ToolCallPart(Part):
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
-            "role": self.role,
             "type": "tool_call",
             "name": self.name,
             "arguments": self.arguments,
@@ -167,7 +157,6 @@ class ToolResultPart(Part):
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
-            "role": self.role,
             "type": "tool_result",
             "name": self.name,
             "output": self.output,
@@ -192,7 +181,7 @@ class AttachmentPart(Part):
     attachment: Optional[Attachment] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"role": self.role, "type": "attachment"}
+        d: Dict[str, Any] = {"type": "attachment"}
         if self.attachment:
             d["attachment"] = _attachment_to_dict(self.attachment)
         return d
@@ -231,23 +220,22 @@ class Message:
         )
 
 
-def normalize_parts(items: Any, role: str = "assistant") -> List[Part]:
+def normalize_parts(items: Any) -> List[Part]:
     """Normalize helper inputs to a list of Part objects.
 
     Accepts str, Attachment, Part, or a list/tuple of those (flattened one
-    level). `role` is applied to newly constructed Parts; pre-existing Part
-    objects keep whatever role they were created with.
+    level).
     """
     out: List[Part] = []
     for item in items:
         if isinstance(item, Part):
             out.append(item)
         elif isinstance(item, str):
-            out.append(TextPart(role=role, text=item))
+            out.append(TextPart(text=item))
         elif isinstance(item, Attachment):
-            out.append(AttachmentPart(role=role, attachment=item))
+            out.append(AttachmentPart(attachment=item))
         elif isinstance(item, (list, tuple)):
-            out.extend(normalize_parts(item, role=role))
+            out.extend(normalize_parts(item))
         else:
             raise TypeError(f"Cannot convert {item!r} to an llm Part")
     return out
@@ -257,7 +245,7 @@ def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> M
     "Build a Message with role='system'."
     return Message(
         role="system",
-        parts=normalize_parts(items, role="system"),
+        parts=normalize_parts(items),
         provider_metadata=provider_metadata,
     )
 
@@ -266,7 +254,7 @@ def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Mes
     "Build a Message with role='user'."
     return Message(
         role="user",
-        parts=normalize_parts(items, role="user"),
+        parts=normalize_parts(items),
         provider_metadata=provider_metadata,
     )
 
@@ -277,7 +265,7 @@ def assistant(
     "Build a Message with role='assistant'."
     return Message(
         role="assistant",
-        parts=normalize_parts(items, role="assistant"),
+        parts=normalize_parts(items),
         provider_metadata=provider_metadata,
     )
 
@@ -288,7 +276,7 @@ def tool_message(
     "Build a Message with role='tool' (typically wrapping ToolResultParts)."
     return Message(
         role="tool",
-        parts=normalize_parts(items, role="tool"),
+        parts=normalize_parts(items),
         provider_metadata=provider_metadata,
     )
 

@@ -427,7 +427,7 @@ class Prompt:
             result.append(
                 Message(
                     role="system",
-                    parts=[TextPart(role="system", text=self.system)],
+                    parts=[TextPart(text=self.system)],
                 )
             )
 
@@ -438,7 +438,6 @@ class Prompt:
                     role="tool",
                     parts=[
                         ToolResultPart(
-                            role="tool",
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
@@ -451,9 +450,9 @@ class Prompt:
         # Current user turn: prompt text and/or attachments.
         user_parts: List[Any] = []
         if self.prompt:
-            user_parts.append(TextPart(role="user", text=self.prompt))
+            user_parts.append(TextPart(text=self.prompt))
         for att in self.attachments:
-            user_parts.append(AttachmentPart(role="user", attachment=att))
+            user_parts.append(AttachmentPart(attachment=att))
         if user_parts:
             result.append(Message(role="user", parts=user_parts))
 
@@ -461,27 +460,16 @@ class Prompt:
 
 
 def _parts_to_messages(parts: List[Any]) -> List[Any]:
-    """Group a flat list of Part objects into Message objects by consecutive role.
+    """Wrap a flat list of output Part objects in a single assistant Message.
 
-    Output parts from a model response typically all share role='assistant',
-    producing a single Message. Server-executed tool_result parts (role='tool')
-    embedded among assistant parts produce a separate Message per role boundary.
+    Server-side tool results are represented as ToolResultParts inside the
+    same assistant Message (matching Anthropic's content-block model).
     """
     from .parts import Message
 
-    result: List[Any] = []
-    current_role: str = "assistant"
-    current_parts: List[Any] = []
-    for part in parts:
-        role = getattr(part, "role", "assistant") or "assistant"
-        if role != current_role and current_parts:
-            result.append(Message(role=current_role, parts=current_parts))
-            current_parts = []
-        current_role = role
-        current_parts.append(part)
-    if current_parts:
-        result.append(Message(role=current_role, parts=current_parts))
-    return result
+    if not parts:
+        return []
+    return [Message(role="assistant", parts=list(parts))]
 
 
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
@@ -820,7 +808,7 @@ class _BaseResponse:
             # No StreamEvents were used — synthesize from plain text chunks
             text = "".join(self._chunks)
             if text:
-                return [TextPart(role="assistant", text=text)]
+                return [TextPart(text=text)]
             return []
 
         parts = []
@@ -835,15 +823,11 @@ class _BaseResponse:
             if current_type == "text":
                 text = "".join(buffer)
                 if text:
-                    parts.append(
-                        TextPart(role="assistant", text=text, provider_metadata=pm)
-                    )
+                    parts.append(TextPart(text=text, provider_metadata=pm))
             elif current_type == "reasoning":
                 text = "".join(buffer)
                 if text:
-                    parts.append(
-                        ReasoningPart(role="assistant", text=text, provider_metadata=pm)
-                    )
+                    parts.append(ReasoningPart(text=text, provider_metadata=pm))
             elif current_type in ("tool_call_name", "tool_call_args"):
                 # Finalize tool call from accumulated name/args
                 name = tool_name_buf[0] if tool_name_buf else ""
@@ -854,7 +838,6 @@ class _BaseResponse:
                     arguments = {"_raw": args_str}
                 parts.append(
                     ToolCallPart(
-                        role="assistant",
                         name=name,
                         arguments=arguments,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
@@ -868,7 +851,6 @@ class _BaseResponse:
                 output = "".join(buffer)
                 parts.append(
                     ToolResultPart(
-                        role="tool",
                         name=tool_name_buf[0] if tool_name_buf else "",
                         output=output,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
@@ -959,7 +941,6 @@ class _BaseResponse:
             parts.insert(
                 0,
                 ReasoningPart(
-                    role="assistant",
                     text="",
                     redacted=True,
                     token_count=reasoning_token_count,
@@ -1147,14 +1128,11 @@ class _BaseResponse:
                 part_pm = data.get("provider_metadata")
                 if part_type == "text":
                     parts.append(
-                        TextPart(
-                            role=role, text=content or "", provider_metadata=part_pm
-                        )
+                        TextPart(text=content or "", provider_metadata=part_pm)
                     )
                 elif part_type == "reasoning":
                     parts.append(
                         ReasoningPart(
-                            role=role,
                             text=content or "",
                             redacted=data.get("redacted", False),
                             token_count=data.get("token_count"),
@@ -1164,7 +1142,6 @@ class _BaseResponse:
                 elif part_type == "tool_call":
                     parts.append(
                         ToolCallPart(
-                            role=role,
                             name=data.get("name", ""),
                             arguments=data.get("arguments", {}),
                             tool_call_id=tool_call_id,
@@ -1175,7 +1152,6 @@ class _BaseResponse:
                 elif part_type == "tool_result":
                     parts.append(
                         ToolResultPart(
-                            role=role,
                             name=data.get("name", ""),
                             output=content or "",
                             tool_call_id=tool_call_id,
@@ -1195,7 +1171,6 @@ class _BaseResponse:
                     )
                     parts.append(
                         AttachmentPart(
-                            role=role,
                             attachment=attachment,
                             provider_metadata=part_pm,
                         )
@@ -1425,7 +1400,7 @@ class _BaseResponse:
             output_messages = [
                 Message(
                     role="assistant",
-                    parts=[TextPart(role="assistant", text="".join(self._chunks))],
+                    parts=[TextPart(text="".join(self._chunks))],
                 )
             ]
         for message in output_messages:
