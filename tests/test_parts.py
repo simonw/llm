@@ -967,7 +967,6 @@ class TestPartsParameter:
 # Phase 5: Database migration for parts
 
 
-
 class TestDatabaseParts:
     """Test that parts are stored and loaded from the database."""
 

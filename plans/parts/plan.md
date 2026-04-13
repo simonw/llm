@@ -131,11 +131,11 @@ For APIs like Claude where tool calls execute on the server and the full call/re
 ```
 StreamEvent(type="text", chunk="Let me look that up", part_index=0)
 # ...text chunks...
-StreamEvent(type="tool_call_name", chunk="code_execution", part_index=1)  
+StreamEvent(type="tool_call_name", chunk="code_execution", part_index=1)
 StreamEvent(type="tool_call_args", chunk='{"code": "print(1+1)"}', part_index=1)
 # Part 1 finalizes as ToolCallPart(server_executed=True)
 StreamEvent(type="tool_result", chunk='2', part_index=2)
-# Part 2 finalizes as ToolResultPart(server_executed=True)  
+# Part 2 finalizes as ToolResultPart(server_executed=True)
 StreamEvent(type="text", chunk="The answer is 2", part_index=3)
 ```
 

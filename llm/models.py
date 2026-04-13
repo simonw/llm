@@ -23,9 +23,13 @@ from typing import (
     List,
     Optional,
     Set,
+    TYPE_CHECKING,
     Union,
     get_type_hints,
 )
+
+if TYPE_CHECKING:
+    from .parts import StreamEvent
 from .utils import (
     ensure_fragment,
     ensure_tool,
@@ -707,6 +711,7 @@ class _BaseResponse:
         self.id = str(monotonic_ulid()).lower()
         self.prompt = prompt
         self._prompt_json = None
+        self._reasoning_token_count: int = 0
         self.model = model
         self.stream = stream
         self._key = key
@@ -2379,7 +2384,7 @@ class Model(_Model):
         stream: bool,
         response: Response,
         conversation: Optional[Conversation],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
 
@@ -2392,7 +2397,7 @@ class KeyModel(_Model):
         response: Response,
         conversation: Optional[Conversation],
         key: Optional[str],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
 
@@ -2490,7 +2495,7 @@ class AsyncModel(_AsyncModel):
         stream: bool,
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
         pass
@@ -2505,7 +2510,7 @@ class AsyncKeyModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
         key: Optional[str],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
         pass

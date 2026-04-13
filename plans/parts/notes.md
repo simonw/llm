@@ -88,6 +88,6 @@ After completion, both work fine: `__iter__` replays `_chunks`, `stream_events()
 ## Final stats
 
 - 524 total tests in llm core, all passing
-- 22 tests in llm-anthropic, all passing  
+- 22 tests in llm-anthropic, all passing
 - 37 tests in llm-gemini, all passing
 - 12 commits across all repos

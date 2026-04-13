@@ -120,7 +120,7 @@ Set `server_executed=True` on the `StreamEvent` so the assembled `ToolCallPart`/
 
 ```
 part_index=0: reasoning chunks
-part_index=1: text chunks  
+part_index=1: text chunks
 part_index=2: tool_call_name + tool_call_args
 part_index=3: another tool_call (if parallel)
 ```
