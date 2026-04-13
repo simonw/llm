@@ -1,7 +1,14 @@
 """Tests for Part types, StreamEvent, and Response integration."""
 
+import json
+import os
 import pytest
+from click.testing import CliRunner
+from pytest_httpx import IteratorStream
 import llm
+from llm.cli import cli
+
+API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 
 class TestExports:
@@ -426,7 +433,6 @@ class TestPhase2StreamEventHandling:
     def test_tool_call_parts_assembled(self):
         """Tool call StreamEvents are assembled into ToolCallPart."""
         from llm.parts import StreamEvent, TextPart, ToolCallPart
-        import json
 
         model = StreamEventModel()
         model.enqueue(
@@ -610,12 +616,6 @@ class TestPhase2AsyncStreamEventHandling:
 
 # Phase 3: OpenAI plugin StreamEvent integration
 
-import json
-import os
-from pytest_httpx import IteratorStream
-
-API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
-
 
 def _openai_sse_chunks(deltas, usage=None):
     """Build SSE byte chunks from a list of delta dicts."""
@@ -654,7 +654,7 @@ class TestOpenAIPluginStreamEvents:
 
     def test_openai_text_stream_events(self, httpx_mock):
         """OpenAI streaming text yields StreamEvents via stream_events()."""
-        from llm.parts import StreamEvent, TextPart
+        from llm.parts import TextPart
 
         httpx_mock.add_response(
             method="POST",
@@ -709,7 +709,7 @@ class TestOpenAIPluginStreamEvents:
 
     def test_openai_tool_call_stream_events(self, httpx_mock):
         """OpenAI streaming tool calls yield tool_call StreamEvents."""
-        from llm.parts import StreamEvent, ToolCallPart
+        from llm.parts import ToolCallPart
 
         httpx_mock.add_response(
             method="POST",
@@ -888,7 +888,7 @@ class TestPartsParameter:
 
     def test_parts_parameter(self, mock_model):
         """parts=[] parameter works and creates parts."""
-        from llm.parts import TextPart, AttachmentPart
+        from llm.parts import TextPart
 
         mock_model.enqueue(["Hi"])
         parts = [
@@ -918,7 +918,6 @@ class TestPartsParameter:
 
     def test_system_creates_system_part(self, mock_model):
         """system= creates a system-role TextPart in parts."""
-        from llm.parts import TextPart
 
         mock_model.enqueue(["Hi"])
         response = mock_model.prompt("Hello", system="Be helpful")
@@ -932,7 +931,7 @@ class TestPartsParameter:
 
     def test_attachments_create_attachment_parts(self, mock_model):
         """attachments= creates AttachmentPart in parts."""
-        from llm.parts import TextPart, AttachmentPart
+        from llm.parts import AttachmentPart
 
         mock_model.enqueue(["Described"])
         att = llm.Attachment(type="image/png", content=b"fake")
@@ -952,7 +951,7 @@ class TestPartsParameter:
 
     def test_parts_serialization(self, mock_model):
         """parts can be serialized to dicts."""
-        from llm.parts import TextPart, Part
+        from llm.parts import Part
 
         mock_model.enqueue(["Hi"])
         response = mock_model.prompt("Hello", system="Be helpful")
@@ -967,7 +966,6 @@ class TestPartsParameter:
 
 # Phase 5: Database migration for parts
 
-import sqlite_utils
 
 
 class TestDatabaseParts:
@@ -989,7 +987,7 @@ class TestDatabaseParts:
     def test_log_to_db_writes_parts(self, mock_model, logs_db):
         """log_to_db() writes output parts to the parts table."""
         from llm.migrations import migrate
-        from llm.parts import StreamEvent, TextPart, ReasoningPart
+        from llm.parts import StreamEvent
 
         migrate(logs_db)
 
@@ -1016,7 +1014,7 @@ class TestDatabaseParts:
         assert parts_rows[1]["role"] == "assistant"
         assert parts_rows[1]["content"] == "answer"
 
-    def test_log_to_db_writes_parts(self, mock_model, logs_db):
+    def test_log_to_db_writes_input_parts(self, mock_model, logs_db):
         """log_to_db() writes input parts to the parts table."""
         from llm.migrations import migrate
 
@@ -1102,9 +1100,6 @@ class TestChainResponseStreamEvents:
 
 
 # CLI reasoning display
-
-from click.testing import CliRunner
-from llm.cli import cli
 
 
 class TestCLIReasoningDisplay:
