@@ -690,7 +690,7 @@ class _Shared:
                     )
         # Use input_parts if parts= was explicitly provided
         if prompt._parts:
-            for part in prompt.input_parts:
+            for part in prompt.parts:
                 if isinstance(part, TextPart):
                     messages.append({"role": part.role, "content": part.text})
                 elif isinstance(part, AttachmentPart) and part.attachment:

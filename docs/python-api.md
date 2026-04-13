@@ -671,12 +671,12 @@ response = model.prompt(
 )
 ```
 
-The `prompt.input_parts` property provides a unified view of all input parts, regardless of how they were specified:
+The `prompt.parts` property provides a unified view of all input parts, regardless of how they were specified:
 
 ```python
 response = model.prompt("Hello", system="Be brief")
 response.text()
-for part in response.prompt.input_parts:
+for part in response.prompt.parts:
     print(part.to_dict())
 ```
 Output:

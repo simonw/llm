@@ -400,7 +400,7 @@ class Prompt:
         return "\n\n".join(bits)
 
     @property
-    def input_parts(self):
+    def parts(self):
         """Return the list of input Part objects for this prompt.
 
         Synthesized from prompt=, system=, attachments=, and parts= parameters.
@@ -1282,7 +1282,7 @@ class _BaseResponse:
         order = 0
 
         # Write input parts
-        for part in self.prompt.input_parts:
+        for part in self.prompt.parts:
             row = {
                 "response_id": response_id,
                 "direction": "input",
