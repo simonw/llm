@@ -355,7 +355,6 @@ class Prompt:
     tools: List[Tool]
     tool_results: List[ToolResult]
     options: "Options"
-    _parts: Optional[List[Any]]  # List of Part objects
     _explicit_messages: Optional[List[Any]]  # messages= passed explicitly
 
     def __init__(
@@ -372,7 +371,6 @@ class Prompt:
         schema=None,
         tools=None,
         tool_results=None,
-        parts=None,
         messages=None,
     ):
         self._prompt = prompt
@@ -388,7 +386,6 @@ class Prompt:
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
         self.options = options or {}
-        self._parts = parts
         self._explicit_messages = list(messages) if messages else None
 
     @property
@@ -407,50 +404,18 @@ class Prompt:
         return "\n\n".join(bits)
 
     @property
-    def parts(self):
-        """Return the list of input Part objects for this prompt.
-
-        Synthesized from prompt=, system=, attachments=, and parts= parameters.
-        """
-        from .parts import TextPart, AttachmentPart
-
-        result = []
-
-        # Start with any explicitly provided parts
-        if self._parts:
-            result.extend(self._parts)
-
-        # Add system prompt as a system-role TextPart
-        system_text = self.system
-        if system_text:
-            result.insert(0, TextPart(role="system", text=system_text))
-
-        # Add prompt text as a user-role TextPart
-        prompt_text = self.prompt
-        if prompt_text:
-            result.append(TextPart(role="user", text=prompt_text))
-
-        # Add attachments as user-role AttachmentParts
-        for attachment in self.attachments:
-            result.append(AttachmentPart(role="user", attachment=attachment))
-
-        return result
-
-    @property
     def messages(self):
         """Canonical list of Message objects for this prompt.
 
         If messages= was explicitly passed, that list is returned verbatim.
-        Otherwise synthesized from system=, parts=, prompt=, attachments=,
-        and tool_results=.
+        Otherwise synthesized from system=, prompt=, attachments=, and
+        tool_results= for backwards compatibility with the simple prompt API.
         """
         from .parts import (
             AttachmentPart,
             Message,
             TextPart,
-            ToolCallPart,
             ToolResultPart,
-            normalize_parts,
         )
 
         if self._explicit_messages is not None:
@@ -465,24 +430,6 @@ class Prompt:
                     parts=[TextPart(role="system", text=self.system)],
                 )
             )
-
-        # Group explicitly-provided parts= by role into Messages.
-        if self._parts:
-            current_role = None
-            current_parts: List[Any] = []
-            for part in normalize_parts(self._parts, role="user"):
-                role = getattr(part, "role", "user") or "user"
-                if isinstance(part, ToolCallPart):
-                    role = "assistant"
-                elif isinstance(part, ToolResultPart):
-                    role = "tool"
-                if role != current_role and current_parts:
-                    result.append(Message(role=current_role, parts=current_parts))
-                    current_parts = []
-                current_role = role
-                current_parts.append(part)
-            if current_parts:
-                result.append(Message(role=current_role, parts=current_parts))
 
         # Tool results from the legacy tool_results= parameter.
         if self.tool_results:
@@ -575,7 +522,6 @@ class Conversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
-        parts: Optional[List[Any]] = None,
         messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
@@ -591,7 +537,6 @@ class Conversation(_BaseConversation):
         return Response(
             Prompt(
                 prompt,
-                parts=parts,
                 messages=messages,
                 model=self.model,
                 fragments=fragments,
@@ -716,7 +661,6 @@ class AsyncConversation(_BaseConversation):
         self,
         prompt: Optional[str] = None,
         *,
-        parts: Optional[List[Any]] = None,
         messages: Optional[List[Any]] = None,
         fragments: Optional[List[str]] = None,
         attachments: Optional[List[Attachment]] = None,
@@ -732,7 +676,6 @@ class AsyncConversation(_BaseConversation):
         return AsyncResponse(
             Prompt(
                 prompt,
-                parts=parts,
                 messages=messages,
                 model=self.model,
                 fragments=fragments,
@@ -1429,113 +1372,96 @@ class _BaseResponse:
             self._log_parts_to_db(db, response_id)
 
     def _log_parts_to_db(self, db, response_id):
-        from .parts import (
-            TextPart,
-            ReasoningPart,
-            ToolCallPart,
-            ToolResultPart,
-            AttachmentPart,
-        )
-
         order = 0
 
-        # Write input parts
-        for part in self.prompt.parts:
-            row = {
-                "response_id": response_id,
-                "direction": "input",
-                "role": part.role,
-                "order": order,
-            }
-            pm = getattr(part, "provider_metadata", None)
-            if isinstance(part, TextPart):
-                row["part_type"] = "text"
-                row["content"] = part.text
-                if pm:
-                    row["content_json"] = json.dumps({"provider_metadata": pm})
-            elif isinstance(part, ReasoningPart):
-                row["part_type"] = "reasoning"
-                row["content"] = part.text
-                extra: Dict[str, Any] = {}
-                if part.redacted or part.token_count:
-                    extra["redacted"] = part.redacted
-                    extra["token_count"] = part.token_count
-                if pm:
-                    extra["provider_metadata"] = pm
-                if extra:
-                    row["content_json"] = json.dumps(extra)
-            elif isinstance(part, AttachmentPart):
-                row["part_type"] = "attachment"
-                if part.attachment:
-                    att_data = {}
-                    if part.attachment.type:
-                        att_data["type"] = part.attachment.type
-                    if part.attachment.url:
-                        att_data["url"] = part.attachment.url
-                    if part.attachment.path:
-                        att_data["path"] = part.attachment.path
-                    if pm:
-                        att_data["provider_metadata"] = pm
-                    row["content_json"] = json.dumps(att_data)
-            else:
-                row["part_type"] = "unknown"
-                row["content_json"] = json.dumps(part.to_dict())
+        # Write input parts (flattened from input messages)
+        for message in self.prompt.messages:
+            for part in message.parts:
+                row = self._part_to_row(response_id, "input", message.role, order, part)
+                db["parts"].insert(row)
+                order += 1
+
+        # Write output parts
+        for part in self._build_parts():
+            row = self._part_to_row(
+                response_id, "output", getattr(part, "role", "assistant"), order, part
+            )
             db["parts"].insert(row)
             order += 1
 
-        # Write output parts
-        for part in self.parts:
-            row = {
-                "response_id": response_id,
-                "direction": "output",
-                "role": part.role,
-                "order": order,
+    @staticmethod
+    def _part_to_row(response_id, direction, role, order, part):
+        from .parts import (
+            AttachmentPart,
+            ReasoningPart,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        row: Dict[str, Any] = {
+            "response_id": response_id,
+            "direction": direction,
+            "role": role,
+            "order": order,
+        }
+        pm = getattr(part, "provider_metadata", None)
+        if isinstance(part, TextPart):
+            row["part_type"] = "text"
+            row["content"] = part.text
+            if pm:
+                row["content_json"] = json.dumps({"provider_metadata": pm})
+        elif isinstance(part, ReasoningPart):
+            row["part_type"] = "reasoning"
+            row["content"] = part.text
+            extra: Dict[str, Any] = {}
+            if part.redacted or part.token_count:
+                extra["redacted"] = part.redacted
+                extra["token_count"] = part.token_count
+            if pm:
+                extra["provider_metadata"] = pm
+            if extra:
+                row["content_json"] = json.dumps(extra)
+        elif isinstance(part, AttachmentPart):
+            row["part_type"] = "attachment"
+            if part.attachment:
+                att_data: Dict[str, Any] = {}
+                if part.attachment.type:
+                    att_data["type"] = part.attachment.type
+                if part.attachment.url:
+                    att_data["url"] = part.attachment.url
+                if part.attachment.path:
+                    att_data["path"] = part.attachment.path
+                if pm:
+                    att_data["provider_metadata"] = pm
+                row["content_json"] = json.dumps(att_data)
+        elif isinstance(part, ToolCallPart):
+            row["part_type"] = "tool_call"
+            tc_data: Dict[str, Any] = {
+                "name": part.name,
+                "arguments": part.arguments,
             }
-            pm = getattr(part, "provider_metadata", None)
-            if isinstance(part, TextPart):
-                row["part_type"] = "text"
-                row["content"] = part.text
-                if pm:
-                    row["content_json"] = json.dumps({"provider_metadata": pm})
-            elif isinstance(part, ReasoningPart):
-                row["part_type"] = "reasoning"
-                row["content"] = part.text
-                extra2: Dict[str, Any] = {}
-                if part.redacted or part.token_count:
-                    extra2["redacted"] = part.redacted
-                    extra2["token_count"] = part.token_count
-                if pm:
-                    extra2["provider_metadata"] = pm
-                if extra2:
-                    row["content_json"] = json.dumps(extra2)
-            elif isinstance(part, ToolCallPart):
-                row["part_type"] = "tool_call"
-                tc_data: Dict[str, Any] = {
-                    "name": part.name,
-                    "arguments": part.arguments,
-                }
-                if pm:
-                    tc_data["provider_metadata"] = pm
-                row["content_json"] = json.dumps(tc_data)
-                row["tool_call_id"] = part.tool_call_id
-                row["server_executed"] = 1 if part.server_executed else 0
-            elif isinstance(part, ToolResultPart):
-                row["part_type"] = "tool_result"
-                row["content"] = part.output
-                tr_data: Dict[str, Any] = {
-                    "name": part.name,
-                    "exception": part.exception,
-                }
-                if pm:
-                    tr_data["provider_metadata"] = pm
-                row["content_json"] = json.dumps(tr_data)
-                row["tool_call_id"] = part.tool_call_id
-                row["server_executed"] = 1 if part.server_executed else 0
-            else:
-                row["part_type"] = "unknown"
-                row["content_json"] = json.dumps(part.to_dict())
-            db["parts"].insert(row)
-            order += 1
+            if pm:
+                tc_data["provider_metadata"] = pm
+            row["content_json"] = json.dumps(tc_data)
+            row["tool_call_id"] = part.tool_call_id
+            row["server_executed"] = 1 if part.server_executed else 0
+        elif isinstance(part, ToolResultPart):
+            row["part_type"] = "tool_result"
+            row["content"] = part.output
+            tr_data: Dict[str, Any] = {
+                "name": part.name,
+                "exception": part.exception,
+            }
+            if pm:
+                tr_data["provider_metadata"] = pm
+            row["content_json"] = json.dumps(tr_data)
+            row["tool_call_id"] = part.tool_call_id
+            row["server_executed"] = 1 if part.server_executed else 0
+        else:
+            row["part_type"] = "unknown"
+            row["content_json"] = json.dumps(part.to_dict())
+        return row
 
 
 class Response(_BaseResponse):
@@ -1790,17 +1716,12 @@ class Response(_BaseResponse):
         self._on_done()
 
     @property
-    def parts(self):
-        "Return the list of Part objects for this response."
-        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
-            return self._loaded_parts
-        self._force()
-        return self._build_parts()
-
-    @property
     def messages(self):
         "Return the list of Message objects for this response."
-        return _parts_to_messages(self.parts)
+        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
+            return _parts_to_messages(self._loaded_parts)
+        self._force()
+        return _parts_to_messages(self._build_parts())
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -2141,18 +2062,13 @@ class AsyncResponse(_BaseResponse):
             await self._on_done()
 
     @property
-    def parts(self):
-        "Return the list of Part objects for this response."
-        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
-            return self._loaded_parts
-        if not self._done:
-            raise ValueError("Response not yet awaited - use 'await response' first")
-        return self._build_parts()
-
-    @property
     def messages(self):
         "Return the list of Message objects for this response."
-        return _parts_to_messages(self.parts)
+        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
+            return _parts_to_messages(self._loaded_parts)
+        if not self._done:
+            raise ValueError("Response not yet awaited - use 'await response' first")
+        return _parts_to_messages(self._build_parts())
 
     def __await__(self):
         return self._force().__await__()
@@ -2491,7 +2407,6 @@ class _Model(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        parts: Optional[List[Any]] = None,
         messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
@@ -2508,7 +2423,6 @@ class _Model(_BaseModel):
         return Response(
             Prompt(
                 prompt,
-                parts=parts,
                 messages=messages,
                 fragments=fragments,
                 attachments=attachments,
@@ -2604,7 +2518,6 @@ class _AsyncModel(_BaseModel):
         self,
         prompt: Optional[str] = None,
         *,
-        parts: Optional[List[Any]] = None,
         messages: Optional[List[Any]] = None,
         fragments: Optional[List[Union[str, Fragment]]] = None,
         attachments: Optional[List[Attachment]] = None,
@@ -2621,7 +2534,6 @@ class _AsyncModel(_BaseModel):
         return AsyncResponse(
             Prompt(
                 prompt,
-                parts=parts,
                 messages=messages,
                 fragments=fragments,
                 attachments=attachments,

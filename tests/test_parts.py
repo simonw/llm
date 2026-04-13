@@ -223,13 +223,13 @@ class TestResponseStreamEvents:
         assert events[0].chunk == "Hello world"
 
     def test_parts_from_plain_str_response(self, mock_model):
-        """response.parts returns a list of Part objects after completion."""
+        """[p for m in response.messages for p in m.parts] returns a list of Part objects after completion."""
         from llm.parts import TextPart
 
         mock_model.enqueue(["Hello", " world"])
         response = mock_model.prompt("hi")
         response.text()  # Force completion
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].role == "assistant"
@@ -242,7 +242,7 @@ class TestResponseStreamEvents:
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("hi")
         # Don't call text() or iterate - just access parts directly
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello"
@@ -283,7 +283,7 @@ class TestAsyncResponseStreamEvents:
         async_mock_model.enqueue(["Hello", " world"])
         response = async_mock_model.prompt("hi")
         await response.text()
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello world"
@@ -407,7 +407,7 @@ class TestPhase2StreamEventHandling:
         assert events[1].chunk == "answer"
 
     def test_parts_assembled_from_stream_events(self):
-        """response.parts assembles Part objects from StreamEvents."""
+        """[p for m in response.messages for p in m.parts] assembles Part objects from StreamEvents."""
         from llm.parts import StreamEvent, TextPart, ReasoningPart
 
         model = StreamEventModel()
@@ -421,7 +421,7 @@ class TestPhase2StreamEventHandling:
         )
         response = model.prompt("question")
         response.text()  # Force completion
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 2
         assert isinstance(parts[0], ReasoningPart)
         assert parts[0].text == "Let me think..."
@@ -460,7 +460,7 @@ class TestPhase2StreamEventHandling:
         )
         response = model.prompt("what's the weather?")
         response.text()
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 2
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Let me search"
@@ -502,7 +502,7 @@ class TestPhase2StreamEventHandling:
         )
         response = model.prompt("compute")
         response.text()
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 3
         assert isinstance(parts[0], ToolCallPart)
         assert parts[0].server_executed is True
@@ -606,7 +606,7 @@ class TestPhase2AsyncStreamEventHandling:
         )
         response = model.prompt("hi")
         await response.text()
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 2
         assert isinstance(parts[0], ReasoningPart)
         assert parts[0].text == "hmm"
@@ -680,7 +680,7 @@ class TestOpenAIPluginStreamEvents:
         assert " world" in [e.chunk for e in text_events]
 
         # Parts should have a single TextPart
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello world"
@@ -774,7 +774,7 @@ class TestOpenAIPluginStreamEvents:
         assert len(args_events) >= 1
 
         # Parts should include a ToolCallPart
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         tool_parts = [p for p in parts if isinstance(p, ToolCallPart)]
         assert len(tool_parts) == 1
         assert tool_parts[0].name == "get_weather"
@@ -819,7 +819,7 @@ class TestOpenAIPluginStreamEvents:
         response = model.prompt("think hard", key=API_KEY)
         response.text()
 
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         # Should have ReasoningPart (redacted) + TextPart
         reasoning_parts = [p for p in parts if isinstance(p, ReasoningPart)]
         text_parts = [p for p in parts if isinstance(p, TextPart)]
@@ -861,7 +861,7 @@ class TestOpenAIPluginStreamEvents:
         model = llm.get_model("gpt-5.4-mini")
         response = model.prompt("hi", key=API_KEY, stream=False)
         assert response.text() == "Hello!"
-        parts = response.parts
+        parts = [p for m in response.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], TextPart)
         assert parts[0].text == "Hello!"
@@ -870,98 +870,8 @@ class TestOpenAIPluginStreamEvents:
 # Phase 4: parts=[] prompt parameter
 
 
-class TestPartsParameter:
-    """Test the parts=[] parameter on model.prompt()."""
-
-    def test_prompt_creates_parts(self, mock_model):
-        """prompt= creates parts on the Prompt."""
-        from llm.parts import TextPart
-
-        mock_model.enqueue(["Hi"])
-        response = mock_model.prompt("Hello")
-        response.text()
-        parts = response.prompt.parts
-        assert len(parts) == 1
-        assert isinstance(parts[0], TextPart)
-        assert parts[0].role == "user"
-        assert parts[0].text == "Hello"
-
-    def test_parts_parameter(self, mock_model):
-        """parts=[] parameter works and creates parts."""
-        from llm.parts import TextPart
-
-        mock_model.enqueue(["Hi"])
-        parts = [
-            TextPart(role="user", text="What's in this image?"),
-        ]
-        response = mock_model.prompt(parts=parts)
-        response.text()
-        result_parts = response.prompt.parts
-        assert len(result_parts) == 1
-        assert isinstance(result_parts[0], TextPart)
-        assert result_parts[0].text == "What's in this image?"
-
-    def test_prompt_and_parts_combine(self, mock_model):
-        """prompt= and parts= combine: parts first, then prompt appended."""
-        from llm.parts import TextPart
-
-        mock_model.enqueue(["Hi"])
-        parts = [TextPart(role="system", text="You are helpful")]
-        response = mock_model.prompt("Hello", parts=parts)
-        response.text()
-        result_parts = response.prompt.parts
-        assert len(result_parts) == 2
-        assert result_parts[0].role == "system"
-        assert result_parts[0].text == "You are helpful"
-        assert result_parts[1].role == "user"
-        assert result_parts[1].text == "Hello"
-
-    def test_system_creates_system_part(self, mock_model):
-        """system= creates a system-role TextPart in parts."""
-
-        mock_model.enqueue(["Hi"])
-        response = mock_model.prompt("Hello", system="Be helpful")
-        response.text()
-        parts = response.prompt.parts
-        system_parts = [p for p in parts if p.role == "system"]
-        user_parts = [p for p in parts if p.role == "user"]
-        assert len(system_parts) == 1
-        assert system_parts[0].text == "Be helpful"
-        assert len(user_parts) == 1
-
-    def test_attachments_create_attachment_parts(self, mock_model):
-        """attachments= creates AttachmentPart in parts."""
-        from llm.parts import AttachmentPart
-
-        mock_model.enqueue(["Described"])
-        att = llm.Attachment(type="image/png", content=b"fake")
-        response = mock_model.prompt("Describe", attachments=[att])
-        response.text()
-        parts = response.prompt.parts
-        att_parts = [p for p in parts if isinstance(p, AttachmentPart)]
-        assert len(att_parts) == 1
-        assert att_parts[0].attachment is att
-
-    def test_prompt_backward_compat(self, mock_model):
-        """prompt.prompt still works as before (backward compat)."""
-        mock_model.enqueue(["Hi"])
-        response = mock_model.prompt("Hello world")
-        response.text()
-        assert response.prompt.prompt == "Hello world"
-
-    def test_parts_serialization(self, mock_model):
-        """parts can be serialized to dicts."""
-        from llm.parts import Part
-
-        mock_model.enqueue(["Hi"])
-        response = mock_model.prompt("Hello", system="Be helpful")
-        response.text()
-        dicts = [p.to_dict() for p in response.prompt.parts]
-        assert any(d["role"] == "system" for d in dicts)
-        assert any(d["role"] == "user" for d in dicts)
-        # Round-trip
-        restored = [Part.from_dict(d) for d in dicts]
-        assert len(restored) == len(response.prompt.parts)
+# TestPartsParameter removed: parts=[] is gone. See TestMessagesParameter and
+# TestPromptMessagesSynthesis for messages= equivalents.
 
 
 # Phase 5: Database migration for parts
@@ -1048,8 +958,9 @@ class TestDatabaseParts:
         # Load from DB
         row = list(logs_db["responses"].rows)[0]
         loaded = llm.Response.from_row(logs_db, row)
-        assert loaded.parts is not None
-        text_parts = [p for p in loaded.parts if isinstance(p, TextPart)]
+        all_parts = [p for m in loaded.messages for p in m.parts]
+        assert all_parts
+        text_parts = [p for p in all_parts if isinstance(p, TextPart)]
         assert len(text_parts) >= 1
         assert text_parts[0].text == "Hello world"
 
@@ -1210,70 +1121,21 @@ class TestCLIReasoningDisplay:
 # Phase 7: OpenAI build_messages supports parts=[]
 
 
-class TestBuildMessagesWithParts:
-    """Test that OpenAI build_messages correctly handles parts=[] parameter."""
+class TestBuildMessagesWithMessages:
+    """Test that OpenAI build_messages correctly handles messages=[] parameter."""
 
-    def test_build_messages_uses_parts(self, mocked_openai_chat, user_path):
-        """When parts=[] is passed, build_messages should use them to construct messages."""
-        from llm.parts import TextPart
+    def test_build_messages_uses_messages(self, mocked_openai_chat, user_path):
+        from llm import user, assistant, system as system_helper
 
         model = llm.get_model("gpt-4o-mini")
         model.key = "x"
         response = model.prompt(
-            parts=[
-                TextPart(role="system", text="You are a geography expert."),
-                TextPart(role="user", text="What is the capital of France?"),
-                TextPart(role="assistant", text="The capital of France is Paris."),
-                TextPart(role="user", text="What about Germany?"),
+            messages=[
+                system_helper("You are a geography expert."),
+                user("What is the capital of France?"),
+                assistant("The capital of France is Paris."),
+                user("What about Germany?"),
             ]
-        )
-        response.text()
-        last_request = mocked_openai_chat.get_requests()[-1]
-        messages = json.loads(last_request.content)["messages"]
-        assert messages == [
-            {"role": "system", "content": "You are a geography expert."},
-            {"role": "user", "content": "What is the capital of France?"},
-            {"role": "assistant", "content": "The capital of France is Paris."},
-            {"role": "user", "content": "What about Germany?"},
-        ]
-
-    def test_build_messages_parts_with_prompt(self, mocked_openai_chat, user_path):
-        """parts=[] combined with prompt= should append prompt as final user message."""
-        from llm.parts import TextPart
-
-        model = llm.get_model("gpt-4o-mini")
-        model.key = "x"
-        response = model.prompt(
-            "What about Germany?",
-            parts=[
-                TextPart(role="system", text="You are a geography expert."),
-                TextPart(role="user", text="What is the capital of France?"),
-                TextPart(role="assistant", text="The capital of France is Paris."),
-            ],
-        )
-        response.text()
-        last_request = mocked_openai_chat.get_requests()[-1]
-        messages = json.loads(last_request.content)["messages"]
-        assert messages == [
-            {"role": "system", "content": "You are a geography expert."},
-            {"role": "user", "content": "What is the capital of France?"},
-            {"role": "assistant", "content": "The capital of France is Paris."},
-            {"role": "user", "content": "What about Germany?"},
-        ]
-
-    def test_build_messages_parts_with_system(self, mocked_openai_chat, user_path):
-        """parts=[] combined with system= should prepend system message."""
-        from llm.parts import TextPart
-
-        model = llm.get_model("gpt-4o-mini")
-        model.key = "x"
-        response = model.prompt(
-            parts=[
-                TextPart(role="user", text="What is the capital of France?"),
-                TextPart(role="assistant", text="The capital of France is Paris."),
-                TextPart(role="user", text="What about Germany?"),
-            ],
-            system="You are a geography expert.",
         )
         response.text()
         last_request = mocked_openai_chat.get_requests()[-1]
@@ -1342,7 +1204,7 @@ class TestPhaseBFixes:
         r = M().prompt("x")
         r.text()
         with pytest.raises(ValueError, match="incompatible with prior type"):
-            r.parts
+            [p for m in r.messages for p in m.parts]
 
     def test_stream_assembler_allows_compatible_tool_call_events(self):
         from llm.parts import StreamEvent, ToolCallPart
@@ -1366,33 +1228,38 @@ class TestPhaseBFixes:
 
         r = M().prompt("x")
         r.text()
-        assert len(r.parts) == 1
-        assert isinstance(r.parts[0], ToolCallPart)
-        assert r.parts[0].arguments == {"q": "x"}
+        assert len([p for m in r.messages for p in m.parts]) == 1
+        assert isinstance([p for m in r.messages for p in m.parts][0], ToolCallPart)
+        assert [p for m in r.messages for p in m.parts][0].arguments == {"q": "x"}
 
     def test_build_messages_with_tool_call_and_result_parts(
         self, mocked_openai_chat, user_path
     ):
-        from llm.parts import TextPart, ToolCallPart, ToolResultPart
+        from llm.parts import ToolCallPart, ToolResultPart
+        from llm import user, assistant, tool_message
 
         model = llm.get_model("gpt-4o-mini")
         model.key = "x"
         response = model.prompt(
-            parts=[
-                TextPart(role="user", text="search please"),
-                ToolCallPart(
-                    role="assistant",
-                    name="search",
-                    arguments={"q": "x"},
-                    tool_call_id="c1",
+            messages=[
+                user("search please"),
+                assistant(
+                    ToolCallPart(
+                        role="assistant",
+                        name="search",
+                        arguments={"q": "x"},
+                        tool_call_id="c1",
+                    )
                 ),
-                ToolResultPart(
-                    role="tool",
-                    tool_call_id="c1",
-                    name="search",
-                    output="result",
+                tool_message(
+                    ToolResultPart(
+                        role="tool",
+                        tool_call_id="c1",
+                        name="search",
+                        output="result",
+                    )
                 ),
-                TextPart(role="user", text="thanks"),
+                user("thanks"),
             ]
         )
         response.text()
@@ -1506,7 +1373,7 @@ class TestProviderMetadata:
 
         r = M().prompt("x")
         r.text()
-        parts = r.parts
+        parts = [p for m in r.messages for p in m.parts]
         assert len(parts) == 1
         assert isinstance(parts[0], ReasoningPart)
         assert parts[0].text == "thinking"
@@ -1538,7 +1405,7 @@ class TestProviderMetadata:
 
         r = M().prompt("x")
         r.text()
-        parts = r.parts
+        parts = [p for m in r.messages for p in m.parts]
         assert isinstance(parts[0], ToolCallPart)
         assert parts[0].provider_metadata == {
             "anthropic": {"signature": "new"},
@@ -1637,19 +1504,25 @@ class TestProviderMetadataDatabase:
 
         model = StreamEventModel()
         model.enqueue([])
+        from llm import user, assistant
+
         response = model.prompt(
-            parts=[
-                TextPart(
-                    role="user",
-                    text="hi",
-                    provider_metadata={"anthropic": {"x": 1}},
+            messages=[
+                user(
+                    TextPart(
+                        role="user",
+                        text="hi",
+                        provider_metadata={"anthropic": {"x": 1}},
+                    )
                 ),
-                ToolCallPart(
-                    role="assistant",
-                    name="f",
-                    arguments={},
-                    tool_call_id="c1",
-                    provider_metadata={"gemini": {"thoughtSignature": "g"}},
+                assistant(
+                    ToolCallPart(
+                        role="assistant",
+                        name="f",
+                        arguments={},
+                        tool_call_id="c1",
+                        provider_metadata={"gemini": {"thoughtSignature": "g"}},
+                    )
                 ),
             ]
         )
