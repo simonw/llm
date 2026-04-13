@@ -1938,3 +1938,73 @@ class TestPromptMessagesSynthesis:
             {"role": "system", "content": "Be brief."},
             {"role": "user", "content": "hello"},
         ]
+
+
+class TestResponseMessages:
+    """response.messages returns a list[Message] wrapping the assembled parts."""
+
+    def test_text_only_response(self):
+        from llm.parts import StreamEvent, TextPart
+        from llm import Message
+
+        class M(llm.Model):
+            model_id = "m-rm1"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(type="text", chunk="hi", part_index=0)
+
+        r = M().prompt("x")
+        r.text()
+        msgs = r.messages
+        assert len(msgs) == 1
+        assert isinstance(msgs[0], Message)
+        assert msgs[0].role == "assistant"
+        assert len(msgs[0].parts) == 1
+        assert isinstance(msgs[0].parts[0], TextPart)
+        assert msgs[0].parts[0].text == "hi"
+
+    def test_text_plus_tool_call_becomes_one_assistant_message(self):
+        from llm.parts import StreamEvent
+
+        class M(llm.Model):
+            model_id = "m-rm2"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(type="text", chunk="searching", part_index=0)
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=1,
+                    tool_call_id="c1",
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"q":"x"}',
+                    part_index=1,
+                    tool_call_id="c1",
+                )
+
+        r = M().prompt("x")
+        r.text()
+        msgs = r.messages
+        assert len(msgs) == 1
+        assert msgs[0].role == "assistant"
+        assert [type(p).__name__ for p in msgs[0].parts] == [
+            "TextPart",
+            "ToolCallPart",
+        ]
+
+    def test_plain_string_response(self, mock_model):
+        mock_model.enqueue(["hello world"])
+        r = mock_model.prompt("hi")
+        r.text()
+        msgs = r.messages
+        assert len(msgs) == 1
+        assert msgs[0].role == "assistant"
+        assert msgs[0].parts[0].text == "hello world"
+
+    def test_empty_response_has_empty_messages(self, mock_model):
+        mock_model.enqueue([""])
+        r = mock_model.prompt("hi")
+        r.text()
+        assert r.messages == []

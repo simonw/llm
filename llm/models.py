@@ -513,6 +513,30 @@ class Prompt:
         return result
 
 
+def _parts_to_messages(parts: List[Any]) -> List[Any]:
+    """Group a flat list of Part objects into Message objects by consecutive role.
+
+    Output parts from a model response typically all share role='assistant',
+    producing a single Message. Server-executed tool_result parts (role='tool')
+    embedded among assistant parts produce a separate Message per role boundary.
+    """
+    from .parts import Message
+
+    result: List[Any] = []
+    current_role: str = "assistant"
+    current_parts: List[Any] = []
+    for part in parts:
+        role = getattr(part, "role", "assistant") or "assistant"
+        if role != current_role and current_parts:
+            result.append(Message(role=current_role, parts=current_parts))
+            current_parts = []
+        current_role = role
+        current_parts.append(part)
+    if current_parts:
+        result.append(Message(role=current_role, parts=current_parts))
+    return result
+
+
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     wrapped_tools = []
     for tool in tools:
@@ -1773,6 +1797,11 @@ class Response(_BaseResponse):
         self._force()
         return self._build_parts()
 
+    @property
+    def messages(self):
+        "Return the list of Message objects for this response."
+        return _parts_to_messages(self.parts)
+
     def __repr__(self):
         text = "... not yet done ..."
         if self._done:
@@ -2119,6 +2148,11 @@ class AsyncResponse(_BaseResponse):
         if not self._done:
             raise ValueError("Response not yet awaited - use 'await response' first")
         return self._build_parts()
+
+    @property
+    def messages(self):
+        "Return the list of Message objects for this response."
+        return _parts_to_messages(self.parts)
 
     def __await__(self):
         return self._force().__await__()
