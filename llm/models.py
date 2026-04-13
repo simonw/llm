@@ -1093,83 +1093,115 @@ class _BaseResponse:
             )
         ]
 
-        # Load parts from the parts table if it exists
-        if "parts" in db.table_names():
-            response._loaded_parts = cls._load_parts_from_db(db, row["id"])
+        # Load output messages if the messages table exists
+        if "messages" in db.table_names():
+            response._loaded_messages = cls._load_messages_from_db(
+                db, row["id"], direction="output"
+            )
         else:
-            response._loaded_parts = None
+            response._loaded_messages = None
 
         return response
 
     @staticmethod
-    def _load_parts_from_db(db, response_id):
+    def _load_messages_from_db(db, response_id, direction="output"):
         from .parts import (
-            TextPart,
+            AttachmentPart,
+            Message,
             ReasoningPart,
+            TextPart,
             ToolCallPart,
             ToolResultPart,
         )
 
-        parts_rows = list(
+        message_rows = list(
             db.execute(
-                'SELECT * FROM parts WHERE response_id = ? AND direction = ? ORDER BY "order"',
-                [response_id, "output"],
+                "SELECT id, role, provider_metadata_json FROM messages "
+                'WHERE response_id = ? AND direction = ? ORDER BY "order"',
+                [response_id, direction],
             ).fetchall()
         )
-        if not parts_rows:
+        if not message_rows:
             return None
 
-        columns = [
-            desc[0] for desc in db.execute("SELECT * FROM parts LIMIT 0").description
-        ]
-        parts = []
-        for row_tuple in parts_rows:
-            r = dict(zip(columns, row_tuple))
-            part_type = r["part_type"]
-            role = r["role"]
-            content = r.get("content")
-            content_json = r.get("content_json")
+        messages: List[Any] = []
+        for msg_id, role, pm_json in message_rows:
+            pm = json.loads(pm_json) if pm_json else None
+            part_rows = list(
+                db.execute(
+                    "SELECT part_type, content, content_json, tool_call_id, "
+                    "server_executed FROM message_parts WHERE message_id = ? "
+                    'ORDER BY "order"',
+                    [msg_id],
+                ).fetchall()
+            )
+            parts: List[Any] = []
+            for (
+                part_type,
+                content,
+                content_json,
+                tool_call_id,
+                server_executed,
+            ) in part_rows:
+                data = json.loads(content_json) if content_json else {}
+                part_pm = data.get("provider_metadata")
+                if part_type == "text":
+                    parts.append(
+                        TextPart(
+                            role=role, text=content or "", provider_metadata=part_pm
+                        )
+                    )
+                elif part_type == "reasoning":
+                    parts.append(
+                        ReasoningPart(
+                            role=role,
+                            text=content or "",
+                            redacted=data.get("redacted", False),
+                            token_count=data.get("token_count"),
+                            provider_metadata=part_pm,
+                        )
+                    )
+                elif part_type == "tool_call":
+                    parts.append(
+                        ToolCallPart(
+                            role=role,
+                            name=data.get("name", ""),
+                            arguments=data.get("arguments", {}),
+                            tool_call_id=tool_call_id,
+                            server_executed=bool(server_executed),
+                            provider_metadata=part_pm,
+                        )
+                    )
+                elif part_type == "tool_result":
+                    parts.append(
+                        ToolResultPart(
+                            role=role,
+                            name=data.get("name", ""),
+                            output=content or "",
+                            tool_call_id=tool_call_id,
+                            server_executed=bool(server_executed),
+                            exception=data.get("exception"),
+                            provider_metadata=part_pm,
+                        )
+                    )
+                elif part_type == "attachment":
+                    from .parts import _attachment_from_dict
 
-            data = json.loads(content_json) if content_json else {}
-            pm = data.get("provider_metadata")
-            if part_type == "text":
-                parts.append(
-                    TextPart(role=role, text=content or "", provider_metadata=pm)
-                )
-            elif part_type == "reasoning":
-                parts.append(
-                    ReasoningPart(
-                        role=role,
-                        text=content or "",
-                        redacted=data.get("redacted", False),
-                        token_count=data.get("token_count"),
-                        provider_metadata=pm,
+                    attachment = (
+                        _attachment_from_dict(data)
+                        if data
+                        and any(data.get(k) for k in ("type", "url", "path", "content"))
+                        else None
                     )
-                )
-            elif part_type == "tool_call":
-                parts.append(
-                    ToolCallPart(
-                        role=role,
-                        name=data.get("name", ""),
-                        arguments=data.get("arguments", {}),
-                        tool_call_id=r.get("tool_call_id"),
-                        server_executed=bool(r.get("server_executed")),
-                        provider_metadata=pm,
+                    parts.append(
+                        AttachmentPart(
+                            role=role,
+                            attachment=attachment,
+                            provider_metadata=part_pm,
+                        )
                     )
-                )
-            elif part_type == "tool_result":
-                parts.append(
-                    ToolResultPart(
-                        role=role,
-                        name=data.get("name", ""),
-                        output=content or "",
-                        tool_call_id=r.get("tool_call_id"),
-                        server_executed=bool(r.get("server_executed")),
-                        exception=data.get("exception"),
-                        provider_metadata=pm,
-                    )
-                )
-        return parts
+            messages.append(Message(role=role, parts=parts, provider_metadata=pm))
+        return messages
 
     def token_usage(self) -> str:
         return token_usage_string(
@@ -1367,30 +1399,62 @@ class _BaseResponse:
                     },
                 )
 
-        # Persist parts (input and output) to the parts table
-        if "parts" in db.table_names():
-            self._log_parts_to_db(db, response_id)
+        # Persist messages (input and output) to the messages+message_parts tables
+        if "messages" in db.table_names():
+            self._log_messages_to_db(db, response_id)
 
-    def _log_parts_to_db(self, db, response_id):
+    def _log_messages_to_db(self, db, response_id):
+        # Input messages
         order = 0
-
-        # Write input parts (flattened from input messages)
         for message in self.prompt.messages:
-            for part in message.parts:
-                row = self._part_to_row(response_id, "input", message.role, order, part)
-                db["parts"].insert(row)
-                order += 1
-
-        # Write output parts
-        for part in self._build_parts():
-            row = self._part_to_row(
-                response_id, "output", getattr(part, "role", "assistant"), order, part
-            )
-            db["parts"].insert(row)
+            self._insert_message(db, response_id, "input", order, message)
             order += 1
 
+        # Output messages
+        from .parts import Message
+
+        output_parts = self._build_parts()
+        if output_parts:
+            output_messages = _parts_to_messages(output_parts)
+        else:
+            output_messages = []
+        if not output_messages and self._chunks:
+            # Plain-string response that didn't go through _build_parts
+            from .parts import TextPart
+
+            output_messages = [
+                Message(
+                    role="assistant",
+                    parts=[TextPart(role="assistant", text="".join(self._chunks))],
+                )
+            ]
+        for message in output_messages:
+            self._insert_message(db, response_id, "output", order, message)
+            order += 1
+
+    def _insert_message(self, db, response_id, direction, order, message):
+        pm_json = (
+            json.dumps(message.provider_metadata) if message.provider_metadata else None
+        )
+        msg_id = (
+            db["messages"]
+            .insert(
+                {
+                    "response_id": response_id,
+                    "direction": direction,
+                    "order": order,
+                    "role": message.role,
+                    "provider_metadata_json": pm_json,
+                }
+            )
+            .last_pk
+        )
+        for part_order, part in enumerate(message.parts):
+            row = self._part_to_row(msg_id, part_order, part)
+            db["message_parts"].insert(row)
+
     @staticmethod
-    def _part_to_row(response_id, direction, role, order, part):
+    def _part_to_row(message_id, order, part):
         from .parts import (
             AttachmentPart,
             ReasoningPart,
@@ -1400,9 +1464,7 @@ class _BaseResponse:
         )
 
         row: Dict[str, Any] = {
-            "response_id": response_id,
-            "direction": direction,
-            "role": role,
+            "message_id": message_id,
             "order": order,
         }
         pm = getattr(part, "provider_metadata", None)
@@ -1718,8 +1780,8 @@ class Response(_BaseResponse):
     @property
     def messages(self):
         "Return the list of Message objects for this response."
-        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
-            return _parts_to_messages(self._loaded_parts)
+        if hasattr(self, "_loaded_messages") and self._loaded_messages is not None:
+            return self._loaded_messages
         self._force()
         return _parts_to_messages(self._build_parts())
 
@@ -2064,8 +2126,8 @@ class AsyncResponse(_BaseResponse):
     @property
     def messages(self):
         "Return the list of Message objects for this response."
-        if hasattr(self, "_loaded_parts") and self._loaded_parts is not None:
-            return _parts_to_messages(self._loaded_parts)
+        if hasattr(self, "_loaded_messages") and self._loaded_messages is not None:
+            return self._loaded_messages
         if not self._done:
             raise ValueError("Response not yet awaited - use 'await response' first")
         return _parts_to_messages(self._build_parts())

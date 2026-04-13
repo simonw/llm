@@ -441,3 +441,39 @@ def m022_parts_table(db):
     db.execute(
         'CREATE UNIQUE INDEX "idx_parts_response_order" ON parts (response_id, direction, "order")'
     )
+
+
+@migration
+def m023_messages_table(db):
+    db["messages"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "direction": str,  # "input" or "output"
+            "order": int,
+            "role": str,
+            "provider_metadata_json": str,
+        },
+        pk="id",
+        foreign_keys=[("response_id", "responses", "id")],
+    )
+    db.execute(
+        'CREATE UNIQUE INDEX "idx_messages_response_order" ON messages (response_id, direction, "order")'
+    )
+    db["message_parts"].create(
+        {
+            "id": int,
+            "message_id": int,
+            "order": int,
+            "part_type": str,
+            "content": str,
+            "content_json": str,
+            "tool_call_id": str,
+            "server_executed": int,
+        },
+        pk="id",
+        foreign_keys=[("message_id", "messages", "id")],
+    )
+    db.execute(
+        'CREATE UNIQUE INDEX "idx_message_parts_message_order" ON message_parts (message_id, "order")'
+    )

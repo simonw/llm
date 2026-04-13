@@ -878,29 +878,21 @@ class TestOpenAIPluginStreamEvents:
 
 
 class TestDatabaseParts:
-    """Test that parts are stored and loaded from the database."""
+    """Test that messages and parts are stored and loaded from the database."""
 
-    def test_parts_table_created(self, logs_db):
-        """The parts table is created by migration."""
+    def test_messages_and_message_parts_tables_created(self, logs_db):
         from llm.migrations import migrate
 
         migrate(logs_db)
-        assert "parts" in logs_db.table_names()
-        columns = {col.name for col in logs_db["parts"].columns}
-        assert "response_id" in columns
-        assert "role" in columns
-        assert "part_type" in columns
-        assert "content" in columns
-        assert "content_json" in columns
+        assert "messages" in logs_db.table_names()
+        assert "message_parts" in logs_db.table_names()
 
-    def test_log_to_db_writes_parts(self, mock_model, logs_db):
-        """log_to_db() writes output parts to the parts table."""
+    def test_log_to_db_writes_output_parts(self, mock_model, logs_db):
         from llm.migrations import migrate
         from llm.parts import StreamEvent
 
         migrate(logs_db)
 
-        # Use a model that yields StreamEvents (has reasoning + text)
         model = StreamEventModel()
         model.enqueue(
             [
@@ -912,19 +904,22 @@ class TestDatabaseParts:
         response.text()
         response.log_to_db(logs_db)
 
-        parts_rows = [r for r in logs_db["parts"].rows if r["direction"] == "output"]
-        assert len(parts_rows) == 2
-        # First part: reasoning
-        assert parts_rows[0]["part_type"] == "reasoning"
-        assert parts_rows[0]["role"] == "assistant"
-        assert parts_rows[0]["content"] == "thinking..."
-        # Second part: text
-        assert parts_rows[1]["part_type"] == "text"
-        assert parts_rows[1]["role"] == "assistant"
-        assert parts_rows[1]["content"] == "answer"
+        # One output message with two parts
+        output_msgs = [
+            m for m in logs_db["messages"].rows if m["direction"] == "output"
+        ]
+        assert len(output_msgs) == 1
+        assert output_msgs[0]["role"] == "assistant"
+        parts = [
+            p
+            for p in logs_db["message_parts"].rows
+            if p["message_id"] == output_msgs[0]["id"]
+        ]
+        assert [p["part_type"] for p in parts] == ["reasoning", "text"]
+        assert parts[0]["content"] == "thinking..."
+        assert parts[1]["content"] == "answer"
 
-    def test_log_to_db_writes_input_parts(self, mock_model, logs_db):
-        """log_to_db() writes input parts to the parts table."""
+    def test_log_to_db_writes_input_messages(self, mock_model, logs_db):
         from llm.migrations import migrate
 
         migrate(logs_db)
@@ -934,14 +929,8 @@ class TestDatabaseParts:
         response.text()
         response.log_to_db(logs_db)
 
-        parts_rows = list(
-            logs_db.execute(
-                'select * from parts where response_id = ? order by "order"',
-                [response.id],
-            ).fetchall()
-        )
-        # Should have: input system part, input user part, output text part
-        assert len(parts_rows) >= 3
+        input_msgs = [m for m in logs_db["messages"].rows if m["direction"] == "input"]
+        assert [m["role"] for m in input_msgs] == ["system", "user"]
 
     def test_from_row_loads_parts(self, mock_model, logs_db):
         """from_row() loads parts from the parts table."""
@@ -1464,24 +1453,12 @@ class TestProviderMetadataDatabase:
         response.text()
         response.log_to_db(logs_db)
 
-        # Verify content_json on disk carries provider_metadata for each type
-        rows = [r for r in logs_db["parts"].rows if r["direction"] == "output"]
-        by_type = {r["part_type"]: json.loads(r["content_json"]) for r in rows}
-        assert by_type["reasoning"]["provider_metadata"] == {
-            "anthropic": {"signature": "sig-r"}
-        }
-        assert by_type["text"]["provider_metadata"] == {
-            "anthropic": {"citations": [{"i": "c"}]}
-        }
-        assert by_type["tool_call"]["provider_metadata"] == {
-            "gemini": {"thoughtSignature": "sig-g"}
-        }
-        assert by_type["tool_result"]["provider_metadata"] == {
-            "anthropic": {"encrypted_content": "blob"}
-        }
-
-        # Exercise the load path directly
-        loaded_parts = llm.Response._load_parts_from_db(logs_db, response.id)
+        # Load via the messages loader
+        loaded_msgs = llm.Response._load_messages_from_db(
+            logs_db, response.id, direction="output"
+        )
+        assert loaded_msgs is not None
+        loaded_parts = [p for m in loaded_msgs for p in m.parts]
         loaded_by_type = {type(p).__name__: p for p in loaded_parts}
         assert loaded_by_type["ReasoningPart"].provider_metadata == {
             "anthropic": {"signature": "sig-r"}
@@ -1529,8 +1506,18 @@ class TestProviderMetadataDatabase:
         response.text()
         response.log_to_db(logs_db)
 
-        input_rows = [r for r in logs_db["parts"].rows if r["direction"] == "input"]
-        pms = [json.loads(r["content_json"])["provider_metadata"] for r in input_rows]
+        input_msgs = [m for m in logs_db["messages"].rows if m["direction"] == "input"]
+        all_part_rows = list(logs_db["message_parts"].rows)
+        input_part_rows = [
+            p
+            for p in all_part_rows
+            if any(m["id"] == p["message_id"] for m in input_msgs)
+        ]
+        pms = [
+            json.loads(r["content_json"])["provider_metadata"]
+            for r in input_part_rows
+            if r["content_json"]
+        ]
         assert {"anthropic": {"x": 1}} in pms
         assert {"gemini": {"thoughtSignature": "g"}} in pms
 
@@ -1913,3 +1900,55 @@ class TestConversationHistoryViaMessages:
             {"role": "assistant", "content": "Paris."},
             {"role": "user", "content": "And Germany?"},
         ]
+
+
+class TestDatabaseMessages:
+    """Log and load Messages via the messages + message_parts tables."""
+
+    def test_messages_tables_created(self, logs_db):
+        from llm.migrations import migrate
+
+        migrate(logs_db)
+        assert "messages" in logs_db.table_names()
+        assert "message_parts" in logs_db.table_names()
+
+    def test_log_and_load_messages(self, logs_db, mock_model):
+        from llm.migrations import migrate
+
+        migrate(logs_db)
+        mock_model.enqueue(["Hello world"])
+        r = mock_model.prompt("Hi", system="Be brief.")
+        r.text()
+        r.log_to_db(logs_db)
+
+        # Reload
+        row = list(logs_db["responses"].rows)[0]
+        loaded = llm.Response.from_row(logs_db, row)
+        msgs = loaded.messages
+        # Output only — input messages are not loaded back through
+        # response.messages (they live on prompt, not response).
+        assert len(msgs) == 1
+        assert msgs[0].role == "assistant"
+        assert msgs[0].parts[0].text == "Hello world"
+
+    def test_message_rows_structure(self, logs_db, mock_model):
+        from llm.migrations import migrate
+
+        migrate(logs_db)
+        mock_model.enqueue(["Paris."])
+        r = mock_model.prompt("Capital?", system="Be brief.")
+        r.text()
+        r.log_to_db(logs_db)
+
+        message_rows = list(logs_db["messages"].rows)
+        # Two input messages (system, user) + one output (assistant)
+        assert len(message_rows) == 3
+        roles = [(m["direction"], m["role"]) for m in message_rows]
+        assert roles == [
+            ("input", "system"),
+            ("input", "user"),
+            ("output", "assistant"),
+        ]
+        part_rows = list(logs_db["message_parts"].rows)
+        # One part per message
+        assert len(part_rows) == 3
