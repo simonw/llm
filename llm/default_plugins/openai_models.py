@@ -632,7 +632,7 @@ class _Shared:
         return "OpenAI Chat: {}".format(self.model_id)
 
     def build_messages(self, prompt, conversation):
-        from llm.parts import TextPart, AttachmentPart
+        from llm.parts import TextPart, AttachmentPart, ToolCallPart, ToolResultPart
 
         messages = []
         current_system = None
@@ -696,6 +696,31 @@ class _Shared:
                 elif isinstance(part, AttachmentPart) and part.attachment:
                     messages.append(
                         {"role": part.role, "content": [_attachment(part.attachment)]}
+                    )
+                elif isinstance(part, ToolCallPart):
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "id": part.tool_call_id,
+                                    "function": {
+                                        "name": part.name,
+                                        "arguments": json.dumps(part.arguments),
+                                    },
+                                }
+                            ],
+                        }
+                    )
+                elif isinstance(part, ToolResultPart):
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": part.tool_call_id,
+                            "content": part.output,
+                        }
                     )
         else:
             if prompt.system and prompt.system != current_system:

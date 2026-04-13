@@ -781,14 +781,19 @@ class _BaseResponse:
         def finalize():
             if current_type is None:
                 return
+            pm = provider_metadata_buf[0] if provider_metadata_buf else None
             if current_type == "text":
                 text = "".join(buffer)
                 if text:
-                    parts.append(TextPart(role="assistant", text=text))
+                    parts.append(
+                        TextPart(role="assistant", text=text, provider_metadata=pm)
+                    )
             elif current_type == "reasoning":
                 text = "".join(buffer)
                 if text:
-                    parts.append(ReasoningPart(role="assistant", text=text))
+                    parts.append(
+                        ReasoningPart(role="assistant", text=text, provider_metadata=pm)
+                    )
             elif current_type in ("tool_call_name", "tool_call_args"):
                 # Finalize tool call from accumulated name/args
                 name = tool_name_buf[0] if tool_name_buf else ""
@@ -806,6 +811,7 @@ class _BaseResponse:
                         server_executed=(
                             server_executed_buf[0] if server_executed_buf else False
                         ),
+                        provider_metadata=pm,
                     )
                 )
             elif current_type == "tool_result":
@@ -819,6 +825,7 @@ class _BaseResponse:
                         server_executed=(
                             server_executed_buf[0] if server_executed_buf else False
                         ),
+                        provider_metadata=pm,
                     )
                 )
 
@@ -826,6 +833,15 @@ class _BaseResponse:
         tool_args_buf = []
         tool_call_id_buf = []
         server_executed_buf = []
+        provider_metadata_buf: List[Any] = []
+
+        # Types compatible within a single part_index share the same "family".
+        # An event type switching families at the same part_index is a bug in
+        # the plugin — raise rather than silently drop the earlier content.
+        def _family(t: str) -> str:
+            if t in ("tool_call_name", "tool_call_args"):
+                return "tool_call"
+            return t
 
         for event in self._stream_events:
             if event.part_index != current_index:
@@ -837,6 +853,15 @@ class _BaseResponse:
                 tool_args_buf = []
                 tool_call_id_buf = []
                 server_executed_buf = []
+                provider_metadata_buf = []
+            elif current_type is not None and _family(event.type) != _family(
+                current_type
+            ):
+                raise ValueError(
+                    f"StreamEvent type {event.type!r} is incompatible with "
+                    f"prior type {current_type!r} at part_index={event.part_index}. "
+                    f"Allocate a new part_index for a different content type."
+                )
 
             if event.type == "text":
                 current_type = "text"
@@ -867,6 +892,14 @@ class _BaseResponse:
                     server_executed_buf = [True]
                 if event.tool_name:
                     tool_name_buf = [event.tool_name]
+
+            # Merge provider_metadata across events for this part (last wins,
+            # deep-merged by top-level namespace key).
+            if event.provider_metadata:
+                merged = dict(provider_metadata_buf[0]) if provider_metadata_buf else {}
+                for k, v in event.provider_metadata.items():
+                    merged[k] = v
+                provider_metadata_buf = [merged]
 
         finalize()
 
@@ -1047,17 +1080,23 @@ class _BaseResponse:
             content = r.get("content")
             content_json = r.get("content_json")
 
+            data = json.loads(content_json) if content_json else {}
+            pm = data.get("provider_metadata")
             if part_type == "text":
-                parts.append(TextPart(role=role, text=content or ""))
+                parts.append(
+                    TextPart(role=role, text=content or "", provider_metadata=pm)
+                )
             elif part_type == "reasoning":
-                kwargs = {}
-                if content_json:
-                    data = json.loads(content_json)
-                    kwargs["redacted"] = data.get("redacted", False)
-                    kwargs["token_count"] = data.get("token_count")
-                parts.append(ReasoningPart(role=role, text=content or "", **kwargs))
+                parts.append(
+                    ReasoningPart(
+                        role=role,
+                        text=content or "",
+                        redacted=data.get("redacted", False),
+                        token_count=data.get("token_count"),
+                        provider_metadata=pm,
+                    )
+                )
             elif part_type == "tool_call":
-                data = json.loads(content_json) if content_json else {}
                 parts.append(
                     ToolCallPart(
                         role=role,
@@ -1065,10 +1104,10 @@ class _BaseResponse:
                         arguments=data.get("arguments", {}),
                         tool_call_id=r.get("tool_call_id"),
                         server_executed=bool(r.get("server_executed")),
+                        provider_metadata=pm,
                     )
                 )
             elif part_type == "tool_result":
-                data = json.loads(content_json) if content_json else {}
                 parts.append(
                     ToolResultPart(
                         role=role,
@@ -1077,6 +1116,7 @@ class _BaseResponse:
                         tool_call_id=r.get("tool_call_id"),
                         server_executed=bool(r.get("server_executed")),
                         exception=data.get("exception"),
+                        provider_metadata=pm,
                     )
                 )
         return parts
@@ -1300,16 +1340,23 @@ class _BaseResponse:
                 "role": part.role,
                 "order": order,
             }
+            pm = getattr(part, "provider_metadata", None)
             if isinstance(part, TextPart):
                 row["part_type"] = "text"
                 row["content"] = part.text
+                if pm:
+                    row["content_json"] = json.dumps({"provider_metadata": pm})
             elif isinstance(part, ReasoningPart):
                 row["part_type"] = "reasoning"
                 row["content"] = part.text
+                extra: Dict[str, Any] = {}
                 if part.redacted or part.token_count:
-                    row["content_json"] = json.dumps(
-                        {"redacted": part.redacted, "token_count": part.token_count}
-                    )
+                    extra["redacted"] = part.redacted
+                    extra["token_count"] = part.token_count
+                if pm:
+                    extra["provider_metadata"] = pm
+                if extra:
+                    row["content_json"] = json.dumps(extra)
             elif isinstance(part, AttachmentPart):
                 row["part_type"] = "attachment"
                 if part.attachment:
@@ -1320,6 +1367,8 @@ class _BaseResponse:
                         att_data["url"] = part.attachment.url
                     if part.attachment.path:
                         att_data["path"] = part.attachment.path
+                    if pm:
+                        att_data["provider_metadata"] = pm
                     row["content_json"] = json.dumps(att_data)
             else:
                 row["part_type"] = "unknown"
@@ -1335,29 +1384,44 @@ class _BaseResponse:
                 "role": part.role,
                 "order": order,
             }
+            pm = getattr(part, "provider_metadata", None)
             if isinstance(part, TextPart):
                 row["part_type"] = "text"
                 row["content"] = part.text
+                if pm:
+                    row["content_json"] = json.dumps({"provider_metadata": pm})
             elif isinstance(part, ReasoningPart):
                 row["part_type"] = "reasoning"
                 row["content"] = part.text
+                extra2: Dict[str, Any] = {}
                 if part.redacted or part.token_count:
-                    row["content_json"] = json.dumps(
-                        {"redacted": part.redacted, "token_count": part.token_count}
-                    )
+                    extra2["redacted"] = part.redacted
+                    extra2["token_count"] = part.token_count
+                if pm:
+                    extra2["provider_metadata"] = pm
+                if extra2:
+                    row["content_json"] = json.dumps(extra2)
             elif isinstance(part, ToolCallPart):
                 row["part_type"] = "tool_call"
-                row["content_json"] = json.dumps(
-                    {"name": part.name, "arguments": part.arguments}
-                )
+                tc_data: Dict[str, Any] = {
+                    "name": part.name,
+                    "arguments": part.arguments,
+                }
+                if pm:
+                    tc_data["provider_metadata"] = pm
+                row["content_json"] = json.dumps(tc_data)
                 row["tool_call_id"] = part.tool_call_id
                 row["server_executed"] = 1 if part.server_executed else 0
             elif isinstance(part, ToolResultPart):
                 row["part_type"] = "tool_result"
                 row["content"] = part.output
-                row["content_json"] = json.dumps(
-                    {"name": part.name, "exception": part.exception}
-                )
+                tr_data: Dict[str, Any] = {
+                    "name": part.name,
+                    "exception": part.exception,
+                }
+                if pm:
+                    tr_data["provider_metadata"] = pm
+                row["content_json"] = json.dumps(tr_data)
                 row["tool_call_id"] = part.tool_call_id
                 row["server_executed"] = 1 if part.server_executed else 0
             else:

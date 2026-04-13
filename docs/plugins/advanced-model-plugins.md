@@ -299,6 +299,124 @@ response.set_resolved_model(resolved_model_id)
 ```
 This string will be recorded in the database and shown in the output of `llm logs` and `llm logs --json`.
 
+(advanced-model-plugins-provider-metadata)=
+
+## Preserving opaque provider metadata
+
+Some providers attach opaque data — signatures, encrypted blobs, IDs — to
+parts of a response that the client must echo back verbatim on the next
+request for multi-turn continuity to work. Concrete examples:
+
+- **Anthropic** puts a `signature` on thinking blocks that is required for
+  multi-turn extended thinking, and `encrypted_content` on each
+  `web_search_result` inside a server-side `web_search_tool_result`.
+- **Google Gemini** puts a `thoughtSignature` on `functionCall` parts when
+  thinking is enabled.
+- **OpenAI Responses API** returns `encrypted_content` on reasoning items
+  when reasoning is stored server-side and needs to be replayed.
+
+LLM doesn't model these fields individually. Instead, every `TextPart`,
+`ReasoningPart`, `ToolCallPart`, and `ToolResultPart` has an optional
+`provider_metadata: dict` field, and `StreamEvent` has the same field.
+Plugins put whatever the API handed them in there, and echo it back on the
+next request.
+
+### Namespacing
+
+Use your provider name as the top-level key so transcripts that mix
+providers don't collide:
+
+```python
+TextPart(
+    role="assistant",
+    text="...",
+    provider_metadata={"anthropic": {"citations": [...]}},
+)
+```
+
+Future-proof this — don't flatten fields onto the top level. A transcript
+logged by one plugin and loaded by another should be round-trip safe.
+
+### Emitting it from a streaming `execute()`
+
+Attach `provider_metadata` to the `StreamEvent` that carries the relevant
+chunk. LLM merges it onto the finalized `Part` for that `part_index`
+(last non-None value wins per top-level key). You can attach it to any
+event for the part — usually the last one, once the signature arrives:
+
+```python
+from llm.parts import StreamEvent
+
+def execute(self, prompt, stream, response, conversation):
+    # ...stream reasoning text chunks at part_index=0...
+    yield StreamEvent(type="reasoning", chunk="Let me think", part_index=0)
+    yield StreamEvent(type="reasoning", chunk=" about this.", part_index=0)
+    # When the signature arrives at the end of the thinking block, attach it:
+    yield StreamEvent(
+        type="reasoning",
+        chunk="",
+        part_index=0,
+        provider_metadata={"anthropic": {"signature": sig}},
+    )
+    # ...then text at part_index=1, tool calls at part_index=2, etc.
+```
+
+For tool-call parts where the signature is known up-front, attach it to
+`tool_call_name`:
+
+```python
+yield StreamEvent(
+    type="tool_call_name",
+    chunk="search",
+    part_index=2,
+    tool_call_id="c1",
+    provider_metadata={"gemini": {"thoughtSignature": sig}},
+)
+```
+
+For server-executed tool results (Anthropic web search, code execution),
+store the whole raw result payload — the client has no use for its
+internal structure, it just has to hand it back:
+
+```python
+yield StreamEvent(
+    type="tool_result",
+    chunk=summary_text,
+    part_index=3,
+    server_executed=True,
+    provider_metadata={"anthropic": {"raw_content": content_blocks}},
+)
+```
+
+### Reading it back on subsequent requests
+
+When a conversation continues, your `build_messages` (or equivalent) walks
+the parts from prior turns. Check `part.provider_metadata` for your
+namespace key and reinsert the opaque fields into the request body. If the
+key is missing, fall through as if nothing was stored — an older transcript
+may predate this support.
+
+```python
+for part in prompt.parts:
+    if isinstance(part, ReasoningPart):
+        block = {"type": "thinking", "thinking": part.text}
+        sig = (part.provider_metadata or {}).get("anthropic", {}).get("signature")
+        if sig:
+            block["signature"] = sig
+        content.append(block)
+```
+
+### Contract
+
+- Treat `provider_metadata` as opaque. Do not parse other providers'
+  entries, and do not rely on internal structure of your own entry beyond
+  what your API documents — providers change these payloads.
+- Serialize cleanly. Anything you put in `provider_metadata` must be JSON
+  round-trippable; it's persisted in the `parts` table as JSON.
+- Don't store secrets here. API keys, user PII, and anything else that
+  shouldn't be logged don't belong in `provider_metadata` — it lands in
+  the user's `logs.db` like any other part data.
+
 (tutorial-model-plugin-raise-errors)=
 
 ## LLM_RAISE_ERRORS

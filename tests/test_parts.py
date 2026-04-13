@@ -1284,3 +1284,379 @@ class TestBuildMessagesWithParts:
             {"role": "assistant", "content": "The capital of France is Paris."},
             {"role": "user", "content": "What about Germany?"},
         ]
+
+
+class TestPhaseBFixes:
+    """Round-trip + stream assembler + tool parts in OpenAI build_messages."""
+
+    def test_attachment_part_round_trips_with_content(self):
+        from llm.parts import AttachmentPart, Part
+
+        att = llm.Attachment(type="image/png", content=b"hello-bytes")
+        d = AttachmentPart(role="user", attachment=att).to_dict()
+        assert d["type"] == "attachment"
+        restored = Part.from_dict(d)
+        assert isinstance(restored, AttachmentPart)
+        assert restored.attachment.content == b"hello-bytes"
+        assert restored.attachment.type == "image/png"
+
+    def test_attachment_part_round_trips_with_url(self):
+        from llm.parts import AttachmentPart, Part
+
+        att = llm.Attachment(type="image/png", url="https://example.com/x.png")
+        restored = Part.from_dict(AttachmentPart(role="user", attachment=att).to_dict())
+        assert restored.attachment.url == "https://example.com/x.png"
+        assert restored.attachment.type == "image/png"
+
+    def test_tool_result_part_attachments_round_trip(self):
+        from llm.parts import ToolResultPart, Part
+
+        att = llm.Attachment(type="text/plain", content=b"xx")
+        tr = ToolResultPart(
+            role="tool",
+            name="f",
+            output="out",
+            tool_call_id="c1",
+            attachments=[att],
+        )
+        restored = Part.from_dict(tr.to_dict())
+        assert len(restored.attachments) == 1
+        assert restored.attachments[0].content == b"xx"
+        assert restored.attachments[0].type == "text/plain"
+
+    def test_stream_assembler_raises_on_incompatible_type_at_same_index(self):
+        from llm.parts import StreamEvent
+
+        class M(llm.Model):
+            model_id = "m-bad-index"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=0,
+                    tool_call_id="c1",
+                )
+                yield StreamEvent(type="text", chunk="hi", part_index=0)
+
+        r = M().prompt("x")
+        r.text()
+        with pytest.raises(ValueError, match="incompatible with prior type"):
+            r.parts
+
+    def test_stream_assembler_allows_compatible_tool_call_events(self):
+        from llm.parts import StreamEvent, ToolCallPart
+
+        class M(llm.Model):
+            model_id = "m-ok"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=0,
+                    tool_call_id="c1",
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"q":"x"}',
+                    part_index=0,
+                    tool_call_id="c1",
+                )
+
+        r = M().prompt("x")
+        r.text()
+        assert len(r.parts) == 1
+        assert isinstance(r.parts[0], ToolCallPart)
+        assert r.parts[0].arguments == {"q": "x"}
+
+    def test_build_messages_with_tool_call_and_result_parts(
+        self, mocked_openai_chat, user_path
+    ):
+        from llm.parts import TextPart, ToolCallPart, ToolResultPart
+
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        response = model.prompt(
+            parts=[
+                TextPart(role="user", text="search please"),
+                ToolCallPart(
+                    role="assistant",
+                    name="search",
+                    arguments={"q": "x"},
+                    tool_call_id="c1",
+                ),
+                ToolResultPart(
+                    role="tool",
+                    tool_call_id="c1",
+                    name="search",
+                    output="result",
+                ),
+                TextPart(role="user", text="thanks"),
+            ]
+        )
+        response.text()
+        last_request = mocked_openai_chat.get_requests()[-1]
+        messages = json.loads(last_request.content)["messages"]
+        assert messages == [
+            {"role": "user", "content": "search please"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "c1",
+                        "function": {
+                            "name": "search",
+                            "arguments": '{"q": "x"}',
+                        },
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "result"},
+            {"role": "user", "content": "thanks"},
+        ]
+
+
+class TestProviderMetadata:
+    """Opaque provider metadata passthrough on parts and StreamEvent."""
+
+    def test_text_part_provider_metadata_round_trip(self):
+        from llm.parts import TextPart, Part
+
+        p = TextPart(
+            role="assistant",
+            text="hi",
+            provider_metadata={"anthropic": {"citations": [{"encrypted_index": "z"}]}},
+        )
+        d = p.to_dict()
+        assert (
+            d["provider_metadata"]["anthropic"]["citations"][0]["encrypted_index"]
+            == "z"
+        )
+        restored = Part.from_dict(d)
+        assert restored.provider_metadata == p.provider_metadata
+
+    def test_reasoning_part_provider_metadata_round_trip(self):
+        from llm.parts import ReasoningPart, Part
+
+        p = ReasoningPart(
+            role="assistant",
+            text="thinking",
+            provider_metadata={"anthropic": {"signature": "sig-bytes"}},
+        )
+        restored = Part.from_dict(p.to_dict())
+        assert restored.provider_metadata == {"anthropic": {"signature": "sig-bytes"}}
+
+    def test_tool_call_part_provider_metadata_round_trip(self):
+        from llm.parts import ToolCallPart, Part
+
+        p = ToolCallPart(
+            role="assistant",
+            name="search",
+            arguments={"q": "x"},
+            tool_call_id="c1",
+            provider_metadata={"gemini": {"thoughtSignature": "abc"}},
+        )
+        restored = Part.from_dict(p.to_dict())
+        assert restored.provider_metadata == {"gemini": {"thoughtSignature": "abc"}}
+
+    def test_tool_result_part_provider_metadata_round_trip(self):
+        from llm.parts import ToolResultPart, Part
+
+        p = ToolResultPart(
+            role="tool",
+            name="web_search",
+            output="ok",
+            tool_call_id="c1",
+            provider_metadata={
+                "anthropic": {
+                    "results": [
+                        {"url": "https://example.com", "encrypted_content": "blob"}
+                    ]
+                }
+            },
+        )
+        restored = Part.from_dict(p.to_dict())
+        assert (
+            restored.provider_metadata["anthropic"]["results"][0]["encrypted_content"]
+            == "blob"
+        )
+
+    def test_provider_metadata_omitted_when_none(self):
+        from llm.parts import TextPart
+
+        assert "provider_metadata" not in TextPart(role="user", text="hi").to_dict()
+
+    def test_stream_event_provider_metadata_flows_to_part(self):
+        from llm.parts import StreamEvent, ReasoningPart
+
+        class M(llm.Model):
+            model_id = "m-sig"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(
+                    type="reasoning",
+                    chunk="think",
+                    part_index=0,
+                    provider_metadata={"anthropic": {"signature": "sig-1"}},
+                )
+                yield StreamEvent(type="reasoning", chunk="ing", part_index=0)
+
+        r = M().prompt("x")
+        r.text()
+        parts = r.parts
+        assert len(parts) == 1
+        assert isinstance(parts[0], ReasoningPart)
+        assert parts[0].text == "thinking"
+        assert parts[0].provider_metadata == {"anthropic": {"signature": "sig-1"}}
+
+    def test_stream_event_provider_metadata_last_wins_per_key(self):
+        from llm.parts import StreamEvent, ToolCallPart
+
+        class M(llm.Model):
+            model_id = "m-sig2"
+
+            def execute(self, prompt, stream, response, conversation):
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk="f",
+                    part_index=0,
+                    tool_call_id="c1",
+                    provider_metadata={"anthropic": {"signature": "old"}},
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk="{}",
+                    part_index=0,
+                    provider_metadata={
+                        "anthropic": {"signature": "new"},
+                        "gemini": {"thoughtSignature": "g"},
+                    },
+                )
+
+        r = M().prompt("x")
+        r.text()
+        parts = r.parts
+        assert isinstance(parts[0], ToolCallPart)
+        assert parts[0].provider_metadata == {
+            "anthropic": {"signature": "new"},
+            "gemini": {"thoughtSignature": "g"},
+        }
+
+
+class TestProviderMetadataDatabase:
+    """provider_metadata is persisted through log_to_db and loaded back."""
+
+    def test_provider_metadata_persisted_and_loaded(self, logs_db):
+        from llm.migrations import migrate
+        from llm.parts import StreamEvent
+
+        migrate(logs_db)
+
+        model = StreamEventModel()
+        model.enqueue(
+            [
+                StreamEvent(
+                    type="reasoning",
+                    chunk="think",
+                    part_index=0,
+                    provider_metadata={"anthropic": {"signature": "sig-r"}},
+                ),
+                StreamEvent(
+                    type="text",
+                    chunk="hello",
+                    part_index=1,
+                    provider_metadata={"anthropic": {"citations": [{"i": "c"}]}},
+                ),
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=2,
+                    tool_call_id="c1",
+                    provider_metadata={"gemini": {"thoughtSignature": "sig-g"}},
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"q":"x"}',
+                    part_index=2,
+                ),
+                StreamEvent(
+                    type="tool_result",
+                    chunk="ok",
+                    part_index=3,
+                    server_executed=True,
+                    tool_call_id="c1",
+                    tool_name="search",
+                    provider_metadata={"anthropic": {"encrypted_content": "blob"}},
+                ),
+            ]
+        )
+        response = model.prompt("q")
+        response.text()
+        response.log_to_db(logs_db)
+
+        # Verify content_json on disk carries provider_metadata for each type
+        rows = [r for r in logs_db["parts"].rows if r["direction"] == "output"]
+        by_type = {r["part_type"]: json.loads(r["content_json"]) for r in rows}
+        assert by_type["reasoning"]["provider_metadata"] == {
+            "anthropic": {"signature": "sig-r"}
+        }
+        assert by_type["text"]["provider_metadata"] == {
+            "anthropic": {"citations": [{"i": "c"}]}
+        }
+        assert by_type["tool_call"]["provider_metadata"] == {
+            "gemini": {"thoughtSignature": "sig-g"}
+        }
+        assert by_type["tool_result"]["provider_metadata"] == {
+            "anthropic": {"encrypted_content": "blob"}
+        }
+
+        # Exercise the load path directly
+        loaded_parts = llm.Response._load_parts_from_db(logs_db, response.id)
+        loaded_by_type = {type(p).__name__: p for p in loaded_parts}
+        assert loaded_by_type["ReasoningPart"].provider_metadata == {
+            "anthropic": {"signature": "sig-r"}
+        }
+        assert loaded_by_type["TextPart"].provider_metadata == {
+            "anthropic": {"citations": [{"i": "c"}]}
+        }
+        assert loaded_by_type["ToolCallPart"].provider_metadata == {
+            "gemini": {"thoughtSignature": "sig-g"}
+        }
+        assert loaded_by_type["ToolResultPart"].provider_metadata == {
+            "anthropic": {"encrypted_content": "blob"}
+        }
+
+    def test_provider_metadata_persisted_for_input_parts(self, logs_db):
+        from llm.migrations import migrate
+        from llm.parts import TextPart, ToolCallPart
+
+        migrate(logs_db)
+
+        model = StreamEventModel()
+        model.enqueue([])
+        response = model.prompt(
+            parts=[
+                TextPart(
+                    role="user",
+                    text="hi",
+                    provider_metadata={"anthropic": {"x": 1}},
+                ),
+                ToolCallPart(
+                    role="assistant",
+                    name="f",
+                    arguments={},
+                    tool_call_id="c1",
+                    provider_metadata={"gemini": {"thoughtSignature": "g"}},
+                ),
+            ]
+        )
+        response.text()
+        response.log_to_db(logs_db)
+
+        input_rows = [r for r in logs_db["parts"].rows if r["direction"] == "input"]
+        pms = [json.loads(r["content_json"])["provider_metadata"] for r in input_rows]
+        assert {"anthropic": {"x": 1}} in pms
+        assert {"gemini": {"thoughtSignature": "g"}} in pms

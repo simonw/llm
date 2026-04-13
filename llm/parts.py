@@ -6,10 +6,36 @@ with type information so consumers can distinguish between different kinds of
 content as it arrives.
 """
 
+import base64
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .models import Attachment
+
+
+def _attachment_to_dict(att: Attachment) -> Dict[str, Any]:
+    d: Dict[str, Any] = {}
+    if att.type:
+        d["type"] = att.type
+    if att.url:
+        d["url"] = att.url
+    if att.path:
+        d["path"] = att.path
+    if att.content:
+        d["content"] = base64.b64encode(att.content).decode("ascii")
+    return d
+
+
+def _attachment_from_dict(d: Dict[str, Any]) -> Attachment:
+    content = d.get("content")
+    if isinstance(content, str):
+        content = base64.b64decode(content)
+    return Attachment(
+        type=d.get("type"),
+        path=d.get("path"),
+        url=d.get("url"),
+        content=content,
+    )
 
 
 @dataclass
@@ -24,14 +50,16 @@ class Part:
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "Part":
         type_ = d.get("type")
+        pm = d.get("provider_metadata")
         if type_ == "text":
-            return TextPart(role=d["role"], text=d["text"])
+            return TextPart(role=d["role"], text=d["text"], provider_metadata=pm)
         elif type_ == "reasoning":
             return ReasoningPart(
                 role=d["role"],
                 text=d.get("text", ""),
                 redacted=d.get("redacted", False),
                 token_count=d.get("token_count"),
+                provider_metadata=pm,
             )
         elif type_ == "tool_call":
             return ToolCallPart(
@@ -40,6 +68,7 @@ class Part:
                 arguments=d["arguments"],
                 tool_call_id=d.get("tool_call_id"),
                 server_executed=d.get("server_executed", False),
+                provider_metadata=pm,
             )
         elif type_ == "tool_result":
             return ToolResultPart(
@@ -49,7 +78,15 @@ class Part:
                 tool_call_id=d.get("tool_call_id"),
                 server_executed=d.get("server_executed", False),
                 exception=d.get("exception"),
+                attachments=[
+                    _attachment_from_dict(a) for a in d.get("attachments", [])
+                ],
+                provider_metadata=pm,
             )
+        elif type_ == "attachment":
+            att_dict = d.get("attachment")
+            attachment = _attachment_from_dict(att_dict) if att_dict else None
+            return AttachmentPart(role=d["role"], attachment=attachment)
         else:
             raise ValueError(f"Unknown part type: {type_!r}")
 
@@ -57,9 +94,13 @@ class Part:
 @dataclass
 class TextPart(Part):
     text: str = ""
+    provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"role": self.role, "type": "text", "text": self.text}
+        d: Dict[str, Any] = {"role": self.role, "type": "text", "text": self.text}
+        if self.provider_metadata:
+            d["provider_metadata"] = self.provider_metadata
+        return d
 
 
 @dataclass
@@ -69,6 +110,7 @@ class ReasoningPart(Part):
     text: str = ""
     redacted: bool = False
     token_count: Optional[int] = None
+    provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -80,6 +122,8 @@ class ReasoningPart(Part):
             d["redacted"] = True
         if self.token_count is not None:
             d["token_count"] = self.token_count
+        if self.provider_metadata:
+            d["provider_metadata"] = self.provider_metadata
         return d
 
 
@@ -91,6 +135,7 @@ class ToolCallPart(Part):
     arguments: Dict[str, Any] = field(default_factory=dict)
     tool_call_id: Optional[str] = None
     server_executed: bool = False
+    provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -103,6 +148,8 @@ class ToolCallPart(Part):
             d["tool_call_id"] = self.tool_call_id
         if self.server_executed:
             d["server_executed"] = True
+        if self.provider_metadata:
+            d["provider_metadata"] = self.provider_metadata
         return d
 
 
@@ -116,6 +163,7 @@ class ToolResultPart(Part):
     server_executed: bool = False
     attachments: List[Any] = field(default_factory=list)
     exception: Optional[str] = None
+    provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -130,6 +178,10 @@ class ToolResultPart(Part):
             d["server_executed"] = True
         if self.exception is not None:
             d["exception"] = self.exception
+        if self.attachments:
+            d["attachments"] = [_attachment_to_dict(a) for a in self.attachments]
+        if self.provider_metadata:
+            d["provider_metadata"] = self.provider_metadata
         return d
 
 
@@ -142,14 +194,7 @@ class AttachmentPart(Part):
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"role": self.role, "type": "attachment"}
         if self.attachment:
-            att: Dict[str, Any] = {}
-            if self.attachment.type:
-                att["type"] = self.attachment.type
-            if self.attachment.url:
-                att["url"] = self.attachment.url
-            if self.attachment.path:
-                att["path"] = self.attachment.path
-            d["attachment"] = att
+            d["attachment"] = _attachment_to_dict(self.attachment)
         return d
 
 
@@ -162,6 +207,10 @@ class StreamEvent:
     part_index: Which part this contributes to (monotonically increasing)
     tool_call_id: Set for tool_call events
     server_executed: True for server-side tool calls/results
+    provider_metadata: Opaque provider-specific data (e.g. Anthropic
+        `signature`, Gemini `thoughtSignature`, OpenAI `encrypted_content`)
+        that must be echoed back on the next request. Merged onto the
+        resulting Part at finalize time (last non-None wins).
     """
 
     type: str
@@ -170,3 +219,4 @@ class StreamEvent:
     tool_call_id: Optional[str] = None
     server_executed: bool = False
     tool_name: Optional[str] = None
+    provider_metadata: Optional[Dict[str, Any]] = None
