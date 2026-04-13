@@ -199,6 +199,101 @@ class AttachmentPart(Part):
 
 
 @dataclass
+class Message:
+    """A single turn in a conversation: role + list of parts.
+
+    `parts` contains one or more Part objects (TextPart, ToolCallPart, etc).
+    `provider_metadata` carries opaque provider-specific data attached to the
+    message as a whole (e.g. message-level IDs); part-level data lives on
+    the individual Part's own `provider_metadata`.
+    """
+
+    role: str
+    parts: List[Part] = field(default_factory=list)
+    provider_metadata: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "role": self.role,
+            "type": "message",
+            "parts": [p.to_dict() for p in self.parts],
+        }
+        if self.provider_metadata:
+            d["provider_metadata"] = self.provider_metadata
+        return d
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "Message":
+        return Message(
+            role=d["role"],
+            parts=[Part.from_dict(p) for p in d.get("parts", [])],
+            provider_metadata=d.get("provider_metadata"),
+        )
+
+
+def normalize_parts(items: Any, role: str = "assistant") -> List[Part]:
+    """Normalize helper inputs to a list of Part objects.
+
+    Accepts str, Attachment, Part, or a list/tuple of those (flattened one
+    level). `role` is applied to newly constructed Parts; pre-existing Part
+    objects keep whatever role they were created with.
+    """
+    out: List[Part] = []
+    for item in items:
+        if isinstance(item, Part):
+            out.append(item)
+        elif isinstance(item, str):
+            out.append(TextPart(role=role, text=item))
+        elif isinstance(item, Attachment):
+            out.append(AttachmentPart(role=role, attachment=item))
+        elif isinstance(item, (list, tuple)):
+            out.extend(normalize_parts(item, role=role))
+        else:
+            raise TypeError(f"Cannot convert {item!r} to an llm Part")
+    return out
+
+
+def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
+    "Build a Message with role='system'."
+    return Message(
+        role="system",
+        parts=normalize_parts(items, role="system"),
+        provider_metadata=provider_metadata,
+    )
+
+
+def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
+    "Build a Message with role='user'."
+    return Message(
+        role="user",
+        parts=normalize_parts(items, role="user"),
+        provider_metadata=provider_metadata,
+    )
+
+
+def assistant(
+    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
+) -> Message:
+    "Build a Message with role='assistant'."
+    return Message(
+        role="assistant",
+        parts=normalize_parts(items, role="assistant"),
+        provider_metadata=provider_metadata,
+    )
+
+
+def tool_message(
+    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
+) -> Message:
+    "Build a Message with role='tool' (typically wrapping ToolResultParts)."
+    return Message(
+        role="tool",
+        parts=normalize_parts(items, role="tool"),
+        provider_metadata=provider_metadata,
+    )
+
+
+@dataclass
 class StreamEvent:
     """A streaming event from a model response.
 

@@ -28,12 +28,17 @@ from .models import (
 )
 from .parts import (
     AttachmentPart,
+    Message,
     Part,
     ReasoningPart,
     StreamEvent,
     TextPart,
     ToolCallPart,
     ToolResultPart,
+    assistant,
+    system,
+    tool_message,
+    user,
 )
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
@@ -63,6 +68,7 @@ __all__ = [
     "get_model",
     "hookimpl",
     "KeyModel",
+    "Message",
     "Model",
     "ModelError",
     "NeedsKeyException",
@@ -82,6 +88,10 @@ __all__ = [
     "ToolResult",
     "ToolResultPart",
     "Usage",
+    "assistant",
+    "system",
+    "tool_message",
+    "user",
     "user_dir",
     "schema_dsl",
 ]

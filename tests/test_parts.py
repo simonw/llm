@@ -1660,3 +1660,186 @@ class TestProviderMetadataDatabase:
         pms = [json.loads(r["content_json"])["provider_metadata"] for r in input_rows]
         assert {"anthropic": {"x": 1}} in pms
         assert {"gemini": {"thoughtSignature": "g"}} in pms
+
+
+class TestMessageClass:
+    """Message dataclass wraps a role + list of parts."""
+
+    def test_message_basic(self):
+        from llm import Message
+        from llm.parts import TextPart
+
+        m = Message(role="user", parts=[TextPart(role="user", text="hi")])
+        assert m.role == "user"
+        assert len(m.parts) == 1
+        assert m.provider_metadata is None
+
+    def test_message_to_dict_and_from_dict_round_trip(self):
+        from llm import Message
+        from llm.parts import TextPart, ToolCallPart
+
+        m = Message(
+            role="assistant",
+            parts=[
+                TextPart(role="assistant", text="I'll check."),
+                ToolCallPart(
+                    role="assistant",
+                    name="search",
+                    arguments={"q": "x"},
+                    tool_call_id="c1",
+                ),
+            ],
+            provider_metadata={"anthropic": {"message_id": "m1"}},
+        )
+        d = m.to_dict()
+        assert d["role"] == "assistant"
+        assert d["type"] == "message"
+        assert len(d["parts"]) == 2
+        assert d["provider_metadata"] == {"anthropic": {"message_id": "m1"}}
+
+        restored = Message.from_dict(d)
+        assert restored.role == "assistant"
+        assert len(restored.parts) == 2
+        assert isinstance(restored.parts[0], TextPart)
+        assert restored.parts[0].text == "I'll check."
+        assert isinstance(restored.parts[1], ToolCallPart)
+        assert restored.parts[1].tool_call_id == "c1"
+        assert restored.provider_metadata == {"anthropic": {"message_id": "m1"}}
+
+    def test_message_to_dict_omits_empty_provider_metadata(self):
+        from llm import Message
+
+        d = Message(role="user", parts=[]).to_dict()
+        assert "provider_metadata" not in d
+
+
+class TestNormalizeParts:
+    def test_string_becomes_text_part(self):
+        from llm.parts import normalize_parts, TextPart
+
+        parts = normalize_parts(["hello"], role="user")
+        assert len(parts) == 1
+        assert isinstance(parts[0], TextPart)
+        assert parts[0].text == "hello"
+        assert parts[0].role == "user"
+
+    def test_attachment_becomes_attachment_part(self):
+        from llm.parts import normalize_parts, AttachmentPart
+
+        att = llm.Attachment(type="image/png", content=b"x")
+        parts = normalize_parts([att], role="user")
+        assert len(parts) == 1
+        assert isinstance(parts[0], AttachmentPart)
+        assert parts[0].attachment is att
+
+    def test_existing_part_passes_through(self):
+        from llm.parts import normalize_parts, TextPart
+
+        p = TextPart(role="user", text="x")
+        assert normalize_parts([p], role="user") == [p]
+
+    def test_list_is_flattened_one_level(self):
+        from llm.parts import normalize_parts, TextPart
+
+        inner = [TextPart(role="user", text="a"), TextPart(role="user", text="b")]
+        parts = normalize_parts(["prefix", inner, "suffix"], role="user")
+        assert [p.text for p in parts] == ["prefix", "a", "b", "suffix"]
+
+    def test_tuple_is_flattened_one_level(self):
+        from llm.parts import normalize_parts, TextPart
+
+        inner = (TextPart(role="user", text="a"),)
+        parts = normalize_parts([inner], role="user")
+        assert [p.text for p in parts] == ["a"]
+
+    def test_invalid_raises_type_error(self):
+        from llm.parts import normalize_parts
+
+        with pytest.raises(TypeError, match="Cannot convert"):
+            normalize_parts([123], role="user")
+
+
+class TestRoleHelpers:
+    def test_user_helper_normalizes_string(self):
+        from llm import user, Message
+        from llm.parts import TextPart
+
+        m = user("hello")
+        assert isinstance(m, Message)
+        assert m.role == "user"
+        assert len(m.parts) == 1
+        assert isinstance(m.parts[0], TextPart)
+        assert m.parts[0].text == "hello"
+
+    def test_assistant_helper_mixes_text_and_tool_call(self):
+        from llm import assistant
+        from llm.parts import TextPart, ToolCallPart
+
+        tc = ToolCallPart(
+            role="assistant",
+            name="get_weather",
+            arguments={"location": "Paris"},
+            tool_call_id="c1",
+        )
+        m = assistant("I'll check.", tc)
+        assert m.role == "assistant"
+        assert len(m.parts) == 2
+        assert isinstance(m.parts[0], TextPart)
+        assert m.parts[1] is tc
+
+    def test_assistant_helper_flattens_list_of_parts(self):
+        from llm import assistant
+        from llm.parts import ToolCallPart
+
+        calls = [
+            ToolCallPart(
+                role="assistant",
+                name="get_weather",
+                arguments={"location": "Paris"},
+                tool_call_id="c1",
+            ),
+            ToolCallPart(
+                role="assistant",
+                name="get_weather",
+                arguments={"location": "Tokyo"},
+                tool_call_id="c2",
+            ),
+        ]
+        m = assistant("I'll check both.", calls)
+        assert len(m.parts) == 3
+        assert m.parts[0].__class__.__name__ == "TextPart"
+        assert m.parts[1].tool_call_id == "c1"
+        assert m.parts[2].tool_call_id == "c2"
+
+    def test_system_helper(self):
+        from llm import system
+
+        m = system("Be concise.")
+        assert m.role == "system"
+        assert m.parts[0].text == "Be concise."
+
+    def test_tool_message_helper(self):
+        from llm import tool_message
+        from llm.parts import ToolResultPart
+
+        tr = ToolResultPart(
+            role="tool",
+            name="search",
+            output="ok",
+            tool_call_id="c1",
+        )
+        m = tool_message(tr)
+        assert m.role == "tool"
+        assert m.parts == [tr]
+
+    def test_helper_preserves_message_provider_metadata(self):
+        from llm import assistant
+
+        m = assistant("x", provider_metadata={"openai": {"message_id": "m"}})
+        assert m.provider_metadata == {"openai": {"message_id": "m"}}
+
+    def test_helpers_exported_from_llm(self):
+        import llm
+
+        for name in ("user", "assistant", "system", "tool_message", "Message"):
+            assert hasattr(llm, name), f"llm.{name} missing"
