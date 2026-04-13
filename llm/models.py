@@ -798,7 +798,9 @@ class _BaseResponse:
                         name=name,
                         arguments=arguments,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
-                        server_executed=server_executed_buf[0] if server_executed_buf else False,
+                        server_executed=(
+                            server_executed_buf[0] if server_executed_buf else False
+                        ),
                     )
                 )
             elif current_type == "tool_result":
@@ -809,7 +811,9 @@ class _BaseResponse:
                         name=tool_name_buf[0] if tool_name_buf else "",
                         output=output,
                         tool_call_id=tool_call_id_buf[0] if tool_call_id_buf else None,
-                        server_executed=server_executed_buf[0] if server_executed_buf else False,
+                        server_executed=(
+                            server_executed_buf[0] if server_executed_buf else False
+                        ),
                     )
                 )
 
@@ -1027,7 +1031,9 @@ class _BaseResponse:
         if not parts_rows:
             return None
 
-        columns = [desc[0] for desc in db.execute("SELECT * FROM parts LIMIT 0").description]
+        columns = [
+            desc[0] for desc in db.execute("SELECT * FROM parts LIMIT 0").description
+        ]
         parts = []
         for row_tuple in parts_rows:
             r = dict(zip(columns, row_tuple))

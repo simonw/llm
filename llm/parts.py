@@ -5,6 +5,7 @@ tool calls, tool results, and attachments. StreamEvent wraps streaming chunks
 with type information so consumers can distinguish between different kinds of
 content as it arrives.
 """
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 

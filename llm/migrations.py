@@ -438,4 +438,6 @@ def m022_parts_table(db):
         pk="id",
         foreign_keys=[("response_id", "responses", "id")],
     )
-    db.execute('CREATE UNIQUE INDEX "idx_parts_response_order" ON parts (response_id, direction, "order")')
+    db.execute(
+        'CREATE UNIQUE INDEX "idx_parts_response_order" ON parts (response_id, direction, "order")'
+    )

@@ -833,7 +833,11 @@ class Chat(_Shared, KeyModel):
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
                             # New tool call — advance part_index past text
-                            tc_part_index = part_index + 1 + index if has_text else part_index + index
+                            tc_part_index = (
+                                part_index + 1 + index
+                                if has_text
+                                else part_index + index
+                            )
                             yield StreamEvent(
                                 type="tool_call_name",
                                 chunk=tool_call.function.name or "",
@@ -845,7 +849,11 @@ class Chat(_Shared, KeyModel):
                                 index
                             ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
-                            tc_part_index = part_index + 1 + index if has_text else part_index + index
+                            tc_part_index = (
+                                part_index + 1 + index
+                                if has_text
+                                else part_index + index
+                            )
                             yield StreamEvent(
                                 type="tool_call_args",
                                 chunk=tool_call.function.arguments,
@@ -898,9 +906,9 @@ class Chat(_Shared, KeyModel):
                 )
         # Extract reasoning tokens before set_usage mutates the dict
         if usage:
-            reasoning_tokens = (
-                usage.get("completion_tokens_details") or {}
-            ).get("reasoning_tokens", 0)
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
+            )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens
         self.set_usage(response, usage)
@@ -955,7 +963,11 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         index = tool_call.index
                         if index not in tool_calls:
                             tool_calls[index] = tool_call
-                            tc_part_index = part_index + 1 + index if has_text else part_index + index
+                            tc_part_index = (
+                                part_index + 1 + index
+                                if has_text
+                                else part_index + index
+                            )
                             yield StreamEvent(
                                 type="tool_call_name",
                                 chunk=tool_call.function.name or "",
@@ -967,7 +979,11 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 index
                             ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
-                            tc_part_index = part_index + 1 + index if has_text else part_index + index
+                            tc_part_index = (
+                                part_index + 1 + index
+                                if has_text
+                                else part_index + index
+                            )
                             yield StreamEvent(
                                 type="tool_call_args",
                                 chunk=tool_call.function.arguments,
@@ -1020,9 +1036,9 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 )
         # Extract reasoning tokens before set_usage mutates the dict
         if usage:
-            reasoning_tokens = (
-                usage.get("completion_tokens_details") or {}
-            ).get("reasoning_tokens", 0)
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
+            )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens
         self.set_usage(response, usage)

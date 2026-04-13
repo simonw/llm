@@ -1,4 +1,5 @@
 """Tests for Part types, StreamEvent, and Response integration."""
+
 import pytest
 import llm
 
@@ -14,6 +15,7 @@ class TestExports:
         assert llm.ToolResultPart is not None
         assert llm.AttachmentPart is not None
         assert llm.StreamEvent is not None
+
 
 # Phase 1: Part types and serialization
 
@@ -336,10 +338,12 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="text", chunk="Hello", part_index=0),
-            StreamEvent(type="text", chunk=" world", part_index=0),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="text", chunk="Hello", part_index=0),
+                StreamEvent(type="text", chunk=" world", part_index=0),
+            ]
+        )
         response = model.prompt("hi")
         chunks = list(response)
         assert chunks == ["Hello", " world"]
@@ -350,10 +354,12 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent
 
         model = StreamEventModel()
-        model.enqueue([
-            "plain ",
-            StreamEvent(type="text", chunk="event", part_index=0),
-        ])
+        model.enqueue(
+            [
+                "plain ",
+                StreamEvent(type="text", chunk="event", part_index=0),
+            ]
+        )
         response = model.prompt("hi")
         chunks = list(response)
         assert chunks == ["plain ", "event"]
@@ -363,10 +369,12 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="Let me think...", part_index=0),
-            StreamEvent(type="text", chunk="The answer is 42", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="Let me think...", part_index=0),
+                StreamEvent(type="text", chunk="The answer is 42", part_index=1),
+            ]
+        )
         response = model.prompt("question")
         # Regular iteration only yields text
         chunks = list(response)
@@ -377,10 +385,12 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
-            StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+                StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         response = model.prompt("question")
         events = list(response.stream_events())
         assert len(events) == 2
@@ -394,12 +404,14 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent, TextPart, ReasoningPart
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="Let me ", part_index=0),
-            StreamEvent(type="reasoning", chunk="think...", part_index=0),
-            StreamEvent(type="text", chunk="The ", part_index=1),
-            StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="Let me ", part_index=0),
+                StreamEvent(type="reasoning", chunk="think...", part_index=0),
+                StreamEvent(type="text", chunk="The ", part_index=1),
+                StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         response = model.prompt("question")
         response.text()  # Force completion
         parts = response.parts
@@ -417,27 +429,29 @@ class TestPhase2StreamEventHandling:
         import json
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="text", chunk="Let me search", part_index=0),
-            StreamEvent(
-                type="tool_call_name",
-                chunk="search",
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-            StreamEvent(
-                type="tool_call_args",
-                chunk='{"query": ',
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-            StreamEvent(
-                type="tool_call_args",
-                chunk='"weather"}',
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="text", chunk="Let me search", part_index=0),
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"query": ',
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk='"weather"}',
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+            ]
+        )
         response = model.prompt("what's the weather?")
         response.text()
         parts = response.parts
@@ -454,30 +468,32 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent, ToolCallPart, ToolResultPart
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(
-                type="tool_call_name",
-                chunk="code_exec",
-                part_index=0,
-                tool_call_id="call_1",
-                server_executed=True,
-            ),
-            StreamEvent(
-                type="tool_call_args",
-                chunk='{"code": "1+1"}',
-                part_index=0,
-                tool_call_id="call_1",
-                server_executed=True,
-            ),
-            StreamEvent(
-                type="tool_result",
-                chunk="2",
-                part_index=1,
-                tool_call_id="call_1",
-                server_executed=True,
-            ),
-            StreamEvent(type="text", chunk="The answer is 2", part_index=2),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="code_exec",
+                    part_index=0,
+                    tool_call_id="call_1",
+                    server_executed=True,
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"code": "1+1"}',
+                    part_index=0,
+                    tool_call_id="call_1",
+                    server_executed=True,
+                ),
+                StreamEvent(
+                    type="tool_result",
+                    chunk="2",
+                    part_index=1,
+                    tool_call_id="call_1",
+                    server_executed=True,
+                ),
+                StreamEvent(type="text", chunk="The answer is 2", part_index=2),
+            ]
+        )
         response = model.prompt("compute")
         response.text()
         parts = response.parts
@@ -494,21 +510,23 @@ class TestPhase2StreamEventHandling:
         from llm.parts import StreamEvent
 
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="text", chunk="searching...", part_index=0),
-            StreamEvent(
-                type="tool_call_name",
-                chunk="search",
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-            StreamEvent(
-                type="tool_call_args",
-                chunk='{"q": "test"}',
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="text", chunk="searching...", part_index=0),
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"q": "test"}',
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+            ]
+        )
         response = model.prompt("hi")
         chunks = list(response)
         assert chunks == ["searching..."]
@@ -521,10 +539,12 @@ class TestPhase2AsyncStreamEventHandling:
         from llm.parts import StreamEvent
 
         model = AsyncStreamEventModel()
-        model.enqueue([
-            StreamEvent(type="text", chunk="Hello", part_index=0),
-            StreamEvent(type="text", chunk=" world", part_index=0),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="text", chunk="Hello", part_index=0),
+                StreamEvent(type="text", chunk=" world", part_index=0),
+            ]
+        )
         response = model.prompt("hi")
         chunks = []
         async for chunk in response:
@@ -536,10 +556,12 @@ class TestPhase2AsyncStreamEventHandling:
         from llm.parts import StreamEvent
 
         model = AsyncStreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
-            StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+                StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         response = model.prompt("hi")
         chunks = []
         async for chunk in response:
@@ -551,10 +573,12 @@ class TestPhase2AsyncStreamEventHandling:
         from llm.parts import StreamEvent
 
         model = AsyncStreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="thinking", part_index=0),
-            StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+                StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         response = model.prompt("hi")
         events = []
         async for event in response.astream_events():
@@ -568,10 +592,12 @@ class TestPhase2AsyncStreamEventHandling:
         from llm.parts import StreamEvent, TextPart, ReasoningPart
 
         model = AsyncStreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="hmm", part_index=0),
-            StreamEvent(type="text", chunk="yes", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="hmm", part_index=0),
+                StreamEvent(type="text", chunk="yes", part_index=1),
+            ]
+        )
         response = model.prompt("hi")
         await response.text()
         parts = response.parts
@@ -599,9 +625,7 @@ def _openai_sse_chunks(deltas, usage=None):
             "object": "chat.completion.chunk",
             "created": 1700000000,
             "model": "gpt-5.4-mini",
-            "choices": [
-                {"index": 0, "delta": delta, "finish_reason": finish_reason}
-            ],
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
         }
         if usage and i == len(deltas) - 1:
             chunk["usage"] = usage
@@ -636,12 +660,14 @@ class TestOpenAIPluginStreamEvents:
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(
-                _openai_sse_chunks([
-                    ({"role": "assistant", "content": ""}, None),
-                    ({"content": "Hello"}, None),
-                    ({"content": " world"}, None),
-                    ({}, "stop"),
-                ])
+                _openai_sse_chunks(
+                    [
+                        ({"role": "assistant", "content": ""}, None),
+                        ({"content": "Hello"}, None),
+                        ({"content": " world"}, None),
+                        ({}, "stop"),
+                    ]
+                )
             ),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -665,11 +691,13 @@ class TestOpenAIPluginStreamEvents:
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(
-                _openai_sse_chunks([
-                    ({"role": "assistant", "content": ""}, None),
-                    ({"content": "Hi"}, None),
-                    ({}, "stop"),
-                ])
+                _openai_sse_chunks(
+                    [
+                        ({"role": "assistant", "content": ""}, None),
+                        ({"content": "Hi"}, None),
+                        ({}, "stop"),
+                    ]
+                )
             ),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -687,48 +715,50 @@ class TestOpenAIPluginStreamEvents:
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(
-                _openai_sse_chunks([
-                    (
-                        {
-                            "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "id": "call_abc",
-                                    "function": {
-                                        "name": "get_weather",
-                                        "arguments": "",
-                                    },
-                                    "type": "function",
-                                }
-                            ],
-                        },
-                        None,
-                    ),
-                    (
-                        {
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "function": {"arguments": '{"city"'},
-                                }
-                            ]
-                        },
-                        None,
-                    ),
-                    (
-                        {
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "function": {"arguments": ': "Paris"}'},
-                                }
-                            ]
-                        },
-                        None,
-                    ),
-                    ({}, "stop"),
-                ])
+                _openai_sse_chunks(
+                    [
+                        (
+                            {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_abc",
+                                        "function": {
+                                            "name": "get_weather",
+                                            "arguments": "",
+                                        },
+                                        "type": "function",
+                                    }
+                                ],
+                            },
+                            None,
+                        ),
+                        (
+                            {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": '{"city"'},
+                                    }
+                                ]
+                            },
+                            None,
+                        ),
+                        (
+                            {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": ': "Paris"}'},
+                                    }
+                                ]
+                            },
+                            None,
+                        ),
+                        ({}, "stop"),
+                    ]
+                )
             ),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -838,6 +868,7 @@ class TestOpenAIPluginStreamEvents:
 
 
 # Phase 4: parts=[] prompt parameter
+
 
 class TestPartsParameter:
     """Test the parts=[] parameter on model.prompt()."""
@@ -964,17 +995,17 @@ class TestDatabaseParts:
 
         # Use a model that yields StreamEvents (has reasoning + text)
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
-            StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+                StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         response = model.prompt("question")
         response.text()
         response.log_to_db(logs_db)
 
-        parts_rows = [
-            r for r in logs_db["parts"].rows if r["direction"] == "output"
-        ]
+        parts_rows = [r for r in logs_db["parts"].rows if r["direction"] == "output"]
         assert len(parts_rows) == 2
         # First part: reasoning
         assert parts_rows[0]["part_type"] == "reasoning"
@@ -998,7 +1029,7 @@ class TestDatabaseParts:
 
         parts_rows = list(
             logs_db.execute(
-                "select * from parts where response_id = ? order by \"order\"",
+                'select * from parts where response_id = ? order by "order"',
                 [response.id],
             ).fetchall()
         )
@@ -1036,21 +1067,23 @@ class TestChainResponseStreamEvents:
 
         model = StreamEventModel()
         # First response: tool call
-        model.enqueue([
-            StreamEvent(type="text", chunk="Let me check", part_index=0),
-            StreamEvent(
-                type="tool_call_name",
-                chunk="lookup",
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-            StreamEvent(
-                type="tool_call_args",
-                chunk='{}',
-                part_index=1,
-                tool_call_id="call_1",
-            ),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="text", chunk="Let me check", part_index=0),
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="lookup",
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk="{}",
+                    part_index=1,
+                    tool_call_id="call_1",
+                ),
+            ]
+        )
         response = model.prompt("test")
         # stream_events on a regular Response should work
         events = list(response.stream_events())
@@ -1086,10 +1119,12 @@ class TestCLIReasoningDisplay:
         # But StreamEventModel isn't registered as a plugin.
         # Instead, test via the Python API pattern that the CLI uses.
         model = StreamEventModel()
-        model.enqueue([
-            StreamEvent(type="reasoning", chunk="thinking hard", part_index=0),
-            StreamEvent(type="text", chunk="the answer", part_index=1),
-        ])
+        model.enqueue(
+            [
+                StreamEvent(type="reasoning", chunk="thinking hard", part_index=0),
+                StreamEvent(type="text", chunk="the answer", part_index=1),
+            ]
+        )
         response = model.prompt("question")
         # Collect text (stdout) and reasoning (stderr) events
         stdout_chunks = []
@@ -1134,7 +1169,9 @@ class TestCLIReasoningDisplay:
         ]
         stdout = io.StringIO()
         stderr = io.StringIO()
-        display_stream_events(events, stdout=stdout, stderr=stderr, show_reasoning=False)
+        display_stream_events(
+            events, stdout=stdout, stderr=stderr, show_reasoning=False
+        )
         assert stdout.getvalue() == "answer"
         assert stderr.getvalue() == ""
 
