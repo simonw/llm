@@ -246,30 +246,20 @@ As you can see, it uses `attachment.url` if that is available and otherwise fall
 
 ### Attachments from previous conversations
 
-Models that implement the ability to continue a conversation can reconstruct the previous message JSON using the `response.attachments` attribute.
-
-Here's how the OpenAI plugin does that:
+The canonical source of structured input for a turn is `prompt.messages` — a list of `llm.Message` objects, each with a `role` and a list of parts (`TextPart`, `AttachmentPart`, `ToolCallPart`, `ToolResultPart`, etc). A plugin's `build_messages` (or equivalent) should iterate these and translate each part to whatever the underlying API expects:
 
 ```python
-for prev_response in conversation.responses:
-    if prev_response.attachments:
-        attachment_message = []
-        if prev_response.prompt.prompt:
-            attachment_message.append(
-                {"type": "text", "text": prev_response.prompt.prompt}
-            )
-        for attachment in prev_response.attachments:
-            attachment_message.append(_attachment(attachment))
-        messages.append({"role": "user", "content": attachment_message})
-    else:
-        messages.append(
-            {"role": "user", "content": prev_response.prompt.prompt}
-        )
-    messages.append({"role": "assistant", "content": prev_response.text_or_raise()})
+for message in prompt.messages:
+    for part in message.parts:
+        if isinstance(part, TextPart):
+            ...
+        elif isinstance(part, AttachmentPart):
+            ...
+        elif isinstance(part, ToolCallPart):
+            ...
 ```
-The `response.text_or_raise()` method used there will return the text from the response or raise a `ValueError` exception if the response is an `AsyncResponse` instance that has not yet been fully resolved.
 
-This is a slightly weird hack to work around the common need to share logic for building up the `messages` list across both sync and async models.
+For conversation history, walk `conversation.responses` and for each `prev_response`, consume `prev_response.prompt.messages` (the input messages from that turn) plus `prev_response.messages` (the assistant response). The `response.text_or_raise()` / `response.tool_calls_or_raise()` accessors are still available as a shortcut for flat text-plus-tool-calls assistant turns and are safe to use from both sync and async code paths.
 
 (advanced-model-plugins-usage)=
 
@@ -328,7 +318,6 @@ providers don't collide:
 
 ```python
 TextPart(
-    role="assistant",
     text="...",
     provider_metadata={"anthropic": {"citations": [...]}},
 )
@@ -397,13 +386,16 @@ key is missing, fall through as if nothing was stored — an older transcript
 may predate this support.
 
 ```python
-for part in prompt.parts:
-    if isinstance(part, ReasoningPart):
-        block = {"type": "thinking", "thinking": part.text}
-        sig = (part.provider_metadata or {}).get("anthropic", {}).get("signature")
-        if sig:
-            block["signature"] = sig
-        content.append(block)
+for message in prompt.messages:
+    for part in message.parts:
+        if isinstance(part, ReasoningPart):
+            block = {"type": "thinking", "thinking": part.text}
+            sig = (part.provider_metadata or {}).get("anthropic", {}).get(
+                "signature"
+            )
+            if sig:
+                block["signature"] = sig
+            content.append(block)
 ```
 
 ### Contract
@@ -412,10 +404,10 @@ for part in prompt.parts:
   entries, and do not rely on internal structure of your own entry beyond
   what your API documents — providers change these payloads.
 - Serialize cleanly. Anything you put in `provider_metadata` must be JSON
-  round-trippable; it's persisted in the `parts` table as JSON.
+  round-trippable; it's persisted in the `message_parts` table as JSON.
 - Don't store secrets here. API keys, user PII, and anything else that
   shouldn't be logged don't belong in `provider_metadata` — it lands in
-  the user's `logs.db` like any other part data.
+  the user's `logs.db` like any other message data.
 
 (tutorial-model-plugin-raise-errors)=
 

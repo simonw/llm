@@ -528,29 +528,26 @@ If a response has been evaluated, `response.text()` will continue to return the 
 
 (python-api-parts)=
 
-### Parts and stream events
+### Messages, parts, and stream events
 
-After a response completes, `response.parts` provides a structured list of everything the model produced — text, reasoning, tool calls, and tool results — as typed Python objects.
+LLM models exchange structured **messages**, each with a role (`user`, `assistant`, `system`, `tool`) and a list of **parts** (text, reasoning, tool calls, tool results, attachments). After a response completes, `response.messages` is the canonical structured view of what the model produced, and the `messages=` parameter on `model.prompt()` is the canonical way to supply explicit conversation history.
 
 ```python
 response = model.prompt("Five names for a pet pelican")
 response.text()  # Force completion
-for part in response.parts:
-    print(type(part).__name__, part.to_dict())
-```
-Output:
-```python
-TextPart {'role': 'assistant', 'type': 'text', 'text': '1. Captain...'}
+for message in response.messages:
+    for part in message.parts:
+        print(type(part).__name__, part.to_dict())
 ```
 
-For models that support extended thinking (such as Claude with `thinking=True`), reasoning appears as a separate part:
+For models that support extended thinking (such as Claude with `thinking=True`), reasoning appears as a separate part within the assistant message:
 
 ```python
 model = llm.get_model("claude-sonnet-4.5")
 response = model.prompt("Count the Rs in strawberry", thinking=True)
 response.text()
-for part in response.parts:
-    print(type(part).__name__, repr(part.text)[:80])
+for part in response.messages[0].parts:
+    print(type(part).__name__, repr(getattr(part, "text", ""))[:80])
 ```
 Output:
 ```python
@@ -561,43 +558,22 @@ TextPart 'There are 3 Rs in "strawberry".'
 Some models (like OpenAI's GPT-5 series) use reasoning internally but don't expose the text. In that case you'll see a redacted reasoning part with a token count:
 
 ```python
-model = llm.get_model("gpt-5.4-mini")
-response = model.prompt("What is 13 * 17?", reasoning_effort="high")
-response.text()
-for part in response.parts:
+for part in response.messages[0].parts:
     if hasattr(part, 'redacted') and part.redacted:
         print(f"ReasoningPart (redacted, {part.token_count} tokens)")
-    else:
-        print(type(part).__name__, repr(part.text)[:60])
 ```
 
-Tool calls and their results also appear as parts:
-
-```python
-def get_weather(city: str) -> str:
-    """Get weather for a city."""
-    return f"Sunny, 72°F in {city}"
-
-model = llm.get_model("gpt-4.1-mini")
-response = model.prompt("Weather in Paris?", tools=[get_weather])
-response.text()
-for part in response.parts:
-    print(type(part).__name__, part.to_dict())
-```
-Output:
-```python
-ToolCallPart {'role': 'assistant', 'type': 'tool_call', 'name': 'get_weather', 'arguments': {'city': 'Paris'}, 'tool_call_id': 'call_...'}
-```
+Tool calls and their results also appear as parts inside the assistant message.
 
 The available part types are:
 
-- **`llm.TextPart`** — text content from the model
+- **`llm.TextPart`** — text content
 - **`llm.ReasoningPart`** — reasoning/thinking tokens (may be `redacted=True` with only a `token_count`)
 - **`llm.ToolCallPart`** — a tool call request with `name`, `arguments`, `tool_call_id`
 - **`llm.ToolResultPart`** — a tool result with `output`, `tool_call_id`
 - **`llm.AttachmentPart`** — an inline attachment
 
-All part types have `to_dict()` for JSON serialization and can be restored with `llm.Part.from_dict(d)`.
+Parts don't carry a role — the role lives on the enclosing `llm.Message`. All part types have `to_dict()` for JSON serialization and can be restored with `llm.Part.from_dict(d)`. Messages also round-trip via `llm.Message.to_dict()` / `llm.Message.from_dict()`.
 
 (python-api-stream-events)=
 
@@ -632,58 +608,57 @@ async for event in response.astream_events():
 
 Regular iteration (`for chunk in response`) continues to yield only text strings — reasoning and tool call events are filtered out. This ensures backward compatibility. Use `stream_events()` when you need the full picture.
 
-(python-api-parts-parameter)=
+(python-api-messages-parameter)=
 
-#### Prompting with parts
+#### Prompting with messages
 
-The `parts=` parameter on `model.prompt()` lets you construct prompts with explicit typed parts instead of just a text string. This is useful for building multi-message prompts or passing structured conversation history:
+The `messages=` parameter on `model.prompt()` lets you supply an explicit list of `llm.Message` objects as structured conversation history. The `user`, `assistant`, `system`, and `tool_message` helpers make these pleasant to write:
 
 ```python
 import llm
-from llm.parts import TextPart
+from llm import user, assistant, system
 
 model = llm.get_model("gpt-4o-mini")
-response = model.prompt(parts=[
-    TextPart(role="system", text="You are a helpful pirate."),
-    TextPart(role="user", text="What's the weather like?"),
+response = model.prompt(messages=[
+    system("You are a helpful pirate."),
+    user("What is the capital of France?"),
+    assistant("Paris, matey."),
+    user("And Germany?"),
 ])
 print(response.text())
 ```
 
-You can combine `parts=` with `prompt=` — the prompt text is appended as a user-role `TextPart`:
+The helpers accept strings (wrapped as `TextPart`), `llm.Attachment` instances (wrapped as `AttachmentPart`), existing `Part` objects, or lists/tuples of any of those (flattened one level):
 
 ```python
-response = model.prompt(
-    "Now tell me about parrots",
-    parts=[TextPart(role="system", text="You are a helpful pirate.")],
-)
+response = model.prompt(messages=[
+    user("Describe this image.", llm.Attachment(path="cat.jpg")),
+])
 ```
 
-The `system=` and `attachments=` parameters also combine with `parts=`:
+Parallel tool calls are one assistant message with multiple `ToolCallPart`s:
 
 ```python
-from llm.parts import TextPart, AttachmentPart
+from llm import user, assistant, tool_message
+from llm.parts import ToolCallPart, ToolResultPart
 
-response = model.prompt(
-    "Describe this image in pirate speak",
-    parts=[TextPart(role="system", text="You are a pirate.")],
-    attachments=[llm.Attachment(path="treasure_map.jpg")],
-)
+messages = [
+    user("Weather in Paris and Tokyo?"),
+    assistant(
+        "I'll check both.",
+        ToolCallPart(name="get_weather", arguments={"location": "Paris"}, tool_call_id="c1"),
+        ToolCallPart(name="get_weather", arguments={"location": "Tokyo"}, tool_call_id="c2"),
+    ),
+    tool_message(
+        ToolResultPart(name="get_weather", output="sunny", tool_call_id="c1"),
+        ToolResultPart(name="get_weather", output="rain", tool_call_id="c2"),
+    ),
+]
 ```
 
-The `prompt.parts` property provides a unified view of all input parts, regardless of how they were specified:
+Provider adapters translate this structure to whatever the underlying API expects (OpenAI's `tool_calls` array, Anthropic's `tool_use` blocks, Gemini's `functionCall` parts).
 
-```python
-response = model.prompt("Hello", system="Be brief")
-response.text()
-for part in response.prompt.parts:
-    print(part.to_dict())
-```
-Output:
-```python
-{'role': 'system', 'type': 'text', 'text': 'Be brief'}
-{'role': 'user', 'type': 'text', 'text': 'Hello'}
-```
+The simple `model.prompt("hi", system="Be brief.")` form keeps working — it's equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
 
 (python-api-async)=
 
