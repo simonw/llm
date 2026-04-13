@@ -1880,7 +1880,61 @@ class TestMessagesParameter:
         assert isinstance(prompt.messages[0], Message)
         assert prompt.messages[0].role == "user"
 
-    def test_prompt_without_messages_has_empty_messages(self):
+    def test_prompt_without_messages_synthesizes_from_legacy_inputs(self):
+        """When messages= is not passed, Prompt.messages is synthesized."""
         model = llm.get_model("gpt-4o-mini")
         prompt = llm.Prompt("hi", model)
-        assert prompt.messages == []
+        assert len(prompt.messages) == 1
+        assert prompt.messages[0].role == "user"
+
+
+class TestPromptMessagesSynthesis:
+    """Prompt.messages is always populated — synthesized from legacy inputs if needed."""
+
+    def test_prompt_only(self):
+        from llm.parts import TextPart
+
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt("hello", model)
+        assert len(prompt.messages) == 1
+        assert prompt.messages[0].role == "user"
+        assert isinstance(prompt.messages[0].parts[0], TextPart)
+        assert prompt.messages[0].parts[0].text == "hello"
+
+    def test_system_and_prompt(self):
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt("hi", model, system="Be brief.")
+        assert [m.role for m in prompt.messages] == ["system", "user"]
+        assert prompt.messages[0].parts[0].text == "Be brief."
+        assert prompt.messages[1].parts[0].text == "hi"
+
+    def test_prompt_with_attachment(self):
+        from llm.parts import TextPart, AttachmentPart
+
+        att = llm.Attachment(type="image/png", content=b"x")
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt("look", model, attachments=[att])
+        assert len(prompt.messages) == 1
+        assert prompt.messages[0].role == "user"
+        assert isinstance(prompt.messages[0].parts[0], TextPart)
+        assert isinstance(prompt.messages[0].parts[1], AttachmentPart)
+
+    def test_explicit_messages_override_legacy(self):
+        from llm import user
+
+        model = llm.get_model("gpt-4o-mini")
+        prompt = llm.Prompt("legacy", model, messages=[user("explicit")])
+        assert len(prompt.messages) == 1
+        assert prompt.messages[0].parts[0].text == "explicit"
+
+    def test_openai_consumes_synthesized_messages(self, mocked_openai_chat, user_path):
+        """Legacy prompt+system path produces the expected OpenAI messages."""
+        model = llm.get_model("gpt-4o-mini")
+        model.key = "x"
+        r = model.prompt("hello", system="Be brief.")
+        r.text()
+        messages = json.loads(mocked_openai_chat.get_requests()[-1].content)["messages"]
+        assert messages == [
+            {"role": "system", "content": "Be brief."},
+            {"role": "user", "content": "hello"},
+        ]

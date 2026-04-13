@@ -356,7 +356,7 @@ class Prompt:
     tool_results: List[ToolResult]
     options: "Options"
     _parts: Optional[List[Any]]  # List of Part objects
-    messages: List[Any]  # List of Message objects
+    _explicit_messages: Optional[List[Any]]  # messages= passed explicitly
 
     def __init__(
         self,
@@ -389,7 +389,7 @@ class Prompt:
         self.tool_results = tool_results or []
         self.options = options or {}
         self._parts = parts
-        self.messages = list(messages) if messages else []
+        self._explicit_messages = list(messages) if messages else None
 
     @property
     def prompt(self):
@@ -433,6 +433,82 @@ class Prompt:
         # Add attachments as user-role AttachmentParts
         for attachment in self.attachments:
             result.append(AttachmentPart(role="user", attachment=attachment))
+
+        return result
+
+    @property
+    def messages(self):
+        """Canonical list of Message objects for this prompt.
+
+        If messages= was explicitly passed, that list is returned verbatim.
+        Otherwise synthesized from system=, parts=, prompt=, attachments=,
+        and tool_results=.
+        """
+        from .parts import (
+            AttachmentPart,
+            Message,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+            normalize_parts,
+        )
+
+        if self._explicit_messages is not None:
+            return list(self._explicit_messages)
+
+        result: List[Message] = []
+
+        if self.system:
+            result.append(
+                Message(
+                    role="system",
+                    parts=[TextPart(role="system", text=self.system)],
+                )
+            )
+
+        # Group explicitly-provided parts= by role into Messages.
+        if self._parts:
+            current_role = None
+            current_parts: List[Any] = []
+            for part in normalize_parts(self._parts, role="user"):
+                role = getattr(part, "role", "user") or "user"
+                if isinstance(part, ToolCallPart):
+                    role = "assistant"
+                elif isinstance(part, ToolResultPart):
+                    role = "tool"
+                if role != current_role and current_parts:
+                    result.append(Message(role=current_role, parts=current_parts))
+                    current_parts = []
+                current_role = role
+                current_parts.append(part)
+            if current_parts:
+                result.append(Message(role=current_role, parts=current_parts))
+
+        # Tool results from the legacy tool_results= parameter.
+        if self.tool_results:
+            result.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            role="tool",
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in self.tool_results
+                    ],
+                )
+            )
+
+        # Current user turn: prompt text and/or attachments.
+        user_parts: List[Any] = []
+        if self.prompt:
+            user_parts.append(TextPart(role="user", text=self.prompt))
+        for att in self.attachments:
+            user_parts.append(AttachmentPart(role="user", attachment=att))
+        if user_parts:
+            result.append(Message(role="user", parts=user_parts))
 
         return result
 

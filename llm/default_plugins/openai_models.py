@@ -700,8 +700,6 @@ class _Shared:
         messages.append(msg)
 
     def build_messages(self, prompt, conversation):
-        from llm.parts import TextPart, AttachmentPart, ToolCallPart, ToolResultPart
-
         messages = []
         current_system = None
         if conversation is not None:
@@ -756,64 +754,20 @@ class _Shared:
                             ],
                         }
                     )
-        # Use messages= if explicitly provided
-        if prompt.messages:
-            for message in prompt.messages:
-                self._append_message_from_message(messages, message)
-        elif prompt._parts:
-            for part in prompt.parts:
-                if isinstance(part, TextPart):
-                    messages.append({"role": part.role, "content": part.text})
-                elif isinstance(part, AttachmentPart) and part.attachment:
-                    messages.append(
-                        {"role": part.role, "content": [_attachment(part.attachment)]}
-                    )
-                elif isinstance(part, ToolCallPart):
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "type": "function",
-                                    "id": part.tool_call_id,
-                                    "function": {
-                                        "name": part.name,
-                                        "arguments": json.dumps(part.arguments),
-                                    },
-                                }
-                            ],
-                        }
-                    )
-                elif isinstance(part, ToolResultPart):
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": part.tool_call_id,
-                            "content": part.output,
-                        }
-                    )
-        else:
-            if prompt.system and prompt.system != current_system:
-                messages.append({"role": "system", "content": prompt.system})
-            for tool_result in prompt.tool_results:
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_result.tool_call_id,
-                        "content": tool_result.output,
-                    }
-                )
-            if not prompt.attachments:
-                if prompt.prompt:
-                    messages.append({"role": "user", "content": prompt.prompt or ""})
-            else:
-                attachment_message = []
-                if prompt.prompt:
-                    attachment_message.append({"type": "text", "text": prompt.prompt})
-                for attachment in prompt.attachments:
-                    attachment_message.append(_attachment(attachment))
-                messages.append({"role": "user", "content": attachment_message})
+        # Single code path: consume prompt.messages (auto-synthesized from
+        # legacy inputs when messages= was not explicitly passed).
+        for message in prompt.messages:
+            # Skip re-emitting a system message we've already emitted from
+            # conversation history.
+            if (
+                message.role == "system"
+                and message.parts
+                and current_system
+                and len(message.parts) == 1
+                and getattr(message.parts[0], "text", None) == current_system
+            ):
+                continue
+            self._append_message_from_message(messages, message)
         return messages
 
     def set_usage(self, response, usage):
