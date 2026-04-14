@@ -1411,21 +1411,20 @@ class _BaseResponse:
         pm_json = (
             json.dumps(message.provider_metadata) if message.provider_metadata else None
         )
-        msg_id = (
-            db["messages"]
-            .insert(
-                {
-                    "response_id": response_id,
-                    "direction": direction,
-                    "order": order,
-                    "role": message.role,
-                    "provider_metadata_json": pm_json,
-                }
-            )
-            .last_pk
+        msg_id = str(monotonic_ulid()).lower()
+        db["messages"].insert(
+            {
+                "id": msg_id,
+                "response_id": response_id,
+                "direction": direction,
+                "order": order,
+                "role": message.role,
+                "provider_metadata_json": pm_json,
+            }
         )
         for part_order, part in enumerate(message.parts):
             row = self._part_to_row(msg_id, part_order, part)
+            row["id"] = str(monotonic_ulid()).lower()
             db["message_parts"].insert(row)
 
     @staticmethod

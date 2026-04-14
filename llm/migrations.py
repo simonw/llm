@@ -447,7 +447,7 @@ def m022_parts_table(db):
 def m023_messages_table(db):
     db["messages"].create(
         {
-            "id": int,
+            "id": str,  # ULID — string IDs allow merging databases
             "response_id": str,
             "direction": str,  # "input" or "output"
             "order": int,
@@ -462,8 +462,8 @@ def m023_messages_table(db):
     )
     db["message_parts"].create(
         {
-            "id": int,
-            "message_id": int,
+            "id": str,  # ULID
+            "message_id": str,
             "order": int,
             "part_type": str,
             "content": str,
