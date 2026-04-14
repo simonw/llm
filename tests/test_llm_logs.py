@@ -1009,3 +1009,47 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     # And the rendered logs
     result3 = runner.invoke(cli, ["logs"])
     assert "Model: **mock** (resolved: **resolved-mock**)" in result3.output
+
+
+def test_logs_json_surfaces_dag_head_pointers(user_path, mock_model):
+    """After a real prompt.log_to_db, --json output includes DAG head
+    pointers from the calls table."""
+    import llm
+
+    logs_path = pathlib.Path(user_path) / "logs.db"
+    db = sqlite_utils.Database(str(logs_path))
+    migrate(db)
+
+    mock_model.enqueue(["hi back"])
+    conv = mock_model.conversation()
+    r = conv.prompt("hi")
+    r.text()
+    r.log_to_db(db)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "-p", str(logs_path), "--json", "-n", "1"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    row = rows[0]
+    # Every real llm prompt now writes a calls row — pointers surface.
+    assert row["head_input_message_id"] is not None
+    assert row["head_output_message_id"] is not None
+    assert row["head_output_message_id"] == conv.head_message_id
+
+
+def test_logs_json_handles_rows_without_calls(log_path):
+    """Historical rows inserted before the DAG shipped have no calls
+    row — the LEFT JOIN surfaces NULL for head pointers, not an error."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "-p", str(log_path), "--json", "-n", "1"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert rows[0]["head_input_message_id"] is None
+    assert rows[0]["head_output_message_id"] is None

@@ -1480,15 +1480,21 @@ LOGS_COLUMNS = """    responses.id,
     responses.token_details,
     conversations.name as conversation_name,
     conversations.model as conversation_model,
-    schemas.content as schema_json"""
+    schemas.content as schema_json,
+    calls.head_input_message_id,
+    calls.head_output_message_id"""
 
+# `calls` is joined on responses.id — they share ids by construction
+# (see Response._log_messages_to_db). For rows that predate the DAG
+# schema, calls.* is NULL.
 LOGS_SQL = """
 select
 {columns}
 from
     responses
 left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id{extra_where}
+left join conversations on responses.conversation_id = conversations.id
+left join calls on calls.id = responses.id{extra_where}
 order by {order_by}{limit}
 """
 LOGS_SQL_SEARCH = """
@@ -1498,6 +1504,7 @@ from
     responses
 left join schemas on responses.schema_id = schemas.id
 left join conversations on responses.conversation_id = conversations.id
+left join calls on calls.id = responses.id
 join responses_fts on responses_fts.rowid = responses.rowid
 where responses_fts match :query{extra_where}
 order by {order_by}{limit}
