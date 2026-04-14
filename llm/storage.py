@@ -217,6 +217,19 @@ class MessageStore:
             out.append(Message(role=role, parts=parts, provider_metadata=pm))
         return out
 
+    def save_with_dedup(self, messages: List[Message]) -> str:
+        """Save a chain, reusing any existing prefix.
+
+        Equivalent to ``save_chain(messages[matched:], starting_parent_id=
+        last_matched)`` where the prefix is located by
+        ``find_longest_existing_prefix``. Writes zero rows when the full
+        chain already exists — used by stateless-API continuation where
+        the client resends the whole message sequence each turn.
+        """
+        last, matched = self.find_longest_existing_prefix(messages)
+        starting = last  # None on miss → save_chain uses ROOT_ID.
+        return self.save_chain(messages[matched:], starting_parent_id=starting)
+
     def find_longest_existing_prefix(
         self, messages: List[Message]
     ) -> "tuple[Optional[str], int]":

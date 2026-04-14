@@ -494,6 +494,10 @@ class _BaseConversation:
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[ToolDef]] = None
     chain_limit: Optional[int] = None
+    # DAG head pointer — advances each saved turn so subsequent prompts
+    # extend the chain instead of branching. Populated from
+    # conversations.head_message_id on load; see plans/dag-schema.md.
+    head_message_id: Optional[str] = None
 
     @classmethod
     @abstractmethod
@@ -587,10 +591,17 @@ class Conversation(_BaseConversation):
     def from_row(cls, row):
         from llm import get_model
 
+        # rows from sqlite-utils support .get() style access; guard against
+        # older rows predating the head_message_id column.
+        try:
+            head = row["head_message_id"]
+        except (KeyError, IndexError):
+            head = None
         return cls(
             model=get_model(row["model"]),
             id=row["id"],
             name=row["name"],
+            head_message_id=head,
         )
 
     def __repr__(self):
@@ -695,10 +706,15 @@ class AsyncConversation(_BaseConversation):
     def from_row(cls, row):
         from llm import get_async_model
 
+        try:
+            head = row["head_message_id"]
+        except (KeyError, IndexError):
+            head = None
         return cls(
             model=get_async_model(row["model"]),
             id=row["id"],
             name=row["name"],
+            head_message_id=head,
         )
 
     def __repr__(self):
