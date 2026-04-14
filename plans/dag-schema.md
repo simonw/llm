@@ -667,22 +667,40 @@ dedup is correct by construction at every chain position.
    Probably leave it `None` until the first `log_to_db()` and have
    `log_to_db()` set it. Subsequent saves use it.
 
-## Suggested implementation sequence
+## Implementation status
 
-1. Lock canonical serialization + hash. Add canonicalization tests.
-2. Replace m023 schema (new `messages` shape, new `message_parts`,
-   new `calls` table, `conversations.head_message_id` column).
-   Implement `MessageStore.save_chain` and `load_chain`. Wire
-   `log_to_db` to write to `messages` + `message_parts` + `calls`
-   instead of the old `responses`/`messages`-with-direction shape.
-   Keep writing the legacy `responses` row in parallel for one release
-   for backward-compat. Wire `Response.from_row` to load via chains.
-3. Implement `find_longest_existing_prefix` and rebuild
-   `Conversation` history reconstruction to use it.
-4. Implement `fork`. Add CLI `llm fork <message_id>` and `llm chat -c
-   <conversation_id>` (probably already works).
-5. Update docs and the plugin upgrade guide to describe the new
-   storage shape (mostly transparent — plugins still produce
-   `list[Message]` and don't touch storage).
-6. Defer: blob dedup, GC, cross-DB merge tooling, `llm logs` tree
-   view.
+Landed in the `dag` branch as a sequence of independently-landable
+commits:
+
+1. **Canonical serialization + content hash** — `llm/_canonical.py`,
+   snapshot-tested. `include_provider_metadata` parameter threaded
+   through so a future semantic hash can be added without refactoring
+   (see `plans/dag-provider-metadata-hashing.md`).
+2. **Schema + MessageStore** — m023 rewritten in place: DAG-shaped
+   `messages`, unchanged `message_parts`, new `calls`,
+   `conversations.head_message_id`, self-referencing sentinel `"root"`
+   row. `llm/storage.py` with `MessageStore.save_chain` and
+   `load_chain`. `Response.log_to_db` writes the DAG + a `calls` row
+   alongside the existing `responses` writes (kept for `llm logs`
+   compatibility; dropping them is deferred).
+3. **Continuation dedup** — `Conversation.head_message_id` on the
+   dataclass, loaded via `from_row`. `MessageStore.save_with_dedup`
+   and `find_longest_existing_prefix` for stateless-API replay.
+4. **Fork** — `MessageStore.fork(source_message_id, name=, model=)`
+   plus the `llm fork <message_id>` CLI command.
+5. **Docs** — this section; `plans/parts/plugin-upgrade-guide.md`
+   gained a storage-model note clarifying that the DAG is transparent
+   to plugins.
+
+## Deferred
+
+- **Stop writing `responses`.** `llm logs` still reads from the old
+  `responses` table; until it can read from `calls`, the old writes
+  stay. Follow-up: teach `llm logs` to union `calls` + `responses`,
+  then drop the `responses` writes.
+- **Rebuild provider-adapter history reconstruction to walk the DAG
+  directly** (instead of `conversation.responses[].prompt.messages`).
+  The current path still works end-to-end; the DAG walk is the
+  eventual canonical source.
+- **`llm logs` tree view** for forks.
+- **Blob dedup**, **GC**, **cross-DB merge tooling**.

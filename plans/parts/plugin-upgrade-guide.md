@@ -309,6 +309,30 @@ for free. The upgrade work is limited to:
 3. Adding StreamEvent-specific tests.
 4. Re-recording VCR cassettes if the request body shape changed.
 
+## Storage: the DAG message store (transparent to plugins)
+
+Starting with the DAG schema work (see `plans/dag-schema.md`), `llm`
+stores messages as an immutable, parent-linked, content-addressed DAG
+instead of per-response rows.
+
+**Plugins do not need to do anything.** `execute()` still yields
+`StreamEvent`s; request builders still consume
+`prompt.messages: list[Message]`. `Message`, `Part`, and
+`provider_metadata` are unchanged. The storage layer (`llm.storage.MessageStore`)
+hashes and persists messages behind the scenes.
+
+Two things to be aware of:
+
+- **`provider_metadata` is part of message identity.** Opaque fields
+  like Anthropic `signature`, OpenAI `encrypted_content`, Gemini
+  `thoughtSignature` go into the content hash. A plugin that echoes
+  these verbatim (as it must, for continuation) will dedup cleanly.
+  A plugin that drops or normalizes them will cause silent chain
+  forking — don't.
+- **Floats are forbidden in `provider_metadata`.** Representation drift
+  would break hashes. Use ints or strings instead. The canonicalizer
+  raises `TypeError` at save time if it encounters one.
+
 ## Checklist
 
 - [ ] `pyproject.toml`: editable `llm` source added
