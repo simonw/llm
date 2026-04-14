@@ -1074,8 +1074,8 @@ class _BaseResponse:
             )
         ]
 
-        # Load output messages if the messages table exists
-        if "messages" in db.table_names():
+        # Load output messages if the calls table exists
+        if "calls" in db.table_names():
             response._loaded_messages = cls._load_messages_from_db(
                 db, row["id"], direction="output"
             )
@@ -1086,97 +1086,36 @@ class _BaseResponse:
 
     @staticmethod
     def _load_messages_from_db(db, response_id, direction="output"):
-        from .parts import (
-            AttachmentPart,
-            Message,
-            ReasoningPart,
-            TextPart,
-            ToolCallPart,
-            ToolResultPart,
-        )
+        """Load input or output messages for a response from the DAG.
 
-        message_rows = list(
-            db.execute(
-                "SELECT id, role, provider_metadata_json FROM messages "
-                'WHERE response_id = ? AND direction = ? ORDER BY "order"',
-                [response_id, direction],
-            ).fetchall()
-        )
-        if not message_rows:
+        ``response_id`` is used as the ``calls.id`` (they share an id by
+        construction). ``direction="input"`` walks sentinel → head_input;
+        ``direction="output"`` walks head_input (exclusive) → head_output.
+        """
+        from .storage import ROOT_ID, MessageStore
+
+        call_row = db.execute(
+            "SELECT head_input_message_id, head_output_message_id "
+            "FROM calls WHERE id = ?",
+            [response_id],
+        ).fetchone()
+        if call_row is None:
             return None
-
-        messages: List[Any] = []
-        for msg_id, role, pm_json in message_rows:
-            pm = json.loads(pm_json) if pm_json else None
-            part_rows = list(
-                db.execute(
-                    "SELECT part_type, content, content_json, tool_call_id, "
-                    "server_executed FROM message_parts WHERE message_id = ? "
-                    'ORDER BY "order"',
-                    [msg_id],
-                ).fetchall()
-            )
-            parts: List[Any] = []
-            for (
-                part_type,
-                content,
-                content_json,
-                tool_call_id,
-                server_executed,
-            ) in part_rows:
-                data = json.loads(content_json) if content_json else {}
-                part_pm = data.get("provider_metadata")
-                if part_type == "text":
-                    parts.append(
-                        TextPart(text=content or "", provider_metadata=part_pm)
-                    )
-                elif part_type == "reasoning":
-                    parts.append(
-                        ReasoningPart(
-                            text=content or "",
-                            redacted=data.get("redacted", False),
-                            token_count=data.get("token_count"),
-                            provider_metadata=part_pm,
-                        )
-                    )
-                elif part_type == "tool_call":
-                    parts.append(
-                        ToolCallPart(
-                            name=data.get("name", ""),
-                            arguments=data.get("arguments", {}),
-                            tool_call_id=tool_call_id,
-                            server_executed=bool(server_executed),
-                            provider_metadata=part_pm,
-                        )
-                    )
-                elif part_type == "tool_result":
-                    parts.append(
-                        ToolResultPart(
-                            name=data.get("name", ""),
-                            output=content or "",
-                            tool_call_id=tool_call_id,
-                            server_executed=bool(server_executed),
-                            exception=data.get("exception"),
-                            provider_metadata=part_pm,
-                        )
-                    )
-                elif part_type == "attachment":
-                    from .parts import _attachment_from_dict
-
-                    attachment = (
-                        _attachment_from_dict(data)
-                        if data
-                        and any(data.get(k) for k in ("type", "url", "path", "content"))
-                        else None
-                    )
-                    parts.append(
-                        AttachmentPart(
-                            attachment=attachment,
-                            provider_metadata=part_pm,
-                        )
-                    )
-            messages.append(Message(role=role, parts=parts, provider_metadata=pm))
-        return messages
+        head_input, head_output = call_row
+        store = MessageStore(db)
+        if direction == "input":
+            if head_input is None or head_input == ROOT_ID:
+                return []
+            return store.load_chain(head_input)
+        # output: chain from after head_input through head_output
+        if head_output is None or head_output == head_input:
+            return []
+        full = store.load_chain(head_output)
+        # Drop the prefix that belongs to the input side.
+        if head_input and head_input != ROOT_ID:
+            input_len = len(store.load_chain(head_input))
+            full = full[input_len:]
+        return full
 
     def token_usage(self) -> str:
         return token_usage_string(
@@ -1374,19 +1313,19 @@ class _BaseResponse:
                     },
                 )
 
-        # Persist messages (input and output) to the messages+message_parts tables
-        if "messages" in db.table_names():
-            self._log_messages_to_db(db, response_id)
+        # DAG-shaped message persistence. Input chain + output chain saved
+        # with dedup; one "calls" row records model + timing + usage and
+        # anchors to the input and output heads. See plans/dag-schema.md.
+        if "calls" in db.table_names():
+            self._log_messages_to_db(db, response_id, conversation)
 
-    def _log_messages_to_db(self, db, response_id):
-        # Input messages
-        order = 0
-        for message in self.prompt.messages:
-            self._insert_message(db, response_id, "input", order, message)
-            order += 1
+    def _log_messages_to_db(self, db, response_id, conversation):
+        from .parts import Message, TextPart
+        from .storage import MessageStore
 
-        # Output messages
-        from .parts import Message
+        store = MessageStore(db)
+
+        input_messages = list(self.prompt.messages)
 
         output_parts = self._build_parts()
         if output_parts:
@@ -1394,110 +1333,57 @@ class _BaseResponse:
         else:
             output_messages = []
         if not output_messages and self._chunks:
-            # Plain-string response that didn't go through _build_parts
-            from .parts import TextPart
-
             output_messages = [
                 Message(
                     role="assistant",
                     parts=[TextPart(text="".join(self._chunks))],
                 )
             ]
-        for message in output_messages:
-            self._insert_message(db, response_id, "output", order, message)
-            order += 1
 
-    def _insert_message(self, db, response_id, direction, order, message):
-        pm_json = (
-            json.dumps(message.provider_metadata) if message.provider_metadata else None
+        # Resume from the conversation's existing head when present, so
+        # continuation turns (``llm -c``) extend the chain instead of
+        # starting a parallel one.
+        starting = None
+        if conversation and getattr(conversation, "head_message_id", None):
+            starting = conversation.head_message_id
+        head_input = store.save_chain(
+            input_messages, starting_parent_id=starting
         )
-        msg_id = str(monotonic_ulid()).lower()
-        db["messages"].insert(
+        head_output = (
+            store.save_chain(output_messages, starting_parent_id=head_input)
+            if output_messages
+            else head_input
+        )
+
+        # Advance the conversation pointer to the new head.
+        if conversation is not None:
+            conversation.head_message_id = head_output
+            db["conversations"].update(
+                conversation.id, {"head_message_id": head_output}
+            )
+
+        db["calls"].insert(
             {
-                "id": msg_id,
-                "response_id": response_id,
-                "direction": direction,
-                "order": order,
-                "role": message.role,
-                "provider_metadata_json": pm_json,
+                "id": response_id,
+                "conversation_id": conversation.id if conversation else None,
+                "head_input_message_id": head_input,
+                "head_output_message_id": head_output,
+                "model": self.model.model_id,
+                "resolved_model": self.resolved_model,
+                "started_at": self.datetime_utc(),
+                "duration_ms": self.duration_ms(),
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "token_details_json": (
+                    json.dumps(self.token_details)
+                    if self.token_details
+                    else None
+                ),
+                "prompt_json": None,
+                "response_json": None,
+                "error": None,
             }
         )
-        for part_order, part in enumerate(message.parts):
-            row = self._part_to_row(msg_id, part_order, part)
-            row["id"] = str(monotonic_ulid()).lower()
-            db["message_parts"].insert(row)
-
-    @staticmethod
-    def _part_to_row(message_id, order, part):
-        from .parts import (
-            AttachmentPart,
-            ReasoningPart,
-            TextPart,
-            ToolCallPart,
-            ToolResultPart,
-        )
-
-        row: Dict[str, Any] = {
-            "message_id": message_id,
-            "order": order,
-        }
-        pm = getattr(part, "provider_metadata", None)
-        if isinstance(part, TextPart):
-            row["part_type"] = "text"
-            row["content"] = part.text
-            if pm:
-                row["content_json"] = json.dumps({"provider_metadata": pm})
-        elif isinstance(part, ReasoningPart):
-            row["part_type"] = "reasoning"
-            row["content"] = part.text
-            extra: Dict[str, Any] = {}
-            if part.redacted or part.token_count:
-                extra["redacted"] = part.redacted
-                extra["token_count"] = part.token_count
-            if pm:
-                extra["provider_metadata"] = pm
-            if extra:
-                row["content_json"] = json.dumps(extra)
-        elif isinstance(part, AttachmentPart):
-            row["part_type"] = "attachment"
-            if part.attachment:
-                att_data: Dict[str, Any] = {}
-                if part.attachment.type:
-                    att_data["type"] = part.attachment.type
-                if part.attachment.url:
-                    att_data["url"] = part.attachment.url
-                if part.attachment.path:
-                    att_data["path"] = part.attachment.path
-                if pm:
-                    att_data["provider_metadata"] = pm
-                row["content_json"] = json.dumps(att_data)
-        elif isinstance(part, ToolCallPart):
-            row["part_type"] = "tool_call"
-            tc_data: Dict[str, Any] = {
-                "name": part.name,
-                "arguments": part.arguments,
-            }
-            if pm:
-                tc_data["provider_metadata"] = pm
-            row["content_json"] = json.dumps(tc_data)
-            row["tool_call_id"] = part.tool_call_id
-            row["server_executed"] = 1 if part.server_executed else 0
-        elif isinstance(part, ToolResultPart):
-            row["part_type"] = "tool_result"
-            row["content"] = part.output
-            tr_data: Dict[str, Any] = {
-                "name": part.name,
-                "exception": part.exception,
-            }
-            if pm:
-                tr_data["provider_metadata"] = pm
-            row["content_json"] = json.dumps(tr_data)
-            row["tool_call_id"] = part.tool_call_id
-            row["server_executed"] = 1 if part.server_executed else 0
-        else:
-            row["part_type"] = "unknown"
-            row["content_json"] = json.dumps(part.to_dict())
-        return row
 
 
 class Response(_BaseResponse):

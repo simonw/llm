@@ -39,6 +39,7 @@ def test_chat_basic(mock_model, logs_db):
         "id": ANY,
         "name": "Hi",
         "model": "mock",
+        "head_message_id": ANY,
     }
     conversation_id = conversations[0]["id"]
     responses = list(logs_db["responses"].rows)

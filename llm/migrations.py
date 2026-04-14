@@ -445,21 +445,51 @@ def m022_parts_table(db):
 
 @migration
 def m023_messages_table(db):
+    # DAG-shaped message store. See plans/dag-schema.md.
+    #
+    # A message is identified by (parent_id, content_hash). parent_id is
+    # NOT NULL; chain roots point at the self-referencing sentinel row
+    # "root" so the unique (parent_id, content_hash) index works uniformly
+    # at every chain position — see the "NULL-parent uniqueness footgun"
+    # section of plans/dag-schema.md for why.
     db["messages"].create(
         {
-            "id": str,  # ULID — string IDs allow merging databases
-            "response_id": str,
-            "direction": str,  # "input" or "output"
-            "order": int,
+            "id": str,  # ULID, or "root" for the sentinel.
+            "parent_id": str,
+            "content_hash": str,
             "role": str,
             "provider_metadata_json": str,
+            "created_at": str,
         },
         pk="id",
-        foreign_keys=[("response_id", "responses", "id")],
+        foreign_keys=[("parent_id", "messages", "id")],
+        not_null={"parent_id", "content_hash", "role", "created_at"},
     )
     db.execute(
-        'CREATE UNIQUE INDEX "idx_messages_response_order" ON messages (response_id, direction, "order")'
+        'CREATE UNIQUE INDEX "idx_messages_parent_hash_unique" '
+        "ON messages(parent_id, content_hash)"
     )
+    db.execute(
+        'CREATE INDEX "idx_messages_parent_id" ON messages(parent_id)'
+    )
+    db.execute(
+        'CREATE INDEX "idx_messages_content_hash" ON messages(content_hash)'
+    )
+
+    # Sentinel root row — self-references so parent_id can be NOT NULL.
+    db["messages"].insert(
+        {
+            "id": "root",
+            "parent_id": "root",
+            "content_hash": "",
+            "role": "root",
+            "provider_metadata_json": None,
+            "created_at": str(
+                datetime.datetime.now(datetime.timezone.utc)
+            ),
+        }
+    )
+
     db["message_parts"].create(
         {
             "id": str,  # ULID
@@ -475,5 +505,52 @@ def m023_messages_table(db):
         foreign_keys=[("message_id", "messages", "id")],
     )
     db.execute(
-        'CREATE UNIQUE INDEX "idx_message_parts_message_order" ON message_parts (message_id, "order")'
+        'CREATE UNIQUE INDEX "idx_message_parts_message_order" '
+        'ON message_parts (message_id, "order")'
+    )
+
+    # conversations gains a head pointer. Walking parent_id from
+    # head_message_id reconstructs the full conversation history.
+    db["conversations"].add_column(
+        "head_message_id", str, fk="messages", fk_col="id"
+    )
+
+    # One row per LLM call. Messages are shared across calls (dedup);
+    # this table records per-call metadata (model, timing, usage).
+    db["calls"].create(
+        {
+            "id": str,  # ULID
+            "conversation_id": str,
+            "head_input_message_id": str,
+            "head_output_message_id": str,
+            "model": str,
+            "resolved_model": str,
+            "started_at": str,
+            "duration_ms": int,
+            "input_tokens": int,
+            "output_tokens": int,
+            "token_details_json": str,
+            "prompt_json": str,
+            "response_json": str,
+            "error": str,
+        },
+        pk="id",
+        foreign_keys=[
+            ("conversation_id", "conversations", "id"),
+            ("head_input_message_id", "messages", "id"),
+            ("head_output_message_id", "messages", "id"),
+        ],
+        not_null={"model", "started_at"},
+    )
+    db.execute(
+        'CREATE INDEX "idx_calls_conversation" ON calls(conversation_id)'
+    )
+    db.execute(
+        'CREATE INDEX "idx_calls_started_at" ON calls(started_at)'
+    )
+    db.execute(
+        'CREATE INDEX "idx_calls_head_input" ON calls(head_input_message_id)'
+    )
+    db.execute(
+        'CREATE INDEX "idx_calls_head_output" ON calls(head_output_message_id)'
     )

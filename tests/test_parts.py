@@ -891,20 +891,19 @@ class TestDatabaseParts:
         response.text()
         response.log_to_db(logs_db)
 
-        # One output message with two parts
-        output_msgs = [
-            m for m in logs_db["messages"].rows if m["direction"] == "output"
-        ]
+        # One output message with two parts — found via the calls row.
+        call_row = list(logs_db["calls"].rows)[0]
+        output_msgs = llm.Response._load_messages_from_db(
+            logs_db, call_row["id"], direction="output"
+        )
         assert len(output_msgs) == 1
-        assert output_msgs[0]["role"] == "assistant"
-        parts = [
-            p
-            for p in logs_db["message_parts"].rows
-            if p["message_id"] == output_msgs[0]["id"]
+        assert output_msgs[0].role == "assistant"
+        assert [type(p).__name__ for p in output_msgs[0].parts] == [
+            "ReasoningPart",
+            "TextPart",
         ]
-        assert [p["part_type"] for p in parts] == ["reasoning", "text"]
-        assert parts[0]["content"] == "thinking..."
-        assert parts[1]["content"] == "answer"
+        assert output_msgs[0].parts[0].text == "thinking..."
+        assert output_msgs[0].parts[1].text == "answer"
 
     def test_log_to_db_writes_input_messages(self, mock_model, logs_db):
         from llm.migrations import migrate
@@ -916,8 +915,11 @@ class TestDatabaseParts:
         response.text()
         response.log_to_db(logs_db)
 
-        input_msgs = [m for m in logs_db["messages"].rows if m["direction"] == "input"]
-        assert [m["role"] for m in input_msgs] == ["system", "user"]
+        call_row = list(logs_db["calls"].rows)[0]
+        input_msgs = llm.Response._load_messages_from_db(
+            logs_db, call_row["id"], direction="input"
+        )
+        assert [m.role for m in input_msgs] == ["system", "user"]
 
     def test_from_row_loads_parts(self, mock_model, logs_db):
         """from_row() loads parts from the parts table."""
@@ -1484,18 +1486,15 @@ class TestProviderMetadataDatabase:
         response.text()
         response.log_to_db(logs_db)
 
-        input_msgs = [m for m in logs_db["messages"].rows if m["direction"] == "input"]
-        all_part_rows = list(logs_db["message_parts"].rows)
-        input_part_rows = [
-            p
-            for p in all_part_rows
-            if any(m["id"] == p["message_id"] for m in input_msgs)
-        ]
-        pms = [
-            json.loads(r["content_json"])["provider_metadata"]
-            for r in input_part_rows
-            if r["content_json"]
-        ]
+        call_row = list(logs_db["calls"].rows)[0]
+        input_msgs = llm.Response._load_messages_from_db(
+            logs_db, call_row["id"], direction="input"
+        )
+        pms = []
+        for msg in input_msgs:
+            for p in msg.parts:
+                if getattr(p, "provider_metadata", None):
+                    pms.append(p.provider_metadata)
         assert {"anthropic": {"x": 1}} in pms
         assert {"gemini": {"thoughtSignature": "g"}} in pms
 
@@ -1911,15 +1910,20 @@ class TestDatabaseMessages:
         r.text()
         r.log_to_db(logs_db)
 
+        # Sentinel root + three real messages (system, user, assistant).
         message_rows = list(logs_db["messages"].rows)
-        # Two input messages (system, user) + one output (assistant)
-        assert len(message_rows) == 3
-        roles = [(m["direction"], m["role"]) for m in message_rows]
-        assert roles == [
-            ("input", "system"),
-            ("input", "user"),
-            ("output", "assistant"),
-        ]
+        assert len(message_rows) == 4
+        real_rows = [m for m in message_rows if m["id"] != "root"]
+        # Each real row points at its parent; the chain is linear.
+        by_id = {m["id"]: m for m in message_rows}
+        call_row = list(logs_db["calls"].rows)[0]
+        chain_roles = []
+        cur = call_row["head_output_message_id"]
+        while cur != "root":
+            chain_roles.append(by_id[cur]["role"])
+            cur = by_id[cur]["parent_id"]
+        chain_roles.reverse()
+        assert chain_roles == ["system", "user", "assistant"]
         part_rows = list(logs_db["message_parts"].rows)
-        # One part per message
-        assert len(part_rows) == 3
+        assert len(part_rows) == 3  # One part per real message.
+        assert len(real_rows) == 3
