@@ -2998,6 +2998,34 @@ def fragments_loaders():
         click.echo("No fragment loaders found")
 
 
+@cli.command()
+@click.argument("message_id")
+@click.option("-m", "--model", default=None, help="Override the conversation model")
+@click.option("-n", "--name", default=None, help="Name for the new conversation")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, allow_dash=False, dir_okay=False),
+    help="Path to log database",
+)
+def fork(message_id, model, name, database):
+    """Fork a conversation from MESSAGE_ID — future turns diverge from there.
+
+    The shared prefix is reused in place; only a new conversations row
+    is written. Prints the new conversation id.
+    """
+    from .storage import MessageStore
+
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    try:
+        new_conv_id = MessageStore(db).fork(message_id, name=name, model=model)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    click.echo(new_conv_id)
+
+
 @cli.command(name="plugins")
 @click.option("--all", help="Include built-in default plugins", is_flag=True)
 @click.option(

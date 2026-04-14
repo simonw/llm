@@ -345,3 +345,68 @@ class TestConversationContinuation:
                 "SELECT parent_id FROM messages WHERE id = ?", [cur]
             ).fetchone()[0]
         assert head_after_first in seen
+
+
+class TestFork:
+    def test_fork_creates_new_conversation_pointing_at_source(
+        self, db, mock_model
+    ):
+        mock_model.enqueue(["a1"])
+        conv = mock_model.conversation()
+        r = conv.prompt("q1")
+        r.text()
+        r.log_to_db(db)
+        source = conv.head_message_id
+        new_id = MessageStore(db).fork(source, name="branch-a")
+        row = db["conversations"].get(new_id)
+        assert row["head_message_id"] == source
+        assert row["name"] == "branch-a"
+        assert row["model"] == "mock"
+        # Original conversation untouched.
+        assert db["conversations"].get(conv.id)["head_message_id"] == source
+
+    def test_fork_unknown_message_raises(self, db):
+        with pytest.raises(ValueError, match="not found"):
+            MessageStore(db).fork("no-such-id")
+
+    def test_fork_without_calls_and_without_model_raises(self, db):
+        """A message inserted without any calls row needs an explicit model."""
+        store = MessageStore(db)
+        head = store.save_chain([Message(role="user", parts=[TextPart(text="hi")])])
+        with pytest.raises(ValueError, match="cannot infer model"):
+            store.fork(head)
+
+    def test_fork_with_explicit_model(self, db):
+        store = MessageStore(db)
+        head = store.save_chain([Message(role="user", parts=[TextPart(text="hi")])])
+        new_id = store.fork(head, model="mock")
+        assert db["conversations"].get(new_id)["model"] == "mock"
+
+
+class TestForkCLI:
+    def test_fork_cli_prints_new_conversation_id(
+        self, db, mock_model, user_path
+    ):
+        import pathlib
+
+        from click.testing import CliRunner
+
+        from llm.cli import cli
+
+        mock_model.enqueue(["a1"])
+        conv = mock_model.conversation()
+        r = conv.prompt("q1")
+        r.text()
+        # Write to the standard logs path used by the CLI.
+        logs_path = pathlib.Path(user_path) / "logs.db"
+        real_db = sqlite_utils.Database(str(logs_path))
+        migrate(real_db)
+        r.log_to_db(real_db)
+        source = conv.head_message_id
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["fork", source], catch_exceptions=False)
+        assert result.exit_code == 0
+        new_id = result.output.strip()
+        row = real_db["conversations"].get(new_id)
+        assert row["head_message_id"] == source

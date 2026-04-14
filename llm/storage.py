@@ -217,6 +217,50 @@ class MessageStore:
             out.append(Message(role=role, parts=parts, provider_metadata=pm))
         return out
 
+    def fork(
+        self,
+        source_message_id: str,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        """Create a new conversation whose head points at an existing message.
+
+        Storage cost: one ``conversations`` row; the shared prefix is
+        reused in place. Subsequent prompts on the new conversation
+        diverge automatically. ``model`` defaults to whatever model
+        most recently wrote a call that touched ``source_message_id``.
+        """
+        if (
+            self.db.execute(
+                "SELECT 1 FROM messages WHERE id = ?", [source_message_id]
+            ).fetchone()
+            is None
+        ):
+            raise ValueError(f"message {source_message_id!r} not found")
+        if model is None:
+            row = self.db.execute(
+                "SELECT model FROM calls "
+                "WHERE head_input_message_id = ? OR head_output_message_id = ? "
+                "ORDER BY started_at DESC LIMIT 1",
+                [source_message_id, source_message_id],
+            ).fetchone()
+            if row is None:
+                raise ValueError(
+                    f"cannot infer model for fork at {source_message_id!r}; "
+                    "pass model= explicitly"
+                )
+            model = row[0]
+        new_conv_id = _new_ulid()
+        self.db["conversations"].insert(
+            {
+                "id": new_conv_id,
+                "name": name,
+                "model": model,
+                "head_message_id": source_message_id,
+            }
+        )
+        return new_conv_id
+
     def save_with_dedup(self, messages: List[Message]) -> str:
         """Save a chain, reusing any existing prefix.
 
