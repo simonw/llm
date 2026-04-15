@@ -3810,7 +3810,7 @@ def template_dir():
 
 
 def logs_db_path():
-    return user_dir() / "logs.db"
+    return user_dir() / "dag.db"
 
 
 def get_history(chat_id):
