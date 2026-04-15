@@ -950,7 +950,9 @@ class _BaseResponse:
                     "tool_call_id": tool_call.tool_call_id,
                 }
             )
+        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
         for tool_result in self.prompt.tool_results:
+            matching_tool = tools_by_name.get(tool_result.name)
             instance_id = None
             if tool_result.instance:
                 try:
@@ -959,8 +961,15 @@ class _BaseResponse:
                             db["tool_instances"]
                             .insert(
                                 {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
+                                    "plugin": getattr(
+                                        matching_tool, "plugin", None
+                                    )
+                                    or getattr(tool_result.instance, "plugin", None),
+                                    "name": (
+                                        matching_tool.name.split("_")[0]
+                                        if matching_tool
+                                        else tool_result.instance.__class__.__name__
+                                    ),
                                     "arguments": json.dumps(
                                         tool_result.instance._config
                                     ),
