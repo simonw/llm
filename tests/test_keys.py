@@ -52,6 +52,18 @@ def test_keys_get(monkeypatch, tmpdir):
     assert result2.output.strip() == "fx"
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_keys_set_rejects_non_ascii(monkeypatch, tmpdir):
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["keys", "set", "openai"], input="bad√key")
+    assert result.exit_code == 1
+    assert "ASCII" in result.output
+    assert not keys_path.exists()
+
+
 @pytest.mark.parametrize("args", (["keys", "list"], ["keys"]))
 def test_keys_list(monkeypatch, tmpdir, args):
     user_path = str(tmpdir / "user/keys")
