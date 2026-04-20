@@ -630,81 +630,127 @@ class _Shared:
     def __str__(self) -> str:
         return "OpenAI Chat: {}".format(self.model_id)
 
+    def _append_llm_message(self, out, message, current_system):
+        """Translate one llm.Message into one (or more) OpenAI message
+        dicts and append them to ``out``.
+
+        Returns the (possibly updated) current_system value so the caller
+        can dedup consecutive identical system messages.
+        """
+        from llm.parts import (
+            AttachmentPart,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        text_bits = []
+        attachment_items = []
+        tool_calls = []
+        tool_results = []
+
+        for part in message.parts:
+            if isinstance(part, TextPart):
+                text_bits.append(part.text)
+            elif isinstance(part, AttachmentPart) and part.attachment:
+                attachment_items.append(_attachment(part.attachment))
+            elif isinstance(part, ToolCallPart):
+                tool_calls.append(
+                    {
+                        "type": "function",
+                        "id": part.tool_call_id,
+                        "function": {
+                            "name": part.name,
+                            "arguments": json.dumps(part.arguments),
+                        },
+                    }
+                )
+            elif isinstance(part, ToolResultPart):
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.tool_call_id,
+                        "content": part.output,
+                    }
+                )
+
+        # Role "tool" emits one OpenAI "tool" message per ToolResultPart.
+        if message.role == "tool":
+            out.extend(tool_results)
+            return current_system
+
+        # System dedup — skip if we just emitted this exact system text.
+        if message.role == "system":
+            text = "".join(text_bits)
+            if text == current_system:
+                return current_system
+            current_system = text
+
+        if attachment_items:
+            content = []
+            if text_bits:
+                content.append({"type": "text", "text": "".join(text_bits)})
+            content.extend(attachment_items)
+            entry = {"role": message.role, "content": content}
+        else:
+            entry = {
+                "role": message.role,
+                "content": "".join(text_bits) if text_bits else None,
+            }
+
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+            # OpenAI expects content=null when only tool_calls are present.
+            if not text_bits:
+                entry["content"] = None
+        elif entry["content"] is None and message.role != "assistant":
+            # For user/system, an empty message is pointless — drop it.
+            return current_system
+
+        out.append(entry)
+        return current_system
+
     def build_messages(self, prompt, conversation):
         messages = []
         current_system = None
         if conversation is not None:
             for prev_response in conversation.responses:
-                if (
-                    prev_response.prompt.system
-                    and prev_response.prompt.system != current_system
-                ):
-                    messages.append(
-                        {"role": "system", "content": prev_response.prompt.system}
+                # Input side for the prior turn — read prompt.messages
+                # so explicit messages= from prior calls round-trips.
+                for msg in prev_response.prompt.messages:
+                    current_system = self._append_llm_message(
+                        messages, msg, current_system
                     )
-                    current_system = prev_response.prompt.system
-                if prev_response.attachments:
-                    attachment_message = []
-                    if prev_response.prompt.prompt:
-                        attachment_message.append(
-                            {"type": "text", "text": prev_response.prompt.prompt}
-                        )
-                    for attachment in prev_response.attachments:
-                        attachment_message.append(_attachment(attachment))
-                    messages.append({"role": "user", "content": attachment_message})
-                elif prev_response.prompt.prompt:
-                    messages.append(
-                        {"role": "user", "content": prev_response.prompt.prompt}
-                    )
-                for tool_result in prev_response.prompt.tool_results:
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_result.tool_call_id,
-                            "content": tool_result.output,
-                        }
-                    )
+                # Output side — use the flat accessors. They tolerate
+                # the fact that some plugins mix text and tool_calls at
+                # the same part_index, which _build_parts would reject.
                 prev_text = prev_response.text_or_raise()
-                if prev_text:
-                    messages.append({"role": "assistant", "content": prev_text})
                 tool_calls = prev_response.tool_calls_or_raise()
-                if tool_calls:
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "type": "function",
-                                    "id": tool_call.tool_call_id,
-                                    "function": {
-                                        "name": tool_call.name,
-                                        "arguments": json.dumps(tool_call.arguments),
-                                    },
-                                }
-                                for tool_call in tool_calls
-                            ],
-                        }
-                    )
-        if prompt.system and prompt.system != current_system:
-            messages.append({"role": "system", "content": prompt.system})
-        for tool_result in prompt.tool_results:
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.output,
-                }
+                if prev_text or tool_calls:
+                    entry = {
+                        "role": "assistant",
+                        "content": prev_text if prev_text else None,
+                    }
+                    if tool_calls:
+                        entry["tool_calls"] = [
+                            {
+                                "type": "function",
+                                "id": tc.tool_call_id,
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": json.dumps(tc.arguments),
+                                },
+                            }
+                            for tc in tool_calls
+                        ]
+                    messages.append(entry)
+
+        # Current turn — consume prompt.messages (auto-synthesized from
+        # legacy kwargs when messages= wasn't explicitly passed).
+        for msg in prompt.messages:
+            current_system = self._append_llm_message(
+                messages, msg, current_system
             )
-        if not prompt.attachments:
-            if prompt.prompt:
-                messages.append({"role": "user", "content": prompt.prompt or ""})
-        else:
-            attachment_message = []
-            if prompt.prompt:
-                attachment_message.append({"type": "text", "text": prompt.prompt})
-            for attachment in prompt.attachments:
-                attachment_message.append(_attachment(attachment))
-            messages.append({"role": "user", "content": attachment_message})
         return messages
 
     def set_usage(self, response, usage):
