@@ -3,15 +3,103 @@
 Phase 4a covers build_messages reading prompt.messages (instead of the
 legacy prompt.prompt / prompt.system / prompt.attachments fields), which
 lets users pass structured message history via model.prompt(messages=[...]).
+
+Phase 4b covers execute() yielding StreamEvent objects instead of plain
+str — including tool_call_name + tool_call_args event streams.
 """
 
 import json
 
 import pytest
+from pytest_httpx import IteratorStream
 
 import llm
 from llm.default_plugins.openai_models import Chat
 from llm.models import Prompt
+
+
+API_KEY = "badkey"
+
+
+def _sse(delta, finish_reason=None, usage=None, tool_calls=None):
+    chunk = {
+        "id": "c1",
+        "object": "chat.completion.chunk",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+            {"index": 0, "delta": delta, "finish_reason": finish_reason}
+        ],
+    }
+    if tool_calls is not None:
+        chunk["choices"][0]["delta"]["tool_calls"] = tool_calls
+    if usage is not None:
+        chunk["usage"] = usage
+    return f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+
+
+def _text_stream():
+    yield _sse({"role": "assistant", "content": ""})
+    yield _sse({"content": "Hel"})
+    yield _sse({"content": "lo"})
+    yield _sse({}, finish_reason="stop")
+    yield b"data: [DONE]\n\n"
+
+
+def _tool_call_stream():
+    """Mimic an OpenAI stream with a tool call (no preceding text)."""
+    yield _sse({"role": "assistant", "content": None})
+    yield _sse(
+        {},
+        tool_calls=[
+            {
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": ""},
+            }
+        ],
+    )
+    yield _sse(
+        {},
+        tool_calls=[
+            {
+                "index": 0,
+                "function": {"arguments": '{"city":'},
+            }
+        ],
+    )
+    yield _sse(
+        {},
+        tool_calls=[
+            {
+                "index": 0,
+                "function": {"arguments": '"Paris"}'},
+            }
+        ],
+    )
+    yield _sse({}, finish_reason="tool_calls")
+    yield b"data: [DONE]\n\n"
+
+
+def _text_then_tool_call_stream():
+    """Text arrives first, then a tool call — the tool call must get
+    a part_index past the text so assembly doesn't mix families."""
+    yield _sse({"role": "assistant", "content": ""})
+    yield _sse({"content": "Looking up"})
+    yield _sse(
+        {},
+        tool_calls=[
+            {
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": '{"c":1}'},
+            }
+        ],
+    )
+    yield _sse({}, finish_reason="tool_calls")
+    yield b"data: [DONE]\n\n"
 
 
 @pytest.fixture
@@ -261,4 +349,188 @@ class TestBuildMessagesConversationHistory:
             {"role": "user", "content": "what's 1+1?"},
             {"role": "assistant", "content": "2"},
             {"role": "user", "content": "what about 2+2?"},
+        ]
+
+
+# -- Phase 4b: execute() yields StreamEvents ---------------------------
+
+
+class TestStreamingExecuteYieldsStreamEvents:
+    def test_text_stream_yields_text_events(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        events = list(response.stream_events())
+        # At least one StreamEvent, all text, all at part_index=0.
+        assert events, "expected stream events"
+        assert all(isinstance(e, llm.StreamEvent) for e in events)
+        assert all(e.type == "text" for e in events)
+        assert all(e.part_index == 0 for e in events)
+        # Text chunks concatenate to the expected full text.
+        assert "".join(e.chunk for e in events) == "Hello"
+
+    def test_text_stream_plain_iteration_still_returns_strings(
+        self, httpx_mock
+    ):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        chunks = list(response)
+        assert all(isinstance(c, str) for c in chunks)
+        assert "".join(chunks) == "Hello"
+
+    def test_text_stream_messages_assembled(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        response.text()
+        assert response.messages == [
+            llm.Message(
+                role="assistant", parts=[llm.TextPart(text="Hello")]
+            )
+        ]
+
+    def test_tool_call_stream_yields_name_and_args_events(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_tool_call_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+        def get_weather(city: str) -> str:
+            "Look up the weather."
+            return "sunny"
+
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[get_weather], key=API_KEY)
+        events = list(response.stream_events())
+        types = [e.type for e in events]
+        assert "tool_call_name" in types
+        assert "tool_call_args" in types
+        # Name event carries the tool_call_id and name.
+        name_ev = next(e for e in events if e.type == "tool_call_name")
+        assert name_ev.tool_call_id == "call_1"
+        assert name_ev.chunk == "get_weather"
+        # Args events share the same part_index and concatenate to
+        # valid JSON.
+        args_events = [e for e in events if e.type == "tool_call_args"]
+        assert all(e.part_index == name_ev.part_index for e in args_events)
+        assert json.loads("".join(e.chunk for e in args_events)) == {
+            "city": "Paris"
+        }
+
+    def test_tool_call_registered_via_add_tool_call(self, httpx_mock):
+        """response.tool_calls() still works — chain/execute relies on it."""
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_tool_call_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+        def get_weather(city: str) -> str:
+            "Look up the weather."
+            return "sunny"
+
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[get_weather], key=API_KEY)
+        response.text()
+        tcs = response.tool_calls()
+        assert len(tcs) == 1
+        assert tcs[0].name == "get_weather"
+        assert tcs[0].arguments == {"city": "Paris"}
+        assert tcs[0].tool_call_id == "call_1"
+
+    def test_text_then_tool_call_part_index_advances(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_then_tool_call_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+        def get_weather(c: int) -> str:
+            "Weather."
+            return "sunny"
+
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("q", tools=[get_weather], key=API_KEY)
+        response.text()
+        # After streaming, messages has both a TextPart and a ToolCallPart.
+        parts = response.messages[0].parts
+        assert any(isinstance(p, llm.TextPart) for p in parts)
+        assert any(isinstance(p, llm.ToolCallPart) for p in parts)
+        text_part = next(p for p in parts if isinstance(p, llm.TextPart))
+        tc_part = next(p for p in parts if isinstance(p, llm.ToolCallPart))
+        assert text_part.text == "Looking up"
+        assert tc_part.name == "get_weather"
+        assert tc_part.arguments == {"c": 1}
+
+
+class TestAsyncStreamingExecuteYieldsStreamEvents:
+    @pytest.mark.asyncio
+    async def test_text_stream_yields_text_events(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_async_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        events = []
+        async for event in response.astream_events():
+            events.append(event)
+        assert all(isinstance(e, llm.StreamEvent) for e in events)
+        assert [e.type for e in events] == ["text"] * len(events)
+        assert "".join(e.chunk for e in events) == "Hello"
+
+
+class TestNonStreamingExecuteYieldsStreamEvents:
+    def test_non_streaming_text_yields_single_event(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "Hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY, stream=False)
+        events = list(response.stream_events())
+        assert events == [
+            llm.StreamEvent(type="text", chunk="Hello", part_index=0)
+        ]
+        assert response.messages == [
+            llm.Message(
+                role="assistant", parts=[llm.TextPart(text="Hello")]
+            )
         ]

@@ -7,6 +7,7 @@ from llm import (
     KeyModel,
     Prompt,
     Response,
+    StreamEvent,
     hookimpl,
 )
 import llm
@@ -851,6 +852,12 @@ class Chat(_Shared, KeyModel):
             )
             chunks = []
             tool_calls = {}
+            # part_index allocator. Text always uses 0. Each tool call
+            # at delta index i is assigned a part_index past any text
+            # that was seen, so _build_parts groups them correctly.
+            seen_text = False
+            tc_part_index = {}
+            next_part_index = 1
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
@@ -859,24 +866,42 @@ class Chat(_Shared, KeyModel):
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        index = tool_call.index
-                        if index not in tool_calls:
-                            tool_calls[index] = tool_call
+                        idx = tool_call.index
+                        if idx not in tool_calls:
+                            tool_calls[idx] = tool_call
+                            tc_part_index[idx] = next_part_index
+                            next_part_index += 1
+                            yield StreamEvent(
+                                type="tool_call_name",
+                                chunk=tool_call.function.name or "",
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_call.id,
+                            )
                         else:
-                            tool_calls[
-                                index
-                            ].function.arguments += tool_call.function.arguments
+                            tool_calls[idx].function.arguments += (
+                                tool_call.function.arguments
+                            )
+                        if tool_call.function.arguments:
+                            yield StreamEvent(
+                                type="tool_call_args",
+                                chunk=tool_call.function.arguments,
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_calls[idx].id,
+                            )
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
-                if content is not None:
-                    yield content
+                if content:
+                    # Empty strings are noise (OpenAI's first chunk
+                    # with role=assistant has content="").
+                    seen_text = True
+                    yield StreamEvent(
+                        type="text", chunk=content, part_index=0
+                    )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
-                    # value.function looks like this:
-                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
                     response.add_tool_call(
                         llm.ToolCall(
                             tool_call_id=value.id,
@@ -893,6 +918,7 @@ class Chat(_Shared, KeyModel):
             )
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
+            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -901,8 +927,25 @@ class Chat(_Shared, KeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
+                part_index += 1
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk=tool_call.function.name or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk=tool_call.function.arguments or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
             if completion.choices[0].message.content is not None:
-                yield completion.choices[0].message.content
+                yield StreamEvent(
+                    type="text",
+                    chunk=completion.choices[0].message.content,
+                    part_index=0,
+                )
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -941,33 +984,48 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             chunks = []
             tool_calls = {}
+            tc_part_index = {}
+            next_part_index = 1
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 chunks.append(chunk)
-                if chunk.usage:
-                    usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        index = tool_call.index
-                        if index not in tool_calls:
-                            tool_calls[index] = tool_call
+                        idx = tool_call.index
+                        if idx not in tool_calls:
+                            tool_calls[idx] = tool_call
+                            tc_part_index[idx] = next_part_index
+                            next_part_index += 1
+                            yield StreamEvent(
+                                type="tool_call_name",
+                                chunk=tool_call.function.name or "",
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_call.id,
+                            )
                         else:
-                            tool_calls[
-                                index
-                            ].function.arguments += tool_call.function.arguments
+                            tool_calls[idx].function.arguments += (
+                                tool_call.function.arguments
+                            )
+                        if tool_call.function.arguments:
+                            yield StreamEvent(
+                                type="tool_call_args",
+                                chunk=tool_call.function.arguments,
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_calls[idx].id,
+                            )
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
-                if content is not None:
-                    yield content
+                if content:
+                    yield StreamEvent(
+                        type="text", chunk=content, part_index=0
+                    )
             if tool_calls:
                 for value in tool_calls.values():
-                    # value.function looks like this:
-                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
                     response.add_tool_call(
                         llm.ToolCall(
                             tool_call_id=value.id,
@@ -985,6 +1043,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
+            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -993,8 +1052,25 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
+                part_index += 1
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk=tool_call.function.name or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk=tool_call.function.arguments or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
             if completion.choices[0].message.content is not None:
-                yield completion.choices[0].message.content
+                yield StreamEvent(
+                    type="text",
+                    chunk=completion.choices[0].message.content,
+                    part_index=0,
+                )
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
