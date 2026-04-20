@@ -309,3 +309,336 @@ class TestStreamEvent:
         assert ev.tool_name == "search"
         assert ev.provider_metadata == {"openai": {"x": 1}}
         assert ev.message_index == 1
+
+
+# -- Phase 2: Response streaming scaffolding ----------------------------
+#
+# Backward compat for plain-str plugins: iterating a Response still
+# yields text strings, response.text() still works, self._chunks is
+# still populated.
+#
+# New capabilities:
+#   - response.stream_events()  / response.astream_events()
+#   - response.messages
+#   - _BaseResponse._build_parts()  (internal, tested via .messages)
+
+
+class TestPlainStrPluginCompat:
+    """A plugin that yields plain str must still work unchanged."""
+
+    def test_iter_yields_strings(self, mock_model):
+        mock_model.enqueue(["hello", " ", "world"])
+        response = mock_model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["hello", " ", "world"]
+
+    def test_text_returns_concatenation(self, mock_model):
+        mock_model.enqueue(["hello ", "world"])
+        response = mock_model.prompt("hi")
+        assert response.text() == "hello world"
+
+    def test_chunks_are_preserved(self, mock_model):
+        mock_model.enqueue(["a", "b", "c"])
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response._chunks == ["a", "b", "c"]
+
+
+class TestStreamEventsFromPlainStrPlugin:
+    """When a plugin yields plain str, stream_events synthesizes text events."""
+
+    def test_stream_events_yields_text_events(self, mock_model):
+        mock_model.enqueue(["hel", "lo"])
+        response = mock_model.prompt("hi")
+        events = list(response.stream_events())
+        assert all(isinstance(e, llm.StreamEvent) for e in events)
+        assert [e.type for e in events] == ["text", "text"]
+        assert [e.chunk for e in events] == ["hel", "lo"]
+        assert all(e.part_index == 0 for e in events)
+
+    def test_response_messages_is_single_assistant_text(self, mock_model):
+        mock_model.enqueue(["hello"])
+        response = mock_model.prompt("hi")
+        response.text()
+        messages = response.messages
+        assert messages == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hello")])
+        ]
+
+    def test_empty_response_has_empty_messages(self, mock_model):
+        mock_model.enqueue([])
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages == []
+
+
+class TestStreamEventsFromStreamEventPlugin:
+    """When a plugin yields StreamEvents, they pass through unchanged
+    and iteration filters to text only."""
+
+    def test_iter_yields_only_text_chunks(self, mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="think ", part_index=0),
+            llm.StreamEvent(type="text", chunk="hel", part_index=1),
+            llm.StreamEvent(type="text", chunk="lo", part_index=1),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        chunks = list(response)
+        assert chunks == ["hel", "lo"]
+
+    def test_stream_events_yields_all_events(self, mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="t", part_index=0),
+            llm.StreamEvent(type="text", chunk="x", part_index=1),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        got = list(response.stream_events())
+        assert [e.type for e in got] == ["reasoning", "text"]
+
+    def test_messages_assembles_reasoning_then_text(self, mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="thinking", part_index=0),
+            llm.StreamEvent(type="text", chunk="hello", part_index=1),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages == [
+            llm.Message(
+                role="assistant",
+                parts=[
+                    llm.ReasoningPart(text="thinking"),
+                    llm.TextPart(text="hello"),
+                ],
+            )
+        ]
+
+    def test_tool_call_name_and_args_merge(self, mock_model):
+        events = [
+            llm.StreamEvent(type="text", chunk="calling", part_index=0),
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="search",
+                part_index=1,
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='{"q":',
+                part_index=1,
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='"weather"}',
+                part_index=1,
+                tool_call_id="c1",
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        msgs = response.messages
+        assert len(msgs) == 1
+        parts = msgs[0].parts
+        assert parts == [
+            llm.TextPart(text="calling"),
+            llm.ToolCallPart(
+                name="search",
+                arguments={"q": "weather"},
+                tool_call_id="c1",
+            ),
+        ]
+
+    def test_tool_call_args_unparseable_json_falls_back(self, mock_model):
+        events = [
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="t",
+                part_index=0,
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk="not json",
+                part_index=0,
+                tool_call_id="c1",
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        part = response.messages[0].parts[0]
+        assert part.name == "t"
+        assert part.arguments == {"_raw": "not json"}
+
+    def test_family_mismatch_at_same_part_index_raises(self, mock_model):
+        events = [
+            llm.StreamEvent(type="text", chunk="x", part_index=0),
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="t",
+                part_index=0,
+                tool_call_id="c1",
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        with pytest.raises(ValueError, match="part_index"):
+            response.messages  # noqa: B018
+
+    def test_provider_metadata_merges_last_wins(self, mock_model):
+        events = [
+            llm.StreamEvent(
+                type="reasoning",
+                chunk="think",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "one"}},
+            ),
+            llm.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "final"}},
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        part = response.messages[0].parts[0]
+        assert part.provider_metadata == {"anthropic": {"signature": "final"}}
+
+    def test_reasoning_token_count_prepends_redacted_part(self, mock_model):
+        # Plugin reports an opaque reasoning token count — framework
+        # prepends a ReasoningPart(redacted=True, token_count=N, text="").
+        class CountingModel(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                response._reasoning_token_count = 200
+                yield llm.StreamEvent(type="text", chunk="hi", part_index=0)
+
+        m = CountingModel()
+        response = m.prompt("x")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts[0] == llm.ReasoningPart(
+            text="", redacted=True, token_count=200
+        )
+        assert parts[1] == llm.TextPart(text="hi")
+
+
+class TestStreamEventsLiveDuringStreaming:
+    """Client code sees events arrive before the response is done —
+    this is the primary user-facing goal of this phase."""
+
+    def test_events_arrive_before_done(self, mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="t", part_index=0),
+            llm.StreamEvent(type="text", chunk="hi", part_index=1),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        seen = []
+        for event in response.stream_events():
+            # Record the _done state at the moment we receive the event.
+            seen.append((event.type, response._done))
+        # Events arrived before _done was set.
+        assert [s[0] for s in seen] == ["reasoning", "text"]
+        assert all(not done for _type, done in seen)
+        # And after the generator is drained, the response is done.
+        assert response._done
+
+    def test_stream_events_after_done_replays(self, mock_model):
+        mock_model.enqueue(
+            [llm.StreamEvent(type="text", chunk="hi", part_index=0)]
+        )
+        response = mock_model.prompt("x")
+        first = list(response.stream_events())
+        # Second call replays from the stored events.
+        second = list(response.stream_events())
+        assert len(first) == 1
+        assert [e.type for e in second] == ["text"]
+        assert [e.chunk for e in second] == ["hi"]
+
+    def test_plain_str_stream_events_after_done_replays(self, mock_model):
+        mock_model.enqueue(["hello"])
+        response = mock_model.prompt("x")
+        response.text()
+        events = list(response.stream_events())
+        assert len(events) == 1
+        assert events[0].type == "text"
+        assert events[0].chunk == "hello"
+
+
+class TestAsyncStreamEvents:
+    @pytest.mark.asyncio
+    async def test_async_stream_events_live(self, async_mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="r", part_index=0),
+            llm.StreamEvent(type="text", chunk="t", part_index=1),
+        ]
+        async_mock_model.enqueue(events)
+        response = async_mock_model.prompt("x")
+        seen_types = []
+        async for event in response.astream_events():
+            seen_types.append(event.type)
+        assert seen_types == ["reasoning", "text"]
+
+    @pytest.mark.asyncio
+    async def test_async_iter_yields_only_text(self, async_mock_model):
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="r", part_index=0),
+            llm.StreamEvent(type="text", chunk="hi", part_index=1),
+        ]
+        async_mock_model.enqueue(events)
+        response = async_mock_model.prompt("x")
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        assert chunks == ["hi"]
+
+    @pytest.mark.asyncio
+    async def test_async_messages_requires_await(self, async_mock_model):
+        async_mock_model.enqueue(["hi"])
+        response = async_mock_model.prompt("x")
+        with pytest.raises(ValueError):
+            response.messages  # noqa: B018
+
+    @pytest.mark.asyncio
+    async def test_async_messages_after_await(self, async_mock_model):
+        async_mock_model.enqueue(["hi"])
+        response = async_mock_model.prompt("x")
+        await response.text()
+        assert response.messages == [
+            llm.Message(
+                role="assistant", parts=[llm.TextPart(text="hi")]
+            )
+        ]
+
+
+class TestChainResponseStreamEvents:
+    def test_sync_chain_stream_events_yields_text_when_no_tools(
+        self, mock_model
+    ):
+        # Chain with no tool calls is a single-response chain — its
+        # stream_events should concatenate from each underlying response.
+        mock_model.enqueue(
+            [llm.StreamEvent(type="text", chunk="done", part_index=0)]
+        )
+        chain = mock_model.conversation().chain("q")
+        events = list(chain.stream_events())
+        assert [e.type for e in events] == ["text"]
+        assert [e.chunk for e in events] == ["done"]
+
+    @pytest.mark.asyncio
+    async def test_async_chain_astream_events_yields(self, async_mock_model):
+        async_mock_model.enqueue(
+            [llm.StreamEvent(type="text", chunk="done", part_index=0)]
+        )
+        chain = async_mock_model.conversation().chain("q")
+        events = []
+        async for event in chain.astream_events():
+            events.append(event)
+        assert [e.type for e in events] == ["text"]

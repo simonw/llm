@@ -674,6 +674,16 @@ class _BaseResponse:
         self.stream = stream
         self._key = key
         self._chunks: List[str] = []
+        # Every StreamEvent ever yielded by execute(), in order. Plain
+        # str yields are wrapped as StreamEvent(type="text", part_index=0)
+        # so this buffer is the single source of truth for replay and
+        # for assembling response.messages.
+        self._stream_events: List[Any] = []
+        # Plugins set this when the provider reports an opaque reasoning
+        # token count (no streamed reasoning text). _build_parts()
+        # prepends a ReasoningPart(redacted=True, token_count=N) when
+        # non-zero.
+        self._reasoning_token_count: int = 0
         self._done = False
         self._tool_calls: List[ToolCall] = []
         self.response_json: Optional[Dict[str, Any]] = None
@@ -692,6 +702,164 @@ class _BaseResponse:
 
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
+
+    def _process_chunk(self, chunk):
+        """Normalize a chunk from execute() into a StreamEvent and return
+        the text str (or None) that __iter__ should yield.
+
+        Plain str yields from legacy plugins are wrapped as text events
+        at part_index=0. Side effects: populates self._stream_events and
+        self._chunks.
+        """
+        from .parts import StreamEvent
+
+        if isinstance(chunk, StreamEvent):
+            self._stream_events.append(chunk)
+            if chunk.type == "text":
+                self._chunks.append(chunk.chunk)
+                return chunk.chunk
+            return None
+        # Legacy plain-str plugin.
+        event = StreamEvent(type="text", chunk=chunk, part_index=0)
+        self._stream_events.append(event)
+        self._chunks.append(chunk)
+        return chunk
+
+    def _build_parts(self) -> List[Any]:
+        """Assemble Part objects from the accumulated stream events.
+
+        Events sharing a part_index group into one Part. Mixing
+        families (text vs tool_call vs reasoning vs tool_result) at the
+        same index is a plugin bug — raises ValueError instead of
+        silently dropping content.
+        """
+        from .parts import (
+            ReasoningPart,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        def family(t: str) -> str:
+            if t in ("tool_call_name", "tool_call_args"):
+                return "tool_call"
+            return t
+
+        parts: List[Any] = []
+        current_index: Optional[int] = None
+        current_family: Optional[str] = None
+        text_buf: List[str] = []
+        tool_name: Optional[str] = None
+        tool_args_buf: List[str] = []
+        tool_call_id: Optional[str] = None
+        server_executed = False
+        tool_result_name: Optional[str] = None
+        pm_merged: Optional[Dict[str, Any]] = None
+
+        def finalize():
+            nonlocal pm_merged
+            if current_family is None:
+                return
+            if current_family == "text":
+                text = "".join(text_buf)
+                if text:
+                    parts.append(TextPart(text=text, provider_metadata=pm_merged))
+            elif current_family == "reasoning":
+                text = "".join(text_buf)
+                if text:
+                    parts.append(
+                        ReasoningPart(text=text, provider_metadata=pm_merged)
+                    )
+            elif current_family == "tool_call":
+                args_str = "".join(tool_args_buf)
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {"_raw": args_str}
+                parts.append(
+                    ToolCallPart(
+                        name=tool_name or "",
+                        arguments=arguments,
+                        tool_call_id=tool_call_id,
+                        server_executed=server_executed,
+                        provider_metadata=pm_merged,
+                    )
+                )
+            elif current_family == "tool_result":
+                parts.append(
+                    ToolResultPart(
+                        name=tool_result_name or "",
+                        output="".join(text_buf),
+                        tool_call_id=tool_call_id,
+                        server_executed=server_executed,
+                        provider_metadata=pm_merged,
+                    )
+                )
+
+        for event in self._stream_events:
+            ev_family = family(event.type)
+            if event.part_index != current_index:
+                finalize()
+                current_index = event.part_index
+                current_family = ev_family
+                text_buf = []
+                tool_name = None
+                tool_args_buf = []
+                tool_call_id = None
+                server_executed = False
+                tool_result_name = None
+                pm_merged = None
+            elif current_family is not None and ev_family != current_family:
+                raise ValueError(
+                    f"StreamEvent type {event.type!r} is incompatible with "
+                    f"prior type at part_index={event.part_index}. "
+                    "Allocate a new part_index for a different content type."
+                )
+
+            if event.type == "text":
+                text_buf.append(event.chunk)
+            elif event.type == "reasoning":
+                text_buf.append(event.chunk)
+            elif event.type == "tool_call_name":
+                tool_name = (tool_name or "") + event.chunk
+                if event.tool_call_id:
+                    tool_call_id = event.tool_call_id
+                if event.server_executed:
+                    server_executed = True
+            elif event.type == "tool_call_args":
+                tool_args_buf.append(event.chunk)
+                if event.tool_call_id and tool_call_id is None:
+                    tool_call_id = event.tool_call_id
+                if event.server_executed:
+                    server_executed = True
+            elif event.type == "tool_result":
+                text_buf.append(event.chunk)
+                if event.tool_call_id and tool_call_id is None:
+                    tool_call_id = event.tool_call_id
+                if event.server_executed:
+                    server_executed = True
+                if event.tool_name:
+                    tool_result_name = event.tool_name
+
+            if event.provider_metadata:
+                merged = dict(pm_merged) if pm_merged else {}
+                for k, v in event.provider_metadata.items():
+                    merged[k] = v
+                pm_merged = merged
+
+        finalize()
+
+        if self._reasoning_token_count:
+            parts.insert(
+                0,
+                ReasoningPart(
+                    text="",
+                    redacted=True,
+                    token_count=self._reasoning_token_count,
+                ),
+            )
+
+        return parts
 
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(tool_call)
@@ -1177,6 +1345,33 @@ class Response(_BaseResponse):
             details=self.token_details,
         )
 
+    def _iter_events(self):
+        """Drive self.model.execute() once. Yields every chunk it
+        produces, each already appended to self._stream_events by
+        _process_chunk as a side effect.
+        """
+        if isinstance(self.model, Model):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+            )
+        elif isinstance(self.model, KeyModel):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+                key=self.model.get_key(self._key),
+            )
+        else:
+            raise Exception("self.model must be a Model or KeyModel")
+
+        for chunk in generator:
+            assert chunk is not None
+            yield chunk
+
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
@@ -1184,35 +1379,58 @@ class Response(_BaseResponse):
             yield from self._chunks
             return
 
-        if isinstance(self.model, Model):
-            for chunk in self.model.execute(
-                self.prompt,
-                stream=self.stream,
-                response=self,
-                conversation=self.conversation,
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
-        elif isinstance(self.model, KeyModel):
-            for chunk in self.model.execute(
-                self.prompt,
-                stream=self.stream,
-                response=self,
-                conversation=self.conversation,
-                key=self.model.get_key(self._key),
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
-        else:
-            raise Exception("self.model must be a Model or KeyModel")
+        for chunk in self._iter_events():
+            text = self._process_chunk(chunk)
+            if text is not None:
+                yield text
 
         if self.conversation:
             self.conversation.responses.append(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
+
+    def stream_events(self):
+        """Yield StreamEvent objects as the model produces them.
+
+        Whichever of __iter__ and stream_events runs first during live
+        streaming consumes the underlying generator. After completion,
+        both work — each replays from its own buffer.
+        """
+        if self._done:
+            yield from self._stream_events
+            return
+
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        for chunk in self._iter_events():
+            # _process_chunk appends to self._stream_events; use it as
+            # the canonical source for what to yield so the replay path
+            # matches the live path byte-for-byte.
+            self._process_chunk(chunk)
+            yield self._stream_events[-1]
+
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+        self._on_done()
+
+    @property
+    def messages(self) -> List[Any]:
+        """List of Message objects produced by this response.
+
+        Almost always a single assistant Message; multiple messages are
+        possible for providers that emit multi-message responses during
+        server-side tool execution (not in this phase's scope).
+        """
+        from .parts import Message
+
+        self._force()
+        parts = self._build_parts()
+        if not parts:
+            return []
+        return [Message(role="assistant", parts=parts)]
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -1416,12 +1634,7 @@ class AsyncResponse(_BaseResponse):
             self._iter_chunks = list(self._chunks)  # Make a copy for iteration
         return self
 
-    async def __anext__(self) -> str:
-        if self._done:
-            if hasattr(self, "_iter_chunks") and self._iter_chunks:
-                return self._iter_chunks.pop(0)
-            raise StopAsyncIteration
-
+    def _ensure_async_generator(self):
         if not hasattr(self, "_generator"):
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
@@ -1441,20 +1654,75 @@ class AsyncResponse(_BaseResponse):
             else:
                 raise ValueError("self.model must be an AsyncModel or AsyncKeyModel")
 
-        try:
-            chunk = await self._generator.__anext__()
+    async def _async_finalize(self):
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+        if hasattr(self, "_generator"):
+            del self._generator
+        await self._on_done()
+
+    async def __anext__(self) -> str:
+        if self._done:
+            if hasattr(self, "_iter_chunks") and self._iter_chunks:
+                return self._iter_chunks.pop(0)
+            raise StopAsyncIteration
+
+        self._ensure_async_generator()
+        # Skip non-text events — iteration yields only text. Loop until
+        # we find a text chunk or the generator is exhausted.
+        while True:
+            try:
+                chunk = await self._generator.__anext__()
+            except StopAsyncIteration:
+                await self._async_finalize()
+                raise
             assert chunk is not None
-            self._chunks.append(chunk)
-            return chunk
-        except StopAsyncIteration:
-            if self.conversation:
-                self.conversation.responses.append(self)
-            self._end = time.monotonic()
-            self._done = True
-            if hasattr(self, "_generator"):
-                del self._generator
-            await self._on_done()
-            raise
+            text = self._process_chunk(chunk)
+            if text is not None:
+                return text
+
+    async def astream_events(self):
+        """Yield StreamEvent objects as the model produces them (async)."""
+        if self._done:
+            for event in self._stream_events:
+                yield event
+            return
+
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        self._ensure_async_generator()
+        try:
+            while True:
+                try:
+                    chunk = await self._generator.__anext__()
+                except StopAsyncIteration:
+                    await self._async_finalize()
+                    return
+                assert chunk is not None
+                self._process_chunk(chunk)
+                yield self._stream_events[-1]
+        finally:
+            pass
+
+    @property
+    def messages(self) -> List[Any]:
+        """List of Message objects produced by this response.
+
+        Raises ValueError if the response has not yet been awaited —
+        assembly depends on the full event stream.
+        """
+        from .parts import Message
+
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — use 'await response' first"
+            )
+        parts = self._build_parts()
+        if not parts:
+            return []
+        return [Message(role="assistant", parts=parts)]
 
     async def _force(self):
         if not self._done:
@@ -1670,6 +1938,11 @@ class ChainResponse(_BaseChainResponse):
         for response_item in self.responses():
             yield from response_item
 
+    def stream_events(self):
+        "Yield StreamEvents from every response in the chain."
+        for response_item in self.responses():
+            yield from response_item.stream_events()
+
     def text(self) -> str:
         return "".join(self)
 
@@ -1728,6 +2001,12 @@ class AsyncChainResponse(_BaseChainResponse):
         async for response_item in self.responses():
             async for chunk in response_item:
                 yield chunk
+
+    async def astream_events(self):
+        "Yield StreamEvents from every response in the chain."
+        async for response_item in self.responses():
+            async for event in response_item.astream_events():
+                yield event
 
     async def text(self) -> str:
         all_chunks = []
