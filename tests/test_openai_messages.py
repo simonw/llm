@@ -502,6 +502,81 @@ class TestAsyncStreamingExecuteYieldsStreamEvents:
         assert "".join(e.chunk for e in events) == "Hello"
 
 
+def _text_stream_with_reasoning_usage(reasoning_tokens):
+    """Stream with usage in the final chunk reporting reasoning_tokens."""
+    yield _sse({"role": "assistant", "content": ""})
+    yield _sse({"content": "Hel"})
+    yield _sse({"content": "lo"})
+    yield _sse({}, finish_reason="stop")
+    # Final chunk with usage — OpenAI streams usage once at the end
+    # when stream_options.include_usage=True.
+    yield _sse(
+        {},
+        usage={
+            "prompt_tokens": 5,
+            "completion_tokens": 2,
+            "total_tokens": 7,
+            "completion_tokens_details": {
+                "reasoning_tokens": reasoning_tokens
+            },
+        },
+    )
+    yield b"data: [DONE]\n\n"
+
+
+class TestReasoningTokenCount:
+    def test_reasoning_token_count_recorded(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream_with_reasoning_usage(200)),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        response.text()
+        assert response._reasoning_token_count == 200
+
+    def test_reasoning_part_prepended_to_messages(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream_with_reasoning_usage(150)),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        response.text()
+        assert response.messages == [
+            llm.Message(
+                role="assistant",
+                parts=[
+                    llm.ReasoningPart(
+                        text="", redacted=True, token_count=150
+                    ),
+                    llm.TextPart(text="Hello"),
+                ],
+            )
+        ]
+
+    def test_no_reasoning_part_when_zero_or_absent(self, httpx_mock):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_text_stream_with_reasoning_usage(0)),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        response.text()
+        # Either the attribute isn't set, or it's 0 — either way no
+        # redacted ReasoningPart in the assembled messages.
+        parts = response.messages[0].parts
+        assert not any(
+            isinstance(p, llm.ReasoningPart) for p in parts
+        ), "should not add a redacted reasoning part when count=0"
+
+
 class TestNonStreamingExecuteYieldsStreamEvents:
     def test_non_streaming_text_yields_single_event(self, httpx_mock):
         httpx_mock.add_response(
