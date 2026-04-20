@@ -787,3 +787,105 @@ class TestChainResponseStreamEvents:
         async for event in chain.astream_events():
             events.append(event)
         assert [e.type for e in events] == ["text"]
+
+
+# -- Phase 6: Client-side serialization round-trip ---------------------
+#
+# A library user can persist a conversation by serializing response.messages
+# to JSON and later re-inflate it as messages=[...] on a follow-up prompt.
+# No SQLite involvement.
+
+
+class TestClientSerializationRoundTrip:
+    def test_response_messages_json_roundtrip(self, mock_model):
+        mock_model.enqueue(["hello there"])
+        r = mock_model.prompt("hi")
+        r.text()
+
+        # Serialize via Message.to_dict / json.dumps
+        payload = json.dumps([m.to_dict() for m in r.messages])
+        # Deserialize — no LLM state needed beyond the types.
+        restored = [llm.Message.from_dict(d) for d in json.loads(payload)]
+
+        assert restored == r.messages
+
+    def test_rebuilt_messages_reach_plugin_via_prompt(self, mock_model):
+        """Round-trip: serialize messages from turn 1, re-inflate, send
+        as messages= to turn 2. The plugin sees the full chain."""
+        # Turn 1
+        mock_model.enqueue(["turn 1 answer"])
+        r1 = mock_model.prompt("turn 1 question")
+        r1.text()
+
+        # Persist everything the client cares about.
+        history = [llm.user("turn 1 question").to_dict()] + [
+            m.to_dict() for m in r1.messages
+        ]
+        payload = json.dumps(history)
+
+        # Later — rebuild from the wire form and continue.
+        rebuilt = [llm.Message.from_dict(d) for d in json.loads(payload)]
+        mock_model.enqueue(["turn 2 answer"])
+        r2 = mock_model.prompt(
+            messages=rebuilt + [llm.user("turn 2 question")]
+        )
+        r2.text()
+
+        # The plugin saw the full structured history on prompt.messages.
+        assert r2.prompt.messages == rebuilt + [
+            llm.user("turn 2 question")
+        ]
+        assert r2.messages == [llm.assistant("turn 2 answer")]
+
+    def test_roundtrip_preserves_tool_calls_and_results(self, mock_model):
+        """Assistant messages with tool calls + subsequent tool role
+        messages survive json round-trip intact."""
+        messages = [
+            llm.user("what's the weather?"),
+            llm.assistant(
+                "let me check",
+                llm.ToolCallPart(
+                    name="get_weather",
+                    arguments={"city": "Paris"},
+                    tool_call_id="c1",
+                ),
+            ),
+            llm.tool_message(
+                llm.ToolResultPart(
+                    name="get_weather",
+                    output="sunny",
+                    tool_call_id="c1",
+                )
+            ),
+        ]
+        payload = json.dumps([m.to_dict() for m in messages])
+        restored = [llm.Message.from_dict(d) for d in json.loads(payload)]
+        assert restored == messages
+
+    def test_roundtrip_preserves_redacted_reasoning(self, mock_model):
+        """Redacted reasoning parts (opaque token counts) survive
+        round-trip — needed for accurate rendering of 'this turn used
+        N reasoning tokens'."""
+        msg = llm.Message(
+            role="assistant",
+            parts=[
+                llm.ReasoningPart(text="", redacted=True, token_count=150),
+                llm.TextPart(text="result"),
+            ],
+        )
+        restored = llm.Message.from_dict(json.loads(json.dumps(msg.to_dict())))
+        assert restored == msg
+
+    def test_roundtrip_preserves_provider_metadata(self, mock_model):
+        msg = llm.Message(
+            role="assistant",
+            parts=[
+                llm.ReasoningPart(
+                    text="thinking",
+                    provider_metadata={"anthropic": {"signature": "abc"}},
+                ),
+                llm.TextPart(text="answer"),
+            ],
+        )
+        restored = llm.Message.from_dict(json.loads(json.dumps(msg.to_dict())))
+        assert restored == msg
