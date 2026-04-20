@@ -618,6 +618,151 @@ class TestAsyncStreamEvents:
         ]
 
 
+# -- Phase 3: messages= parameter and Prompt.messages synthesis --------
+
+
+class TestPromptMessagesSynthesis:
+    """Prompt.messages constructs a Message list from legacy inputs when
+    messages= wasn't passed explicitly."""
+
+    def test_empty_prompt_yields_empty_messages(self, mock_model):
+        from llm.models import Prompt
+
+        p = Prompt(None, model=mock_model)
+        assert p.messages == []
+
+    def test_prompt_text_synthesizes_user_message(self, mock_model):
+        from llm.models import Prompt
+
+        p = Prompt("hi", model=mock_model)
+        assert p.messages == [
+            llm.Message(role="user", parts=[llm.TextPart(text="hi")])
+        ]
+
+    def test_system_and_prompt_synthesizes_two_messages(self, mock_model):
+        from llm.models import Prompt
+
+        p = Prompt("hi", model=mock_model, system="be brief")
+        assert p.messages == [
+            llm.Message(role="system", parts=[llm.TextPart(text="be brief")]),
+            llm.Message(role="user", parts=[llm.TextPart(text="hi")]),
+        ]
+
+    def test_attachments_join_user_message(self, mock_model):
+        from llm.models import Prompt
+
+        att = llm.Attachment(url="http://example.com/a.jpg")
+        p = Prompt("look", model=mock_model, attachments=[att])
+        assert p.messages == [
+            llm.Message(
+                role="user",
+                parts=[
+                    llm.TextPart(text="look"),
+                    llm.AttachmentPart(attachment=att),
+                ],
+            )
+        ]
+
+    def test_tool_results_become_tool_role_message(self, mock_model):
+        from llm.models import Prompt
+        from llm import ToolResult
+
+        tr = ToolResult(name="t", output="ok", tool_call_id="c1")
+        p = Prompt(None, model=mock_model, tool_results=[tr])
+        assert p.messages == [
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.ToolResultPart(
+                        name="t", output="ok", tool_call_id="c1"
+                    )
+                ],
+            )
+        ]
+
+
+class TestPromptMessagesExplicit:
+    """When messages= is passed, it's authoritative."""
+
+    def test_explicit_messages_returned_verbatim(self, mock_model):
+        from llm.models import Prompt
+
+        explicit = [
+            llm.system("x"),
+            llm.user("y"),
+        ]
+        p = Prompt(None, model=mock_model, messages=explicit)
+        assert p.messages == explicit
+
+    def test_explicit_messages_plus_prompt_appends_trailing_user(
+        self, mock_model
+    ):
+        from llm.models import Prompt
+
+        explicit = [llm.system("x"), llm.user("prior")]
+        p = Prompt("follow-up", model=mock_model, messages=explicit)
+        assert p.messages == [
+            llm.system("x"),
+            llm.user("prior"),
+            llm.user("follow-up"),
+        ]
+
+    def test_explicit_messages_independent_copy(self, mock_model):
+        """Mutating the caller's list must not mutate Prompt.messages."""
+        from llm.models import Prompt
+
+        explicit = [llm.user("x")]
+        p = Prompt(None, model=mock_model, messages=explicit)
+        explicit.append(llm.user("later"))
+        assert p.messages == [llm.user("x")]
+
+
+class TestModelPromptMessagesKwarg:
+    """model.prompt / conversation.prompt / async counterparts accept
+    messages= and the list is observable on the resulting Prompt."""
+
+    def test_model_prompt_accepts_messages(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(messages=[llm.user("hi")])
+        response.text()
+        assert response.prompt.messages == [llm.user("hi")]
+
+    def test_model_prompt_messages_with_system(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            messages=[llm.system("be brief"), llm.user("hi")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("hi"),
+        ]
+
+    def test_conversation_prompt_accepts_messages(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        response = conv.prompt(messages=[llm.user("q")])
+        response.text()
+        assert response.prompt.messages == [llm.user("q")]
+
+    @pytest.mark.asyncio
+    async def test_async_model_prompt_accepts_messages(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        response = async_mock_model.prompt(messages=[llm.user("hi")])
+        await response.text()
+        assert response.prompt.messages == [llm.user("hi")]
+
+    @pytest.mark.asyncio
+    async def test_async_conversation_prompt_accepts_messages(
+        self, async_mock_model
+    ):
+        async_mock_model.enqueue(["ok"])
+        conv = async_mock_model.conversation()
+        response = conv.prompt(messages=[llm.user("q")])
+        await response.text()
+        assert response.prompt.messages == [llm.user("q")]
+
+
 class TestChainResponseStreamEvents:
     def test_sync_chain_stream_events_yields_text_when_no_tools(
         self, mock_model

@@ -366,6 +366,7 @@ class Prompt:
         schema=None,
         tools=None,
         tool_results=None,
+        messages=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -380,6 +381,9 @@ class Prompt:
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
         self.options = options or {}
+        # Explicit messages= list, if the caller supplied one. Copied so
+        # later mutation by the caller doesn't alter the Prompt.
+        self._explicit_messages = list(messages) if messages is not None else None
 
     @property
     def prompt(self):
@@ -395,6 +399,63 @@ class Prompt:
             if bit.strip()
         ]
         return "\n\n".join(bits)
+
+    @property
+    def messages(self):
+        """Canonical list of Message objects for this prompt.
+
+        If messages= was passed explicitly, returns that list — with the
+        optional prompt= text appended as a trailing user TextPart.
+        Otherwise synthesizes from system=, prompt=, attachments=, and
+        tool_results= so plugins can read one uniform representation
+        regardless of which surface the caller used.
+        """
+        from .parts import (
+            AttachmentPart,
+            Message,
+            TextPart,
+            ToolResultPart,
+        )
+
+        if self._explicit_messages is not None:
+            out = list(self._explicit_messages)
+            if self._prompt:
+                out.append(
+                    Message(role="user", parts=[TextPart(text=self._prompt)])
+                )
+            return out
+
+        result: List["Message"] = []
+
+        if self.system:
+            result.append(
+                Message(role="system", parts=[TextPart(text=self.system)])
+            )
+
+        if self.tool_results:
+            result.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in self.tool_results
+                    ],
+                )
+            )
+
+        user_parts: List[Any] = []
+        if self.prompt:
+            user_parts.append(TextPart(text=self.prompt))
+        for att in self.attachments:
+            user_parts.append(AttachmentPart(attachment=att))
+        if user_parts:
+            result.append(Message(role="user", parts=user_parts))
+
+        return result
 
 
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
@@ -442,6 +503,7 @@ class Conversation(_BaseConversation):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -457,6 +519,7 @@ class Conversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -579,6 +642,7 @@ class AsyncConversation(_BaseConversation):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
@@ -594,6 +658,7 @@ class AsyncConversation(_BaseConversation):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -2115,6 +2180,7 @@ class _Model(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -2133,6 +2199,7 @@ class _Model(_BaseModel):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 model=self,
                 options=self.Options(**options),
             ),
@@ -2227,6 +2294,7 @@ class _AsyncModel(_BaseModel):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
@@ -2242,6 +2310,7 @@ class _AsyncModel(_BaseModel):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 model=self,
                 options=self.Options(**options),
             ),
