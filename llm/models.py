@@ -26,6 +26,7 @@ from typing import (
     Union,
     get_type_hints,
 )
+from .serialization import ResponseDict
 from .utils import (
     ensure_fragment,
     ensure_tool,
@@ -1386,7 +1387,7 @@ class _BaseResponse:
                 )
 
 
-def _response_to_dict(response: "_BaseResponse") -> Dict[str, Any]:
+def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     """Shared serializer for Response.to_dict / AsyncResponse.to_dict.
 
     The output is a JSON-safe dict — store it anywhere (file, Redis,
@@ -1413,11 +1414,14 @@ def _response_to_dict(response: "_BaseResponse") -> Dict[str, Any]:
         payload["id"] = response.id
     if response._done:
         if response.input_tokens is not None or response.output_tokens is not None:
-            payload["usage"] = {
-                "input": response.input_tokens,
-                "output": response.output_tokens,
-                "details": response.token_details,
-            }
+            usage: Dict[str, Any] = {}
+            if response.input_tokens is not None:
+                usage["input"] = response.input_tokens
+            if response.output_tokens is not None:
+                usage["output"] = response.output_tokens
+            if response.token_details is not None:
+                usage["details"] = response.token_details
+            payload["usage"] = usage
         if response._start_utcnow is not None:
             payload["datetime_utc"] = response._start_utcnow.isoformat()
     return payload
@@ -1521,7 +1525,7 @@ class Response(_BaseResponse):
             chain.extend(messages)
         return self.model.prompt(messages=chain, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ResponseDict:
         """Serialize this response for JSON persistence.
 
         Captures exactly what is needed to continue the conversation:
@@ -1530,13 +1534,15 @@ class Response(_BaseResponse):
         (``response.messages``), and any explicit options. Pair with
         :meth:`Response.from_dict` to rehydrate and
         :meth:`Response.reply` to continue.
+
+        Returns :class:`~llm.serialization.ResponseDict`.
         """
         return _response_to_dict(self)
 
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
+        data: ResponseDict,
         *,
         model: Optional["Model"] = None,
     ) -> "Response":
@@ -1834,7 +1840,7 @@ class AsyncResponse(_BaseResponse):
             chain.extend(messages)
         return self.model.prompt(messages=chain, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ResponseDict:
         """Async counterpart of Response.to_dict(). Requires awaiting."""
         if not self._done:
             raise ValueError(
@@ -1845,7 +1851,7 @@ class AsyncResponse(_BaseResponse):
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
+        data: ResponseDict,
         *,
         model: Optional["AsyncModel"] = None,
     ) -> "AsyncResponse":

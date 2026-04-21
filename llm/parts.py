@@ -16,9 +16,19 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .models import Attachment
+from .serialization import (
+    AttachmentDict,
+    AttachmentPartDict,
+    MessageDict,
+    PartDict,
+    ReasoningPartDict,
+    TextPartDict,
+    ToolCallPartDict,
+    ToolResultPartDict,
+)
 
 
-def _attachment_to_dict(att: Attachment) -> Dict[str, Any]:
+def _attachment_to_dict(att: Attachment) -> AttachmentDict:
     d: Dict[str, Any] = {}
     if att.type:
         d["type"] = att.type
@@ -28,10 +38,10 @@ def _attachment_to_dict(att: Attachment) -> Dict[str, Any]:
         d["path"] = att.path
     if att.content:
         d["content"] = base64.b64encode(att.content).decode("ascii")
-    return d
+    return d  # type: ignore[return-value]
 
 
-def _attachment_from_dict(d: Dict[str, Any]) -> Attachment:
+def _attachment_from_dict(d: AttachmentDict) -> Attachment:
     content = d.get("content")
     if isinstance(content, str):
         content = base64.b64decode(content)
@@ -47,11 +57,11 @@ def _attachment_from_dict(d: Dict[str, Any]) -> Attachment:
 class Part:
     """Base class for all parts. Role lives on the enclosing Message."""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> PartDict:
         raise NotImplementedError
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Part":
+    def from_dict(d: PartDict) -> "Part":
         type_ = d.get("type")
         pm = d.get("provider_metadata")
         if type_ == "text":
@@ -95,11 +105,11 @@ class TextPart(Part):
     text: str = ""
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> TextPartDict:
         d: Dict[str, Any] = {"type": "text", "text": self.text}
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
 
 @dataclass
@@ -116,7 +126,7 @@ class ReasoningPart(Part):
     token_count: Optional[int] = None
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ReasoningPartDict:
         d: Dict[str, Any] = {"type": "reasoning", "text": self.text}
         if self.redacted:
             d["redacted"] = True
@@ -124,7 +134,7 @@ class ReasoningPart(Part):
             d["token_count"] = self.token_count
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
 
 @dataclass
@@ -142,7 +152,7 @@ class ToolCallPart(Part):
     server_executed: bool = False
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ToolCallPartDict:
         d: Dict[str, Any] = {
             "type": "tool_call",
             "name": self.name,
@@ -154,7 +164,7 @@ class ToolCallPart(Part):
             d["server_executed"] = True
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
 
 @dataclass
@@ -169,7 +179,7 @@ class ToolResultPart(Part):
     exception: Optional[str] = None
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ToolResultPartDict:
         d: Dict[str, Any] = {
             "type": "tool_result",
             "name": self.name,
@@ -185,7 +195,7 @@ class ToolResultPart(Part):
             d["attachments"] = [_attachment_to_dict(a) for a in self.attachments]
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
 
 @dataclass
@@ -195,13 +205,13 @@ class AttachmentPart(Part):
     attachment: Optional[Attachment] = None
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> AttachmentPartDict:
         d: Dict[str, Any] = {"type": "attachment"}
         if self.attachment:
             d["attachment"] = _attachment_to_dict(self.attachment)
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
 
 @dataclass
@@ -218,17 +228,17 @@ class Message:
     parts: List[Part] = field(default_factory=list)
     provider_metadata: Optional[Dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> MessageDict:
         d: Dict[str, Any] = {
             "role": self.role,
             "parts": [p.to_dict() for p in self.parts],
         }
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
-        return d
+        return d  # type: ignore[return-value]
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Message":
+    def from_dict(d: MessageDict) -> "Message":
         return Message(
             role=d["role"],
             parts=[Part.from_dict(p) for p in d.get("parts", [])],
