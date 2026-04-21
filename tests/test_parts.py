@@ -876,6 +876,70 @@ class TestConversationFullChainInvariant:
         ]
 
 
+# -- Regression: rehydrated-from-SQLite response.messages survives ----
+
+
+class TestSqliteRehydrateMessages:
+    """After Response.from_row, response.messages must still yield the
+    assistant turn as a TextPart (+ any tool calls). Otherwise
+    Conversation.prompt builds a broken chain for `llm -c`.
+    """
+
+    def test_from_row_response_messages_synthesized_from_chunks(
+        self, mock_model, tmp_path
+    ):
+        import sqlite_utils
+        from llm.migrations import migrate
+
+        mock_model.enqueue(["answer text"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+
+        db = sqlite_utils.Database(str(tmp_path / "logs.db"))
+        migrate(db)
+        r1.log_to_db(db)
+
+        # Rehydrate the response
+        row = next(db["responses"].rows)
+        rehydrated = llm.Response.from_row(db, row)
+        # _stream_events is empty (SQLite doesn't persist those), but
+        # _chunks carries the text. response.messages must fall back
+        # to synthesizing a TextPart.
+        assert rehydrated._stream_events == []
+        assert rehydrated.messages == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="answer text")])
+        ]
+
+    def test_llm_dash_c_chain_preserves_prior_assistant_turn(
+        self, mock_model, tmp_path
+    ):
+        """End-to-end: a follow-up turn via load_conversation must send
+        [user(q1), assistant(a1), user(q2)] — not drop the assistant."""
+        import sqlite_utils
+        from llm.migrations import migrate
+        from llm.cli import load_conversation
+
+        mock_model.enqueue(["first answer"])
+        mock_model.enqueue(["second answer"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+
+        db_path = tmp_path / "logs.db"
+        db = sqlite_utils.Database(str(db_path))
+        migrate(db)
+        r1.log_to_db(db)
+
+        conv = load_conversation(None, database=str(db_path))
+        r2 = conv.prompt("q2")
+        r2.text()
+
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("first answer"),
+            llm.user("q2"),
+        ]
+
+
 # -- Phase 7.3: response.reply() --------------------------------------
 
 

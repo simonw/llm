@@ -894,6 +894,14 @@ class _BaseResponse:
         families (text vs tool_call vs reasoning vs tool_result) at the
         same index is a plugin bug — raises ValueError instead of
         silently dropping content.
+
+        Fallback: when no stream events were recorded (response was
+        rehydrated from SQLite via ``from_row``), synthesize a
+        TextPart from ``self._chunks`` plus any ``self._tool_calls``
+        restored by the row loader. Reasoning signatures are not
+        recoverable from SQLite in this fallback — use
+        ``response.to_dict()`` / ``Response.from_dict()`` for
+        structure-preserving persistence.
         """
         from .parts import (
             ReasoningPart,
@@ -901,6 +909,37 @@ class _BaseResponse:
             ToolCallPart,
             ToolResultPart,
         )
+
+        if not self._stream_events:
+            # Rehydrated-from-SQLite path: assemble from _chunks +
+            # _tool_calls so response.messages isn't empty after
+            # from_row, and Conversation.prompt-built chains include
+            # the assistant turn on follow-up calls.
+            parts: List[Any] = []
+            text = "".join(self._chunks)
+            if text:
+                parts.append(TextPart(text=text))
+            for tc in self._tool_calls:
+                parts.append(
+                    ToolCallPart(
+                        name=tc.name,
+                        arguments=tc.arguments or {},
+                        tool_call_id=tc.tool_call_id,
+                    )
+                )
+            reasoning_token_count = getattr(
+                self, "_reasoning_token_count", 0
+            )
+            if reasoning_token_count:
+                parts.insert(
+                    0,
+                    ReasoningPart(
+                        text="",
+                        redacted=True,
+                        token_count=reasoning_token_count,
+                    ),
+                )
+            return parts
 
         def family(t: str) -> str:
             if t in ("tool_call_name", "tool_call_args"):
