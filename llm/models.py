@@ -2221,6 +2221,57 @@ class AsyncResponse(_BaseResponse):
         return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
+def _chain_for_tool_results(
+    prior_response, tool_results, attachments
+) -> List[Any]:
+    """Build the message chain for a tool-result turn in a chain loop.
+
+    Takes the prior response's full input chain + its structured
+    output, then appends a tool-role message carrying the new
+    ToolResult outputs. Attachments (e.g. images returned by tools)
+    are folded into a subsequent user-role message.
+
+    This is what gives ``response.prompt.messages`` on the tool-
+    result turn the complete history for the next provider call —
+    including any reasoning signatures or thoughtSignatures from the
+    prior turn.
+    """
+    from .parts import (
+        AttachmentPart,
+        Message,
+        TextPart,
+        ToolResultPart,
+    )
+
+    chain: List[Any] = list(prior_response.prompt.messages) + list(
+        prior_response.messages
+    )
+    if tool_results:
+        chain.append(
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name=tr.name,
+                        output=tr.output,
+                        tool_call_id=tr.tool_call_id,
+                    )
+                    for tr in tool_results
+                ],
+            )
+        )
+    # Attachments that came back from tools ride on a trailing user
+    # message (mimics the legacy attachments=[] kwarg behavior).
+    if attachments:
+        chain.append(
+            Message(
+                role="user",
+                parts=[AttachmentPart(attachment=a) for a in attachments],
+            )
+        )
+    return chain
+
+
 class _BaseChainResponse:
     prompt: "Prompt"
     stream: bool
@@ -2289,12 +2340,20 @@ class ChainResponse(_BaseChainResponse):
             for tool_result in tool_results:
                 attachments.extend(tool_result.attachments)
             if tool_results:
+                # Pre-bake the full chain for the tool-result turn so
+                # response.prompt.messages is what gets sent — carries
+                # thoughtSignatures, thinking signatures, and everything
+                # else the model needs for the next call.
+                next_chain = _chain_for_tool_results(
+                    current_response, tool_results, attachments
+                )
                 current_response = Response(
                     Prompt(
-                        "",  # Next prompt is empty, tools drive it
+                        "",  # Next prompt text is empty; tool_results drive it
                         self.model,
                         tools=current_response.prompt.tools,
                         tool_results=tool_results,
+                        messages=next_chain,
                         options=self.prompt.options,
                         attachments=attachments,
                     ),
@@ -2351,11 +2410,17 @@ class AsyncChainResponse(_BaseChainResponse):
                 attachments = []
                 for tool_result in tool_results:
                     attachments.extend(tool_result.attachments)
+                # Pre-bake chain so prompt.messages carries full history
+                # + any thinking/tool-call signatures from prior turn.
+                next_chain = _chain_for_tool_results(
+                    current_response, tool_results, attachments
+                )
                 prompt = Prompt(
                     "",
                     self.model,
                     tools=current_response.prompt.tools,
                     tool_results=tool_results,
+                    messages=next_chain,
                     options=self.prompt.options,
                     attachments=attachments,
                 )
