@@ -283,48 +283,39 @@ class TestBuildMessagesLegacyFieldsStillWork:
 
 
 class TestBuildMessagesSystemDedup:
+    """Explicit messages with repeated system messages dedupe
+    consecutive identical systems — OpenAI accepts one."""
+
     def test_same_system_not_repeated(self, chat_model):
-        """If two turns share a system prompt, only the first emits it."""
-        # Simulate a conversation with a prior response plus a current
-        # turn; both have the same system prompt.
-        from llm import Conversation, Response
-
-        conv = Conversation(model=chat_model)
-        prev_prompt = Prompt(
-            "first question", model=chat_model, system="be brief"
+        prompt = Prompt(
+            None,
+            model=chat_model,
+            messages=[
+                llm.system("be brief"),
+                llm.user("q1"),
+                llm.assistant("a1"),
+                llm.system("be brief"),
+                llm.user("q2"),
+            ],
         )
-        prev_response = Response(prev_prompt, chat_model, stream=False)
-        prev_response._chunks = ["first answer"]
-        prev_response._done = True
-        conv.responses = [prev_response]
-
-        new_prompt = Prompt(
-            "second question", model=chat_model, system="be brief"
-        )
-
-        result = chat_model.build_messages(new_prompt, conv)
-        # System appears once.
+        result = chat_model.build_messages(prompt, None)
         system_msgs = [m for m in result if m["role"] == "system"]
         assert len(system_msgs) == 1
         assert system_msgs[0]["content"] == "be brief"
 
     def test_system_change_emitted(self, chat_model):
-        from llm import Conversation, Response
-
-        conv = Conversation(model=chat_model)
-        prev_prompt = Prompt(
-            "q1", model=chat_model, system="be brief"
+        prompt = Prompt(
+            None,
+            model=chat_model,
+            messages=[
+                llm.system("be brief"),
+                llm.user("q1"),
+                llm.assistant("a1"),
+                llm.system("be expansive"),
+                llm.user("q2"),
+            ],
         )
-        prev_response = Response(prev_prompt, chat_model, stream=False)
-        prev_response._chunks = ["a1"]
-        prev_response._done = True
-        conv.responses = [prev_response]
-
-        new_prompt = Prompt(
-            "q2", model=chat_model, system="be expansive"
-        )
-
-        result = chat_model.build_messages(new_prompt, conv)
+        result = chat_model.build_messages(prompt, None)
         system_msgs = [m for m in result if m["role"] == "system"]
         assert [m["content"] for m in system_msgs] == [
             "be brief",
@@ -334,21 +325,86 @@ class TestBuildMessagesSystemDedup:
 
 class TestBuildMessagesConversationHistory:
     def test_prior_turn_text_plus_current_user(self, chat_model):
-        from llm import Conversation, Response
-
-        conv = Conversation(model=chat_model)
-        prev_prompt = Prompt("what's 1+1?", model=chat_model)
-        prev_response = Response(prev_prompt, chat_model, stream=False)
-        prev_response._chunks = ["2"]
-        prev_response._done = True
-        conv.responses = [prev_response]
-
-        new_prompt = Prompt("what about 2+2?", model=chat_model)
-        result = chat_model.build_messages(new_prompt, conv)
+        """With the Phase 7 invariant, prompt.messages for a follow-up
+        turn already contains the full chain — the adapter reads only
+        from it, not from conversation.responses."""
+        new_prompt = Prompt(
+            None,
+            model=chat_model,
+            messages=[
+                llm.user("what's 1+1?"),
+                llm.assistant("2"),
+                llm.user("what about 2+2?"),
+            ],
+        )
+        result = chat_model.build_messages(new_prompt, None)
         assert result == [
             {"role": "user", "content": "what's 1+1?"},
             {"role": "assistant", "content": "2"},
             {"role": "user", "content": "what about 2+2?"},
+        ]
+
+    def test_no_double_emission_from_conversation_prompt_flow(
+        self, chat_model, httpx_mock
+    ):
+        """Phase 7 invariant: prompt.messages for a conversation's
+        follow-up turn is the full chain. The adapter must not ALSO
+        walk conversation.responses, or the wire body doubles up."""
+        # Two staged responses so conv.prompt twice can complete.
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "A1"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "A2"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+
+        model = llm.get_model("gpt-4o-mini")
+        conv = model.conversation()
+        r1 = conv.prompt("Q1", key=API_KEY, stream=False)
+        r1.text()
+        r2 = conv.prompt("Q2", key=API_KEY, stream=False)
+        r2.text()
+
+        # Inspect what was sent on the SECOND turn.
+        sent_body = json.loads(httpx_mock.get_requests()[-1].content)
+        sent_messages = sent_body["messages"]
+        # Exactly three: user(Q1), assistant(A1), user(Q2).
+        assert sent_messages == [
+            {"role": "user", "content": "Q1"},
+            {"role": "assistant", "content": "A1"},
+            {"role": "user", "content": "Q2"},
         ]
 
 

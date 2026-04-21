@@ -712,42 +712,15 @@ class _Shared:
         return current_system
 
     def build_messages(self, prompt, conversation):
-        messages = []
-        current_system = None
-        if conversation is not None:
-            for prev_response in conversation.responses:
-                # Input side for the prior turn — read prompt.messages
-                # so explicit messages= from prior calls round-trips.
-                for msg in prev_response.prompt.messages:
-                    current_system = self._append_llm_message(
-                        messages, msg, current_system
-                    )
-                # Output side — use the flat accessors. They tolerate
-                # the fact that some plugins mix text and tool_calls at
-                # the same part_index, which _build_parts would reject.
-                prev_text = prev_response.text_or_raise()
-                tool_calls = prev_response.tool_calls_or_raise()
-                if prev_text or tool_calls:
-                    entry = {
-                        "role": "assistant",
-                        "content": prev_text if prev_text else None,
-                    }
-                    if tool_calls:
-                        entry["tool_calls"] = [
-                            {
-                                "type": "function",
-                                "id": tc.tool_call_id,
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments),
-                                },
-                            }
-                            for tc in tool_calls
-                        ]
-                    messages.append(entry)
+        """Translate prompt.messages into OpenAI's wire format.
 
-        # Current turn — consume prompt.messages (auto-synthesized from
-        # legacy kwargs when messages= wasn't explicitly passed).
+        Under the Phase 7 invariant, ``prompt.messages`` is the full
+        chain for this turn — Conversation.prompt and response.reply
+        pre-bake the history into it. The ``conversation`` parameter
+        is unused and retained only for the plugin API contract.
+        """
+        messages: List[Dict[str, Any]] = []
+        current_system: Optional[str] = None
         for msg in prompt.messages:
             current_system = self._append_llm_message(
                 messages, msg, current_system

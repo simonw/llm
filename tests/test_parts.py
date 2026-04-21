@@ -694,18 +694,17 @@ class TestPromptMessagesExplicit:
         p = Prompt(None, model=mock_model, messages=explicit)
         assert p.messages == explicit
 
-    def test_explicit_messages_plus_prompt_appends_trailing_user(
+    def test_explicit_messages_ignores_prompt_kwarg(
         self, mock_model
     ):
+        """Explicit messages= is authoritative. A prompt= string passed
+        alongside is no longer auto-appended — the invariant is that
+        prompt.messages equals exactly what the model was sent."""
         from llm.models import Prompt
 
-        explicit = [llm.system("x"), llm.user("prior")]
-        p = Prompt("follow-up", model=mock_model, messages=explicit)
-        assert p.messages == [
-            llm.system("x"),
-            llm.user("prior"),
-            llm.user("follow-up"),
-        ]
+        explicit = [llm.system("x"), llm.user("prior"), llm.user("follow-up")]
+        p = Prompt("ignored text", model=mock_model, messages=explicit)
+        assert p.messages == explicit
 
     def test_explicit_messages_independent_copy(self, mock_model):
         """Mutating the caller's list must not mutate Prompt.messages."""
@@ -761,6 +760,324 @@ class TestModelPromptMessagesKwarg:
         response = conv.prompt(messages=[llm.user("q")])
         await response.text()
         assert response.prompt.messages == [llm.user("q")]
+
+
+# -- Phase 7.1: Conversation passes full chain via messages= ----------
+#
+# Invariant: response.prompt.messages == exactly what the model was
+# sent for this turn, regardless of whether the caller used
+# model.prompt(messages=[...]), conversation.prompt("text"), or
+# response.reply("text").
+
+
+class TestConversationFullChainInvariant:
+    def test_explicit_messages_is_authoritative_no_prompt_combine(self, mock_model):
+        """Explicit messages= is the whole list. If prompt= is ALSO
+        passed, it's ignored for messages-building — the caller asked
+        for exact control."""
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "this prompt argument is ignored",
+            messages=[llm.user("q")],
+        )
+        response.text()
+        assert response.prompt.messages == [llm.user("q")]
+
+    def test_conversation_second_turn_prompt_messages_has_full_chain(
+        self, mock_model
+    ):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        conv = mock_model.conversation()
+
+        r1 = conv.prompt("q1")
+        r1.text()
+        r2 = conv.prompt("q2")
+        r2.text()
+
+        # r2 was sent the full chain.
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+    def test_conversation_third_turn_includes_everything_before(
+        self, mock_model
+    ):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        mock_model.enqueue(["a3"])
+        conv = mock_model.conversation()
+        r1 = conv.prompt("q1"); r1.text()
+        r2 = conv.prompt("q2"); r2.text()
+        r3 = conv.prompt("q3"); r3.text()
+
+        assert r3.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+            llm.assistant("a2"),
+            llm.user("q3"),
+        ]
+
+    def test_conversation_first_turn_chain_is_single_user_message(
+        self, mock_model
+    ):
+        mock_model.enqueue(["a1"])
+        conv = mock_model.conversation()
+        r1 = conv.prompt("q1")
+        r1.text()
+        assert r1.prompt.messages == [llm.user("q1")]
+
+    def test_conversation_preserves_reasoning_and_tool_call_parts(
+        self, mock_model
+    ):
+        """The chain carries reasoning and tool calls from prior turns,
+        not just the flat text — required for multi-turn extended
+        thinking (Claude) and tool-use round-trips."""
+        mock_model.enqueue([
+            llm.StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        mock_model.enqueue(["follow-up answer"])
+        conv = mock_model.conversation()
+        r1 = conv.prompt("q1")
+        r1.text()
+        r2 = conv.prompt("q2")
+        r2.text()
+
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.Message(
+                role="assistant",
+                parts=[
+                    llm.ReasoningPart(text="thinking..."),
+                    llm.TextPart(text="answer"),
+                ],
+            ),
+            llm.user("q2"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_conversation_full_chain(self, async_mock_model):
+        async_mock_model.enqueue(["a1"])
+        async_mock_model.enqueue(["a2"])
+        conv = async_mock_model.conversation()
+        r1 = conv.prompt("q1")
+        await r1.text()
+        r2 = conv.prompt("q2")
+        await r2.text()
+
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+
+# -- Phase 7.3: response.reply() --------------------------------------
+
+
+class TestResponseReply:
+    def test_reply_builds_next_turn_from_this_response(self, mock_model):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+
+        r2 = r1.reply("q2")
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+    def test_reply_chains(self, mock_model):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        mock_model.enqueue(["a3"])
+        r1 = mock_model.prompt("q1"); r1.text()
+        r2 = r1.reply("q2"); r2.text()
+        r3 = r2.reply("q3"); r3.text()
+        assert r3.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+            llm.assistant("a2"),
+            llm.user("q3"),
+        ]
+
+    def test_reply_no_prompt_reuses_messages_kwarg(self, mock_model):
+        """Passing messages= to reply() appends those onto the chain
+        in place of a new user string."""
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+        r2 = r1.reply(messages=[llm.user("alt")])
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("alt"),
+        ]
+
+    def test_reply_from_conversation_response_extends_chain(self, mock_model):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        conv = mock_model.conversation()
+        r1 = conv.prompt("q1")
+        r1.text()
+        r2 = r1.reply("q2")
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply(self, async_mock_model):
+        async_mock_model.enqueue(["a1"])
+        async_mock_model.enqueue(["a2"])
+        r1 = async_mock_model.prompt("q1")
+        await r1.text()
+        r2 = r1.reply("q2")
+        await r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+
+# -- Phase 7.2: Response.to_dict / Response.from_dict ------------------
+
+
+class TestResponseToDictFromDict:
+    def test_to_dict_captures_chain_and_output(self, mock_model):
+        mock_model.enqueue(["hello"])
+        r = mock_model.prompt("hi")
+        r.text()
+
+        d = r.to_dict()
+        assert d["model"] == "mock"
+        assert d["prompt"]["messages"] == [llm.user("hi").to_dict()]
+        assert d["messages"] == [llm.assistant("hello").to_dict()]
+
+    def test_from_dict_rehydrates_with_messages(self, mock_model):
+        mock_model.enqueue(["hello"])
+        r = mock_model.prompt("hi")
+        r.text()
+        payload = json.dumps(r.to_dict())
+
+        restored = llm.Response.from_dict(json.loads(payload))
+        assert restored._done
+        assert restored.text() == "hello"
+        assert restored.messages == [llm.assistant("hello")]
+        assert restored.prompt.messages == [llm.user("hi")]
+
+    def test_from_dict_then_reply_continues_conversation(self, mock_model):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+
+        # Serialize across the process boundary
+        payload = json.dumps(r1.to_dict())
+        restored = llm.Response.from_dict(json.loads(payload))
+
+        # Continue from the restored response
+        r2 = restored.reply("q2")
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.user("q2"),
+        ]
+
+    def test_to_dict_preserves_reasoning_and_signatures(self, mock_model):
+        mock_model.enqueue([
+            llm.StreamEvent(
+                type="reasoning",
+                chunk="thinking...",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "sig-abc"}},
+            ),
+            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        r = mock_model.prompt("q")
+        r.text()
+
+        payload = json.dumps(r.to_dict())
+        restored = llm.Response.from_dict(json.loads(payload))
+
+        msgs = restored.messages
+        assert msgs[0].role == "assistant"
+        assert isinstance(msgs[0].parts[0], llm.ReasoningPart)
+        assert msgs[0].parts[0].text == "thinking..."
+        assert msgs[0].parts[0].provider_metadata == {
+            "anthropic": {"signature": "sig-abc"}
+        }
+
+    def test_from_dict_reply_includes_prior_reasoning_in_chain(
+        self, mock_model
+    ):
+        """The thing this entire refactor was about: a reply() after
+        from_dict() sends the thinking signature back to the model
+        for multi-turn extended thinking."""
+        mock_model.enqueue([
+            llm.StreamEvent(
+                type="reasoning",
+                chunk="thinking...",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "sig-xyz"}},
+            ),
+            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+        ])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+
+        payload = json.dumps(r1.to_dict())
+        restored = llm.Response.from_dict(json.loads(payload))
+        r2 = restored.reply("q2")
+        r2.text()
+
+        # The signature must be in the chain sent to the model.
+        chain = r2.prompt.messages
+        reasoning_parts = [
+            p for m in chain for p in m.parts
+            if isinstance(p, llm.ReasoningPart)
+        ]
+        assert len(reasoning_parts) == 1
+        assert reasoning_parts[0].provider_metadata == {
+            "anthropic": {"signature": "sig-xyz"}
+        }
+
+    def test_to_dict_captures_options(self, mock_model):
+        mock_model.enqueue(["ok"])
+        r = mock_model.prompt("hi", max_tokens=42)
+        r.text()
+
+        d = r.to_dict()
+        assert d["prompt"]["options"] == {"max_tokens": 42}
+
+    def test_from_dict_options_restored(self, mock_model):
+        mock_model.enqueue(["ok"])
+        r = mock_model.prompt("hi", max_tokens=42)
+        r.text()
+
+        payload = json.dumps(r.to_dict())
+        restored = llm.Response.from_dict(json.loads(payload))
+        assert restored.prompt.options.max_tokens == 42
+
+    def test_message_from_dict_static_method_unchanged(self):
+        # Sanity: Message.from_dict / to_dict keep the Phase 1 contract.
+        m = llm.assistant("hi")
+        assert llm.Message.from_dict(m.to_dict()) == m
 
 
 class TestChainResponseStreamEvents:

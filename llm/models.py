@@ -404,11 +404,24 @@ class Prompt:
     def messages(self):
         """Canonical list of Message objects for this prompt.
 
-        If messages= was passed explicitly, returns that list — with the
-        optional prompt= text appended as a trailing user TextPart.
-        Otherwise synthesizes from system=, prompt=, attachments=, and
-        tool_results= so plugins can read one uniform representation
-        regardless of which surface the caller used.
+        **Invariant:** this property returns exactly what the model
+        was (or will be) sent for this turn — the full chain including
+        any prior conversation history.
+
+        - If ``messages=`` was passed explicitly, it is authoritative:
+          returned verbatim. Other kwargs (``prompt=``, ``system=``,
+          ``attachments=``, ``tool_results=``) are ignored for the
+          messages list (they remain available via ``prompt.prompt``,
+          ``prompt.system``, etc., for adapters that still read them).
+        - Otherwise the list is synthesized from the legacy kwargs
+          (system, tool_results, prompt, attachments), producing just
+          the current turn — prior history is not folded in, because
+          no conversation context is reachable here.
+
+        Conversation.prompt / AsyncConversation.prompt / reply() all
+        pre-compute the full chain and pass it as ``messages=``, so
+        ``response.prompt.messages`` after those paths is the full
+        chain.
         """
         from .parts import (
             AttachmentPart,
@@ -418,12 +431,7 @@ class Prompt:
         )
 
         if self._explicit_messages is not None:
-            out = list(self._explicit_messages)
-            if self._prompt:
-                out.append(
-                    Message(role="user", parts=[TextPart(text=self._prompt)])
-                )
-            return out
+            return list(self._explicit_messages)
 
         result: List["Message"] = []
 
@@ -486,6 +494,81 @@ class _BaseConversation:
     def from_row(cls, row: Any) -> "_BaseConversation":
         raise NotImplementedError
 
+    def _build_full_chain(
+        self,
+        prompt: Optional[str],
+        attachments,
+        tool_results,
+        explicit_messages,
+    ) -> List[Any]:
+        """Build the full message chain for the next turn.
+
+        Walks this conversation's responses to collect prior history,
+        then appends the new turn's content (explicit messages first,
+        or synthesized from prompt/attachments/tool_results).
+
+        Returns the list that should be passed as ``messages=`` to the
+        Prompt constructor so that ``response.prompt.messages`` equals
+        exactly what the model sees.
+
+        If ``explicit_messages`` is provided, the caller has opted out
+        of history walking — the list is used as-is.
+        """
+        from .parts import (
+            AttachmentPart,
+            Message,
+            TextPart,
+            ToolResultPart,
+        )
+
+        if explicit_messages is not None:
+            return list(explicit_messages)
+
+        chain: List[Any] = []
+        for prev in self.responses:
+            # prev.prompt.messages already contains prev's full input
+            # chain under the new invariant, but for the FIRST hop into
+            # a conversation we defensively de-duplicate by only
+            # concatenating the last response's full chain (which
+            # transitively includes everything before it).
+            pass
+        if self.responses:
+            last = self.responses[-1]
+            chain.extend(last.prompt.messages)
+            # Append that response's own output (structured messages).
+            try:
+                chain.extend(last.messages)
+            except ValueError:
+                # AsyncResponse not yet awaited — the caller shouldn't
+                # be constructing a next turn without awaiting first.
+                pass
+
+        # Append the new turn's input
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
+
+        user_parts: List[Any] = []
+        if prompt:
+            user_parts.append(TextPart(text=prompt))
+        for att in attachments or []:
+            user_parts.append(AttachmentPart(attachment=att))
+        if user_parts:
+            chain.append(Message(role="user", parts=user_parts))
+
+        return chain
+
 
 @dataclass
 class Conversation(_BaseConversation):
@@ -508,6 +591,14 @@ class Conversation(_BaseConversation):
         key: Optional[str] = None,
         **options,
     ) -> "Response":
+        # Build the authoritative chain so response.prompt.messages
+        # equals exactly what the model sees for this turn.
+        chain = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return Response(
             Prompt(
                 prompt,
@@ -519,7 +610,7 @@ class Conversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
-                messages=messages,
+                messages=chain,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -647,6 +738,12 @@ class AsyncConversation(_BaseConversation):
         key: Optional[str] = None,
         **options,
     ) -> "AsyncResponse":
+        chain = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return AsyncResponse(
             Prompt(
                 prompt,
@@ -658,7 +755,7 @@ class AsyncConversation(_BaseConversation):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
-                messages=messages,
+                messages=chain,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -1250,11 +1347,168 @@ class _BaseResponse:
                 )
 
 
+def _response_to_dict(response: "_BaseResponse") -> Dict[str, Any]:
+    """Shared serializer for Response.to_dict / AsyncResponse.to_dict.
+
+    The output is a JSON-safe dict — store it anywhere (file, Redis,
+    Postgres, HTTP body) and round-trip via Response.from_dict.
+    """
+    options = {
+        key: value
+        for key, value in dict(response.prompt.options).items()
+        if value is not None
+    }
+    payload: Dict[str, Any] = {
+        "model": response.model.model_id,
+        "prompt": {
+            "messages": [m.to_dict() for m in response.prompt.messages],
+        },
+        "messages": [m.to_dict() for m in response.messages],
+    }
+    if options:
+        payload["prompt"]["options"] = options
+    if response.prompt._system:
+        payload["prompt"]["system"] = response.prompt._system
+    # Optional audit fields — helpful for debugging, not needed for reply().
+    if response.id:
+        payload["id"] = response.id
+    if response._done:
+        if response.input_tokens is not None or response.output_tokens is not None:
+            payload["usage"] = {
+                "input": response.input_tokens,
+                "output": response.output_tokens,
+                "details": response.token_details,
+            }
+        if response._start_utcnow is not None:
+            payload["datetime_utc"] = response._start_utcnow.isoformat()
+    return payload
+
+
+def _response_from_dict(
+    data: Dict[str, Any],
+    cls,
+    *,
+    model=None,
+    async_: bool = False,
+) -> "_BaseResponse":
+    """Shared deserializer for Response.from_dict / AsyncResponse.from_dict."""
+    from .parts import Message
+
+    if model is None:
+        from llm import get_async_model, get_model
+
+        getter = get_async_model if async_ else get_model
+        model = getter(data["model"])
+
+    prompt_data = data.get("prompt", {})
+    input_messages = [
+        Message.from_dict(m) for m in prompt_data.get("messages", [])
+    ]
+    output_messages = [
+        Message.from_dict(m) for m in data.get("messages", [])
+    ]
+
+    options_kwargs = prompt_data.get("options") or {}
+    system = prompt_data.get("system")
+
+    prompt = Prompt(
+        None,
+        model=model,
+        messages=input_messages,
+        system=system,
+        options=model.Options(**options_kwargs),
+    )
+    response = cls(prompt, model=model, stream=False)
+    # Preserve id for audit continuity.
+    if "id" in data:
+        response.id = data["id"]
+    # Rebuild chunks from the assistant's text parts so response.text()
+    # works without re-running the assembler.
+    from .parts import TextPart
+
+    response._chunks = [
+        p.text
+        for m in output_messages
+        for p in m.parts
+        if isinstance(p, TextPart) and p.text
+    ]
+    # Stash the structured output so response.messages returns the
+    # full picture (reasoning, tool calls, signatures) without needing
+    # a StreamEvent replay.
+    response._loaded_messages = output_messages
+    response._done = True
+    # Restore usage if present.
+    usage = data.get("usage")
+    if usage:
+        response.input_tokens = usage.get("input")
+        response.output_tokens = usage.get("output")
+        response.token_details = usage.get("details")
+    return response
+
+
 class Response(_BaseResponse):
     "Sync response from a model."
 
     model: "Model"
     conversation: Optional["Conversation"] = None
+
+    def reply(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        messages: Optional[List[Any]] = None,
+        **kwargs,
+    ) -> "Response":
+        """Continue the conversation from this response.
+
+        Builds the next turn's chain as
+        ``self.prompt.messages + self.messages + [user(prompt)]`` and
+        calls ``self.model.prompt(messages=chain, ...)``. No
+        Conversation object required — the Response carries everything
+        needed.
+
+        If ``messages=`` is passed, its contents are appended to the
+        chain instead of (or in addition to) the ``prompt`` string.
+        """
+        from .parts import Message, TextPart
+
+        self._force()
+        chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        if prompt:
+            chain.append(
+                Message(role="user", parts=[TextPart(text=prompt)])
+            )
+        if messages:
+            chain.extend(messages)
+        return self.model.prompt(messages=chain, **kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize this response for JSON persistence.
+
+        Captures exactly what is needed to continue the conversation:
+        model id, the input chain that was sent
+        (``response.prompt.messages``), the structured assistant output
+        (``response.messages``), and any explicit options. Pair with
+        :meth:`Response.from_dict` to rehydrate and
+        :meth:`Response.reply` to continue.
+        """
+        return _response_to_dict(self)
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        *,
+        model: Optional["Model"] = None,
+    ) -> "Response":
+        """Rehydrate a Response from a ``to_dict()`` payload.
+
+        The returned Response is in the ``_done`` state with
+        ``response.text()`` and ``response.messages`` populated.
+        ``model`` overrides the stored model id (useful for continuing
+        on a different model).
+        """
+        return _response_from_dict(data, cls, model=model, async_=False)
 
     def on_done(self, callback):
         "Register a callback to be called when the response is complete."
@@ -1488,9 +1742,15 @@ class Response(_BaseResponse):
         Almost always a single assistant Message; multiple messages are
         possible for providers that emit multi-message responses during
         server-side tool execution (not in this phase's scope).
+
+        Responses rehydrated via ``Response.from_dict`` short-circuit
+        and return the stored messages directly.
         """
         from .parts import Message
 
+        loaded = getattr(self, "_loaded_messages", None)
+        if loaded is not None:
+            return list(loaded)
         self._force()
         parts = self._build_parts()
         if not parts:
@@ -1509,6 +1769,49 @@ class AsyncResponse(_BaseResponse):
 
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
+
+    def reply(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        messages: Optional[List[Any]] = None,
+        **kwargs,
+    ) -> "AsyncResponse":
+        """Async counterpart of Response.reply(). Requires this response
+        to have been awaited (so self.messages is available).
+        """
+        from .parts import Message, TextPart
+
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before reply()"
+            )
+        chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        if prompt:
+            chain.append(
+                Message(role="user", parts=[TextPart(text=prompt)])
+            )
+        if messages:
+            chain.extend(messages)
+        return self.model.prompt(messages=chain, **kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Async counterpart of Response.to_dict(). Requires awaiting."""
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before to_dict()"
+            )
+        return _response_to_dict(self)
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        *,
+        model: Optional["AsyncModel"] = None,
+    ) -> "AsyncResponse":
+        """Async counterpart of Response.from_dict()."""
+        return _response_from_dict(data, cls, model=model, async_=True)
 
     @classmethod
     def from_row(cls, db, row, _async=False):
@@ -1776,10 +2079,15 @@ class AsyncResponse(_BaseResponse):
         """List of Message objects produced by this response.
 
         Raises ValueError if the response has not yet been awaited —
-        assembly depends on the full event stream.
+        assembly depends on the full event stream. Responses rehydrated
+        via ``AsyncResponse.from_dict`` short-circuit and return the
+        stored messages.
         """
         from .parts import Message
 
+        loaded = getattr(self, "_loaded_messages", None)
+        if loaded is not None:
+            return list(loaded)
         if not self._done:
             raise ValueError(
                 "Response not yet awaited — use 'await response' first"
