@@ -1017,6 +1017,123 @@ class TestResponseReply:
         ]
 
 
+# -- chain() propagates system across tool-result turns --------------
+
+
+class TestChainPropagatesSystem:
+    """On a tool-result turn within a chain loop, the Prompt must
+    carry forward the original system= and system_fragments= so
+    adapters that read prompt.system (OpenAI and other
+    stateless-per-turn providers) see it on every call."""
+
+    def test_sync_chain_tool_result_turn_preserves_system(self, mock_model):
+        # First turn: fake a tool call so the chain iterates.
+        tool_call = llm.ToolCall(
+            tool_call_id="c1", name="tick", arguments={}
+        )
+
+        class ChainMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                if not self._queue:
+                    yield "done"
+                    return
+                msgs = self._queue.pop(0)
+                for m in msgs:
+                    yield m
+                if not response._tool_calls:
+                    response.add_tool_call(tool_call)
+
+        def tick() -> str:
+            "Tick"
+            return "tock"
+
+        m = ChainMock()
+        m.enqueue(["tool-turn"])  # first response; chain will loop
+        m.enqueue(["final"])  # second response, after tool results
+
+        chain = m.chain("q", system="be brief", tools=[tick])
+        list(chain.responses())
+        # Second response was the tool-result turn.
+        second = chain._responses[1]
+        assert second.prompt.system == "be brief"
+
+    def test_sync_chain_tool_result_turn_preserves_system_fragments(
+        self, mock_model
+    ):
+        tool_call = llm.ToolCall(
+            tool_call_id="c1", name="tick", arguments={}
+        )
+
+        class ChainMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                if not self._queue:
+                    yield "done"
+                    return
+                msgs = self._queue.pop(0)
+                for m in msgs:
+                    yield m
+                if not response._tool_calls:
+                    response.add_tool_call(tool_call)
+
+        def tick() -> str:
+            "Tick"
+            return "tock"
+
+        m = ChainMock()
+        m.enqueue(["tool-turn"])
+        m.enqueue(["final"])
+
+        chain = m.chain(
+            "q",
+            system="inline sys",
+            system_fragments=["fragment A", "fragment B"],
+            tools=[tick],
+        )
+        list(chain.responses())
+        second = chain._responses[1]
+        # prompt.system concatenates _system + system_fragments; all
+        # three strings should be preserved on the tool-result turn.
+        assert "inline sys" in second.prompt.system
+        assert "fragment A" in second.prompt.system
+        assert "fragment B" in second.prompt.system
+
+    @pytest.mark.asyncio
+    async def test_async_chain_tool_result_turn_preserves_system(
+        self, async_mock_model
+    ):
+        tool_call = llm.ToolCall(
+            tool_call_id="c1", name="tick", arguments={}
+        )
+
+        class AsyncChainMock(type(async_mock_model)):
+            supports_tools = True
+
+            async def execute(self, prompt, stream, response, conversation):
+                if not self._queue:
+                    yield "done"
+                    return
+                msgs = self._queue.pop(0)
+                for m in msgs:
+                    yield m
+                if not response._tool_calls:
+                    response.add_tool_call(tool_call)
+
+        def tick() -> str:
+            "Tick"
+            return "tock"
+
+        m = AsyncChainMock()
+        m.enqueue(["tool-turn"])
+        m.enqueue(["final"])
+
+        chain = m.chain("q", system="be brief", tools=[tick])
+        responses = []
+        async for r in chain.responses():
+            responses.append(r)
+        second = chain._responses[1]
+        assert second.prompt.system == "be brief"
+
+
 # -- chain() accepts messages= (parity with prompt()) -----------------
 
 

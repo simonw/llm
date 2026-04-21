@@ -2419,6 +2419,13 @@ class ChainResponse(_BaseChainResponse):
                         tools=current_response.prompt.tools,
                         tool_results=tool_results,
                         messages=next_chain,
+                        # Carry system + system_fragments forward so
+                        # stateless-per-turn adapters (OpenAI and
+                        # friends that read prompt.system directly)
+                        # keep seeing the system prompt on every call
+                        # of the chain loop.
+                        system=self.prompt._system,
+                        system_fragments=self.prompt.system_fragments,
                         options=self.prompt.options,
                         attachments=attachments,
                     ),
@@ -2486,6 +2493,10 @@ class AsyncChainResponse(_BaseChainResponse):
                     tools=current_response.prompt.tools,
                     tool_results=tool_results,
                     messages=next_chain,
+                    # Carry system + system_fragments forward — same
+                    # reasoning as the sync path.
+                    system=self.prompt._system,
+                    system_fragments=self.prompt.system_fragments,
                     options=self.prompt.options,
                     attachments=attachments,
                 )
