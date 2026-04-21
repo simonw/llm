@@ -628,6 +628,7 @@ class Conversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -639,6 +640,16 @@ class Conversation(_BaseConversation):
         options: Optional[dict] = None,
     ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
+        # Parity with Conversation.prompt: pre-bake the full chain so
+        # response.prompt.messages is authoritative for the first turn
+        # of the chain loop. Subsequent tool-result turns extend the
+        # chain via _chain_for_tool_results.
+        chain_messages = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return ChainResponse(
             Prompt(
                 prompt,
@@ -649,6 +660,7 @@ class Conversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
             ),
@@ -690,6 +702,7 @@ class AsyncConversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -701,6 +714,12 @@ class AsyncConversation(_BaseConversation):
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
         self.model._validate_attachments(attachments)
+        chain_messages = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return AsyncChainResponse(
             Prompt(
                 prompt,
@@ -711,6 +730,7 @@ class AsyncConversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
             ),
@@ -2634,6 +2654,7 @@ class _Model(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -2649,6 +2670,7 @@ class _Model(_BaseModel):
             attachments=attachments,
             system=system,
             system_fragments=system_fragments,
+            messages=messages,
             stream=stream,
             schema=schema,
             tools=tools,
@@ -2745,6 +2767,7 @@ class _AsyncModel(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -2760,6 +2783,7 @@ class _AsyncModel(_BaseModel):
             attachments=attachments,
             system=system,
             system_fragments=system_fragments,
+            messages=messages,
             stream=stream,
             schema=schema,
             tools=tools,

@@ -1017,6 +1017,79 @@ class TestResponseReply:
         ]
 
 
+# -- chain() accepts messages= (parity with prompt()) -----------------
+
+
+class TestChainMessagesKwarg:
+    def test_conversation_chain_accepts_messages(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        chain = conv.chain(messages=[llm.user("explicit")])
+        chain.text()
+        r1 = chain._responses[0]
+        assert r1.prompt.messages == [llm.user("explicit")]
+
+    def test_model_chain_accepts_messages(self, mock_model):
+        mock_model.enqueue(["ok"])
+        chain = mock_model.chain(messages=[llm.user("explicit")])
+        chain.text()
+        r1 = chain._responses[0]
+        assert r1.prompt.messages == [llm.user("explicit")]
+
+    def test_chain_messages_is_authoritative_over_prompt_kwarg(
+        self, mock_model
+    ):
+        """Parity with prompt(): when both are passed, messages= wins
+        and the prompt= string is not folded into the chain."""
+        mock_model.enqueue(["ok"])
+        chain = mock_model.chain(
+            "ignored text",
+            messages=[llm.user("explicit")],
+        )
+        chain.text()
+        r1 = chain._responses[0]
+        assert r1.prompt.messages == [llm.user("explicit")]
+
+    def test_chain_with_messages_and_prior_conversation(self, mock_model):
+        """Explicit messages= on chain() replaces any history walking —
+        the chain starts from that exact list."""
+        mock_model.enqueue(["first"])
+        mock_model.enqueue(["second"])
+        conv = mock_model.conversation()
+        r1 = conv.prompt("prior")
+        r1.text()
+
+        # Now start a chain with explicit messages= — prior turn is
+        # ignored (consistent with prompt() behavior).
+        chain = conv.chain(messages=[llm.user("fresh start")])
+        chain.text()
+        first_chain_response = chain._responses[0]
+        assert first_chain_response.prompt.messages == [
+            llm.user("fresh start")
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_conversation_chain_accepts_messages(
+        self, async_mock_model
+    ):
+        async_mock_model.enqueue(["ok"])
+        conv = async_mock_model.conversation()
+        chain = conv.chain(messages=[llm.user("explicit")])
+        await chain.text()
+        r1 = chain._responses[0]
+        assert r1.prompt.messages == [llm.user("explicit")]
+
+    @pytest.mark.asyncio
+    async def test_async_model_chain_accepts_messages(
+        self, async_mock_model
+    ):
+        async_mock_model.enqueue(["ok"])
+        chain = async_mock_model.chain(messages=[llm.user("explicit")])
+        await chain.text()
+        r1 = chain._responses[0]
+        assert r1.prompt.messages == [llm.user("explicit")]
+
+
 # -- Phase 7.2: Response.to_dict / Response.from_dict ------------------
 
 
