@@ -535,12 +535,7 @@ class _BaseConversation:
             # under the invariant, so use the last response only and then
             # append that response's structured output.
             chain.extend(last.prompt.messages)
-            try:
-                chain.extend(last.messages)
-            except ValueError:
-                # AsyncResponse not yet awaited — the caller shouldn't
-                # be constructing a next turn without awaiting first.
-                pass
+            chain.extend(last.messages)
 
         # Append the new turn's input
         if tool_results:
