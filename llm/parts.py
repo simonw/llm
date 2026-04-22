@@ -267,9 +267,7 @@ def normalize_parts(items: Any) -> List[Part]:
     return out
 
 
-def system(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
-) -> Message:
+def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
     "Build a Message with role='system'."
     return Message(
         role="system",
@@ -278,9 +276,7 @@ def system(
     )
 
 
-def user(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
-) -> Message:
+def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
     "Build a Message with role='user'."
     return Message(
         role="user",
@@ -330,7 +326,7 @@ class StreamEvent:
     """
 
     type: str  # "text" / "reasoning" / "tool_call_name" /
-               # "tool_call_args" / "tool_result"
+    # "tool_call_args" / "tool_result"
     chunk: str
     part_index: int
     tool_call_id: Optional[str] = None

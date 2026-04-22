@@ -722,9 +722,7 @@ class _Shared:
         messages: List[Dict[str, Any]] = []
         current_system: Optional[str] = None
         for msg in prompt.messages:
-            current_system = self._append_llm_message(
-                messages, msg, current_system
-            )
+            current_system = self._append_llm_message(messages, msg, current_system)
         return messages
 
     def set_usage(self, response, usage):
@@ -851,9 +849,9 @@ class Chat(_Shared, KeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[idx].function.arguments += (
-                                tool_call.function.arguments
-                            )
+                            tool_calls[
+                                idx
+                            ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -869,9 +867,7 @@ class Chat(_Shared, KeyModel):
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
                     seen_text = True
-                    yield StreamEvent(
-                        type="text", chunk=content, part_index=0
-                    )
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
@@ -923,10 +919,8 @@ class Chat(_Shared, KeyModel):
         # set_usage pops top-level keys and passes the rest through
         # simplify_usage_dict, which strips zero-valued entries.
         if usage:
-            reasoning_tokens = (
-                (usage.get("completion_tokens_details") or {}).get(
-                    "reasoning_tokens", 0
-                )
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
             )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens
@@ -990,9 +984,9 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[idx].function.arguments += (
-                                tool_call.function.arguments
-                            )
+                            tool_calls[
+                                idx
+                            ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -1005,9 +999,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 except IndexError:
                     content = None
                 if content:
-                    yield StreamEvent(
-                        type="text", chunk=content, part_index=0
-                    )
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             if tool_calls:
                 for value in tool_calls.values():
                     response.add_tool_call(
@@ -1057,10 +1049,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 )
         # See sync Chat.execute: capture reasoning before set_usage mutates.
         if usage:
-            reasoning_tokens = (
-                (usage.get("completion_tokens_details") or {}).get(
-                    "reasoning_tokens", 0
-                )
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
             )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens

@@ -38,7 +38,6 @@ from typing import Any, Dict, List, Literal, Union
 # support. typing_extensions is a transitive dep via pydantic.
 from typing_extensions import NotRequired, TypedDict
 
-
 __all__ = [
     "AttachmentDict",
     "AttachmentPartDict",

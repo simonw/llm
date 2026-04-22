@@ -25,7 +25,6 @@ from llm.serialization import (
     UsageDict,
 )
 
-
 # ---- required/optional keys ----------------------------------------
 
 
@@ -41,30 +40,34 @@ class TestRequiredOptionalKeys:
     def test_reasoning_part_dict_required_keys(self):
         assert ReasoningPartDict.__required_keys__ == {"type", "text"}
         assert ReasoningPartDict.__optional_keys__ == {
-            "redacted", "token_count", "provider_metadata"
+            "redacted",
+            "token_count",
+            "provider_metadata",
         }
 
     def test_tool_call_part_dict_required_keys(self):
-        assert ToolCallPartDict.__required_keys__ == {
-            "type", "name", "arguments"
-        }
+        assert ToolCallPartDict.__required_keys__ == {"type", "name", "arguments"}
         assert ToolCallPartDict.__optional_keys__ == {
-            "tool_call_id", "server_executed", "provider_metadata"
+            "tool_call_id",
+            "server_executed",
+            "provider_metadata",
         }
 
     def test_tool_result_part_dict_required_keys(self):
-        assert ToolResultPartDict.__required_keys__ == {
-            "type", "name", "output"
-        }
+        assert ToolResultPartDict.__required_keys__ == {"type", "name", "output"}
         assert ToolResultPartDict.__optional_keys__ == {
-            "tool_call_id", "server_executed", "exception",
-            "attachments", "provider_metadata",
+            "tool_call_id",
+            "server_executed",
+            "exception",
+            "attachments",
+            "provider_metadata",
         }
 
     def test_attachment_part_dict_required_keys(self):
         assert AttachmentPartDict.__required_keys__ == {"type"}
         assert AttachmentPartDict.__optional_keys__ == {
-            "attachment", "provider_metadata"
+            "attachment",
+            "provider_metadata",
         }
 
     def test_response_dict_required_keys(self):
@@ -90,9 +93,7 @@ class TestPartRoundTrip:
         self._adapter(TextPartDict).validate_python(d)
 
     def test_reasoning_part_redacted_matches(self):
-        d = llm.ReasoningPart(
-            text="", redacted=True, token_count=150
-        ).to_dict()
+        d = llm.ReasoningPart(text="", redacted=True, token_count=150).to_dict()
         self._adapter(ReasoningPartDict).validate_python(d)
 
     def test_reasoning_part_with_signature_matches(self):
@@ -135,15 +136,11 @@ class TestPartDiscriminatedUnion:
         TypeAdapter(PartDict).validate_python(d)
 
     def test_tool_call_part_validates_as_part_dict(self):
-        d = llm.ToolCallPart(
-            name="t", arguments={}, tool_call_id="c1"
-        ).to_dict()
+        d = llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1").to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_tool_result_part_validates_as_part_dict(self):
-        d = llm.ToolResultPart(
-            name="t", output="out", tool_call_id="c1"
-        ).to_dict()
+        d = llm.ToolResultPart(name="t", output="out", tool_call_id="c1").to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_attachment_part_validates_as_part_dict(self):
@@ -153,9 +150,7 @@ class TestPartDiscriminatedUnion:
 
     def test_unknown_type_rejected(self):
         with pytest.raises(Exception):
-            TypeAdapter(PartDict).validate_python(
-                {"type": "nonsense", "text": "x"}
-            )
+            TypeAdapter(PartDict).validate_python({"type": "nonsense", "text": "x"})
 
 
 class TestMessageDictRoundTrip:
@@ -198,15 +193,17 @@ class TestResponseDictRoundTrip:
         TypeAdapter(ResponseDict).validate_python(d)
 
     def test_response_with_reasoning_matches(self, mock_model):
-        mock_model.enqueue([
-            llm.StreamEvent(
-                type="reasoning",
-                chunk="thinking",
-                part_index=0,
-                provider_metadata={"anthropic": {"signature": "s"}},
-            ),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        mock_model.enqueue(
+            [
+                llm.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking",
+                    part_index=0,
+                    provider_metadata={"anthropic": {"signature": "s"}},
+                ),
+                llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         r = mock_model.prompt("q")
         r.text()
 
@@ -232,27 +229,32 @@ class TestLiteralDiscriminators:
 
     def test_text_part_literal_is_text(self):
         import typing
+
         hints = typing.get_type_hints(TextPartDict)
         # Literal["text"] — check the args
         assert typing.get_args(hints["type"]) == ("text",)
 
     def test_reasoning_part_literal_is_reasoning(self):
         import typing
+
         hints = typing.get_type_hints(ReasoningPartDict)
         assert typing.get_args(hints["type"]) == ("reasoning",)
 
     def test_tool_call_part_literal_is_tool_call(self):
         import typing
+
         hints = typing.get_type_hints(ToolCallPartDict)
         assert typing.get_args(hints["type"]) == ("tool_call",)
 
     def test_tool_result_part_literal_is_tool_result(self):
         import typing
+
         hints = typing.get_type_hints(ToolResultPartDict)
         assert typing.get_args(hints["type"]) == ("tool_result",)
 
     def test_attachment_part_literal_is_attachment(self):
         import typing
+
         hints = typing.get_type_hints(AttachmentPartDict)
         assert typing.get_args(hints["type"]) == ("attachment",)
 
@@ -265,41 +267,49 @@ class TestAnnotations:
 
     def test_text_part_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.TextPart.to_dict)
         assert hints["return"] is TextPartDict
 
     def test_reasoning_part_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.ReasoningPart.to_dict)
         assert hints["return"] is ReasoningPartDict
 
     def test_tool_call_part_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.ToolCallPart.to_dict)
         assert hints["return"] is ToolCallPartDict
 
     def test_tool_result_part_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.ToolResultPart.to_dict)
         assert hints["return"] is ToolResultPartDict
 
     def test_attachment_part_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.AttachmentPart.to_dict)
         assert hints["return"] is AttachmentPartDict
 
     def test_message_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.Message.to_dict)
         assert hints["return"] is MessageDict
 
     def test_message_from_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.Message.from_dict)
         assert hints["d"] is MessageDict
 
     def test_response_to_dict_annotation(self):
         import typing
+
         hints = typing.get_type_hints(llm.Response.to_dict)
         assert hints["return"] is ResponseDict
 

@@ -437,9 +437,7 @@ class Prompt:
         result: List["Message"] = []
 
         if self.system:
-            result.append(
-                Message(role="system", parts=[TextPart(text=self.system)])
-            )
+            result.append(Message(role="system", parts=[TextPart(text=self.system)]))
 
         if self.tool_results:
             result.append(
@@ -948,9 +946,7 @@ class _BaseResponse:
                         tool_call_id=tc.tool_call_id,
                     )
                 )
-            reasoning_token_count = getattr(
-                self, "_reasoning_token_count", 0
-            )
+            reasoning_token_count = getattr(self, "_reasoning_token_count", 0)
             if reasoning_token_count:
                 parts.insert(
                     0,
@@ -989,9 +985,7 @@ class _BaseResponse:
             elif current_family == "reasoning":
                 text = "".join(text_buf)
                 if text:
-                    parts.append(
-                        ReasoningPart(text=text, provider_metadata=pm_merged)
-                    )
+                    parts.append(ReasoningPart(text=text, provider_metadata=pm_merged))
             elif current_family == "tool_call":
                 args_str = "".join(tool_args_buf)
                 try:
@@ -1464,12 +1458,8 @@ def _response_from_dict(
         model = getter(data["model"])
 
     prompt_data = data.get("prompt", {})
-    input_messages = [
-        Message.from_dict(m) for m in prompt_data.get("messages", [])
-    ]
-    output_messages = [
-        Message.from_dict(m) for m in data.get("messages", [])
-    ]
+    input_messages = [Message.from_dict(m) for m in prompt_data.get("messages", [])]
+    output_messages = [Message.from_dict(m) for m in data.get("messages", [])]
 
     options_kwargs = prompt_data.get("options") or {}
     system = prompt_data.get("system")
@@ -1538,9 +1528,7 @@ class Response(_BaseResponse):
         self._force()
         chain: List[Any] = list(self.prompt.messages) + list(self.messages)
         if prompt:
-            chain.append(
-                Message(role="user", parts=[TextPart(text=prompt)])
-            )
+            chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
         return self.model.prompt(messages=chain, **kwargs)
@@ -1853,9 +1841,7 @@ class AsyncResponse(_BaseResponse):
             )
         chain: List[Any] = list(self.prompt.messages) + list(self.messages)
         if prompt:
-            chain.append(
-                Message(role="user", parts=[TextPart(text=prompt)])
-            )
+            chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
         return self.model.prompt(messages=chain, **kwargs)
@@ -2154,9 +2140,7 @@ class AsyncResponse(_BaseResponse):
         if loaded is not None:
             return list(loaded)
         if not self._done:
-            raise ValueError(
-                "Response not yet awaited — use 'await response' first"
-            )
+            raise ValueError("Response not yet awaited — use 'await response' first")
         parts = self._build_parts()
         if not parts:
             return []
@@ -2286,9 +2270,7 @@ class AsyncResponse(_BaseResponse):
         return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
-def _chain_for_tool_results(
-    prior_response, tool_results, attachments
-) -> List[Any]:
+def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[Any]:
     """Build the message chain for a tool-result turn in a chain loop.
 
     Takes the prior response's full input chain + its structured
