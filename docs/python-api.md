@@ -526,6 +526,97 @@ If a response has been evaluated, `response.text()` will continue to return the 
    :exclude-members: fake, from_row, log_to_db
 ```
 
+(python-api-messages)=
+
+### Structured messages and streaming events
+
+Many LLMs return structure that goes beyond a plain text response. LLM represents these using **messages** that consist of **parts**.
+
+A conversation consists of turns, where each turn is an `llm.Message` with a `role` (`"user"`, `"assistant"`, `"system"`, or `"tool"`) and a list of `Part` objects — `TextPart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, or `AttachmentPart`.
+
+You can pass structured prompt inputs via `messages=[...]`, iterate over typed events as the model streams, and inspect the assembled message after the response completes.
+
+Here's how to prompt a model with a list of messages instead of a plain text prompt:
+
+```python
+import llm
+from llm import user, assistant, system
+
+model = llm.get_model("gpt-5.4-mini")
+
+response = model.prompt(messages=[
+    system("You are a helpful pirate."),
+    user("What is the capital of France?"),
+    assistant("Paris, matey."),
+    user("And Germany?"),
+])
+print(response.text())
+```
+
+The `user()`, `assistant()`, and `system()` helpers accept strings (wrapped as `TextPart`) but can also accept `llm.Attachment` instances (wrapped as `AttachmentPart`) or more complex sequences of `Part` objects.
+
+Calling `model.prompt("hi", system="Be brief.")` is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
+
+#### Streaming events as they arrive
+
+`response.stream_events()` yields typed events for every content block the model produces as they stream in. This is useful for interfaces that show the model response "live".
+
+```python
+response = model.prompt("Explain quantum computing briefly.")
+for event in response.stream_events():
+    if event.type == "reasoning":
+        print(f"[thinking] {event.chunk}", end="", flush=True)
+    elif event.type == "text":
+        print(event.chunk, end="", flush=True)
+    elif event.type == "tool_call_name":
+        print(f"\n[calling tool: {event.chunk}]")
+    elif event.type == "tool_call_args":
+        print(event.chunk, end="", flush=True)
+```
+
+Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, and `"tool_result"`. Each event carries a `part_index` that groups events into the same logical Part (all events at the same `part_index` assemble into one Part after the stream completes). For async models, use `async for event in response.astream_events()`.
+
+Iterating against the response object itself (`for chunk in response`) yields only text strings — reasoning and tool-call events are filtered out.
+
+#### Inspecting the finished response
+
+After a response completes, `response.messages` gives you the assembled list of `Message` objects returned by that response, excluding the messages from the original prompt:
+
+```python
+response = model.prompt("What's 2+2?")
+response.text()
+for message in response.messages:
+    for part in message.parts:
+        print(type(part).__name__, part.to_dict())
+```
+
+#### Persisting a conversation
+
+A `Response` can round-trip through a plain Python dictionary via `response.to_dict()` and `llm.Response.from_dict(...)`. The dict captures the model id, the input messages that were sent, the assistant output, and any options — everything needed to continue the conversation later.
+
+Use `response.reply(...)` to continue from a rehydrated response:
+
+```python
+import json
+import llm
+
+model = llm.get_model("gpt-5.4-mini")
+response = model.prompt("What's 2+2?")
+print(response.text())
+
+payload = json.dumps(response.to_dict())
+# ...save `payload` wherever you want...
+
+# Later — rehydrate and continue.
+rebuilt = llm.Response.from_dict(json.loads(payload))
+followup = rebuilt.reply("Add 3 to that")
+print(followup.text())
+```
+
+`AttachmentPart` bytes are base64-encoded in the dict form, so multi-modal conversations round-trip faithfully via JSON too.
+
+Individual `Message` and `Part` objects also support `to_dict()` / `from_dict()` if you need to manipulate turns directly — for example, to edit, filter, or splice messages before passing them back via `model.prompt(messages=[...])`.
+
 (python-api-async)=
 
 ## Async models

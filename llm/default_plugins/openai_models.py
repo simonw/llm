@@ -7,6 +7,7 @@ from llm import (
     KeyModel,
     Prompt,
     Response,
+    StreamEvent,
     hookimpl,
 )
 import llm
@@ -25,7 +26,17 @@ import os
 
 from pydantic import field_validator, Field
 
-from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    cast,
+    Dict,
+    List,
+    Iterable,
+    Iterator,
+    Optional,
+    Union,
+)
 import json
 import yaml
 
@@ -630,81 +641,91 @@ class _Shared:
     def __str__(self) -> str:
         return "OpenAI Chat: {}".format(self.model_id)
 
-    def build_messages(self, prompt, conversation):
-        messages = []
-        current_system = None
-        if conversation is not None:
-            for prev_response in conversation.responses:
-                if (
-                    prev_response.prompt.system
-                    and prev_response.prompt.system != current_system
-                ):
-                    messages.append(
-                        {"role": "system", "content": prev_response.prompt.system}
-                    )
-                    current_system = prev_response.prompt.system
-                if prev_response.attachments:
-                    attachment_message = []
-                    if prev_response.prompt.prompt:
-                        attachment_message.append(
-                            {"type": "text", "text": prev_response.prompt.prompt}
-                        )
-                    for attachment in prev_response.attachments:
-                        attachment_message.append(_attachment(attachment))
-                    messages.append({"role": "user", "content": attachment_message})
-                elif prev_response.prompt.prompt:
-                    messages.append(
-                        {"role": "user", "content": prev_response.prompt.prompt}
-                    )
-                for tool_result in prev_response.prompt.tool_results:
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_result.tool_call_id,
-                            "content": tool_result.output,
-                        }
-                    )
-                prev_text = prev_response.text_or_raise()
-                if prev_text:
-                    messages.append({"role": "assistant", "content": prev_text})
-                tool_calls = prev_response.tool_calls_or_raise()
-                if tool_calls:
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "type": "function",
-                                    "id": tool_call.tool_call_id,
-                                    "function": {
-                                        "name": tool_call.name,
-                                        "arguments": json.dumps(tool_call.arguments),
-                                    },
-                                }
-                                for tool_call in tool_calls
-                            ],
-                        }
-                    )
-        if prompt.system and prompt.system != current_system:
-            messages.append({"role": "system", "content": prompt.system})
-        for tool_result in prompt.tool_results:
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.output,
-                }
-            )
-        if not prompt.attachments:
-            if prompt.prompt:
-                messages.append({"role": "user", "content": prompt.prompt or ""})
+    def _append_llm_message(self, out, message, current_system):
+        """Translate one llm.Message into one (or more) OpenAI message
+        dicts and append them to ``out``.
+
+        Returns the (possibly updated) current_system value so the caller
+        can avoid re-emitting an unchanged system prompt.
+        """
+        from llm.parts import (
+            AttachmentPart,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        text_bits = []
+        attachment_items = []
+        tool_calls = []
+        tool_results = []
+
+        for part in message.parts:
+            if isinstance(part, TextPart):
+                text_bits.append(part.text)
+            elif isinstance(part, AttachmentPart) and part.attachment:
+                attachment_items.append(_attachment(part.attachment))
+            elif isinstance(part, ToolCallPart):
+                tool_calls.append(
+                    {
+                        "type": "function",
+                        "id": part.tool_call_id,
+                        "function": {
+                            "name": part.name,
+                            "arguments": json.dumps(part.arguments),
+                        },
+                    }
+                )
+            elif isinstance(part, ToolResultPart):
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.tool_call_id,
+                        "content": part.output,
+                    }
+                )
+
+        # Role "tool" emits one OpenAI "tool" message per ToolResultPart.
+        if message.role == "tool":
+            out.extend(tool_results)
+            return current_system
+
+        # System dedup: skip if this text is already the active system prompt.
+        if message.role == "system":
+            text = "".join(text_bits)
+            if text == current_system:
+                return current_system
+            current_system = text
+
+        if attachment_items:
+            content = []
+            if text_bits:
+                content.append({"type": "text", "text": "".join(text_bits)})
+            content.extend(attachment_items)
+            entry = {"role": message.role, "content": content}
         else:
-            attachment_message = []
-            if prompt.prompt:
-                attachment_message.append({"type": "text", "text": prompt.prompt})
-            for attachment in prompt.attachments:
-                attachment_message.append(_attachment(attachment))
-            messages.append({"role": "user", "content": attachment_message})
+            entry = {
+                "role": message.role,
+                "content": "".join(text_bits) if text_bits else None,
+            }
+
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+            # OpenAI expects content=null when only tool_calls are present.
+            if not text_bits:
+                entry["content"] = None
+        elif entry["content"] is None and message.role != "assistant":
+            # For user/system, an empty message is pointless — drop it.
+            return current_system
+
+        out.append(entry)
+        return current_system
+
+    def build_messages(self, prompt, conversation):
+        messages: List[Dict[str, Any]] = []
+        current_system: Optional[str] = None
+        for msg in prompt.messages:
+            current_system = self._append_llm_message(messages, msg, current_system)
         return messages
 
     def set_usage(self, response, usage):
@@ -789,7 +810,7 @@ class Chat(_Shared, KeyModel):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -805,6 +826,11 @@ class Chat(_Shared, KeyModel):
             )
             chunks = []
             tool_calls = {}
+            # part_index allocator. Text events always use 0, so tool
+            # calls start at 1 and keep a stable index per OpenAI delta
+            # index. This keeps _build_parts from mixing families.
+            tc_part_index = {}
+            next_part_index = 1
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
@@ -813,24 +839,39 @@ class Chat(_Shared, KeyModel):
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        index = tool_call.index
-                        if index not in tool_calls:
-                            tool_calls[index] = tool_call
+                        idx = tool_call.index
+                        if idx not in tool_calls:
+                            tool_calls[idx] = tool_call
+                            tc_part_index[idx] = next_part_index
+                            next_part_index += 1
+                            yield StreamEvent(
+                                type="tool_call_name",
+                                chunk=tool_call.function.name or "",
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_call.id,
+                            )
                         else:
                             tool_calls[
-                                index
+                                idx
                             ].function.arguments += tool_call.function.arguments
+                        if tool_call.function.arguments:
+                            yield StreamEvent(
+                                type="tool_call_args",
+                                chunk=tool_call.function.arguments,
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_calls[idx].id,
+                            )
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
-                if content is not None:
-                    yield content
+                if content:
+                    # Empty strings are noise (OpenAI's first chunk
+                    # with role=assistant has content="").
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
-                    # value.function looks like this:
-                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
                     response.add_tool_call(
                         llm.ToolCall(
                             tool_call_id=value.id,
@@ -847,6 +888,7 @@ class Chat(_Shared, KeyModel):
             )
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
+            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -855,8 +897,34 @@ class Chat(_Shared, KeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
+                part_index += 1
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk=tool_call.function.name or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk=tool_call.function.arguments or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
             if completion.choices[0].message.content is not None:
-                yield completion.choices[0].message.content
+                yield StreamEvent(
+                    type="text",
+                    chunk=completion.choices[0].message.content,
+                    part_index=0,
+                )
+        # Capture the reasoning token count BEFORE set_usage runs —
+        # set_usage pops top-level keys and passes the rest through
+        # simplify_usage_dict, which strips zero-valued entries.
+        if usage:
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
+            )
+            if reasoning_tokens:
+                response._reasoning_token_count = reasoning_tokens
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -879,7 +947,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation] = None,
         key: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, StreamEvent], None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -895,33 +963,46 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             chunks = []
             tool_calls = {}
+            tc_part_index = {}
+            next_part_index = 1
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 chunks.append(chunk)
-                if chunk.usage:
-                    usage = chunk.usage.model_dump()
                 if chunk.choices and chunk.choices[0].delta:
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        index = tool_call.index
-                        if index not in tool_calls:
-                            tool_calls[index] = tool_call
+                        idx = tool_call.index
+                        if idx not in tool_calls:
+                            tool_calls[idx] = tool_call
+                            tc_part_index[idx] = next_part_index
+                            next_part_index += 1
+                            yield StreamEvent(
+                                type="tool_call_name",
+                                chunk=tool_call.function.name or "",
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_call.id,
+                            )
                         else:
                             tool_calls[
-                                index
+                                idx
                             ].function.arguments += tool_call.function.arguments
+                        if tool_call.function.arguments:
+                            yield StreamEvent(
+                                type="tool_call_args",
+                                chunk=tool_call.function.arguments,
+                                part_index=tc_part_index[idx],
+                                tool_call_id=tool_calls[idx].id,
+                            )
                 try:
                     content = chunk.choices[0].delta.content
                 except IndexError:
                     content = None
-                if content is not None:
-                    yield content
+                if content:
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             if tool_calls:
                 for value in tool_calls.values():
-                    # value.function looks like this:
-                    # ChoiceDeltaToolCallFunction(arguments='{"city":"San Francisco"}', name='get_weather')
                     response.add_tool_call(
                         llm.ToolCall(
                             tool_call_id=value.id,
@@ -939,6 +1020,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
+            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -947,8 +1029,32 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
+                part_index += 1
+                yield StreamEvent(
+                    type="tool_call_name",
+                    chunk=tool_call.function.name or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
+                yield StreamEvent(
+                    type="tool_call_args",
+                    chunk=tool_call.function.arguments or "",
+                    part_index=part_index,
+                    tool_call_id=tool_call.id,
+                )
             if completion.choices[0].message.content is not None:
-                yield completion.choices[0].message.content
+                yield StreamEvent(
+                    type="text",
+                    chunk=completion.choices[0].message.content,
+                    part_index=0,
+                )
+        # See sync Chat.execute: capture reasoning before set_usage mutates.
+        if usage:
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
+            )
+            if reasoning_tokens:
+                response._reasoning_token_count = reasoning_tokens
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -975,7 +1081,7 @@ class Completion(Chat):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
