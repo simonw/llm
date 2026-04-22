@@ -12,17 +12,14 @@ from pydantic import TypeAdapter
 
 import llm
 from llm.serialization import (
-    AttachmentDict,
     AttachmentPartDict,
     MessageDict,
     PartDict,
-    PromptDict,
     ResponseDict,
     ReasoningPartDict,
     TextPartDict,
     ToolCallPartDict,
     ToolResultPartDict,
-    UsageDict,
 )
 
 # ---- required/optional keys ----------------------------------------

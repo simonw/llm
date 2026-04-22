@@ -2290,7 +2290,6 @@ def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[A
     from .parts import (
         AttachmentPart,
         Message,
-        TextPart,
         ToolResultPart,
     )
 

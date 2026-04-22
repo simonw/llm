@@ -5,7 +5,6 @@ Uses the llm-echo plugin (sync ``Echo`` + async ``EchoAsync``) so both
 paths exercise real registered models with identical behaviour.
 """
 
-import asyncio
 import json
 
 import llm
