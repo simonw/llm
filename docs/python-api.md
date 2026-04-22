@@ -530,13 +530,19 @@ If a response has been evaluated, `response.text()` will continue to return the 
 
 ### Structured messages and streaming events
 
-LLM has a structured view of a conversation that sits alongside the simple string API. Each turn is an `llm.Message` with a `role` (`"user"`, `"assistant"`, `"system"`, or `"tool"`) and a list of `Part` objects — `TextPart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, or `AttachmentPart`. You can pass explicit structured input via `messages=[...]`, observe typed events as the model streams, and inspect the assembled message after the response completes.
+Many LLMs return structure that goes beyond a plain text response. LLM represents these using **messages** that consist of **parts**.
+
+A conversation consists of turns, where each turn is an `llm.Message` with a `role` (`"user"`, `"assistant"`, `"system"`, or `"tool"`) and a list of `Part` objects — `TextPart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, or `AttachmentPart`.
+
+You can pass structured prompt inputs via `messages=[...]`, iterate over typed events as the model streams, and inspect the assembled message after the response completes.
+
+Here's how to prompt a model with a list of messages instead of a plain text prompt:
 
 ```python
 import llm
 from llm import user, assistant, system
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.4-mini")
 
 response = model.prompt(messages=[
     system("You are a helpful pirate."),
@@ -547,9 +553,9 @@ response = model.prompt(messages=[
 print(response.text())
 ```
 
-The `user`, `assistant`, `system`, and `tool_message` helpers accept strings (wrapped as `TextPart`), `llm.Attachment` instances (wrapped as `AttachmentPart`), existing `Part` objects, and nested lists or tuples.
+The `user()`, `assistant()`, and `system()` helpers accept strings (wrapped as `TextPart`) but can also accept `llm.Attachment` instances (wrapped as `AttachmentPart`) or more complex sequences of `Part` objects.
 
-The simple `model.prompt("hi", system="Be brief.")` form is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
+Calling `model.prompt("hi", system="Be brief.")` is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
 
 #### Streaming events as they arrive
 
@@ -570,11 +576,11 @@ for event in response.stream_events():
 
 Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, and `"tool_result"`. Each event carries a `part_index` that groups events into the same logical Part (all events at the same `part_index` assemble into one Part after the stream completes). For async models, use `async for event in response.astream_events()`.
 
-Plain iteration (`for chunk in response`) continues to yield only text strings — reasoning and tool-call events are filtered out.
+Iterating against the response object itself (`for chunk in response`) yields only text strings — reasoning and tool-call events are filtered out.
 
 #### Inspecting the finished response
 
-After a response completes, `response.messages` gives you the assembled list of `Message` objects:
+After a response completes, `response.messages` gives you the assembled list of `Message` objects returned by that response, excluding the messages from the original prompt:
 
 ```python
 response = model.prompt("What's 2+2?")
@@ -584,31 +590,32 @@ for message in response.messages:
         print(type(part).__name__, part.to_dict())
 ```
 
-#### Persisting a conversation yourself
+#### Persisting a conversation
 
-Messages and Parts round-trip through plain Python dicts via `to_dict()` / `from_dict()`, so your application can persist conversations to any JSON-capable store without touching SQLite:
+A `Response` can round-trip through a plain Python dictionary via `response.to_dict()` and `llm.Response.from_dict(...)`. The dict captures the model id, the input messages that were sent, the assistant output, and any options — everything needed to continue the conversation later.
+
+Use `response.reply(...)` to continue from a rehydrated response:
 
 ```python
 import json
+import llm
 
-# Turn 1
+model = llm.get_model("gpt-5.4-mini")
 response = model.prompt("What's 2+2?")
-response.text()
+print(response.text())
 
-# Build a history payload from the user prompt + assistant reply.
-history = [user("What's 2+2?").to_dict()] + [
-    m.to_dict() for m in response.messages
-]
-payload = json.dumps(history)
+payload = json.dumps(response.to_dict())
 # ...save `payload` wherever you want...
 
-# Later — re-inflate and continue.
-rebuilt = [llm.Message.from_dict(d) for d in json.loads(payload)]
-response = model.prompt(messages=rebuilt + [user("And 3+3?")])
-print(response.text())
+# Later — rehydrate and continue.
+rebuilt = llm.Response.from_dict(json.loads(payload))
+followup = rebuilt.reply("Add 3 to that")
+print(followup.text())
 ```
 
-`AttachmentPart` bytes are base64-encoded in the dict form, so full multi-modal conversations round-trip faithfully.
+`AttachmentPart` bytes are base64-encoded in the dict form, so multi-modal conversations round-trip faithfully via JSON too.
+
+Individual `Message` and `Part` objects also support `to_dict()` / `from_dict()` if you need to manipulate turns directly — for example, to edit, filter, or splice messages before passing them back via `model.prompt(messages=[...])`.
 
 (python-api-async)=
 
