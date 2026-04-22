@@ -807,7 +807,7 @@ class Chat(_Shared, KeyModel):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -946,7 +946,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation] = None,
         key: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, StreamEvent], None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(prompt, conversation)
@@ -1080,7 +1080,7 @@ class Completion(Chat):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
