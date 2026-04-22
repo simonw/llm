@@ -530,14 +530,7 @@ If a response has been evaluated, `response.text()` will continue to return the 
 
 ### Structured messages and streaming events
 
-LLM has a structured view of a conversation that sits alongside the
-simple string API. Each turn is an `llm.Message` with a `role`
-(`"user"`, `"assistant"`, `"system"`, or `"tool"`) and a list of
-`Part` objects — `TextPart`, `ReasoningPart`, `ToolCallPart`,
-`ToolResultPart`, or `AttachmentPart`. You can pass explicit
-structured input via `messages=[...]`, observe typed events as the
-model streams, and inspect the assembled message after the response
-completes.
+LLM has a structured view of a conversation that sits alongside the simple string API. Each turn is an `llm.Message` with a `role` (`"user"`, `"assistant"`, `"system"`, or `"tool"`) and a list of `Part` objects — `TextPart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, or `AttachmentPart`. You can pass explicit structured input via `messages=[...]`, observe typed events as the model streams, and inspect the assembled message after the response completes.
 
 ```python
 import llm
@@ -554,19 +547,13 @@ response = model.prompt(messages=[
 print(response.text())
 ```
 
-The `user`, `assistant`, `system`, and `tool_message` helpers accept
-strings (wrapped as `TextPart`), `llm.Attachment` instances (wrapped
-as `AttachmentPart`), existing `Part` objects, and nested lists or
-tuples.
+The `user`, `assistant`, `system`, and `tool_message` helpers accept strings (wrapped as `TextPart`), `llm.Attachment` instances (wrapped as `AttachmentPart`), existing `Part` objects, and nested lists or tuples.
 
-The simple `model.prompt("hi", system="Be brief.")` form keeps
-working — it's equivalent to
-`model.prompt(messages=[system("Be brief."), user("hi")])`.
+The simple `model.prompt("hi", system="Be brief.")` form is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
 
 #### Streaming events as they arrive
 
-`response.stream_events()` yields typed events for every content
-block the model produces, live:
+`response.stream_events()` yields typed events for every content block the model produces as they stream in. This is useful for interfaces that show the model response "live".
 
 ```python
 response = model.prompt("Explain quantum computing briefly.")
@@ -581,20 +568,13 @@ for event in response.stream_events():
         print(event.chunk, end="", flush=True)
 ```
 
-Event types are `"text"`, `"reasoning"`, `"tool_call_name"`,
-`"tool_call_args"`, and `"tool_result"`. Each event carries a
-`part_index` that groups events into the same logical Part (all
-events at the same `part_index` assemble into one Part after the
-stream completes). For async models, use
-`async for event in response.astream_events()`.
+Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, and `"tool_result"`. Each event carries a `part_index` that groups events into the same logical Part (all events at the same `part_index` assemble into one Part after the stream completes). For async models, use `async for event in response.astream_events()`.
 
-Plain iteration (`for chunk in response`) continues to yield only
-text strings — reasoning and tool-call events are filtered out.
+Plain iteration (`for chunk in response`) continues to yield only text strings — reasoning and tool-call events are filtered out.
 
 #### Inspecting the finished response
 
-After a response completes, `response.messages` gives you the
-assembled list of `Message` objects:
+After a response completes, `response.messages` gives you the assembled list of `Message` objects:
 
 ```python
 response = model.prompt("What's 2+2?")
@@ -606,9 +586,7 @@ for message in response.messages:
 
 #### Persisting a conversation yourself
 
-Messages and Parts round-trip through plain Python dicts via
-`to_dict()` / `from_dict()`, so your application can persist
-conversations to any JSON-capable store without touching SQLite:
+Messages and Parts round-trip through plain Python dicts via `to_dict()` / `from_dict()`, so your application can persist conversations to any JSON-capable store without touching SQLite:
 
 ```python
 import json
@@ -630,8 +608,7 @@ response = model.prompt(messages=rebuilt + [user("And 3+3?")])
 print(response.text())
 ```
 
-`AttachmentPart` bytes are base64-encoded in the dict form, so full
-multi-modal conversations round-trip faithfully.
+`AttachmentPart` bytes are base64-encoded in the dict form, so full multi-modal conversations round-trip faithfully.
 
 (python-api-async)=
 
