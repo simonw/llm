@@ -1571,7 +1571,9 @@ class Response(_BaseResponse):
         ``model`` overrides the stored model id (useful for continuing
         on a different model).
         """
-        return cast("Response", _response_from_dict(data, cls, model=model, async_=False))
+        return cast(
+            "Response", _response_from_dict(data, cls, model=model, async_=False)
+        )
 
     def on_done(self, callback):
         "Register a callback to be called when the response is complete."
@@ -1804,7 +1806,7 @@ class Response(_BaseResponse):
 
         Almost always a single assistant Message; multiple messages are
         possible for providers that emit multi-message responses during
-        server-side tool execution (not in this phase's scope).
+        server-side tool execution.
 
         Responses rehydrated via ``Response.from_dict`` short-circuit
         and return the stored messages directly.
@@ -1872,7 +1874,9 @@ class AsyncResponse(_BaseResponse):
         model: Optional["AsyncModel"] = None,
     ) -> "AsyncResponse":
         """Async counterpart of Response.from_dict()."""
-        return cast("AsyncResponse", _response_from_dict(data, cls, model=model, async_=True))
+        return cast(
+            "AsyncResponse", _response_from_dict(data, cls, model=model, async_=True)
+        )
 
     @classmethod
     def from_row(cls, db, row, _async=False):

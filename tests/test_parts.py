@@ -1,36 +1,6 @@
-"""Tests for Part, Message, StreamEvent and the constructor helpers.
-
-Phase 1 covers the in-memory value types and JSON round-trip only.
-No Response / streaming / plugin integration yet.
-"""
-
 import json
 import pytest
-
 import llm
-
-# -- Exports ------------------------------------------------------------
-
-
-class TestExports:
-    def test_llm_exports_part_types(self):
-        assert llm.Part is not None
-        assert llm.TextPart is not None
-        assert llm.ReasoningPart is not None
-        assert llm.ToolCallPart is not None
-        assert llm.ToolResultPart is not None
-        assert llm.AttachmentPart is not None
-        assert llm.Message is not None
-        assert llm.StreamEvent is not None
-
-    def test_llm_exports_constructor_helpers(self):
-        assert callable(llm.user)
-        assert callable(llm.assistant)
-        assert callable(llm.system)
-        assert callable(llm.tool_message)
-
-
-# -- Part subclasses ----------------------------------------------------
 
 
 class TestTextPart:
@@ -167,9 +137,6 @@ class TestRoleNotOnPart:
         )
 
 
-# -- Message ------------------------------------------------------------
-
-
 class TestMessage:
     def test_roundtrip_simple_user_message(self):
         m = llm.Message(role="user", parts=[llm.TextPart(text="hi")])
@@ -215,9 +182,6 @@ class TestMessage:
         )
         # Both serialize the same (empty metadata is omitted)
         assert m_none.to_dict() == m_empty.to_dict()
-
-
-# -- Constructor helpers -----------------------------------------------
 
 
 class TestHelpers:
@@ -273,9 +237,6 @@ class TestHelpers:
         assert m.provider_metadata == {"openai": {"id": "x"}}
 
 
-# -- StreamEvent (type only, no Response integration yet) --------------
-
-
 class TestStreamEvent:
     def test_dataclass_defaults(self):
         ev = llm.StreamEvent(type="text", chunk="hi", part_index=0)
@@ -306,16 +267,9 @@ class TestStreamEvent:
         assert ev.message_index == 1
 
 
-# -- Phase 2: Response streaming scaffolding ----------------------------
-#
 # Backward compat for plain-str plugins: iterating a Response still
 # yields text strings, response.text() still works, self._chunks is
 # still populated.
-#
-# New capabilities:
-#   - response.stream_events()  / response.astream_events()
-#   - response.messages
-#   - _BaseResponse._build_parts()  (internal, tested via .messages)
 
 
 class TestPlainStrPluginCompat:
@@ -523,8 +477,7 @@ class TestStreamEventsFromStreamEventPlugin:
 
 
 class TestStreamEventsLiveDuringStreaming:
-    """Client code sees events arrive before the response is done —
-    this is the primary user-facing goal of this phase."""
+    """Client code sees events arrive before the response is done"""
 
     def test_events_arrive_before_done(self, mock_model):
         events = [
@@ -605,9 +558,6 @@ class TestAsyncStreamEvents:
         assert response.messages == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
         ]
-
-
-# -- Phase 3: messages= parameter and Prompt.messages synthesis --------
 
 
 class TestPromptMessagesSynthesis:
@@ -739,8 +689,6 @@ class TestModelPromptMessagesKwarg:
         assert response.prompt.messages == [llm.user("q")]
 
 
-# -- Phase 7.1: Conversation passes full chain via messages= ----------
-#
 # Invariant: response.prompt.messages == exactly what the model was
 # sent for this turn, regardless of whether the caller used
 # model.prompt(messages=[...]), conversation.prompt("text"), or
@@ -850,9 +798,6 @@ class TestConversationFullChainInvariant:
         ]
 
 
-# -- Regression: rehydrated-from-SQLite response.messages survives ----
-
-
 class TestSqliteRehydrateMessages:
     """After Response.from_row, response.messages must still yield the
     assistant turn as a TextPart (+ any tool calls). Otherwise
@@ -912,9 +857,6 @@ class TestSqliteRehydrateMessages:
             llm.assistant("first answer"),
             llm.user("q2"),
         ]
-
-
-# -- Phase 7.3: response.reply() --------------------------------------
 
 
 class TestResponseReply:
@@ -994,7 +936,7 @@ class TestResponseReply:
         ]
 
 
-# -- chain() propagates system across tool-result turns --------------
+# chain() propagates system across tool-result turns
 
 
 class TestChainPropagatesSystem:
@@ -1103,7 +1045,7 @@ class TestChainPropagatesSystem:
         assert second.prompt.system == "be brief"
 
 
-# -- chain() accepts messages= (parity with prompt()) -----------------
+# chain() accepts messages= (parity with prompt())
 
 
 class TestChainMessagesKwarg:
@@ -1168,7 +1110,7 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
 
-# -- Phase 7.2: Response.to_dict / Response.from_dict ------------------
+# Response.to_dict / Response.from_dict
 
 
 class TestResponseToDictFromDict:
@@ -1240,9 +1182,8 @@ class TestResponseToDictFromDict:
         }
 
     def test_from_dict_reply_includes_prior_reasoning_in_chain(self, mock_model):
-        """The thing this entire refactor was about: a reply() after
-        from_dict() sends the thinking signature back to the model
-        for multi-turn extended thinking."""
+        """a reply() after from_dict() sends the thinking  signature
+        back to the model for multi-turn extended thinking."""
         mock_model.enqueue(
             [
                 llm.StreamEvent(
@@ -1291,7 +1232,6 @@ class TestResponseToDictFromDict:
         assert restored.prompt.options.max_tokens == 42
 
     def test_message_from_dict_static_method_unchanged(self):
-        # Sanity: Message.from_dict / to_dict keep the Phase 1 contract.
         m = llm.assistant("hi")
         assert llm.Message.from_dict(m.to_dict()) == m
 
@@ -1318,7 +1258,7 @@ class TestChainResponseStreamEvents:
         assert [e.type for e in events] == ["text"]
 
 
-# -- Phase 6: Client-side serialization round-trip ---------------------
+# Client-side serialization round-trip
 #
 # A library user can persist a conversation by serializing response.messages
 # to JSON and later re-inflate it as messages=[...] on a follow-up prompt.

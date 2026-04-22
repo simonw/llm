@@ -1,4 +1,4 @@
-"""Async parity: every sync API added in Phases 1-7 must work the same
+"""Async parity: every sync API must work the same
 way on AsyncResponse and AsyncConversation.
 
 Uses the llm-echo plugin (sync ``Echo`` + async ``EchoAsync``) so both

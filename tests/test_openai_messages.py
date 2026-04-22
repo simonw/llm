@@ -1,13 +1,3 @@
-"""Tests for the OpenAI built-in plugin's messages= path.
-
-Phase 4a covers build_messages reading prompt.messages (instead of the
-legacy prompt.prompt / prompt.system / prompt.attachments fields), which
-lets users pass structured message history via model.prompt(messages=[...]).
-
-Phase 4b covers execute() yielding StreamEvent objects instead of plain
-str — including tool_call_name + tool_call_args event streams.
-"""
-
 import json
 
 import pytest
@@ -316,9 +306,6 @@ class TestBuildMessagesSystemDedup:
 
 class TestBuildMessagesConversationHistory:
     def test_prior_turn_text_plus_current_user(self, chat_model):
-        """With the Phase 7 invariant, prompt.messages for a follow-up
-        turn already contains the full chain — the adapter reads only
-        from it, not from conversation.responses."""
         new_prompt = Prompt(
             None,
             model=chat_model,
@@ -338,9 +325,6 @@ class TestBuildMessagesConversationHistory:
     def test_no_double_emission_from_conversation_prompt_flow(
         self, chat_model, httpx_mock
     ):
-        """Phase 7 invariant: prompt.messages for a conversation's
-        follow-up turn is the full chain. The adapter must not ALSO
-        walk conversation.responses, or the wire body doubles up."""
         # Two staged responses so conv.prompt twice can complete.
         httpx_mock.add_response(
             method="POST",
@@ -397,9 +381,6 @@ class TestBuildMessagesConversationHistory:
             {"role": "assistant", "content": "A1"},
             {"role": "user", "content": "Q2"},
         ]
-
-
-# -- Phase 4b: execute() yields StreamEvents ---------------------------
 
 
 class TestStreamingExecuteYieldsStreamEvents:

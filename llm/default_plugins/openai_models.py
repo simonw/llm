@@ -712,13 +712,6 @@ class _Shared:
         return current_system
 
     def build_messages(self, prompt, conversation):
-        """Translate prompt.messages into OpenAI's wire format.
-
-        Under the Phase 7 invariant, ``prompt.messages`` is the full
-        chain for this turn — Conversation.prompt and response.reply
-        pre-bake the history into it. The ``conversation`` parameter
-        is unused and retained only for the plugin API contract.
-        """
         messages: List[Dict[str, Any]] = []
         current_system: Optional[str] = None
         for msg in prompt.messages:
