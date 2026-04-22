@@ -507,16 +507,16 @@ class _BaseConversation:
     ) -> List[Any]:
         """Build the full message chain for the next turn.
 
-        Walks this conversation's responses to collect prior history,
-        then appends the new turn's content (explicit messages first,
-        or synthesized from prompt/attachments/tool_results).
+        Uses the last response's stored prompt chain to recover prior
+        history, then appends the new turn's content (explicit messages
+        first, or synthesized from prompt/attachments/tool_results).
 
         Returns the list that should be passed as ``messages=`` to the
         Prompt constructor so that ``response.prompt.messages`` equals
         exactly what the model sees.
 
         If ``explicit_messages`` is provided, the caller has opted out
-        of history walking — the list is used as-is.
+        of history reconstruction and the list is used as-is.
         """
         from .parts import (
             AttachmentPart,
@@ -529,17 +529,12 @@ class _BaseConversation:
             return list(explicit_messages)
 
         chain: List[Any] = []
-        for prev in self.responses:
-            # prev.prompt.messages already contains prev's full input
-            # chain under the new invariant, but for the FIRST hop into
-            # a conversation we defensively de-duplicate by only
-            # concatenating the last response's full chain (which
-            # transitively includes everything before it).
-            pass
         if self.responses:
             last = self.responses[-1]
+            # last.prompt.messages already contains the full input chain
+            # under the invariant, so use the last response only and then
+            # append that response's structured output.
             chain.extend(last.prompt.messages)
-            # Append that response's own output (structured messages).
             try:
                 chain.extend(last.messages)
             except ValueError:
@@ -1415,7 +1410,8 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     """Shared serializer for Response.to_dict / AsyncResponse.to_dict.
 
     The output is a JSON-safe dict — store it anywhere (file, Redis,
-    Postgres, HTTP body) and round-trip via Response.from_dict.
+    Postgres, HTTP body) and round-trip via Response.from_dict or
+    AsyncResponse.from_dict.
     """
     options = {
         key: value
@@ -1730,9 +1726,8 @@ class Response(_BaseResponse):
         )
 
     def _iter_events(self):
-        """Drive self.model.execute() once. Yields every chunk it
-        produces, each already appended to self._stream_events by
-        _process_chunk as a side effect.
+        """Drive self.model.execute() once and yield each raw chunk it
+        produces. Callers normalize chunks through _process_chunk.
         """
         if isinstance(self.model, Model):
             generator = self.model.execute(

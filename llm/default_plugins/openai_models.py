@@ -636,7 +636,7 @@ class _Shared:
         dicts and append them to ``out``.
 
         Returns the (possibly updated) current_system value so the caller
-        can dedup consecutive identical system messages.
+        can avoid re-emitting an unchanged system prompt.
         """
         from llm.parts import (
             AttachmentPart,
@@ -680,7 +680,7 @@ class _Shared:
             out.extend(tool_results)
             return current_system
 
-        # System dedup — skip if we just emitted this exact system text.
+        # System dedup: skip if this text is already the active system prompt.
         if message.role == "system":
             text = "".join(text_bits)
             if text == current_system:
@@ -816,10 +816,9 @@ class Chat(_Shared, KeyModel):
             )
             chunks = []
             tool_calls = {}
-            # part_index allocator. Text always uses 0. Each tool call
-            # at delta index i is assigned a part_index past any text
-            # that was seen, so _build_parts groups them correctly.
-            seen_text = False
+            # part_index allocator. Text events always use 0, so tool
+            # calls start at 1 and keep a stable index per OpenAI delta
+            # index. This keeps _build_parts from mixing families.
             tc_part_index = {}
             next_part_index = 1
             for chunk in completion:
@@ -859,7 +858,6 @@ class Chat(_Shared, KeyModel):
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
-                    seen_text = True
                     yield StreamEvent(type="text", chunk=content, part_index=0)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:

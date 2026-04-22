@@ -265,7 +265,7 @@ class TestBuildMessagesLegacyFieldsStillWork:
 
 class TestBuildMessagesSystemDedup:
     """Explicit messages with repeated system messages dedupe
-    consecutive identical systems — OpenAI accepts one."""
+    repeated unchanged systems; OpenAI accepts one."""
 
     def test_same_system_not_repeated(self, chat_model):
         prompt = Prompt(

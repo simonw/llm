@@ -1077,7 +1077,7 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
     def test_chain_with_messages_and_prior_conversation(self, mock_model):
-        """Explicit messages= on chain() replaces any history walking —
+        """Explicit messages= on chain() replaces history reconstruction;
         the chain starts from that exact list."""
         mock_model.enqueue(["first"])
         mock_model.enqueue(["second"])
