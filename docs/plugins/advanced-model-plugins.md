@@ -252,11 +252,11 @@ Conversation history — including attachments from prior turns — is available
 
 ## Structured messages and streaming events
 
-Modern plugins use a richer contract than "yield strings":
+The 0.31 alpha introduced a richer contract for plugins than "yield strings":
 
 1. **`execute()` yields `StreamEvent` objects** (or plain `str`, still supported) so text, reasoning (thinking tokens), tool calls, and server-side tool results each surface as their own event type. The framework assembles these into typed `Part` objects.
-2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn. This replaces the older pattern of walking `conversation.responses` and reading `prompt.prompt` / `prompt.system`.
-3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, echo it back on the next request.
+2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn.
+3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, then echo it back on the next request.
 
 **Backward compatibility is guaranteed.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=..., part_index=0)` internally.
 
