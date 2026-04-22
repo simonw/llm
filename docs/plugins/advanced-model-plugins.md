@@ -246,30 +246,380 @@ As you can see, it uses `attachment.url` if that is available and otherwise fall
 
 ### Attachments from previous conversations
 
-Models that implement the ability to continue a conversation can reconstruct the previous message JSON using the `response.attachments` attribute.
+Conversation history — including attachments from prior turns — is available on the canonical `prompt.messages` list. See the [next section](#structured-messages-streaming) for how that works.
 
-Here's how the OpenAI plugin does that:
+(structured-messages-streaming)=
+
+## Structured messages and streaming events
+
+Modern plugins use a richer contract than "yield strings":
+
+1. **`execute()` yields `StreamEvent` objects** (or plain `str`, still supported) so text, reasoning (thinking tokens), tool calls, and server-side tool results each surface as their own event type. The framework assembles these into typed `Part` objects.
+2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn. This replaces the older pattern of walking `conversation.responses` and reading `prompt.prompt` / `prompt.system`.
+3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, echo it back on the next request.
+
+**Backward compatibility is guaranteed.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=..., part_index=0)` internally.
+
+### Yielding StreamEvent from execute()
 
 ```python
-for prev_response in conversation.responses:
-    if prev_response.attachments:
-        attachment_message = []
-        if prev_response.prompt.prompt:
-            attachment_message.append(
-                {"type": "text", "text": prev_response.prompt.prompt}
-            )
-        for attachment in prev_response.attachments:
-            attachment_message.append(_attachment(attachment))
-        messages.append({"role": "user", "content": attachment_message})
-    else:
-        messages.append(
-            {"role": "user", "content": prev_response.prompt.prompt}
-        )
-    messages.append({"role": "assistant", "content": prev_response.text_or_raise()})
-```
-The `response.text_or_raise()` method used there will return the text from the response or raise a `ValueError` exception if the response is an `AsyncResponse` instance that has not yet been fully resolved.
+from llm.parts import StreamEvent
 
-This is a slightly weird hack to work around the common need to share logic for building up the `messages` list across both sync and async models.
+def execute(self, prompt, stream, response, conversation, key=None):
+    messages = self.build_messages(prompt, conversation)
+    ...
+
+    for chunk in provider_sdk.stream(...):
+        if chunk.type == "text":
+            yield StreamEvent(type="text", chunk=chunk.text, part_index=0)
+        elif chunk.type == "thinking":
+            yield StreamEvent(type="reasoning", chunk=chunk.text, part_index=0)
+```
+
+A `StreamEvent` has five frequently-used fields:
+
+- **`type`** — one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`.
+- **`chunk`** — the text fragment. For tool calls this is the tool name (for `tool_call_name`) or a partial JSON string (for `tool_call_args`).
+- **`part_index`** — a monotonically allocated integer identifying which `Part` this event contributes to. All events sharing a `part_index` must belong to the same family; events at the same index concatenate into one Part.
+- **`tool_call_id`** — the provider's id for the tool call, set on `tool_call_name` / `tool_call_args` / `tool_result` events.
+- **`provider_metadata`** — an optional `dict[str, dict]` namespaced by provider name. Carries opaque data (signatures, encrypted blobs) that must be echoed back on future requests.
+
+Two additional fields exist for special cases:
+
+- **`server_executed: bool`** — set `True` for server-side tool calls (for example, Anthropic web search) and their results. The model ran the tool internally.
+- **`tool_name`** — set on `tool_result` events to identify which tool this result came from.
+
+### Allocating `part_index`
+
+`part_index` groups events into Parts. Rules:
+
+- **Same `part_index` + same family** → events are appended into one Part (text concatenates; tool-call args accumulate into the final JSON).
+- **Same `part_index` + different family** → the framework raises `ValueError`. That's a plugin bug — allocate a new index when a new content block begins.
+- **Tool calls span two event types**: `tool_call_name` and `tool_call_args` at the *same* `part_index` combine into one `ToolCallPart`. The name arrives first; the args stream in as partial JSON and are parsed when the part finalizes.
+
+A typical allocation scheme:
+
+```
+part_index=0  reasoning chunks
+part_index=1  text chunks
+part_index=2  first tool_call (name + streaming args)
+part_index=3  second tool_call (parallel)
+```
+
+For providers that emit discrete content blocks (like Anthropic's `content_block_start` / `content_block_delta` events), a natural implementation is a dict keyed by block index:
+
+```python
+state = {"blocks": {}, "next_part_index": 0}
+
+# On content_block_start:
+idx = event.index
+pi = state["next_part_index"]
+state["next_part_index"] += 1
+state["blocks"][idx] = {"kind": block.type, "part_index": pi}
+
+# On content_block_delta:
+info = state["blocks"][event.index]
+pi = info["part_index"]
+yield StreamEvent(type="text", chunk=delta.text, part_index=pi)
+```
+
+For providers that emit discrete parts per streamed chunk without start/stop markers (like Gemini), track the current block kind and advance the index on kind changes:
+
+```python
+state = {"index": 0, "kind": None}
+
+def allocate_for_kind(state, new_kind):
+    if state["kind"] == new_kind:
+        return state["index"]     # concat
+    if state["kind"] is not None:
+        state["index"] += 1       # advance past previous block
+    state["kind"] = new_kind
+    return state["index"]
+```
+
+### Reasoning tokens
+
+Two modes are supported:
+
+**Streamed reasoning text** (Anthropic extended thinking, Gemini with `includeThoughts: true`):
+
+```python
+yield StreamEvent(type="reasoning", chunk=thinking_chunk, part_index=0)
+```
+
+Text events and reasoning events at different indexes produce distinct `TextPart` and `ReasoningPart` entries in `response.messages`.
+
+**Opaque reasoning token count** (OpenAI o-series, Gemini without `includeThoughts`):
+
+The provider reports only a count — no reasoning text. Record the count on the Response object and the framework will prepend a redacted `ReasoningPart`:
+
+```python
+# Anywhere before set_usage runs (usually at the end of execute):
+if reasoning_tokens > 0:
+    response._reasoning_token_count = reasoning_tokens
+```
+
+For OpenAI this count lives in `usage.completion_tokens_details.reasoning_tokens`; read it **before** calling `self.set_usage()` — `set_usage()` mutates the usage dict via `pop()` and simplifies out zero-valued entries.
+
+### Tool calls
+
+Each tool call emits two event types at the same `part_index`:
+
+```python
+yield StreamEvent(
+    type="tool_call_name",
+    chunk=tool_name,
+    part_index=tc_part_index,
+    tool_call_id=tool_call_id,
+)
+# then, as the provider streams JSON args:
+yield StreamEvent(
+    type="tool_call_args",
+    chunk=partial_json_fragment,
+    part_index=tc_part_index,
+    tool_call_id=tool_call_id,
+)
+```
+
+Some providers (Gemini) emit the complete tool call in one chunk — fine; emit both events back-to-back with the full name and full JSON.
+
+For client-side tool calls — tools that LLM should execute locally in a chain — **also call `response.add_tool_call()`**. The chain-execution path (`response.tool_calls()` → `execute_tool_calls()`) reads from the explicitly-added list, not from the StreamEvent buffer. Your code should do both:
+
+```python
+response.add_tool_call(
+    llm.ToolCall(
+        tool_call_id=tool_id,
+        name=tool_name,
+        arguments=parsed_args,
+    )
+)
+```
+
+### Server-side tool calls
+
+For tools the API executes internally, set `server_executed=True` on the events. Anthropic web search is a good concrete example: the API returns a `server_tool_use` block for the search request, followed by a `web_search_tool_result` block containing the result payload.
+
+```python
+yield StreamEvent(
+    type="tool_call_name",
+    chunk="web_search",
+    part_index=tc_pi,
+    tool_call_id=tool_id,
+    server_executed=True,
+)
+yield StreamEvent(
+    type="tool_call_args",
+    chunk=json.dumps(query_args),
+    part_index=tc_pi,
+    tool_call_id=tool_id,
+    server_executed=True,
+)
+```
+
+The tool *result* (for example, the search hits) is also emitted as an event:
+
+```python
+yield StreamEvent(
+    type="tool_result",
+    chunk=human_readable_summary,
+    part_index=tr_pi,
+    tool_call_id=tool_id,
+    server_executed=True,
+    tool_name="web_search",
+    provider_metadata={"myprovider": {"raw_content": full_payload}},
+)
+```
+
+For providers that don't stream server-tool-result contents (Anthropic's `web_search_tool_result` blocks only arrive in the final message), do the emission as a post-stream step — after the main iteration loop completes, inspect the final message and emit tool_result events for any server-side results.
+
+Do **not** call `response.add_tool_call()` for server-side tool calls unless you intentionally want LLM to run a separate local tool too. The provider has already executed these calls; represent them as `StreamEvent`s so they are preserved in `response.messages` and can be replayed in future turns.
+
+### Opaque provider metadata
+
+Some providers require you to echo back opaque fields on the next request for multi-turn continuity to work:
+
+- **Anthropic** — `signature` on each thinking block; `encrypted_content` inside web_search_tool_result items.
+- **Google Gemini** — `thoughtSignature` on `functionCall` parts when thinking is active.
+- **OpenAI Responses API** — `encrypted_content` on reasoning items in stateless mode.
+
+These values are attached to a `StreamEvent` via its `provider_metadata` field. The framework merges metadata across events at the same `part_index` (last non-None wins per top-level key) and persists it on the finalized Part.
+
+Namespace under your provider's name so transcripts that mix providers don't collide:
+
+```python
+# Anthropic signature arrives at the end of a thinking block.
+yield StreamEvent(
+    type="reasoning",
+    chunk="",
+    part_index=reasoning_pi,
+    provider_metadata={"anthropic": {"signature": sig}},
+)
+```
+
+```python
+# Gemini attaches thoughtSignature to a functionCall part.
+yield StreamEvent(
+    type="tool_call_name",
+    chunk=name,
+    part_index=tc_pi,
+    tool_call_id=tc_id,
+    provider_metadata={"gemini": {"thoughtSignature": sig}},
+)
+```
+
+Treat other providers' entries as opaque; don't parse them. The framework round-trips the value verbatim via JSON, so use JSON-safe primitives (string, int, bool, dict, list) — avoid custom classes or bytes (base64-encode bytes if you need them).
+
+### Non-streaming path
+
+When `stream=False` (or the provider returns a complete message at once), emit one event per content block:
+
+```python
+else:
+    completion = client.messages.create(**kwargs)
+    response.response_json = completion.model_dump()
+    pi = 0
+    for block in completion.content:
+        if block.type == "thinking":
+            yield StreamEvent(
+                type="reasoning",
+                chunk=block.thinking,
+                part_index=pi,
+                provider_metadata={"anthropic": {"signature": block.signature}},
+            )
+            pi += 1
+        elif block.type == "text":
+            yield StreamEvent(type="text", chunk=block.text, part_index=pi)
+            pi += 1
+        elif block.type == "tool_use":
+            yield StreamEvent(
+                type="tool_call_name",
+                chunk=block.name,
+                part_index=pi,
+                tool_call_id=block.id,
+            )
+            yield StreamEvent(
+                type="tool_call_args",
+                chunk=json.dumps(block.input),
+                part_index=pi,
+                tool_call_id=block.id,
+            )
+            pi += 1
+```
+
+## Consuming prompt.messages in build_messages
+
+`prompt.messages` is an `list[llm.Message]` that is always **the complete input chain for this turn** — whether the caller supplied it explicitly via `model.prompt(messages=[...])`, or it was synthesized from legacy kwargs (`prompt=`, `system=`, `attachments=`, `tool_results=`), or it was pre-built by a `Conversation` or by `response.reply()`.
+
+**Do not also walk `conversation.responses`.** Under the invariant, history is already baked into `prompt.messages`; walking the conversation would double-emit.
+
+A plugin's `build_messages` (or equivalent) iterates `prompt.messages` and dispatches per `Part` subtype:
+
+```python
+from llm.parts import (
+    TextPart,
+    ReasoningPart,
+    ToolCallPart,
+    ToolResultPart,
+    AttachmentPart,
+)
+
+def build_messages(self, prompt, conversation):
+    messages = []
+    for msg in prompt.messages:
+        if msg.role == "system":
+            # Some APIs put system on a separate kwarg (Anthropic, Gemini).
+            # OpenAI-style APIs emit it as a message; handle accordingly.
+            continue
+        self._append_message(messages, msg)
+    return messages
+
+def _append_message(self, out, msg):
+    # Map llm's role to the provider's (assistant→model for Gemini,
+    # tool→user for Anthropic/Gemini tool_result convention, etc.)
+    role = self._provider_role(msg.role)
+    parts = []
+    for part in msg.parts:
+        if isinstance(part, TextPart):
+            parts.append({"type": "text", "text": part.text})
+        elif isinstance(part, ReasoningPart):
+            # Skip redacted reasoning (no content to echo back).
+            if part.redacted or not part.text:
+                continue
+            block = {"type": "thinking", "thinking": part.text}
+            # Restore the signature from provider_metadata.
+            sig = (part.provider_metadata or {}).get("anthropic", {}).get("signature")
+            if sig:
+                block["signature"] = sig
+            parts.append(block)
+        elif isinstance(part, ToolCallPart):
+            parts.append({
+                "type": "tool_use",
+                "id": part.tool_call_id,
+                "name": part.name,
+                "input": part.arguments,
+            })
+        elif isinstance(part, ToolResultPart):
+            parts.append({
+                "type": "tool_result",
+                "tool_use_id": part.tool_call_id,
+                "content": part.output,
+            })
+        elif isinstance(part, AttachmentPart) and part.attachment:
+            parts.append(self._attachment_block(part.attachment))
+    # Merge with the previous message if roles match (some providers
+    # require strict alternation between user and assistant).
+    if out and out[-1]["role"] == role:
+        out[-1]["content"].extend(parts)
+    else:
+        out.append({"role": role, "content": parts})
+```
+
+### Role mapping
+
+LLM uses four roles: `"user"`, `"assistant"`, `"system"`, `"tool"`. Providers differ:
+
+- **OpenAI Chat Completions** — carries system in the messages array. `"tool"` → `{"role": "tool", "tool_call_id": ..., "content": ...}` per result.
+- **Anthropic Messages** — system on a separate `system=` kwarg. `"tool"` → user-role message with `tool_result` blocks. `"assistant"` unchanged.
+- **Gemini Generate Content** — system on `systemInstruction`. `"assistant"` → `"model"`. `"tool"` → user-role with `function_response` parts.
+
+For adapters that need system separately: filter `msg.role == "system"` out of the messages loop and read the current-turn system from `prompt.system` (the synthesized string of `prompt._system` + any system_fragments). The `prompt.system` attribute remains populated by Conversation.prompt for backward compatibility.
+
+### Role-alternation merging
+
+Several providers require strict alternation between user and assistant (or equivalent) messages. When two consecutive `llm.Message` values map to the same provider-side role, merge their parts into one provider message:
+
+```python
+if out and out[-1]["role"] == role:
+    out[-1]["content"].extend(parts)
+else:
+    out.append({"role": role, "content": parts})
+```
+
+This is especially relevant for `tool` + `user` — both typically map to a `user` turn for Anthropic/Gemini.
+
+## Restoring opaque metadata on subsequent requests
+
+When a conversation continues, your `build_messages` walks prior-turn Parts via `prompt.messages`. Each Part's `provider_metadata` is a `dict[str, dict]` keyed by provider name — extract your namespace and fold the fields back into the outgoing request body:
+
+```python
+if isinstance(part, ReasoningPart):
+    block = {"type": "thinking", "thinking": part.text}
+    pm = (part.provider_metadata or {}).get("anthropic", {})
+    if "signature" in pm:
+        block["signature"] = pm["signature"]
+    parts.append(block)
+
+if isinstance(part, ToolCallPart):
+    fc_part = {"function_call": {"name": part.name, "args": part.arguments}}
+    pm = (part.provider_metadata or {}).get("gemini", {})
+    if "thoughtSignature" in pm:
+        # Gemini expects thoughtSignature beside function_call,
+        # not nested inside it.
+        fc_part["thoughtSignature"] = pm["thoughtSignature"]
+    parts.append(fc_part)
+```
+
+If the key is missing (an older transcript that pre-dates your plugin's support), fall through — don't fail. Treat other providers' entries as opaque; don't parse them.
 
 (advanced-model-plugins-usage)=
 
