@@ -418,3 +418,14 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_prompt_attachments_pk(db):
+    # The same attachment can be attached to a response multiple times
+    # (e.g. llm "..." --attachment file.pdf --attachment file.pdf)
+    # Mirror the fix applied for prompt_fragments in m016.
+    # https://github.com/simonw/llm/issues/1354
+    db["prompt_attachments"].transform(
+        pk=("response_id", "attachment_id", "order")
+    )
