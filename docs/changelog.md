@@ -1,5 +1,13 @@
 # Changelog
 
+(v0_31)=
+## 0.31 (2026-04-24)
+
+- New GPT-5.5 OpenAI model: `llm -m gpt-5.5`. [#1418](https://github.com/simonw/llm/issues/1418)
+- New option to set the [text verbosity level](https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_new_params_and_tools#1-verbosity-parameter) for GPT-5+ OpenAI models: `-o verbosity low`. Values are `low`, `medium`, `high`.
+- New option for setting the [image detail level](https://developers.openai.com/api/docs/guides/images-vision#choose-an-image-detail-level) used for image attachments to OpenAI models: `-o image_detail low` - values are `low`, `high` and `auto`, and GPT-5.4 and 5.5 also accept `original`.
+- Models listed in `extra-openai-models.yaml` are now also registered as asynchronous. [#1395](https://github.com/simonw/llm/issues/1395)
+
 (v0_30)=
 ## 0.30 (2026-03-31)
 
