@@ -126,6 +126,117 @@ def test_gpt5_verbosity_option_validates_allowed_values():
     assert "Input should be 'low', 'medium' or 'high'" in result.output
 
 
+@pytest.mark.parametrize(
+    "model_id,expected_description",
+    (
+        (
+            "gpt-4o",
+            "Controls the detail level for image attachments. Supported values are low, high, and auto.",
+        ),
+        (
+            "gpt-5.4",
+            "Controls the detail level for image attachments. Supported values are low, high, original, and auto.",
+        ),
+        (
+            "gpt-5.5",
+            "Controls the detail level for image attachments. Supported values are low, high, original, and auto.",
+        ),
+    ),
+)
+def test_openai_image_detail_option_description(model_id, expected_description):
+    field = llm.get_model(model_id).Options.model_fields["image_detail"]
+    assert field.description == expected_description
+
+
+def test_openai_image_detail_option_is_sent_on_image_attachments(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o",
+            "usage": {},
+            "choices": [{"message": {"content": "Looks detailed"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o",
+            "-o",
+            "image_detail",
+            "high",
+            "--at",
+            "https://example.com/image.jpg",
+            "image/jpeg",
+            "--no-stream",
+            "--key",
+            "x",
+            "Describe this",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    image_part = request_body["messages"][0]["content"][1]
+    assert image_part == {
+        "type": "image_url",
+        "image_url": {
+            "url": "https://example.com/image.jpg",
+            "detail": "high",
+        },
+    }
+    assert "image_detail" not in request_body
+
+
+def test_openai_image_detail_original_is_sent_for_gpt54(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-5.4",
+            "usage": {},
+            "choices": [{"message": {"content": "Original detail"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.4",
+            "-o",
+            "image_detail",
+            "original",
+            "--at",
+            "https://example.com/image.jpg",
+            "image/jpeg",
+            "--no-stream",
+            "--key",
+            "x",
+            "Describe this",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    image_part = request_body["messages"][0]["content"][1]
+    assert image_part["image_url"]["detail"] == "original"
+
+
+def test_openai_image_detail_original_is_rejected_for_other_models():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-5", "-o", "image_detail", "original", "Say hi"],
+    )
+    assert result.exit_code == 1
+    assert "Input should be 'low', 'high' or 'auto'" in result.output
+
+
 @pytest.mark.parametrize("model", ("gpt-4o-mini", "gpt-4o-audio-preview"))
 @pytest.mark.parametrize("filetype", ("mp3", "wav"))
 def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
