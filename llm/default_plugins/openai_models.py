@@ -23,7 +23,7 @@ import httpx
 import openai
 import os
 
-from pydantic import field_validator, Field
+from pydantic import create_model, field_validator, Field
 
 from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
 import json
@@ -563,33 +563,41 @@ class VerbosityEnum(str, Enum):
     high = "high"
 
 
-class OptionsForReasoning(SharedOptions):
-    json_object: Optional[bool] = Field(
-        description="Output a valid JSON object {...}. Prompt must mention JSON.",
-        default=None,
-    )
-    reasoning_effort: Optional[ReasoningEffortEnum] = Field(
-        description=(
-            "Constraints effort on reasoning for reasoning models. Currently supported "
-            "values are low, medium, and high. Reducing reasoning effort can result in "
-            "faster responses and fewer tokens used on reasoning in a response."
-        ),
-        default=None,
-    )
-
-
-class OptionsWithVerbosity(SharedOptions):
-    verbosity: Optional[VerbosityEnum] = Field(
-        description=(
-            "Controls how verbose the model's response should be. Supported values "
-            "are low, medium, and high."
-        ),
-        default=None,
-    )
-
-
-class OptionsForReasoningAndVerbosity(OptionsForReasoning, OptionsWithVerbosity):
-    pass
+def build_options_class(*, reasoning=False, verbosity=False):
+    fields = {
+        "json_object": (
+            Optional[bool],
+            Field(
+                description="Output a valid JSON object {...}. Prompt must mention JSON.",
+                default=None,
+            ),
+        )
+    }
+    if reasoning:
+        fields["reasoning_effort"] = (
+            Optional[ReasoningEffortEnum],
+            Field(
+                description=(
+                    "Constraints effort on reasoning for reasoning models. Currently "
+                    "supported values are low, medium, and high. Reducing reasoning "
+                    "effort can result in faster responses and fewer tokens used on "
+                    "reasoning in a response."
+                ),
+                default=None,
+            ),
+        )
+    if verbosity:
+        fields["verbosity"] = (
+            Optional[VerbosityEnum],
+            Field(
+                description=(
+                    "Controls how verbose the model's response should be. Supported "
+                    "values are low, medium, and high."
+                ),
+                default=None,
+            ),
+        )
+    return create_model("Options", __base__=SharedOptions, **fields)
 
 
 def _attachment(attachment):
@@ -657,12 +665,10 @@ class _Shared:
 
         self.attachment_types = set()
 
-        if reasoning and verbosity:
-            self.Options = OptionsForReasoningAndVerbosity
-        elif reasoning:
-            self.Options = OptionsForReasoning
-        elif verbosity:
-            self.Options = OptionsWithVerbosity
+        if reasoning or verbosity:
+            self.Options = build_options_class(
+                reasoning=reasoning, verbosity=verbosity
+            )
 
         if vision:
             self.attachment_types.update(
