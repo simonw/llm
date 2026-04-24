@@ -258,6 +258,27 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
+    # GPT-5.5
+    for model_id in (
+        "gpt-5.5",
+        "gpt-5.5-2026-04-23",
+    ):
+        register(
+            Chat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                reasoning=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
 
     # The -instruct completion model
     register(
