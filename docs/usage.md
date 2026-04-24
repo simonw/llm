@@ -1085,6 +1085,7 @@ OpenAI Chat: gpt-5
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1107,6 +1108,7 @@ OpenAI Chat: gpt-5-mini
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1129,6 +1131,7 @@ OpenAI Chat: gpt-5-nano
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1151,6 +1154,7 @@ OpenAI Chat: gpt-5-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1173,6 +1177,7 @@ OpenAI Chat: gpt-5-mini-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1195,6 +1200,7 @@ OpenAI Chat: gpt-5-nano-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1217,6 +1223,7 @@ OpenAI Chat: gpt-5.1
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1239,6 +1246,7 @@ OpenAI Chat: gpt-5.1-chat-latest
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1261,6 +1269,7 @@ OpenAI Chat: gpt-5.2
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1283,6 +1292,7 @@ OpenAI Chat: gpt-5.2-chat-latest
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1305,6 +1315,7 @@ OpenAI Chat: gpt-5.4
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1327,6 +1338,7 @@ OpenAI Chat: gpt-5.4-2026-03-05
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1349,6 +1361,7 @@ OpenAI Chat: gpt-5.4-mini
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1371,6 +1384,7 @@ OpenAI Chat: gpt-5.4-mini-2026-03-17
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1393,6 +1407,7 @@ OpenAI Chat: gpt-5.4-nano
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1415,6 +1430,7 @@ OpenAI Chat: gpt-5.4-nano-2026-03-17
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1437,6 +1453,7 @@ OpenAI Chat: gpt-5.5
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:
@@ -1459,6 +1476,7 @@ OpenAI Chat: gpt-5.5-2026-04-23
     stop: str
     logit_bias: dict, str
     seed: int
+    verbosity: str
     json_object: boolean
     reasoning_effort: str
   Attachment types:

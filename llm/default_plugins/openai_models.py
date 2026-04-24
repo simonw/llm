@@ -181,6 +181,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -188,6 +189,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -202,6 +204,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -209,6 +212,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -220,6 +224,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -227,6 +232,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -247,6 +253,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -254,6 +261,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -268,6 +276,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -275,6 +284,7 @@ def register_models(register):
                 model_id,
                 vision=True,
                 reasoning=True,
+                verbosity=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -547,6 +557,12 @@ class ReasoningEffortEnum(str, Enum):
     xhigh = "xhigh"
 
 
+class VerbosityEnum(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class OptionsForReasoning(SharedOptions):
     json_object: Optional[bool] = Field(
         description="Output a valid JSON object {...}. Prompt must mention JSON.",
@@ -560,6 +576,20 @@ class OptionsForReasoning(SharedOptions):
         ),
         default=None,
     )
+
+
+class OptionsWithVerbosity(SharedOptions):
+    verbosity: Optional[VerbosityEnum] = Field(
+        description=(
+            "Controls how verbose the model's response should be. Supported values "
+            "are low, medium, and high."
+        ),
+        default=None,
+    )
+
+
+class OptionsForReasoningAndVerbosity(OptionsForReasoning, OptionsWithVerbosity):
+    pass
 
 
 def _attachment(attachment):
@@ -606,6 +636,7 @@ class _Shared:
         vision=False,
         audio=False,
         reasoning=False,
+        verbosity=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -626,8 +657,12 @@ class _Shared:
 
         self.attachment_types = set()
 
-        if reasoning:
+        if reasoning and verbosity:
+            self.Options = OptionsForReasoningAndVerbosity
+        elif reasoning:
             self.Options = OptionsForReasoning
+        elif verbosity:
+            self.Options = OptionsWithVerbosity
 
         if vision:
             self.attachment_types.update(
