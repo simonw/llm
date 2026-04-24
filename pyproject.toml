@@ -81,3 +81,6 @@ llm = "llm.cli:cli"
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["llm*"]
