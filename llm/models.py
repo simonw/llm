@@ -938,7 +938,8 @@ class _BaseResponse:
                 {
                     "tool_id": tool_id,
                     "response_id": response_id,
-                }
+                },
+                ignore=True,
             )
         for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
             db["tool_calls"].insert(
