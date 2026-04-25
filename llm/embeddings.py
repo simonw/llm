@@ -131,9 +131,28 @@ class Collection:
         from llm import encode
 
         content_hash = self.content_hash(value)
-        if self.db["embeddings"].count_where(
-            "content_hash = ? and collection_id = ?", [content_hash, self.id]
-        ):
+        existing = list(
+            self.db["embeddings"].rows_where(
+                "content_hash = ? and collection_id = ?",
+                [content_hash, self.id],
+            )
+        )
+        if existing:
+            # Avoid recomputing the embedding, but refresh stored content
+            # and metadata so changing --store / metadata between calls is
+            # not silently ignored. See issue #224.
+            new_content = value if (store and isinstance(value, str)) else None
+            new_content_blob = value if (store and isinstance(value, bytes)) else None
+            new_metadata = json.dumps(metadata) if metadata else None
+            self.db["embeddings"].update(
+                (existing[0]["collection_id"], existing[0]["id"]),
+                {
+                    "content": new_content,
+                    "content_blob": new_content_blob,
+                    "metadata": new_metadata,
+                    "updated": int(time.time()),
+                },
+            )
             return
         embedding = self.model().embed(value)
         cast(Table, self.db["embeddings"]).insert(
@@ -196,18 +215,45 @@ class Collection:
             # Calculate hashes first
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
             # Any of those hashes already exist?
-            existing_ids = [
-                row["id"]
+            existing_hashes = {
+                row["content_hash"]
                 for row in self.db.query(
                     """
-                    select id from embeddings
+                    select content_hash from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
                     [collection_id]
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
+            }
+            # Items whose content already has an embedding stored: update the
+            # content/metadata in place so changing --store/metadata between
+            # calls is not silently ignored. See issue #224.
+            existing_items = [
+                (item, h) for item, h in items_and_hashes if h in existing_hashes
             ]
-            filtered_batch = [item for item in batch if item[0] not in existing_ids]
+            filtered_batch = [
+                item for item, h in items_and_hashes if h not in existing_hashes
+            ]
+            if existing_items:
+                now = int(time.time())
+                with self.db.conn:
+                    for (id, value, metadata), content_hash in existing_items:
+                        self.db.execute(
+                            """
+                            update embeddings
+                            set content = ?, content_blob = ?, metadata = ?, updated = ?
+                            where collection_id = ? and content_hash = ?
+                            """,
+                            [
+                                value if (store and isinstance(value, str)) else None,
+                                value if (store and isinstance(value, bytes)) else None,
+                                json.dumps(metadata) if metadata else None,
+                                now,
+                                collection_id,
+                                content_hash,
+                            ],
+                        )
             embeddings = list(
                 self.model().embed_multi(item[1] for item in filtered_batch)
             )
