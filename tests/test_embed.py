@@ -146,6 +146,41 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+@pytest.mark.parametrize("with_metadata", (False, True))
+def test_embed_multi_deduplicates_by_content_hash(with_metadata):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    collection.embed("1", "hello world")
+    model = collection.model()
+    model.batch_count = 0
+
+    if with_metadata:
+        entries = (
+            ("2", "hello world", {"meta": "2"}),
+            ("3", "brand new text", {"meta": "3"}),
+        )
+        collection.embed_multi_with_metadata(entries)
+    else:
+        entries = (
+            ("2", "hello world"),
+            ("3", "brand new text"),
+        )
+        collection.embed_multi(entries, store=True)
+
+    rows = list(db["embeddings"].rows)
+    assert len(rows) == 2
+    assert {row["id"] for row in rows} == {"1", "3"}
+    assert model.batch_count == 1
+
+    inserted = next(db["embeddings"].rows_where("id = ?", ["3"]))
+    if with_metadata:
+        assert json.loads(inserted["metadata"]) == {"meta": "3"}
+        assert inserted["content"] is None
+    else:
+        assert inserted["content"] == "brand new text"
+        assert inserted["metadata"] is None
+
+
 def test_collection_delete(collection):
     db = collection.db
     assert db["embeddings"].count == 2
