@@ -1,9 +1,15 @@
+import base64
 from click.testing import CliRunner
 import json
 import llm
 from llm.cli import cli
+from llm.default_plugins.openai_models import redact_data
+import json
+import pathlib
 import pytest
 import sqlite_utils
+
+TINY_PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
 
 
 @pytest.fixture
@@ -377,3 +383,99 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     assert db["responses"].count == 1
     row = next(db["responses"].rows)
     assert row["response"] == "Ho ho ho"
+
+
+def test_redact_data_redacts_inline_payloads():
+    prompt_json = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,abc123"},
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/signed"},
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {"data": "audio-base64", "format": "wav"},
+                    },
+                    {
+                        "type": "file",
+                        "file": {
+                            "filename": "secret.pdf",
+                            "file_data": "data:application/pdf;base64,def456",
+                        },
+                    },
+                    {
+                        "type": "file",
+                        "file": {"filename": "opaque.bin", "file_data": "opaque-inline"},
+                    },
+                    {
+                        "type": "file",
+                        "file": {"filename": "remote.pdf", "file_id": "file-123"},
+                    },
+                ],
+            }
+        ]
+    }
+
+    redacted = redact_data(prompt_json)
+    content = redacted["messages"][0]["content"]
+
+    assert content[0]["image_url"]["url"] == "data:..."
+    assert content[1]["image_url"]["url"] == "https://example.com/signed"
+    assert content[2]["input_audio"]["data"] == "..."
+    assert content[3]["file"]["file_data"] == "data:..."
+    assert content[4]["file"]["file_data"] == "..."
+    assert content[5]["file"]["file_id"] == "file-123"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_pdf_attachment_prompt_json_is_redacted(mocked_openai_chat, user_path, logs_db, async_):
+    pdf_path = pathlib.Path(str(user_path)) / "secret.pdf"
+    pdf_path.write_bytes(TINY_PDF)
+    expected_base64 = base64.b64encode(TINY_PDF).decode("utf-8")
+
+    runner = CliRunner()
+    args = [
+        "-m",
+        "gpt-4o-mini",
+        "summarize this",
+        "-a",
+        str(pdf_path),
+        "--no-stream",
+        "--key",
+        "x",
+    ]
+    if async_:
+        args.append("--async")
+
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+
+    last_request = mocked_openai_chat.get_requests()[-1]
+    request_json = json.loads(last_request.content)
+    request_file = next(
+        item
+        for item in request_json["messages"][0]["content"]
+        if item["type"] == "file"
+    )
+    assert request_file["file"]["filename"].endswith(".pdf")
+    assert request_file["file"]["file_data"].startswith("data:application/pdf;base64,")
+    assert expected_base64 in request_file["file"]["file_data"]
+
+    row = next(logs_db["responses"].rows)
+    prompt_json = json.loads(row["prompt_json"])
+    logged_file = next(
+        item
+        for item in prompt_json["messages"][0]["content"]
+        if item["type"] == "file"
+    )
+    assert logged_file["file"]["filename"] == request_file["file"]["filename"]
+    assert logged_file["file"]["file_data"] == "data:..."
+    assert expected_base64 not in row["prompt_json"]

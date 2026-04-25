@@ -1191,7 +1191,7 @@ def redact_data(input_dict):
     Recursively search through the input dictionary for any 'image_url' keys
     and modify the 'url' value to be just 'data:...'.
 
-    Also redact input_audio.data keys
+    Also redact input_audio.data and file.file_data keys
     """
     if isinstance(input_dict, dict):
         for key, value in input_dict.items():
@@ -1204,6 +1204,13 @@ def redact_data(input_dict):
                 value["url"] = "data:..."
             elif key == "input_audio" and isinstance(value, dict) and "data" in value:
                 value["data"] = "..."
+            elif key == "file" and isinstance(value, dict) and "file_data" in value:
+                value["file_data"] = (
+                    "data:..."
+                    if isinstance(value["file_data"], str)
+                    and value["file_data"].startswith("data:")
+                    else "..."
+                )
             else:
                 redact_data(value)
     elif isinstance(input_dict, list):
