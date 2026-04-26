@@ -61,6 +61,48 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert prompt_attachment["response_id"] == response["id"]
 
 
+def test_duplicate_attachment_logs_cleanly(mock_model, logs_db, tmp_path):
+    """Passing the same --attachment twice should log successfully, not raise.
+
+    Regression test for https://github.com/simonw/llm/issues/1354
+    """
+    file_path = tmp_path / "image.png"
+    file_path.write_bytes(TINY_PNG)
+
+    runner = CliRunner()
+    mock_model.enqueue(["ok"])
+    result = runner.invoke(
+        cli.cli,
+        [
+            "prompt",
+            "-m",
+            "mock",
+            "describe file",
+            "-a",
+            str(file_path),
+            "-a",
+            str(file_path),
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Both attachments should be logged, sharing one attachment row
+    # but two prompt_attachments rows with distinct "order" values.
+    attachments = list(logs_db["attachments"].rows)
+    assert len(attachments) == 1
+    prompt_attachments = list(
+        logs_db["prompt_attachments"].rows_where(
+            order_by='"order"'
+        )
+    )
+    assert len(prompt_attachments) == 2
+    assert [row["order"] for row in prompt_attachments] == [0, 1]
+    assert all(
+        row["attachment_id"] == attachments[0]["id"] for row in prompt_attachments
+    )
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":
