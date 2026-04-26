@@ -360,7 +360,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
         },
         headers={"Content-Type": "application/json"},
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
     if usage:
         args.append(usage)
