@@ -252,7 +252,7 @@ Conversation history — including attachments from prior turns — is available
 
 ## Structured messages and streaming events
 
-The 0.31 alpha introduced a richer contract for plugins than "yield strings":
+The 0.32 alpha introduced a richer contract for plugins than "yield strings":
 
 1. **`execute()` yields `StreamEvent` objects** (or plain `str`, still supported) so text, reasoning (thinking tokens), tool calls, and server-side tool results each surface as their own event type. The framework assembles these into typed `Part` objects.
 2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn.
