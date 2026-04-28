@@ -36,7 +36,7 @@ extensions = [
     "sphinx_markdown_builder",
     "sphinx.ext.autodoc",
 ]
-myst_enable_extensions = ["colon_fence"]
+myst_enable_extensions = ["colon_fence", "deflist"]
 
 markdown_http_base = "https://llm.datasette.io/en/stable"
 markdown_uri_doc_suffix = ".html"

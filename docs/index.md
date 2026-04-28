@@ -120,6 +120,7 @@ aliases
 embeddings/index
 plugins/index
 python-api
+serialization
 logging
 related-tools
 help
