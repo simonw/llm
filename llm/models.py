@@ -888,10 +888,6 @@ class _BaseResponse:
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
 
-    def messages(self) -> List[Any]:
-        "Overridden by Response / AsyncResponse — declared here for type checkers."
-        raise NotImplementedError
-
     def _messages_now(self) -> List[Any]:
         """Assemble messages assuming the response is already drained.
 

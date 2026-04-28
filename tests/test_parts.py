@@ -1276,11 +1276,7 @@ class TestResponseReply:
         ]
 
     def test_reply_with_tool_results_and_prompt(self, mock_model):
-        from llm.parts import (
-            Message,
-            ToolCallPart,
-            ToolResultPart,
-        )
+        from llm.parts import ToolResultPart
 
         class ToolCallMock(type(mock_model)):
             supports_tools = True
@@ -1318,7 +1314,7 @@ class TestResponseReply:
     def test_reply_auto_executes_tool_calls_when_none_passed(self, mock_model):
         # Zero-arg sugar: response.reply() with tool calls present
         # auto-executes them and threads results back into the chain.
-        from llm.parts import Message, ToolResultPart
+        from llm.parts import ToolResultPart
 
         executed = []
 
