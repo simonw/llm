@@ -2223,7 +2223,7 @@ def logs_list(
                 except ValueError:
                     pass
             if row.get("reasoning"):
-                click.echo("\n## Reasoning\n\n{}".format(row["reasoning"]))
+                click.echo("\n## Reasoning\n\n{}".format(row["reasoning"].rstrip()))
             click.echo("\n## Response\n")
             if row["tool_calls"]:
                 click.echo("### Tool calls\n")

@@ -1059,7 +1059,7 @@ def test_logs_markdown_renders_reasoning_heading(user_path):
             "system": None,
             "prompt": "hi",
             "response": "answer",
-            "reasoning": "I thought hard about it.",
+            "reasoning": "I thought hard about it.\n\n\n",
             "model": "mock",
             "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "conversation_id": "c1",
@@ -1068,10 +1068,9 @@ def test_logs_markdown_renders_reasoning_heading(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["logs", "-p", log_path], catch_exceptions=False)
     assert result.exit_code == 0
-    assert "## Reasoning\n\nI thought hard about it." in result.output
-    reasoning_pos = result.output.index("## Reasoning")
-    response_pos = result.output.index("## Response")
-    assert reasoning_pos < response_pos
+    # rstrip() before rendering so trailing newlines from the
+    # provider output don't push `## Response` down the page.
+    assert "## Reasoning\n\nI thought hard about it.\n\n## Response" in result.output
 
 
 def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
