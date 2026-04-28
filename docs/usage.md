@@ -549,6 +549,9 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Integer seed to attempt to sample deterministically
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
+    image_detail: str
+      Controls the detail level for image attachments. Supported values are
+      low, high, and auto.
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -570,6 +573,7 @@ OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -589,6 +593,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -610,6 +615,7 @@ OpenAI Chat: gpt-4o-audio-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     audio/mpeg, audio/wav
   Features:
@@ -629,6 +635,7 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     audio/mpeg, audio/wav
   Features:
@@ -648,6 +655,7 @@ OpenAI Chat: gpt-4o-audio-preview-2024-10-01
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     audio/mpeg, audio/wav
   Features:
@@ -667,6 +675,7 @@ OpenAI Chat: gpt-4o-mini-audio-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     audio/mpeg, audio/wav
   Features:
@@ -686,6 +695,7 @@ OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     audio/mpeg, audio/wav
   Features:
@@ -705,6 +715,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -726,6 +737,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -747,6 +759,7 @@ OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -768,6 +781,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -785,6 +799,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -802,6 +817,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -819,6 +835,7 @@ OpenAI Chat: gpt-4-32k (aliases: 4-32k)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -836,6 +853,7 @@ OpenAI Chat: gpt-4-1106-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -853,6 +871,7 @@ OpenAI Chat: gpt-4-0125-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -870,6 +889,7 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -887,6 +907,7 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -904,6 +925,7 @@ OpenAI Chat: gpt-4.5-preview-2025-02-27
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -925,6 +947,7 @@ OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -946,6 +969,7 @@ OpenAI Chat: o1
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
@@ -967,6 +991,7 @@ OpenAI Chat: o1-2024-12-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
@@ -988,6 +1013,7 @@ OpenAI Chat: o1-preview
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -1005,6 +1031,7 @@ OpenAI Chat: o1-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
   Features:
   - streaming
   - async
@@ -1022,6 +1049,7 @@ OpenAI Chat: o3-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
   Features:
   - streaming
@@ -1042,6 +1070,7 @@ OpenAI Chat: o3
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
@@ -1064,6 +1093,7 @@ OpenAI Chat: o4-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
@@ -1086,7 +1116,9 @@ OpenAI Chat: gpt-5
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1108,7 +1140,9 @@ OpenAI Chat: gpt-5-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1130,7 +1164,9 @@ OpenAI Chat: gpt-5-nano
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1152,7 +1188,9 @@ OpenAI Chat: gpt-5-2025-08-07
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1174,7 +1212,9 @@ OpenAI Chat: gpt-5-mini-2025-08-07
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1196,7 +1236,9 @@ OpenAI Chat: gpt-5-nano-2025-08-07
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1218,7 +1260,9 @@ OpenAI Chat: gpt-5.1
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1240,7 +1284,9 @@ OpenAI Chat: gpt-5.1-chat-latest
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1262,7 +1308,9 @@ OpenAI Chat: gpt-5.2
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1284,7 +1332,9 @@ OpenAI Chat: gpt-5.2-chat-latest
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1306,7 +1356,9 @@ OpenAI Chat: gpt-5.4
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1328,7 +1380,9 @@ OpenAI Chat: gpt-5.4-2026-03-05
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1350,7 +1404,9 @@ OpenAI Chat: gpt-5.4-mini
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1372,7 +1428,9 @@ OpenAI Chat: gpt-5.4-mini-2026-03-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1394,7 +1452,9 @@ OpenAI Chat: gpt-5.4-nano
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1416,7 +1476,57 @@ OpenAI Chat: gpt-5.4-nano-2026-03-17
     logit_bias: dict, str
     seed: int
     json_object: boolean
+    image_detail: str
     reasoning_effort: str
+    verbosity: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-5.5
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Chat: gpt-5.5-2026-04-23
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:

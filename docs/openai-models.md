@@ -75,6 +75,8 @@ OpenAI Chat: gpt-5.4-mini
 OpenAI Chat: gpt-5.4-mini-2026-03-17
 OpenAI Chat: gpt-5.4-nano
 OpenAI Chat: gpt-5.4-nano-2026-03-17
+OpenAI Chat: gpt-5.5
+OpenAI Chat: gpt-5.5-2026-04-23
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
