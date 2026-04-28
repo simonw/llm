@@ -1,37 +1,6 @@
-"""Tests for Part, Message, StreamEvent and the constructor helpers.
-
-Phase 1 covers the in-memory value types and JSON round-trip only.
-No Response / streaming / plugin integration yet.
-"""
-
 import json
 import pytest
-
 import llm
-
-
-# -- Exports ------------------------------------------------------------
-
-
-class TestExports:
-    def test_llm_exports_part_types(self):
-        assert llm.Part is not None
-        assert llm.TextPart is not None
-        assert llm.ReasoningPart is not None
-        assert llm.ToolCallPart is not None
-        assert llm.ToolResultPart is not None
-        assert llm.AttachmentPart is not None
-        assert llm.Message is not None
-        assert llm.StreamEvent is not None
-
-    def test_llm_exports_constructor_helpers(self):
-        assert callable(llm.user)
-        assert callable(llm.assistant)
-        assert callable(llm.system)
-        assert callable(llm.tool_message)
-
-
-# -- Part subclasses ----------------------------------------------------
 
 
 class TestTextPart:
@@ -46,9 +15,7 @@ class TestTextPart:
         assert llm.TextPart(text="hi").to_dict() == {"type": "text", "text": "hi"}
 
     def test_with_provider_metadata(self):
-        part = llm.TextPart(
-            text="hi", provider_metadata={"openai": {"flag": True}}
-        )
+        part = llm.TextPart(text="hi", provider_metadata={"openai": {"flag": True}})
         restored = llm.Part.from_dict(part.to_dict())
         assert restored == part
 
@@ -97,9 +64,7 @@ class TestToolCallPart:
 
 class TestToolResultPart:
     def test_roundtrip(self):
-        part = llm.ToolResultPart(
-            name="search", output="72F sunny", tool_call_id="c1"
-        )
+        part = llm.ToolResultPart(name="search", output="72F sunny", tool_call_id="c1")
         restored = llm.Part.from_dict(part.to_dict())
         assert restored == part
         assert restored.exception is None
@@ -172,9 +137,6 @@ class TestRoleNotOnPart:
         )
 
 
-# -- Message ------------------------------------------------------------
-
-
 class TestMessage:
     def test_roundtrip_simple_user_message(self):
         m = llm.Message(role="user", parts=[llm.TextPart(text="hi")])
@@ -220,9 +182,6 @@ class TestMessage:
         )
         # Both serialize the same (empty metadata is omitted)
         assert m_none.to_dict() == m_empty.to_dict()
-
-
-# -- Constructor helpers -----------------------------------------------
 
 
 class TestHelpers:
@@ -278,9 +237,6 @@ class TestHelpers:
         assert m.provider_metadata == {"openai": {"id": "x"}}
 
 
-# -- StreamEvent (type only, no Response integration yet) --------------
-
-
 class TestStreamEvent:
     def test_dataclass_defaults(self):
         ev = llm.StreamEvent(type="text", chunk="hi", part_index=0)
@@ -311,16 +267,9 @@ class TestStreamEvent:
         assert ev.message_index == 1
 
 
-# -- Phase 2: Response streaming scaffolding ----------------------------
-#
 # Backward compat for plain-str plugins: iterating a Response still
 # yields text strings, response.text() still works, self._chunks is
 # still populated.
-#
-# New capabilities:
-#   - response.stream_events()  / response.astream_events()
-#   - response.messages
-#   - _BaseResponse._build_parts()  (internal, tested via .messages)
 
 
 class TestPlainStrPluginCompat:
@@ -523,15 +472,12 @@ class TestStreamEventsFromStreamEventPlugin:
         response = m.prompt("x")
         response.text()
         parts = response.messages[0].parts
-        assert parts[0] == llm.ReasoningPart(
-            text="", redacted=True, token_count=200
-        )
+        assert parts[0] == llm.ReasoningPart(text="", redacted=True, token_count=200)
         assert parts[1] == llm.TextPart(text="hi")
 
 
 class TestStreamEventsLiveDuringStreaming:
-    """Client code sees events arrive before the response is done —
-    this is the primary user-facing goal of this phase."""
+    """Client code sees events arrive before the response is done"""
 
     def test_events_arrive_before_done(self, mock_model):
         events = [
@@ -551,9 +497,7 @@ class TestStreamEventsLiveDuringStreaming:
         assert response._done
 
     def test_stream_events_after_done_replays(self, mock_model):
-        mock_model.enqueue(
-            [llm.StreamEvent(type="text", chunk="hi", part_index=0)]
-        )
+        mock_model.enqueue([llm.StreamEvent(type="text", chunk="hi", part_index=0)])
         response = mock_model.prompt("x")
         first = list(response.stream_events())
         # Second call replays from the stored events.
@@ -612,13 +556,8 @@ class TestAsyncStreamEvents:
         response = async_mock_model.prompt("x")
         await response.text()
         assert response.messages == [
-            llm.Message(
-                role="assistant", parts=[llm.TextPart(text="hi")]
-            )
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
         ]
-
-
-# -- Phase 3: messages= parameter and Prompt.messages synthesis --------
 
 
 class TestPromptMessagesSynthesis:
@@ -635,9 +574,7 @@ class TestPromptMessagesSynthesis:
         from llm.models import Prompt
 
         p = Prompt("hi", model=mock_model)
-        assert p.messages == [
-            llm.Message(role="user", parts=[llm.TextPart(text="hi")])
-        ]
+        assert p.messages == [llm.Message(role="user", parts=[llm.TextPart(text="hi")])]
 
     def test_system_and_prompt_synthesizes_two_messages(self, mock_model):
         from llm.models import Prompt
@@ -672,11 +609,7 @@ class TestPromptMessagesSynthesis:
         assert p.messages == [
             llm.Message(
                 role="tool",
-                parts=[
-                    llm.ToolResultPart(
-                        name="t", output="ok", tool_call_id="c1"
-                    )
-                ],
+                parts=[llm.ToolResultPart(name="t", output="ok", tool_call_id="c1")],
             )
         ]
 
@@ -694,9 +627,7 @@ class TestPromptMessagesExplicit:
         p = Prompt(None, model=mock_model, messages=explicit)
         assert p.messages == explicit
 
-    def test_explicit_messages_ignores_prompt_kwarg(
-        self, mock_model
-    ):
+    def test_explicit_messages_ignores_prompt_kwarg(self, mock_model):
         """Explicit messages= is authoritative. A prompt= string passed
         alongside is no longer auto-appended — the invariant is that
         prompt.messages equals exactly what the model was sent."""
@@ -728,9 +659,7 @@ class TestModelPromptMessagesKwarg:
 
     def test_model_prompt_messages_with_system(self, mock_model):
         mock_model.enqueue(["ok"])
-        response = mock_model.prompt(
-            messages=[llm.system("be brief"), llm.user("hi")]
-        )
+        response = mock_model.prompt(messages=[llm.system("be brief"), llm.user("hi")])
         response.text()
         assert response.prompt.messages == [
             llm.system("be brief"),
@@ -752,9 +681,7 @@ class TestModelPromptMessagesKwarg:
         assert response.prompt.messages == [llm.user("hi")]
 
     @pytest.mark.asyncio
-    async def test_async_conversation_prompt_accepts_messages(
-        self, async_mock_model
-    ):
+    async def test_async_conversation_prompt_accepts_messages(self, async_mock_model):
         async_mock_model.enqueue(["ok"])
         conv = async_mock_model.conversation()
         response = conv.prompt(messages=[llm.user("q")])
@@ -762,8 +689,6 @@ class TestModelPromptMessagesKwarg:
         assert response.prompt.messages == [llm.user("q")]
 
 
-# -- Phase 7.1: Conversation passes full chain via messages= ----------
-#
 # Invariant: response.prompt.messages == exactly what the model was
 # sent for this turn, regardless of whether the caller used
 # model.prompt(messages=[...]), conversation.prompt("text"), or
@@ -783,9 +708,7 @@ class TestConversationFullChainInvariant:
         response.text()
         assert response.prompt.messages == [llm.user("q")]
 
-    def test_conversation_second_turn_prompt_messages_has_full_chain(
-        self, mock_model
-    ):
+    def test_conversation_second_turn_prompt_messages_has_full_chain(self, mock_model):
         mock_model.enqueue(["a1"])
         mock_model.enqueue(["a2"])
         conv = mock_model.conversation()
@@ -802,16 +725,17 @@ class TestConversationFullChainInvariant:
             llm.user("q2"),
         ]
 
-    def test_conversation_third_turn_includes_everything_before(
-        self, mock_model
-    ):
+    def test_conversation_third_turn_includes_everything_before(self, mock_model):
         mock_model.enqueue(["a1"])
         mock_model.enqueue(["a2"])
         mock_model.enqueue(["a3"])
         conv = mock_model.conversation()
-        r1 = conv.prompt("q1"); r1.text()
-        r2 = conv.prompt("q2"); r2.text()
-        r3 = conv.prompt("q3"); r3.text()
+        r1 = conv.prompt("q1")
+        r1.text()
+        r2 = conv.prompt("q2")
+        r2.text()
+        r3 = conv.prompt("q3")
+        r3.text()
 
         assert r3.prompt.messages == [
             llm.user("q1"),
@@ -821,25 +745,23 @@ class TestConversationFullChainInvariant:
             llm.user("q3"),
         ]
 
-    def test_conversation_first_turn_chain_is_single_user_message(
-        self, mock_model
-    ):
+    def test_conversation_first_turn_chain_is_single_user_message(self, mock_model):
         mock_model.enqueue(["a1"])
         conv = mock_model.conversation()
         r1 = conv.prompt("q1")
         r1.text()
         assert r1.prompt.messages == [llm.user("q1")]
 
-    def test_conversation_preserves_reasoning_and_tool_call_parts(
-        self, mock_model
-    ):
+    def test_conversation_preserves_reasoning_and_tool_call_parts(self, mock_model):
         """The chain carries reasoning and tool calls from prior turns,
         not just the flat text — required for multi-turn extended
         thinking (Claude) and tool-use round-trips."""
-        mock_model.enqueue([
-            llm.StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        mock_model.enqueue(
+            [
+                llm.StreamEvent(type="reasoning", chunk="thinking...", part_index=0),
+                llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         mock_model.enqueue(["follow-up answer"])
         conv = mock_model.conversation()
         r1 = conv.prompt("q1")
@@ -874,9 +796,6 @@ class TestConversationFullChainInvariant:
             llm.assistant("a1"),
             llm.user("q2"),
         ]
-
-
-# -- Regression: rehydrated-from-SQLite response.messages survives ----
 
 
 class TestSqliteRehydrateMessages:
@@ -940,9 +859,6 @@ class TestSqliteRehydrateMessages:
         ]
 
 
-# -- Phase 7.3: response.reply() --------------------------------------
-
-
 class TestResponseReply:
     def test_reply_builds_next_turn_from_this_response(self, mock_model):
         mock_model.enqueue(["a1"])
@@ -962,9 +878,12 @@ class TestResponseReply:
         mock_model.enqueue(["a1"])
         mock_model.enqueue(["a2"])
         mock_model.enqueue(["a3"])
-        r1 = mock_model.prompt("q1"); r1.text()
-        r2 = r1.reply("q2"); r2.text()
-        r3 = r2.reply("q3"); r3.text()
+        r1 = mock_model.prompt("q1")
+        r1.text()
+        r2 = r1.reply("q2")
+        r2.text()
+        r3 = r2.reply("q3")
+        r3.text()
         assert r3.prompt.messages == [
             llm.user("q1"),
             llm.assistant("a1"),
@@ -1017,7 +936,7 @@ class TestResponseReply:
         ]
 
 
-# -- chain() propagates system across tool-result turns --------------
+# chain() propagates system across tool-result turns
 
 
 class TestChainPropagatesSystem:
@@ -1028,9 +947,7 @@ class TestChainPropagatesSystem:
 
     def test_sync_chain_tool_result_turn_preserves_system(self, mock_model):
         # First turn: fake a tool call so the chain iterates.
-        tool_call = llm.ToolCall(
-            tool_call_id="c1", name="tick", arguments={}
-        )
+        tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
 
         class ChainMock(type(mock_model)):
             def execute(self, prompt, stream, response, conversation):
@@ -1057,12 +974,8 @@ class TestChainPropagatesSystem:
         second = chain._responses[1]
         assert second.prompt.system == "be brief"
 
-    def test_sync_chain_tool_result_turn_preserves_system_fragments(
-        self, mock_model
-    ):
-        tool_call = llm.ToolCall(
-            tool_call_id="c1", name="tick", arguments={}
-        )
+    def test_sync_chain_tool_result_turn_preserves_system_fragments(self, mock_model):
+        tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
 
         class ChainMock(type(mock_model)):
             def execute(self, prompt, stream, response, conversation):
@@ -1101,9 +1014,7 @@ class TestChainPropagatesSystem:
     async def test_async_chain_tool_result_turn_preserves_system(
         self, async_mock_model
     ):
-        tool_call = llm.ToolCall(
-            tool_call_id="c1", name="tick", arguments={}
-        )
+        tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
 
         class AsyncChainMock(type(async_mock_model)):
             supports_tools = True
@@ -1134,7 +1045,7 @@ class TestChainPropagatesSystem:
         assert second.prompt.system == "be brief"
 
 
-# -- chain() accepts messages= (parity with prompt()) -----------------
+# chain() accepts messages= (parity with prompt())
 
 
 class TestChainMessagesKwarg:
@@ -1153,9 +1064,7 @@ class TestChainMessagesKwarg:
         r1 = chain._responses[0]
         assert r1.prompt.messages == [llm.user("explicit")]
 
-    def test_chain_messages_is_authoritative_over_prompt_kwarg(
-        self, mock_model
-    ):
+    def test_chain_messages_is_authoritative_over_prompt_kwarg(self, mock_model):
         """Parity with prompt(): when both are passed, messages= wins
         and the prompt= string is not folded into the chain."""
         mock_model.enqueue(["ok"])
@@ -1168,7 +1077,7 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
     def test_chain_with_messages_and_prior_conversation(self, mock_model):
-        """Explicit messages= on chain() replaces any history walking —
+        """Explicit messages= on chain() replaces history reconstruction;
         the chain starts from that exact list."""
         mock_model.enqueue(["first"])
         mock_model.enqueue(["second"])
@@ -1181,14 +1090,10 @@ class TestChainMessagesKwarg:
         chain = conv.chain(messages=[llm.user("fresh start")])
         chain.text()
         first_chain_response = chain._responses[0]
-        assert first_chain_response.prompt.messages == [
-            llm.user("fresh start")
-        ]
+        assert first_chain_response.prompt.messages == [llm.user("fresh start")]
 
     @pytest.mark.asyncio
-    async def test_async_conversation_chain_accepts_messages(
-        self, async_mock_model
-    ):
+    async def test_async_conversation_chain_accepts_messages(self, async_mock_model):
         async_mock_model.enqueue(["ok"])
         conv = async_mock_model.conversation()
         chain = conv.chain(messages=[llm.user("explicit")])
@@ -1197,9 +1102,7 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
     @pytest.mark.asyncio
-    async def test_async_model_chain_accepts_messages(
-        self, async_mock_model
-    ):
+    async def test_async_model_chain_accepts_messages(self, async_mock_model):
         async_mock_model.enqueue(["ok"])
         chain = async_mock_model.chain(messages=[llm.user("explicit")])
         await chain.text()
@@ -1207,7 +1110,7 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
 
-# -- Phase 7.2: Response.to_dict / Response.from_dict ------------------
+# Response.to_dict / Response.from_dict
 
 
 class TestResponseToDictFromDict:
@@ -1253,15 +1156,17 @@ class TestResponseToDictFromDict:
         ]
 
     def test_to_dict_preserves_reasoning_and_signatures(self, mock_model):
-        mock_model.enqueue([
-            llm.StreamEvent(
-                type="reasoning",
-                chunk="thinking...",
-                part_index=0,
-                provider_metadata={"anthropic": {"signature": "sig-abc"}},
-            ),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+        mock_model.enqueue(
+            [
+                llm.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking...",
+                    part_index=0,
+                    provider_metadata={"anthropic": {"signature": "sig-abc"}},
+                ),
+                llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         r = mock_model.prompt("q")
         r.text()
 
@@ -1276,21 +1181,20 @@ class TestResponseToDictFromDict:
             "anthropic": {"signature": "sig-abc"}
         }
 
-    def test_from_dict_reply_includes_prior_reasoning_in_chain(
-        self, mock_model
-    ):
-        """The thing this entire refactor was about: a reply() after
-        from_dict() sends the thinking signature back to the model
-        for multi-turn extended thinking."""
-        mock_model.enqueue([
-            llm.StreamEvent(
-                type="reasoning",
-                chunk="thinking...",
-                part_index=0,
-                provider_metadata={"anthropic": {"signature": "sig-xyz"}},
-            ),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
-        ])
+    def test_from_dict_reply_includes_prior_reasoning_in_chain(self, mock_model):
+        """a reply() after from_dict() sends the thinking  signature
+        back to the model for multi-turn extended thinking."""
+        mock_model.enqueue(
+            [
+                llm.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking...",
+                    part_index=0,
+                    provider_metadata={"anthropic": {"signature": "sig-xyz"}},
+                ),
+                llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
         mock_model.enqueue(["a2"])
         r1 = mock_model.prompt("q1")
         r1.text()
@@ -1303,8 +1207,7 @@ class TestResponseToDictFromDict:
         # The signature must be in the chain sent to the model.
         chain = r2.prompt.messages
         reasoning_parts = [
-            p for m in chain for p in m.parts
-            if isinstance(p, llm.ReasoningPart)
+            p for m in chain for p in m.parts if isinstance(p, llm.ReasoningPart)
         ]
         assert len(reasoning_parts) == 1
         assert reasoning_parts[0].provider_metadata == {
@@ -1329,20 +1232,15 @@ class TestResponseToDictFromDict:
         assert restored.prompt.options.max_tokens == 42
 
     def test_message_from_dict_static_method_unchanged(self):
-        # Sanity: Message.from_dict / to_dict keep the Phase 1 contract.
         m = llm.assistant("hi")
         assert llm.Message.from_dict(m.to_dict()) == m
 
 
 class TestChainResponseStreamEvents:
-    def test_sync_chain_stream_events_yields_text_when_no_tools(
-        self, mock_model
-    ):
+    def test_sync_chain_stream_events_yields_text_when_no_tools(self, mock_model):
         # Chain with no tool calls is a single-response chain — its
         # stream_events should concatenate from each underlying response.
-        mock_model.enqueue(
-            [llm.StreamEvent(type="text", chunk="done", part_index=0)]
-        )
+        mock_model.enqueue([llm.StreamEvent(type="text", chunk="done", part_index=0)])
         chain = mock_model.conversation().chain("q")
         events = list(chain.stream_events())
         assert [e.type for e in events] == ["text"]
@@ -1360,7 +1258,7 @@ class TestChainResponseStreamEvents:
         assert [e.type for e in events] == ["text"]
 
 
-# -- Phase 6: Client-side serialization round-trip ---------------------
+# Client-side serialization round-trip
 #
 # A library user can persist a conversation by serializing response.messages
 # to JSON and later re-inflate it as messages=[...] on a follow-up prompt.
@@ -1397,15 +1295,11 @@ class TestClientSerializationRoundTrip:
         # Later — rebuild from the wire form and continue.
         rebuilt = [llm.Message.from_dict(d) for d in json.loads(payload)]
         mock_model.enqueue(["turn 2 answer"])
-        r2 = mock_model.prompt(
-            messages=rebuilt + [llm.user("turn 2 question")]
-        )
+        r2 = mock_model.prompt(messages=rebuilt + [llm.user("turn 2 question")])
         r2.text()
 
         # The plugin saw the full structured history on prompt.messages.
-        assert r2.prompt.messages == rebuilt + [
-            llm.user("turn 2 question")
-        ]
+        assert r2.prompt.messages == rebuilt + [llm.user("turn 2 question")]
         assert r2.messages == [llm.assistant("turn 2 answer")]
 
     def test_roundtrip_preserves_tool_calls_and_results(self, mock_model):

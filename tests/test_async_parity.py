@@ -1,16 +1,14 @@
-"""Async parity: every sync API added in Phases 1-7 must work the same
+"""Async parity: every sync API must work the same
 way on AsyncResponse and AsyncConversation.
 
 Uses the llm-echo plugin (sync ``Echo`` + async ``EchoAsync``) so both
 paths exercise real registered models with identical behaviour.
 """
 
-import asyncio
 import json
 
 import llm
 import pytest
-
 
 # ---- basic sanity: both variants are registered --------------------
 
@@ -202,12 +200,12 @@ async def test_async_chain_tool_result_turn_has_full_chain():
     # Drive a one-iteration chain by asking echo to emit a tool call
     # (echo's JSON-prompt syntax).
     chain = model.chain(
-        json.dumps({
-            "tool_calls": [
-                {"name": "my_tool", "arguments": {"x": 5}}
-            ],
-            "prompt": "prompt",
-        }),
+        json.dumps(
+            {
+                "tool_calls": [{"name": "my_tool", "arguments": {"x": 5}}],
+                "prompt": "prompt",
+            }
+        ),
         tools=[llm.Tool.function(my_tool, name="my_tool")],
     )
 
@@ -267,9 +265,7 @@ async def test_async_from_dict_model_override():
 
     # Pass model explicitly to override whatever's in the payload.
     alt = llm.get_async_model("echo")
-    restored = llm.AsyncResponse.from_dict(
-        json.loads(payload), model=alt
-    )
+    restored = llm.AsyncResponse.from_dict(json.loads(payload), model=alt)
     assert restored.model is alt
 
 
@@ -350,7 +346,11 @@ async def test_async_full_chain_to_dict_round_trip_three_turns():
     payload = json.dumps(r3.to_dict())
     restored = llm.AsyncResponse.from_dict(json.loads(payload))
     assert [m.role for m in restored.prompt.messages] == [
-        "user", "assistant", "user", "assistant", "user"
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
     ]
     texts = [m.parts[0].text for m in restored.prompt.messages if m.parts]
     assert texts[0] == "q1"
@@ -361,7 +361,13 @@ async def test_async_full_chain_to_dict_round_trip_three_turns():
     r4 = restored.reply("q4")
     await r4.text()
     assert [m.role for m in r4.prompt.messages] == [
-        "user", "assistant", "user", "assistant", "user", "assistant", "user"
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
     ]
 
 
@@ -376,9 +382,7 @@ async def test_async_reply_chains_three_turns():
     await r3.text()
 
     chain = r3.prompt.messages
-    assert [m.role for m in chain] == [
-        "user", "assistant", "user", "assistant", "user"
-    ]
+    assert [m.role for m in chain] == ["user", "assistant", "user", "assistant", "user"]
     texts = [m.parts[0].text for m in chain if m.parts]
     assert texts[0] == "q1"
     assert texts[2] == "q2"

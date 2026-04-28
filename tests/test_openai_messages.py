@@ -1,13 +1,3 @@
-"""Tests for the OpenAI built-in plugin's messages= path.
-
-Phase 4a covers build_messages reading prompt.messages (instead of the
-legacy prompt.prompt / prompt.system / prompt.attachments fields), which
-lets users pass structured message history via model.prompt(messages=[...]).
-
-Phase 4b covers execute() yielding StreamEvent objects instead of plain
-str — including tool_call_name + tool_call_args event streams.
-"""
-
 import json
 
 import pytest
@@ -16,7 +6,6 @@ from pytest_httpx import IteratorStream
 import llm
 from llm.default_plugins.openai_models import Chat
 from llm.models import Prompt
-
 
 API_KEY = "badkey"
 
@@ -27,9 +16,7 @@ def _sse(delta, finish_reason=None, usage=None, tool_calls=None):
         "object": "chat.completion.chunk",
         "created": 1700000000,
         "model": "gpt-4o-mini",
-        "choices": [
-            {"index": 0, "delta": delta, "finish_reason": finish_reason}
-        ],
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
     }
     if tool_calls is not None:
         chunk["choices"][0]["delta"]["tool_calls"] = tool_calls
@@ -111,9 +98,7 @@ def chat_model():
 
 class TestBuildMessagesFromExplicitMessages:
     def test_single_user_message(self, chat_model):
-        prompt = Prompt(
-            None, model=chat_model, messages=[llm.user("hi")]
-        )
+        prompt = Prompt(None, model=chat_model, messages=[llm.user("hi")])
         result = chat_model.build_messages(prompt, None)
         assert result == [{"role": "user", "content": "hi"}]
 
@@ -130,9 +115,7 @@ class TestBuildMessagesFromExplicitMessages:
         ]
 
     def test_user_with_attachment(self, chat_model):
-        att = llm.Attachment(
-            type="image/jpeg", url="http://example.com/cat.jpg"
-        )
+        att = llm.Attachment(type="image/jpeg", url="http://example.com/cat.jpg")
         prompt = Prompt(
             None,
             model=chat_model,
@@ -213,9 +196,7 @@ class TestBuildMessagesFromExplicitMessages:
         }
 
     def test_tool_role_message_with_tool_result(self, chat_model):
-        tr = llm.ToolResultPart(
-            name="search", output="sunny", tool_call_id="c1"
-        )
+        tr = llm.ToolResultPart(name="search", output="sunny", tool_call_id="c1")
         prompt = Prompt(
             None,
             model=chat_model,
@@ -284,7 +265,7 @@ class TestBuildMessagesLegacyFieldsStillWork:
 
 class TestBuildMessagesSystemDedup:
     """Explicit messages with repeated system messages dedupe
-    consecutive identical systems — OpenAI accepts one."""
+    repeated unchanged systems; OpenAI accepts one."""
 
     def test_same_system_not_repeated(self, chat_model):
         prompt = Prompt(
@@ -325,9 +306,6 @@ class TestBuildMessagesSystemDedup:
 
 class TestBuildMessagesConversationHistory:
     def test_prior_turn_text_plus_current_user(self, chat_model):
-        """With the Phase 7 invariant, prompt.messages for a follow-up
-        turn already contains the full chain — the adapter reads only
-        from it, not from conversation.responses."""
         new_prompt = Prompt(
             None,
             model=chat_model,
@@ -347,9 +325,6 @@ class TestBuildMessagesConversationHistory:
     def test_no_double_emission_from_conversation_prompt_flow(
         self, chat_model, httpx_mock
     ):
-        """Phase 7 invariant: prompt.messages for a conversation's
-        follow-up turn is the full chain. The adapter must not ALSO
-        walk conversation.responses, or the wire body doubles up."""
         # Two staged responses so conv.prompt twice can complete.
         httpx_mock.add_response(
             method="POST",
@@ -408,9 +383,6 @@ class TestBuildMessagesConversationHistory:
         ]
 
 
-# -- Phase 4b: execute() yields StreamEvents ---------------------------
-
-
 class TestStreamingExecuteYieldsStreamEvents:
     def test_text_stream_yields_text_events(self, httpx_mock):
         httpx_mock.add_response(
@@ -430,9 +402,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         # Text chunks concatenate to the expected full text.
         assert "".join(e.chunk for e in events) == "Hello"
 
-    def test_text_stream_plain_iteration_still_returns_strings(
-        self, httpx_mock
-    ):
+    def test_text_stream_plain_iteration_still_returns_strings(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
@@ -456,9 +426,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         response = model.prompt("hi", key=API_KEY)
         response.text()
         assert response.messages == [
-            llm.Message(
-                role="assistant", parts=[llm.TextPart(text="Hello")]
-            )
+            llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
         ]
 
     def test_tool_call_stream_yields_name_and_args_events(self, httpx_mock):
@@ -487,9 +455,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         # valid JSON.
         args_events = [e for e in events if e.type == "tool_call_args"]
         assert all(e.part_index == name_ev.part_index for e in args_events)
-        assert json.loads("".join(e.chunk for e in args_events)) == {
-            "city": "Paris"
-        }
+        assert json.loads("".join(e.chunk for e in args_events)) == {"city": "Paris"}
 
     def test_tool_call_registered_via_add_tool_call(self, httpx_mock):
         """response.tool_calls() still works — chain/execute relies on it."""
@@ -572,9 +538,7 @@ def _text_stream_with_reasoning_usage(reasoning_tokens):
             "prompt_tokens": 5,
             "completion_tokens": 2,
             "total_tokens": 7,
-            "completion_tokens_details": {
-                "reasoning_tokens": reasoning_tokens
-            },
+            "completion_tokens_details": {"reasoning_tokens": reasoning_tokens},
         },
     )
     yield b"data: [DONE]\n\n"
@@ -607,9 +571,7 @@ class TestReasoningTokenCount:
             llm.Message(
                 role="assistant",
                 parts=[
-                    llm.ReasoningPart(
-                        text="", redacted=True, token_count=150
-                    ),
+                    llm.ReasoningPart(text="", redacted=True, token_count=150),
                     llm.TextPart(text="Hello"),
                 ],
             )
@@ -657,11 +619,7 @@ class TestNonStreamingExecuteYieldsStreamEvents:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY, stream=False)
         events = list(response.stream_events())
-        assert events == [
-            llm.StreamEvent(type="text", chunk="Hello", part_index=0)
-        ]
+        assert events == [llm.StreamEvent(type="text", chunk="Hello", part_index=0)]
         assert response.messages == [
-            llm.Message(
-                role="assistant", parts=[llm.TextPart(text="Hello")]
-            )
+            llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
         ]

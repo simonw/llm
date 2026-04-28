@@ -42,14 +42,15 @@ def _attachment_to_dict(att: Attachment) -> AttachmentDict:
 
 
 def _attachment_from_dict(d: AttachmentDict) -> Attachment:
-    content = d.get("content")
-    if isinstance(content, str):
-        content = base64.b64decode(content)
+    raw_content = d.get("content")
+    content_bytes: Optional[bytes] = None
+    if isinstance(raw_content, str):
+        content_bytes = base64.b64decode(raw_content)
     return Attachment(
         type=d.get("type"),
         path=d.get("path"),
         url=d.get("url"),
-        content=content,
+        content=content_bytes,
     )
 
 
@@ -62,42 +63,46 @@ class Part:
 
     @staticmethod
     def from_dict(d: PartDict) -> "Part":
-        type_ = d.get("type")
-        pm = d.get("provider_metadata")
-        if type_ == "text":
-            return TextPart(text=d.get("text", ""), provider_metadata=pm)
-        if type_ == "reasoning":
+        if d["type"] == "text":
+            return TextPart(
+                text=d["text"],
+                provider_metadata=d.get("provider_metadata"),
+            )
+        if d["type"] == "reasoning":
             return ReasoningPart(
-                text=d.get("text", ""),
+                text=d["text"],
                 redacted=d.get("redacted", False),
                 token_count=d.get("token_count"),
-                provider_metadata=pm,
+                provider_metadata=d.get("provider_metadata"),
             )
-        if type_ == "tool_call":
+        if d["type"] == "tool_call":
             return ToolCallPart(
                 name=d["name"],
-                arguments=d.get("arguments", {}),
+                arguments=d["arguments"],
                 tool_call_id=d.get("tool_call_id"),
                 server_executed=d.get("server_executed", False),
-                provider_metadata=pm,
+                provider_metadata=d.get("provider_metadata"),
             )
-        if type_ == "tool_result":
+        if d["type"] == "tool_result":
             return ToolResultPart(
                 name=d["name"],
-                output=d.get("output", ""),
+                output=d["output"],
                 tool_call_id=d.get("tool_call_id"),
                 server_executed=d.get("server_executed", False),
                 exception=d.get("exception"),
                 attachments=[
                     _attachment_from_dict(a) for a in d.get("attachments", [])
                 ],
-                provider_metadata=pm,
+                provider_metadata=d.get("provider_metadata"),
             )
-        if type_ == "attachment":
+        if d["type"] == "attachment":
             att_dict = d.get("attachment")
             attachment = _attachment_from_dict(att_dict) if att_dict else None
-            return AttachmentPart(attachment=attachment, provider_metadata=pm)
-        raise ValueError(f"Unknown part type: {type_!r}")
+            return AttachmentPart(
+                attachment=attachment,
+                provider_metadata=d.get("provider_metadata"),
+            )
+        raise ValueError(f"Unknown part type: {d['type']!r}")
 
 
 @dataclass
@@ -267,9 +272,7 @@ def normalize_parts(items: Any) -> List[Part]:
     return out
 
 
-def system(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
-) -> Message:
+def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
     "Build a Message with role='system'."
     return Message(
         role="system",
@@ -278,9 +281,7 @@ def system(
     )
 
 
-def user(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
-) -> Message:
+def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
     "Build a Message with role='user'."
     return Message(
         role="user",
@@ -330,7 +331,7 @@ class StreamEvent:
     """
 
     type: str  # "text" / "reasoning" / "tool_call_name" /
-               # "tool_call_args" / "tool_result"
+    # "tool_call_args" / "tool_result"
     chunk: str
     part_index: int
     tool_call_id: Optional[str] = None

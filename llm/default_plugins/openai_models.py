@@ -26,7 +26,17 @@ import os
 
 from pydantic import create_model, field_validator, Field
 
-from typing import AsyncGenerator, cast, List, Iterable, Iterator, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    cast,
+    Dict,
+    List,
+    Iterable,
+    Iterator,
+    Optional,
+    Union,
+)
 import json
 import yaml
 
@@ -744,7 +754,7 @@ class _Shared:
         dicts and append them to ``out``.
 
         Returns the (possibly updated) current_system value so the caller
-        can dedup consecutive identical system messages.
+        can avoid re-emitting an unchanged system prompt.
         """
         from llm.parts import (
             AttachmentPart,
@@ -790,7 +800,7 @@ class _Shared:
             out.extend(tool_results)
             return current_system
 
-        # System dedup — skip if we just emitted this exact system text.
+        # System dedup: skip if this text is already the active system prompt.
         if message.role == "system":
             text = "".join(text_bits)
             if text == current_system:
@@ -829,7 +839,7 @@ class _Shared:
         pre-bake the history into it. The ``conversation`` parameter
         is unused and retained only for the plugin API contract.
         """
-        messages = []
+        messages: List[Dict[str, Any]] = []
         if image_detail is not None:
             image_detail = image_detail.value
         current_system: Optional[str] = None
@@ -918,7 +928,7 @@ class Chat(_Shared, KeyModel):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(
@@ -938,10 +948,9 @@ class Chat(_Shared, KeyModel):
             )
             chunks = []
             tool_calls = {}
-            # part_index allocator. Text always uses 0. Each tool call
-            # at delta index i is assigned a part_index past any text
-            # that was seen, so _build_parts groups them correctly.
-            seen_text = False
+            # part_index allocator. Text events always use 0, so tool
+            # calls start at 1 and keep a stable index per OpenAI delta
+            # index. This keeps _build_parts from mixing families.
             tc_part_index = {}
             next_part_index = 1
             for chunk in completion:
@@ -964,9 +973,9 @@ class Chat(_Shared, KeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[idx].function.arguments += (
-                                tool_call.function.arguments
-                            )
+                            tool_calls[
+                                idx
+                            ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -981,10 +990,7 @@ class Chat(_Shared, KeyModel):
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
-                    seen_text = True
-                    yield StreamEvent(
-                        type="text", chunk=content, part_index=0
-                    )
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
@@ -1036,10 +1042,8 @@ class Chat(_Shared, KeyModel):
         # set_usage pops top-level keys and passes the rest through
         # simplify_usage_dict, which strips zero-valued entries.
         if usage:
-            reasoning_tokens = (
-                (usage.get("completion_tokens_details") or {}).get(
-                    "reasoning_tokens", 0
-                )
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
             )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens
@@ -1061,7 +1065,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation] = None,
         key: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, StreamEvent], None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(
@@ -1103,9 +1107,9 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[idx].function.arguments += (
-                                tool_call.function.arguments
-                            )
+                            tool_calls[
+                                idx
+                            ].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -1118,9 +1122,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 except IndexError:
                     content = None
                 if content:
-                    yield StreamEvent(
-                        type="text", chunk=content, part_index=0
-                    )
+                    yield StreamEvent(type="text", chunk=content, part_index=0)
             if tool_calls:
                 for value in tool_calls.values():
                     response.add_tool_call(
@@ -1170,10 +1172,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 )
         # See sync Chat.execute: capture reasoning before set_usage mutates.
         if usage:
-            reasoning_tokens = (
-                (usage.get("completion_tokens_details") or {}).get(
-                    "reasoning_tokens", 0
-                )
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens", 0
             )
             if reasoning_tokens:
                 response._reasoning_token_count = reasoning_tokens
@@ -1203,7 +1203,7 @@ class Completion(Chat):
         response: Response,
         conversation: Optional[Conversation] = None,
         key: Optional[str] = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, StreamEvent]]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"

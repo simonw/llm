@@ -38,7 +38,6 @@ from typing import Any, Dict, List, Literal, Union
 # support. typing_extensions is a transitive dep via pydantic.
 from typing_extensions import NotRequired, TypedDict
 
-
 __all__ = [
     "AttachmentDict",
     "AttachmentPartDict",
@@ -95,7 +94,8 @@ class ToolCallPartDict(TypedDict):
     arguments: Dict[str, Any]
     tool_call_id: NotRequired[str]
     # True for provider-executed calls (Anthropic web search, Gemini code
-    # execution). Client echoes the block back as-is on next turn.
+    # execution). Adapters use this to restore provider-side blocks on
+    # the next turn.
     server_executed: NotRequired[bool]
     provider_metadata: NotRequired[Dict[str, Any]]
 
