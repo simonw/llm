@@ -26,8 +26,10 @@ def test_text_goes_to_stdout_not_stderr(mock_model):
 def test_reasoning_goes_to_stderr_not_stdout(mock_model):
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="thinking hard", part_index=0),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            llm.parts.StreamEvent(
+                type="reasoning", chunk="thinking hard", part_index=0
+            ),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)
@@ -46,8 +48,8 @@ def test_reasoning_rendered_in_dim_style(mock_model):
     """The click.style(..., dim=True) wrapper emits the ANSI dim code."""
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="t", part_index=0),
-            llm.StreamEvent(type="text", chunk="x", part_index=1),
+            llm.parts.StreamEvent(type="reasoning", chunk="t", part_index=0),
+            llm.parts.StreamEvent(type="text", chunk="x", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)
@@ -66,8 +68,10 @@ def test_reasoning_rendered_in_dim_style(mock_model):
 def test_no_reasoning_flag_suppresses_reasoning(mock_model):
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="hidden thinking", part_index=0),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            llm.parts.StreamEvent(
+                type="reasoning", chunk="hidden thinking", part_index=0
+            ),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)
@@ -85,8 +89,8 @@ def test_no_reasoning_flag_suppresses_reasoning(mock_model):
 def test_no_reasoning_short_flag_R(mock_model):
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="hidden", part_index=0),
-            llm.StreamEvent(type="text", chunk="x", part_index=1),
+            llm.parts.StreamEvent(type="reasoning", chunk="hidden", part_index=0),
+            llm.parts.StreamEvent(type="text", chunk="x", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)
@@ -104,8 +108,8 @@ def test_newline_between_reasoning_and_text(mock_model):
     text on stdout starts on a fresh visual line."""
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="think", part_index=0),
-            llm.StreamEvent(type="text", chunk="answer", part_index=1),
+            llm.parts.StreamEvent(type="reasoning", chunk="think", part_index=0),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)
@@ -122,8 +126,10 @@ def test_newline_between_reasoning_and_text(mock_model):
 def test_async_path_reasoning_to_stderr(async_mock_model):
     async_mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="async thinking", part_index=0),
-            llm.StreamEvent(type="text", chunk="async answer", part_index=1),
+            llm.parts.StreamEvent(
+                type="reasoning", chunk="async thinking", part_index=0
+            ),
+            llm.parts.StreamEvent(type="text", chunk="async answer", part_index=1),
         ]
     )
     runner = CliRunner(mix_stderr=False)

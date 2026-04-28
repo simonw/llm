@@ -1021,9 +1021,9 @@ def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
 
     mock_model.enqueue(
         [
-            llm.StreamEvent(type="reasoning", chunk="thinking "),
-            llm.StreamEvent(type="reasoning", chunk="hard"),
-            llm.StreamEvent(type="text", chunk="hello"),
+            llm.parts.StreamEvent(type="reasoning", chunk="thinking "),
+            llm.parts.StreamEvent(type="reasoning", chunk="hard"),
+            llm.parts.StreamEvent(type="text", chunk="hello"),
         ]
     )
     response = mock_model.prompt("hi")

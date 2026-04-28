@@ -136,7 +136,7 @@ class TestBuildMessagesFromExplicitMessages:
         ]
 
     def test_assistant_with_tool_call(self, chat_model):
-        tool_call = llm.ToolCallPart(
+        tool_call = llm.parts.ToolCallPart(
             name="search",
             arguments={"q": "weather"},
             tool_call_id="c1",
@@ -171,7 +171,7 @@ class TestBuildMessagesFromExplicitMessages:
     def test_assistant_tool_call_only_no_text(self, chat_model):
         """When an assistant message has tool_calls but no text, OpenAI
         expects content=null."""
-        tool_call = llm.ToolCallPart(
+        tool_call = llm.parts.ToolCallPart(
             name="search", arguments={"q": "x"}, tool_call_id="c1"
         )
         prompt = Prompt(
@@ -196,7 +196,7 @@ class TestBuildMessagesFromExplicitMessages:
         }
 
     def test_tool_role_message_with_tool_result(self, chat_model):
-        tr = llm.ToolResultPart(name="search", output="sunny", tool_call_id="c1")
+        tr = llm.parts.ToolResultPart(name="search", output="sunny", tool_call_id="c1")
         prompt = Prompt(
             None,
             model=chat_model,
@@ -213,8 +213,8 @@ class TestBuildMessagesFromExplicitMessages:
 
     def test_multiple_tool_results_emit_multiple_messages(self, chat_model):
         """Parallel tool results: one OpenAI 'tool' message per result."""
-        a = llm.ToolResultPart(name="t", output="A", tool_call_id="c1")
-        b = llm.ToolResultPart(name="t", output="B", tool_call_id="c2")
+        a = llm.parts.ToolResultPart(name="t", output="A", tool_call_id="c1")
+        b = llm.parts.ToolResultPart(name="t", output="B", tool_call_id="c2")
         prompt = Prompt(
             None,
             model=chat_model,
@@ -396,7 +396,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         events = list(response.stream_events())
         # At least one StreamEvent, all text, all at part_index=0.
         assert events, "expected stream events"
-        assert all(isinstance(e, llm.StreamEvent) for e in events)
+        assert all(isinstance(e, llm.parts.StreamEvent) for e in events)
         assert all(e.type == "text" for e in events)
         assert all(e.part_index == 0 for e in events)
         # Text chunks concatenate to the expected full text.
@@ -426,7 +426,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         response = model.prompt("hi", key=API_KEY)
         response.text()
         assert response.messages() == [
-            llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
+            llm.Message(role="assistant", parts=[llm.parts.TextPart(text="Hello")])
         ]
 
     def test_tool_call_stream_yields_name_and_args_events(self, httpx_mock):
@@ -496,10 +496,10 @@ class TestStreamingExecuteYieldsStreamEvents:
         response.text()
         # After streaming, messages has both a TextPart and a ToolCallPart.
         parts = response.messages()[0].parts
-        assert any(isinstance(p, llm.TextPart) for p in parts)
-        assert any(isinstance(p, llm.ToolCallPart) for p in parts)
-        text_part = next(p for p in parts if isinstance(p, llm.TextPart))
-        tc_part = next(p for p in parts if isinstance(p, llm.ToolCallPart))
+        assert any(isinstance(p, llm.parts.TextPart) for p in parts)
+        assert any(isinstance(p, llm.parts.ToolCallPart) for p in parts)
+        text_part = next(p for p in parts if isinstance(p, llm.parts.TextPart))
+        tc_part = next(p for p in parts if isinstance(p, llm.parts.ToolCallPart))
         assert text_part.text == "Looking up"
         assert tc_part.name == "get_weather"
         assert tc_part.arguments == {"c": 1}
@@ -519,7 +519,7 @@ class TestAsyncStreamingExecuteYieldsStreamEvents:
         events = []
         async for event in response.astream_events():
             events.append(event)
-        assert all(isinstance(e, llm.StreamEvent) for e in events)
+        assert all(isinstance(e, llm.parts.StreamEvent) for e in events)
         assert [e.type for e in events] == ["text"] * len(events)
         assert "".join(e.chunk for e in events) == "Hello"
 
@@ -559,8 +559,8 @@ class TestReasoningTokenCount:
             llm.Message(
                 role="assistant",
                 parts=[
-                    llm.ReasoningPart(text="", redacted=True),
-                    llm.TextPart(text="Hello"),
+                    llm.parts.ReasoningPart(text="", redacted=True),
+                    llm.parts.TextPart(text="Hello"),
                 ],
             )
         ]
@@ -577,7 +577,7 @@ class TestReasoningTokenCount:
         response.text()
         parts = response.messages()[0].parts
         assert not any(
-            isinstance(p, llm.ReasoningPart) for p in parts
+            isinstance(p, llm.parts.ReasoningPart) for p in parts
         ), "should not add a redacted reasoning part when count=0"
 
 
@@ -605,7 +605,9 @@ class TestNonStreamingExecuteYieldsStreamEvents:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY, stream=False)
         events = list(response.stream_events())
-        assert events == [llm.StreamEvent(type="text", chunk="Hello", part_index=0)]
+        assert events == [
+            llm.parts.StreamEvent(type="text", chunk="Hello", part_index=0)
+        ]
         assert response.messages() == [
-            llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
+            llm.Message(role="assistant", parts=[llm.parts.TextPart(text="Hello")])
         ]

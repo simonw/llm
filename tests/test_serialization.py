@@ -79,69 +79,71 @@ class TestPartRoundTrip:
         return TypeAdapter(td)
 
     def test_text_part_matches(self):
-        d = llm.TextPart(text="hello").to_dict()
+        d = llm.parts.TextPart(text="hello").to_dict()
         self._adapter(TextPartDict).validate_python(d)
 
     def test_text_part_with_provider_metadata_matches(self):
-        d = llm.TextPart(
+        d = llm.parts.TextPart(
             text="hi", provider_metadata={"anthropic": {"cached": True}}
         ).to_dict()
         self._adapter(TextPartDict).validate_python(d)
 
     def test_reasoning_part_redacted_matches(self):
-        d = llm.ReasoningPart(text="", redacted=True).to_dict()
+        d = llm.parts.ReasoningPart(text="", redacted=True).to_dict()
         self._adapter(ReasoningPartDict).validate_python(d)
 
     def test_reasoning_part_with_signature_matches(self):
-        d = llm.ReasoningPart(
+        d = llm.parts.ReasoningPart(
             text="thinking...",
             provider_metadata={"anthropic": {"signature": "sig-abc"}},
         ).to_dict()
         self._adapter(ReasoningPartDict).validate_python(d)
 
     def test_tool_call_part_matches(self):
-        d = llm.ToolCallPart(
+        d = llm.parts.ToolCallPart(
             name="search", arguments={"q": "x"}, tool_call_id="c1"
         ).to_dict()
         self._adapter(ToolCallPartDict).validate_python(d)
 
     def test_tool_result_part_matches(self):
-        d = llm.ToolResultPart(
+        d = llm.parts.ToolResultPart(
             name="search", output="result", tool_call_id="c1"
         ).to_dict()
         self._adapter(ToolResultPartDict).validate_python(d)
 
     def test_attachment_part_with_url_matches(self):
         att = llm.Attachment(type="image/jpeg", url="https://example.com/cat.jpg")
-        d = llm.AttachmentPart(attachment=att).to_dict()
+        d = llm.parts.AttachmentPart(attachment=att).to_dict()
         self._adapter(AttachmentPartDict).validate_python(d)
 
     def test_attachment_part_with_bytes_matches(self):
         att = llm.Attachment(type="image/png", content=b"\x89PNG...")
-        d = llm.AttachmentPart(attachment=att).to_dict()
+        d = llm.parts.AttachmentPart(attachment=att).to_dict()
         self._adapter(AttachmentPartDict).validate_python(d)
 
 
 class TestPartDiscriminatedUnion:
     def test_text_part_validates_as_part_dict(self):
-        d = llm.TextPart(text="hi").to_dict()
+        d = llm.parts.TextPart(text="hi").to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_reasoning_part_validates_as_part_dict(self):
-        d = llm.ReasoningPart(text="thinking").to_dict()
+        d = llm.parts.ReasoningPart(text="thinking").to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_tool_call_part_validates_as_part_dict(self):
-        d = llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1").to_dict()
+        d = llm.parts.ToolCallPart(name="t", arguments={}, tool_call_id="c1").to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_tool_result_part_validates_as_part_dict(self):
-        d = llm.ToolResultPart(name="t", output="out", tool_call_id="c1").to_dict()
+        d = llm.parts.ToolResultPart(
+            name="t", output="out", tool_call_id="c1"
+        ).to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_attachment_part_validates_as_part_dict(self):
         att = llm.Attachment(type="image/jpeg", url="http://x")
-        d = llm.AttachmentPart(attachment=att).to_dict()
+        d = llm.parts.AttachmentPart(attachment=att).to_dict()
         TypeAdapter(PartDict).validate_python(d)
 
     def test_unknown_type_rejected(self):
@@ -158,12 +160,12 @@ class TestMessageDictRoundTrip:
         m = llm.Message(
             role="assistant",
             parts=[
-                llm.ReasoningPart(
+                llm.parts.ReasoningPart(
                     text="thinking",
                     provider_metadata={"anthropic": {"signature": "s"}},
                 ),
-                llm.TextPart(text="answer"),
-                llm.ToolCallPart(
+                llm.parts.TextPart(text="answer"),
+                llm.parts.ToolCallPart(
                     name="search",
                     arguments={"q": "x"},
                     tool_call_id="c1",
@@ -174,7 +176,7 @@ class TestMessageDictRoundTrip:
 
     def test_tool_role_message_with_results_matches(self):
         m = llm.tool_message(
-            llm.ToolResultPart(name="s", output="r", tool_call_id="c1"),
+            llm.parts.ToolResultPart(name="s", output="r", tool_call_id="c1"),
         )
         TypeAdapter(MessageDict).validate_python(m.to_dict())
 
@@ -191,13 +193,13 @@ class TestResponseDictRoundTrip:
     def test_response_with_reasoning_matches(self, mock_model):
         mock_model.enqueue(
             [
-                llm.StreamEvent(
+                llm.parts.StreamEvent(
                     type="reasoning",
                     chunk="thinking",
                     part_index=0,
                     provider_metadata={"anthropic": {"signature": "s"}},
                 ),
-                llm.StreamEvent(type="text", chunk="answer", part_index=1),
+                llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
             ]
         )
         r = mock_model.prompt("q")
@@ -264,31 +266,31 @@ class TestAnnotations:
     def test_text_part_to_dict_annotation(self):
         import typing
 
-        hints = typing.get_type_hints(llm.TextPart.to_dict)
+        hints = typing.get_type_hints(llm.parts.TextPart.to_dict)
         assert hints["return"] is TextPartDict
 
     def test_reasoning_part_to_dict_annotation(self):
         import typing
 
-        hints = typing.get_type_hints(llm.ReasoningPart.to_dict)
+        hints = typing.get_type_hints(llm.parts.ReasoningPart.to_dict)
         assert hints["return"] is ReasoningPartDict
 
     def test_tool_call_part_to_dict_annotation(self):
         import typing
 
-        hints = typing.get_type_hints(llm.ToolCallPart.to_dict)
+        hints = typing.get_type_hints(llm.parts.ToolCallPart.to_dict)
         assert hints["return"] is ToolCallPartDict
 
     def test_tool_result_part_to_dict_annotation(self):
         import typing
 
-        hints = typing.get_type_hints(llm.ToolResultPart.to_dict)
+        hints = typing.get_type_hints(llm.parts.ToolResultPart.to_dict)
         assert hints["return"] is ToolResultPartDict
 
     def test_attachment_part_to_dict_annotation(self):
         import typing
 
-        hints = typing.get_type_hints(llm.AttachmentPart.to_dict)
+        hints = typing.get_type_hints(llm.parts.AttachmentPart.to_dict)
         assert hints["return"] is AttachmentPartDict
 
     def test_message_to_dict_annotation(self):

@@ -111,7 +111,7 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
     msgs = await rehydrated.messages()
     assert len(msgs) == 1
     assert msgs[0].role == "assistant"
-    assert isinstance(msgs[0].parts[0], llm.TextPart)
+    assert isinstance(msgs[0].parts[0], llm.parts.TextPart)
 
 
 # ---- AsyncConversation follow-up via load_conversation -------------
