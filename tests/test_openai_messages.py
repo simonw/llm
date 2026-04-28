@@ -545,19 +545,7 @@ def _text_stream_with_reasoning_usage(reasoning_tokens):
 
 
 class TestReasoningTokenCount:
-    def test_reasoning_token_count_recorded(self, httpx_mock):
-        httpx_mock.add_response(
-            method="POST",
-            url="https://api.openai.com/v1/chat/completions",
-            stream=IteratorStream(_text_stream_with_reasoning_usage(200)),
-            headers={"Content-Type": "text/event-stream"},
-        )
-        model = llm.get_model("gpt-4o-mini")
-        response = model.prompt("hi", key=API_KEY)
-        response.text()
-        assert response._reasoning_token_count == 200
-
-    def test_reasoning_part_prepended_to_messages(self, httpx_mock):
+    def test_redacted_reasoning_part_emitted_when_count_present(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
@@ -571,7 +559,7 @@ class TestReasoningTokenCount:
             llm.Message(
                 role="assistant",
                 parts=[
-                    llm.ReasoningPart(text="", redacted=True, token_count=150),
+                    llm.ReasoningPart(text="", redacted=True),
                     llm.TextPart(text="Hello"),
                 ],
             )
@@ -587,8 +575,6 @@ class TestReasoningTokenCount:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY)
         response.text()
-        # Either the attribute isn't set, or it's 0 — either way no
-        # redacted ReasoningPart in the assembled messages.
         parts = response.messages[0].parts
         assert not any(
             isinstance(p, llm.ReasoningPart) for p in parts

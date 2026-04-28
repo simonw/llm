@@ -72,7 +72,6 @@ class Part:
             return ReasoningPart(
                 text=d["text"],
                 redacted=d.get("redacted", False),
-                token_count=d.get("token_count"),
                 provider_metadata=d.get("provider_metadata"),
             )
         if d["type"] == "tool_call":
@@ -121,22 +120,22 @@ class TextPart(Part):
 class ReasoningPart(Part):
     """Reasoning/thinking tokens from the model.
 
-    `redacted=True, text=""` represents the opaque-token-count case
-    (OpenAI GPT-5 series, Gemini) where the provider reports only a
-    count, not content.
+    `redacted=True, text=""` is the marker for the opaque-reasoning
+    case (OpenAI GPT-5 series, Gemini without `includeThoughts`) where
+    the provider reports that reasoning happened but withholds the
+    content. The actual token total lives on response.token_details
+    (e.g. `reasoning_tokens`); the Part only records the structural
+    fact that reasoning occurred.
     """
 
     text: str = ""
     redacted: bool = False
-    token_count: Optional[int] = None
     provider_metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> ReasoningPartDict:
         d: Dict[str, Any] = {"type": "reasoning", "text": self.text}
         if self.redacted:
             d["redacted"] = True
-        if self.token_count is not None:
-            d["token_count"] = self.token_count
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
         return d  # type: ignore[return-value]
@@ -324,6 +323,13 @@ class StreamEvent:
     grouping (e.g. forcing a single TextPart across non-adjacent text
     bursts).
 
+    `redacted=True` (only meaningful on `type="reasoning"` events with
+    an empty `chunk`) signals that opaque reasoning happened — content
+    withheld by the provider, token total on response.token_details.
+    The framework hoists redacted reasoning Parts to the start of the
+    assembled message regardless of when they were emitted in the
+    stream, so UIs can render them before the visible content.
+
     `provider_metadata` carries opaque provider data (Anthropic
     `signature`, Gemini `thoughtSignature`, OpenAI `encrypted_content`)
     that must be echoed back on the next request; the framework merges
@@ -341,5 +347,6 @@ class StreamEvent:
     tool_call_id: Optional[str] = None
     server_executed: bool = False
     tool_name: Optional[str] = None
+    redacted: bool = False
     provider_metadata: Optional[Dict[str, Any]] = None
     message_index: int = 0

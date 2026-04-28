@@ -38,7 +38,6 @@ class TestRequiredOptionalKeys:
         assert ReasoningPartDict.__required_keys__ == {"type", "text"}
         assert ReasoningPartDict.__optional_keys__ == {
             "redacted",
-            "token_count",
             "provider_metadata",
         }
 
@@ -90,7 +89,7 @@ class TestPartRoundTrip:
         self._adapter(TextPartDict).validate_python(d)
 
     def test_reasoning_part_redacted_matches(self):
-        d = llm.ReasoningPart(text="", redacted=True, token_count=150).to_dict()
+        d = llm.ReasoningPart(text="", redacted=True).to_dict()
         self._adapter(ReasoningPartDict).validate_python(d)
 
     def test_reasoning_part_with_signature_matches(self):

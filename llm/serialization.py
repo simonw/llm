@@ -81,10 +81,10 @@ class TextPartDict(TypedDict):
 class ReasoningPartDict(TypedDict):
     type: Literal["reasoning"]
     text: str
-    # Redacted reasoning: text is "" and token_count carries the opaque
-    # count reported by the provider (OpenAI GPT-5, Gemini thinking).
+    # `redacted=True` with `text=""` is the marker for opaque
+    # reasoning (OpenAI GPT-5, Gemini without thoughts). The token
+    # total lives on response usage, not on the Part.
     redacted: NotRequired[bool]
-    token_count: NotRequired[int]
     provider_metadata: NotRequired[Dict[str, Any]]
 
 

@@ -1024,7 +1024,7 @@ class Chat(_Shared, KeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
-        # Capture the reasoning token count BEFORE set_usage runs —
+        # Read reasoning_tokens from usage BEFORE set_usage runs —
         # set_usage pops top-level keys and passes the rest through
         # simplify_usage_dict, which strips zero-valued entries.
         if usage:
@@ -1032,7 +1032,7 @@ class Chat(_Shared, KeyModel):
                 "reasoning_tokens", 0
             )
             if reasoning_tokens:
-                response._reasoning_token_count = reasoning_tokens
+                yield StreamEvent(type="reasoning", chunk="", redacted=True)
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -1145,13 +1145,13 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
-        # See sync Chat.execute: capture reasoning before set_usage mutates.
+        # See sync Chat.execute: read reasoning before set_usage mutates.
         if usage:
             reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
                 "reasoning_tokens", 0
             )
             if reasoning_tokens:
-                response._reasoning_token_count = reasoning_tokens
+                yield StreamEvent(type="reasoning", chunk="", redacted=True)
         self.set_usage(response, usage)
         response._prompt_json = redact_data({"messages": messages})
 

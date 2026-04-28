@@ -27,15 +27,20 @@ class TestReasoningPart:
         assert restored == part
         assert restored.text == "Let me think..."
         assert restored.redacted is False
-        assert restored.token_count is None
 
     def test_roundtrip_redacted(self):
-        part = llm.ReasoningPart(text="", redacted=True, token_count=150)
+        part = llm.ReasoningPart(text="", redacted=True)
         d = part.to_dict()
         assert d["redacted"] is True
-        assert d["token_count"] == 150
+        assert "token_count" not in d
         restored = llm.Part.from_dict(d)
         assert restored == part
+
+    def test_no_token_count_field(self):
+        # token_count was removed: opaque token totals live on
+        # response.token_details, not on the Part.
+        with pytest.raises(TypeError):
+            llm.ReasoningPart(text="", redacted=True, token_count=150)
 
 
 class TestToolCallPart:
@@ -460,20 +465,46 @@ class TestStreamEventsFromStreamEventPlugin:
         part = response.messages[0].parts[0]
         assert part.provider_metadata == {"anthropic": {"signature": "final"}}
 
-    def test_reasoning_token_count_prepends_redacted_part(self, mock_model):
-        # Plugin reports an opaque reasoning token count — framework
-        # prepends a ReasoningPart(redacted=True, token_count=N, text="").
-        class CountingModel(type(mock_model)):
-            def execute(self, prompt, stream, response, conversation):
-                response._reasoning_token_count = 200
-                yield llm.StreamEvent(type="text", chunk="hi", part_index=0)
-
-        m = CountingModel()
-        response = m.prompt("x")
+    def test_redacted_reasoning_event_emits_marker_part(self, mock_model):
+        # A reasoning StreamEvent with redacted=True yields a
+        # ReasoningPart(text="", redacted=True) marker — opaque token
+        # totals live on response.token_details, not on the Part.
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="", redacted=True),
+            llm.StreamEvent(type="text", chunk="hi"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
         response.text()
         parts = response.messages[0].parts
-        assert parts[0] == llm.ReasoningPart(text="", redacted=True, token_count=200)
-        assert parts[1] == llm.TextPart(text="hi")
+        assert parts == [
+            llm.ReasoningPart(text="", redacted=True),
+            llm.TextPart(text="hi"),
+        ]
+
+    def test_redacted_reasoning_hoisted_to_start_when_emitted_late(
+        self, mock_model
+    ):
+        # Plugins typically learn opaque reasoning happened only when
+        # the final usage chunk arrives, so they emit the marker last.
+        # The framework hoists redacted reasoning Parts to the start of
+        # the assembled message so UIs can render them before content.
+        events = [
+            llm.StreamEvent(type="text", chunk="hello"),
+            llm.StreamEvent(type="reasoning", chunk="", redacted=True),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.ReasoningPart(text="", redacted=True),
+            llm.TextPart(text="hello"),
+        ]
+
+    def test_redacted_reasoning_event_default_redacted_is_false(self):
+        ev = llm.StreamEvent(type="reasoning", chunk="thinking")
+        assert ev.redacted is False
 
 
 class TestPartIndexAutoAllocation:
@@ -637,6 +668,29 @@ class TestPartIndexAutoAllocation:
             llm.ReasoningPart(text="first"),
             llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1"),
             llm.ReasoningPart(text="second"),
+        ]
+
+    def test_parallel_tool_calls_without_id_each_get_own_part(self, mock_model):
+        # Gemini emits multiple functionCall parts back-to-back without
+        # a tool_call_id. Each tool_call_name must allocate a fresh
+        # part — otherwise the N tool calls collapse into one with
+        # concatenated names and args.
+        events = [
+            llm.StreamEvent(type="tool_call_name", chunk="store_fact"),
+            llm.StreamEvent(type="tool_call_args", chunk='{"fact":"a"}'),
+            llm.StreamEvent(type="tool_call_name", chunk="store_fact"),
+            llm.StreamEvent(type="tool_call_args", chunk='{"fact":"b"}'),
+            llm.StreamEvent(type="tool_call_name", chunk="store_fact"),
+            llm.StreamEvent(type="tool_call_args", chunk='{"fact":"c"}'),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.ToolCallPart(name="store_fact", arguments={"fact": "a"}),
+            llm.ToolCallPart(name="store_fact", arguments={"fact": "b"}),
+            llm.ToolCallPart(name="store_fact", arguments={"fact": "c"}),
         ]
 
     def test_explicit_part_index_still_works(self, mock_model):
@@ -1526,13 +1580,13 @@ class TestClientSerializationRoundTrip:
         assert restored == messages
 
     def test_roundtrip_preserves_redacted_reasoning(self, mock_model):
-        """Redacted reasoning parts (opaque token counts) survive
-        round-trip — needed for accurate rendering of 'this turn used
-        N reasoning tokens'."""
+        """The redacted=True marker on a ReasoningPart survives
+        round-trip — UIs use it to show that opaque reasoning happened
+        in this turn (the actual token count lives on response usage)."""
         msg = llm.Message(
             role="assistant",
             parts=[
-                llm.ReasoningPart(text="", redacted=True, token_count=150),
+                llm.ReasoningPart(text="", redacted=True),
                 llm.TextPart(text="result"),
             ],
         )

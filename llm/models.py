@@ -869,11 +869,6 @@ class _BaseResponse:
         self._auto_last_index: Optional[int] = None
         self._auto_last_family: Optional[str] = None
         self._auto_tool_id_to_index: Dict[str, int] = {}
-        # Plugins set this when the provider reports an opaque reasoning
-        # token count (no streamed reasoning text). _build_parts()
-        # prepends a ReasoningPart(redacted=True, token_count=N) when
-        # non-zero.
-        self._reasoning_token_count: int = 0
         self._done = False
         self._tool_calls: List[ToolCall] = []
         self.response_json: Optional[Dict[str, Any]] = None
@@ -942,10 +937,14 @@ class _BaseResponse:
                 self._auto_last_index = new_idx
                 self._auto_last_family = "tool_call"
                 return
-            # No tool_call_id — fall back to grouping with the prior
-            # tool-call event if one is current.
+            # No tool_call_id — providers like Gemini omit the id on
+            # parallel tool calls. tool_call_args events glue onto the
+            # most recent tool-call index; a fresh tool_call_name
+            # always starts a new part (otherwise N parallel tool calls
+            # collapse into one with concatenated names and args).
             if (
-                self._auto_last_family == "tool_call"
+                event.type == "tool_call_args"
+                and self._auto_last_family == "tool_call"
                 and self._auto_last_index is not None
             ):
                 event.part_index = self._auto_last_index
@@ -1039,16 +1038,6 @@ class _BaseResponse:
                         tool_call_id=tc.tool_call_id,
                     )
                 )
-            reasoning_token_count = getattr(self, "_reasoning_token_count", 0)
-            if reasoning_token_count:
-                fallback_parts.insert(
-                    0,
-                    ReasoningPart(
-                        text="",
-                        redacted=True,
-                        token_count=reasoning_token_count,
-                    ),
-                )
             return fallback_parts
 
         # Group events by their (resolved) part_index, preserving the
@@ -1091,8 +1080,15 @@ class _BaseResponse:
                     parts.append(TextPart(text=text, provider_metadata=pm_merged))
             elif fam_first == "reasoning":
                 text = "".join(e.chunk for e in evs)
-                if text:
-                    parts.append(ReasoningPart(text=text, provider_metadata=pm_merged))
+                redacted = any(e.redacted for e in evs)
+                if text or redacted:
+                    parts.append(
+                        ReasoningPart(
+                            text=text,
+                            redacted=redacted,
+                            provider_metadata=pm_merged,
+                        )
+                    )
             elif fam_first == "tool_call":
                 tool_name = "".join(e.chunk for e in evs if e.type == "tool_call_name")
                 args_str = "".join(e.chunk for e in evs if e.type == "tool_call_args")
@@ -1129,15 +1125,21 @@ class _BaseResponse:
                     )
                 )
 
-        if self._reasoning_token_count:
-            parts.insert(
-                0,
-                ReasoningPart(
-                    text="",
-                    redacted=True,
-                    token_count=self._reasoning_token_count,
-                ),
-            )
+        # Hoist redacted reasoning Parts to the start of the assembled
+        # message. Plugins typically emit them late (when usage arrives
+        # in the final chunk), but UIs render reasoning before content,
+        # so the framework reorders. Relative order among redacted
+        # Parts is preserved.
+        redacted_parts = [
+            p for p in parts if isinstance(p, ReasoningPart) and p.redacted
+        ]
+        if redacted_parts:
+            other_parts = [
+                p
+                for p in parts
+                if not (isinstance(p, ReasoningPart) and p.redacted)
+            ]
+            parts = redacted_parts + other_parts
 
         return parts
 
