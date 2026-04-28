@@ -934,12 +934,10 @@ def test_expand_fragment_markdown(fragments_fixture):
 
 def test_logs_tools(logs_db):
     runner = CliRunner()
-    code = textwrap.dedent(
-        """
+    code = textwrap.dedent("""
     def demo():
         return "one\\ntwo\\nthree"
-    """
-    )
+    """)
     result1 = runner.invoke(
         cli,
         [

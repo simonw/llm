@@ -464,8 +464,7 @@ class GreetingsPlugin:
 def test_tools_in_templates(
     source, expected_tool_success, expected_functions_success, httpx_mock, tmpdir
 ):
-    template_yaml = textwrap.dedent(
-        """
+    template_yaml = textwrap.dedent("""
     name: test
     tools:
     - llm_version
@@ -473,8 +472,7 @@ def test_tools_in_templates(
     functions: |
       def demo():
           return "Demo"
-    """
-    )
+    """)
     args = []
 
     def before():
