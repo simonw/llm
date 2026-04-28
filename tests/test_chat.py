@@ -60,6 +60,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
         {
             "id": ANY,
@@ -78,6 +79,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
     ]
     # Now continue that conversation
@@ -126,6 +128,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         }
     ]
 
@@ -170,6 +173,7 @@ def test_chat_system(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         }
     ]
 
@@ -213,6 +217,7 @@ def test_chat_options(mock_model, logs_db, user_path):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
         {
             "id": ANY,
@@ -231,6 +236,7 @@ def test_chat_options(mock_model, logs_db, user_path):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
     ]
 
@@ -308,11 +314,13 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_tools(logs_db):
     runner = CliRunner()
-    functions = textwrap.dedent("""
+    functions = textwrap.dedent(
+        """
     def upper(text: str) -> str:
         "Convert text to upper case"
         return text.upper()                         
-    """)
+    """
+    )
     result = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "echo", "--functions", functions],

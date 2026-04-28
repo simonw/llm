@@ -1345,6 +1345,16 @@ class _BaseResponse:
 
         response_text = self.text_or_raise()
         replacements[f"r:{response_id}"] = response_text
+        # Concatenate visible reasoning text from the assembled
+        # ReasoningPart entries; redacted markers contribute nothing.
+        from .parts import ReasoningPart
+
+        reasoning_text = "".join(
+            p.text
+            for m in self._messages_now()
+            for p in m.parts
+            if isinstance(p, ReasoningPart) and p.text
+        )
         json_data = self.json()
 
         response = {
@@ -1359,6 +1369,7 @@ class _BaseResponse:
                 if value is not None
             },
             "response": response_text,
+            "reasoning": reasoning_text or None,
             "response_json": condense_json(json_data, replacements),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
