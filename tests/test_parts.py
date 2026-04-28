@@ -476,6 +476,204 @@ class TestStreamEventsFromStreamEventPlugin:
         assert parts[1] == llm.TextPart(text="hi")
 
 
+class TestPartIndexAutoAllocation:
+    """When part_index is None (the default), the framework groups
+    events into Parts using same-family adjacency for text/reasoning
+    and tool_call_id for tool calls."""
+
+    def test_streamevent_part_index_defaults_to_none(self):
+        ev = llm.StreamEvent(type="text", chunk="hi")
+        assert ev.part_index is None
+
+    def test_consecutive_text_concatenates_into_one_part(self, mock_model):
+        events = [
+            llm.StreamEvent(type="text", chunk="hello "),
+            llm.StreamEvent(type="text", chunk="world"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages[0].parts == [llm.TextPart(text="hello world")]
+
+    def test_text_then_reasoning_splits_into_two_parts(self, mock_model):
+        events = [
+            llm.StreamEvent(type="text", chunk="hello"),
+            llm.StreamEvent(type="reasoning", chunk="thinking"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages[0].parts == [
+            llm.TextPart(text="hello"),
+            llm.ReasoningPart(text="thinking"),
+        ]
+
+    def test_text_tool_call_text_produces_three_parts(self, mock_model):
+        events = [
+            llm.StreamEvent(type="text", chunk="before"),
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="search",
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='{"q": "x"}',
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(type="text", chunk="after"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages[0].parts == [
+            llm.TextPart(text="before"),
+            llm.ToolCallPart(name="search", arguments={"q": "x"}, tool_call_id="c1"),
+            llm.TextPart(text="after"),
+        ]
+
+    def test_tool_call_groups_by_tool_call_id(self, mock_model):
+        events = [
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="search",
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='{"q":',
+                tool_call_id="c1",
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='"weather"}',
+                tool_call_id="c1",
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages[0].parts == [
+            llm.ToolCallPart(
+                name="search",
+                arguments={"q": "weather"},
+                tool_call_id="c1",
+            )
+        ]
+
+    def test_parallel_tool_calls_interleaved_by_id(self, mock_model):
+        # Two tool calls whose args interleave on the wire — must
+        # still produce two distinct ToolCallParts grouped by id.
+        events = [
+            llm.StreamEvent(type="tool_call_name", chunk="search", tool_call_id="A"),
+            llm.StreamEvent(type="tool_call_name", chunk="lookup", tool_call_id="B"),
+            llm.StreamEvent(type="tool_call_args", chunk='{"q":"a"}', tool_call_id="A"),
+            llm.StreamEvent(type="tool_call_args", chunk='{"k":"b"}', tool_call_id="B"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.ToolCallPart(name="search", arguments={"q": "a"}, tool_call_id="A"),
+            llm.ToolCallPart(name="lookup", arguments={"k": "b"}, tool_call_id="B"),
+        ]
+
+    def test_tool_result_is_always_own_part(self, mock_model):
+        events = [
+            llm.StreamEvent(
+                type="tool_call_name",
+                chunk="web_search",
+                tool_call_id="c1",
+                server_executed=True,
+            ),
+            llm.StreamEvent(
+                type="tool_call_args",
+                chunk='{"q":"x"}',
+                tool_call_id="c1",
+                server_executed=True,
+            ),
+            llm.StreamEvent(
+                type="tool_result",
+                chunk="results...",
+                tool_call_id="c1",
+                tool_name="web_search",
+                server_executed=True,
+            ),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.ToolCallPart(
+                name="web_search",
+                arguments={"q": "x"},
+                tool_call_id="c1",
+                server_executed=True,
+            ),
+            llm.ToolResultPart(
+                name="web_search",
+                output="results...",
+                tool_call_id="c1",
+                server_executed=True,
+            ),
+        ]
+
+    def test_two_reasoning_blocks_split_by_tool_call(self, mock_model):
+        # Some providers emit two thinking blocks separated by a tool
+        # call — those should yield two ReasoningParts, not one.
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="first"),
+            llm.StreamEvent(type="tool_call_name", chunk="t", tool_call_id="c1"),
+            llm.StreamEvent(type="tool_call_args", chunk="{}", tool_call_id="c1"),
+            llm.StreamEvent(type="reasoning", chunk="second"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.ReasoningPart(text="first"),
+            llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1"),
+            llm.ReasoningPart(text="second"),
+        ]
+
+    def test_explicit_part_index_still_works(self, mock_model):
+        # Back-compat: plugins that pass explicit part_index should
+        # behave exactly as before.
+        events = [
+            llm.StreamEvent(type="reasoning", chunk="t", part_index=0),
+            llm.StreamEvent(type="text", chunk="hi", part_index=1),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        assert response.messages[0].parts == [
+            llm.ReasoningPart(text="t"),
+            llm.TextPart(text="hi"),
+        ]
+
+    def test_mix_explicit_zero_and_none_for_text_concatenates(self, mock_model):
+        # Forcing a single TextPart across non-adjacent text bursts:
+        # plugin pins explicit part_index=0 on the wraparound text
+        # events, and the tool call in between gets None (auto).
+        events = [
+            llm.StreamEvent(type="text", chunk="before ", part_index=0),
+            llm.StreamEvent(type="tool_call_name", chunk="t", tool_call_id="c1"),
+            llm.StreamEvent(type="tool_call_args", chunk="{}", tool_call_id="c1"),
+            llm.StreamEvent(type="text", chunk="after", part_index=0),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("hi")
+        response.text()
+        parts = response.messages[0].parts
+        assert parts == [
+            llm.TextPart(text="before after"),
+            llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1"),
+        ]
+
+
 class TestStreamEventsLiveDuringStreaming:
     """Client code sees events arrive before the response is done"""
 

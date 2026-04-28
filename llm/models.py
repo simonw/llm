@@ -851,10 +851,24 @@ class _BaseResponse:
         self._key = key
         self._chunks: List[str] = []
         # Every StreamEvent ever yielded by execute(), in order. Plain
-        # str yields are wrapped as StreamEvent(type="text", part_index=0)
-        # so this buffer is the single source of truth for replay and
-        # for assembling response.messages.
+        # str yields are wrapped as text events (with part_index resolved
+        # by _resolve_part_index) so this buffer is the single source of
+        # truth for replay and for assembling response.messages.
         self._stream_events: List[Any] = []
+        # Auto-allocator state for resolving StreamEvent.part_index=None.
+        # Plugins yield events with part_index=None (the default) and
+        # the framework assigns concrete integers based on context:
+        # consecutive same-family text/reasoning events concatenate,
+        # tool calls group by tool_call_id, and tool_result is always
+        # its own part. _auto_index_max tracks the highest index seen
+        # (explicit or allocated); _auto_last_index / _auto_last_family
+        # remember the previously-resolved event so same-family runs
+        # share an index; _auto_tool_id_to_index maps known tool ids to
+        # their assigned index for parallel-tool-call grouping.
+        self._auto_index_max: int = -1
+        self._auto_last_index: Optional[int] = None
+        self._auto_last_family: Optional[str] = None
+        self._auto_tool_id_to_index: Dict[str, int] = {}
         # Plugins set this when the provider reports an opaque reasoning
         # token count (no streamed reasoning text). _build_parts()
         # prepends a ReasoningPart(redacted=True, token_count=N) when
@@ -884,24 +898,103 @@ class _BaseResponse:
         "Overridden by Response / AsyncResponse — declared here for type checkers."
         raise NotImplementedError
 
+    @staticmethod
+    def _event_family(event_type: str) -> str:
+        if event_type in ("tool_call_name", "tool_call_args"):
+            return "tool_call"
+        return event_type
+
+    def _resolve_part_index(self, event):
+        """Mutate event.part_index in place when the plugin left it None.
+
+        Resolution rules: consecutive same-family text/reasoning events
+        share an index; tool-call events are grouped by tool_call_id;
+        tool_result always allocates a fresh index. Explicit indices
+        pass through but update the allocator's bookkeeping so future
+        None resolutions avoid collisions.
+        """
+        fam = self._event_family(event.type)
+
+        if event.part_index is not None:
+            if event.part_index > self._auto_index_max:
+                self._auto_index_max = event.part_index
+            if (
+                event.type in ("tool_call_name", "tool_call_args")
+                and event.tool_call_id
+            ):
+                self._auto_tool_id_to_index[event.tool_call_id] = event.part_index
+            self._auto_last_index = event.part_index
+            self._auto_last_family = fam
+            return
+
+        if event.type in ("tool_call_name", "tool_call_args"):
+            if event.tool_call_id:
+                existing = self._auto_tool_id_to_index.get(event.tool_call_id)
+                if existing is not None:
+                    event.part_index = existing
+                    self._auto_last_index = existing
+                    self._auto_last_family = "tool_call"
+                    return
+                self._auto_index_max += 1
+                new_idx = self._auto_index_max
+                self._auto_tool_id_to_index[event.tool_call_id] = new_idx
+                event.part_index = new_idx
+                self._auto_last_index = new_idx
+                self._auto_last_family = "tool_call"
+                return
+            # No tool_call_id — fall back to grouping with the prior
+            # tool-call event if one is current.
+            if (
+                self._auto_last_family == "tool_call"
+                and self._auto_last_index is not None
+            ):
+                event.part_index = self._auto_last_index
+                return
+            self._auto_index_max += 1
+            new_idx = self._auto_index_max
+            event.part_index = new_idx
+            self._auto_last_index = new_idx
+            self._auto_last_family = "tool_call"
+            return
+
+        if event.type == "tool_result":
+            self._auto_index_max += 1
+            new_idx = self._auto_index_max
+            event.part_index = new_idx
+            self._auto_last_index = new_idx
+            self._auto_last_family = "tool_result"
+            return
+
+        # text / reasoning: same family as previous → reuse, else new.
+        if self._auto_last_family == fam and self._auto_last_index is not None:
+            event.part_index = self._auto_last_index
+            return
+        self._auto_index_max += 1
+        new_idx = self._auto_index_max
+        event.part_index = new_idx
+        self._auto_last_index = new_idx
+        self._auto_last_family = fam
+
     def _process_chunk(self, chunk):
         """Normalize a chunk from execute() into a StreamEvent and return
         the text str (or None) that __iter__ should yield.
 
         Plain str yields from legacy plugins are wrapped as text events
-        at part_index=0. Side effects: populates self._stream_events and
-        self._chunks.
+        with an auto-allocated part_index. Side effects: populates
+        self._stream_events and self._chunks.
         """
         from .parts import StreamEvent
 
         if isinstance(chunk, StreamEvent):
+            self._resolve_part_index(chunk)
             self._stream_events.append(chunk)
             if chunk.type == "text":
                 self._chunks.append(chunk.chunk)
                 return chunk.chunk
             return None
         # Legacy plain-str plugin.
-        event = StreamEvent(type="text", chunk=chunk, part_index=0)
+        event = StreamEvent(type="text", chunk=chunk)
+        self._resolve_part_index(event)
         self._stream_events.append(event)
         self._chunks.append(chunk)
         return chunk
@@ -958,112 +1051,83 @@ class _BaseResponse:
                 )
             return fallback_parts
 
-        def family(t: str) -> str:
-            if t in ("tool_call_name", "tool_call_args"):
-                return "tool_call"
-            return t
+        # Group events by their (resolved) part_index, preserving the
+        # order in which each index was first seen. Then build one Part
+        # per group. This handles non-adjacent same-index events (e.g.
+        # text → tool_call → text where the plugin pinned both text
+        # bursts to part_index=0) by merging them into one Part.
+        groups: Dict[int, List[Any]] = {}
+        order: List[int] = []
+        for event in self._stream_events:
+            pi = event.part_index
+            if pi not in groups:
+                groups[pi] = []
+                order.append(pi)
+            groups[pi].append(event)
 
         parts: List[Any] = []
-        current_index: Optional[int] = None
-        current_family: Optional[str] = None
-        text_buf: List[str] = []
-        tool_name: Optional[str] = None
-        tool_args_buf: List[str] = []
-        tool_call_id: Optional[str] = None
-        server_executed = False
-        tool_result_name: Optional[str] = None
-        pm_merged: Optional[Dict[str, Any]] = None
+        for pi in order:
+            evs = groups[pi]
+            fam_first = self._event_family(evs[0].type)
+            for e in evs:
+                if self._event_family(e.type) != fam_first:
+                    raise ValueError(
+                        f"StreamEvent type {e.type!r} is incompatible with "
+                        f"prior type at part_index={pi}. "
+                        "Allocate a new part_index for a different content type."
+                    )
 
-        def finalize():
-            nonlocal pm_merged
-            if current_family is None:
-                return
-            if current_family == "text":
-                text = "".join(text_buf)
+            pm_merged: Optional[Dict[str, Any]] = None
+            for e in evs:
+                if e.provider_metadata:
+                    merged = dict(pm_merged) if pm_merged else {}
+                    for k, v in e.provider_metadata.items():
+                        merged[k] = v
+                    pm_merged = merged
+
+            if fam_first == "text":
+                text = "".join(e.chunk for e in evs)
                 if text:
                     parts.append(TextPart(text=text, provider_metadata=pm_merged))
-            elif current_family == "reasoning":
-                text = "".join(text_buf)
+            elif fam_first == "reasoning":
+                text = "".join(e.chunk for e in evs)
                 if text:
                     parts.append(ReasoningPart(text=text, provider_metadata=pm_merged))
-            elif current_family == "tool_call":
-                args_str = "".join(tool_args_buf)
+            elif fam_first == "tool_call":
+                tool_name = "".join(e.chunk for e in evs if e.type == "tool_call_name")
+                args_str = "".join(e.chunk for e in evs if e.type == "tool_call_args")
                 try:
                     arguments = json.loads(args_str) if args_str else {}
                 except json.JSONDecodeError:
                     arguments = {"_raw": args_str}
+                tool_call_id = next(
+                    (e.tool_call_id for e in evs if e.tool_call_id), None
+                )
+                server_executed = any(e.server_executed for e in evs)
                 parts.append(
                     ToolCallPart(
-                        name=tool_name or "",
+                        name=tool_name,
                         arguments=arguments,
                         tool_call_id=tool_call_id,
                         server_executed=server_executed,
                         provider_metadata=pm_merged,
                     )
                 )
-            elif current_family == "tool_result":
+            elif fam_first == "tool_result":
+                tool_result_name = next((e.tool_name for e in evs if e.tool_name), "")
+                tool_call_id = next(
+                    (e.tool_call_id for e in evs if e.tool_call_id), None
+                )
+                server_executed = any(e.server_executed for e in evs)
                 parts.append(
                     ToolResultPart(
-                        name=tool_result_name or "",
-                        output="".join(text_buf),
+                        name=tool_result_name,
+                        output="".join(e.chunk for e in evs),
                         tool_call_id=tool_call_id,
                         server_executed=server_executed,
                         provider_metadata=pm_merged,
                     )
                 )
-
-        for event in self._stream_events:
-            ev_family = family(event.type)
-            if event.part_index != current_index:
-                finalize()
-                current_index = event.part_index
-                current_family = ev_family
-                text_buf = []
-                tool_name = None
-                tool_args_buf = []
-                tool_call_id = None
-                server_executed = False
-                tool_result_name = None
-                pm_merged = None
-            elif current_family is not None and ev_family != current_family:
-                raise ValueError(
-                    f"StreamEvent type {event.type!r} is incompatible with "
-                    f"prior type at part_index={event.part_index}. "
-                    "Allocate a new part_index for a different content type."
-                )
-
-            if event.type == "text":
-                text_buf.append(event.chunk)
-            elif event.type == "reasoning":
-                text_buf.append(event.chunk)
-            elif event.type == "tool_call_name":
-                tool_name = (tool_name or "") + event.chunk
-                if event.tool_call_id:
-                    tool_call_id = event.tool_call_id
-                if event.server_executed:
-                    server_executed = True
-            elif event.type == "tool_call_args":
-                tool_args_buf.append(event.chunk)
-                if event.tool_call_id and tool_call_id is None:
-                    tool_call_id = event.tool_call_id
-                if event.server_executed:
-                    server_executed = True
-            elif event.type == "tool_result":
-                text_buf.append(event.chunk)
-                if event.tool_call_id and tool_call_id is None:
-                    tool_call_id = event.tool_call_id
-                if event.server_executed:
-                    server_executed = True
-                if event.tool_name:
-                    tool_result_name = event.tool_name
-
-            if event.provider_metadata:
-                merged = dict(pm_merged) if pm_merged else {}
-                for k, v in event.provider_metadata.items():
-                    merged[k] = v
-                pm_merged = merged
-
-        finalize()
 
         if self._reasoning_token_count:
             parts.insert(

@@ -258,7 +258,7 @@ The 0.31 alpha introduced a richer contract for plugins than "yield strings":
 2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn.
 3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, then echo it back on the next request.
 
-**Backward compatibility is guaranteed.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=..., part_index=0)` internally.
+**Backward compatibility is guaranteed.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=...)` internally.
 
 ### Yielding StreamEvent from execute()
 
@@ -271,71 +271,53 @@ def execute(self, prompt, stream, response, conversation, key=None):
 
     for chunk in provider_sdk.stream(...):
         if chunk.type == "text":
-            yield StreamEvent(type="text", chunk=chunk.text, part_index=0)
+            yield StreamEvent(type="text", chunk=chunk.text)
         elif chunk.type == "thinking":
-            yield StreamEvent(type="reasoning", chunk=chunk.text, part_index=0)
+            yield StreamEvent(type="reasoning", chunk=chunk.text)
 ```
 
-A `StreamEvent` has five frequently-used fields:
+That's the whole pattern for most plugins. The framework figures out which events group into which Part.
+
+A `StreamEvent` has four frequently-used fields:
 
 - **`type`** — one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`.
 - **`chunk`** — the text fragment. For tool calls this is the tool name (for `tool_call_name`) or a partial JSON string (for `tool_call_args`).
-- **`part_index`** — a monotonically allocated integer identifying which `Part` this event contributes to. All events sharing a `part_index` must belong to the same family; events at the same index concatenate into one Part.
-- **`tool_call_id`** — the provider's id for the tool call, set on `tool_call_name` / `tool_call_args` / `tool_result` events.
+- **`tool_call_id`** — the provider's id for the tool call, set on `tool_call_name` / `tool_call_args` / `tool_result` events. Also the signal the framework uses to group tool-call events into one `ToolCallPart`.
 - **`provider_metadata`** — an optional `dict[str, dict]` namespaced by provider name. Carries opaque data (signatures, encrypted blobs) that must be echoed back on future requests.
 
-Two additional fields exist for special cases:
+Three additional fields exist for special cases:
 
 - **`server_executed: bool`** — set `True` for server-side tool calls (for example, Anthropic web search) and their results. The model ran the tool internally.
 - **`tool_name`** — set on `tool_result` events to identify which tool this result came from.
+- **`part_index: int | None`** — defaults to `None`, which means "let the framework decide which Part this event belongs to." Pass an explicit integer only when you need to override the default grouping (see [below](#part-index-overrides)).
 
-### Allocating `part_index`
+### How events group into Parts
 
-`part_index` groups events into Parts. Rules:
+When you leave `part_index` as `None` (the default), the framework groups events using these rules:
 
-- **Same `part_index` + same family** → events are appended into one Part (text concatenates; tool-call args accumulate into the final JSON).
-- **Same `part_index` + different family** → the framework raises `ValueError`. That's a plugin bug — allocate a new index when a new content block begins.
-- **Tool calls span two event types**: `tool_call_name` and `tool_call_args` at the *same* `part_index` combine into one `ToolCallPart`. The name arrives first; the args stream in as partial JSON and are parsed when the part finalizes.
+- **Consecutive same-family events concatenate.** Two `text` events in a row become one `TextPart`. Two `reasoning` events in a row become one `ReasoningPart`. A family transition (text → reasoning, or reasoning → text) starts a new Part.
+- **Tool calls group by `tool_call_id`.** A `tool_call_name` and any number of `tool_call_args` events sharing a `tool_call_id` combine into one `ToolCallPart` — even if they're interleaved with other events (parallel tool calls).
+- **`tool_result` is always its own Part**, paired to the originating call by `tool_call_id`.
 
-A typical allocation scheme:
+This handles every common shape without a plugin-side allocator:
 
-```
-part_index=0  reasoning chunks
-part_index=1  text chunks
-part_index=2  first tool_call (name + streaming args)
-part_index=3  second tool_call (parallel)
-```
+| Stream                                    | Resulting Parts                                          |
+|-------------------------------------------|----------------------------------------------------------|
+| `text` × N                                | one `TextPart`                                           |
+| `reasoning` × N, then `text` × N          | `ReasoningPart`, `TextPart`                              |
+| `text`, `tool_call_name`+`args`, `text`   | `TextPart`, `ToolCallPart`, `TextPart`                   |
+| Parallel tool calls (interleaved by id)   | one `ToolCallPart` per distinct `tool_call_id`           |
+| `reasoning`, tool call, `reasoning`       | `ReasoningPart`, `ToolCallPart`, `ReasoningPart`         |
 
-For providers that emit discrete content blocks (like Anthropic's `content_block_start` / `content_block_delta` events), a natural implementation is a dict keyed by block index:
+(part-index-overrides)=
+### Setting `part_index` explicitly
 
-```python
-state = {"blocks": {}, "next_part_index": 0}
+In rare cases you'll want to override the default grouping:
 
-# On content_block_start:
-idx = event.index
-pi = state["next_part_index"]
-state["next_part_index"] += 1
-state["blocks"][idx] = {"kind": block.type, "part_index": pi}
+- **Forcing a single TextPart across non-adjacent text bursts.** If your provider interleaves text deltas with tool calls but you want all the text concatenated into one `TextPart`, pass `part_index=0` on every text event. (The default behavior produces separate `TextPart`s on each side of the tool calls — usually what you want, but not always.)
+- **Tool-call args arriving before the id.** If your provider streams args before the `tool_call_id` is known, assign your own index per logical tool call and pass it on each event of that call.
 
-# On content_block_delta:
-info = state["blocks"][event.index]
-pi = info["part_index"]
-yield StreamEvent(type="text", chunk=delta.text, part_index=pi)
-```
-
-For providers that emit discrete parts per streamed chunk without start/stop markers (like Gemini), track the current block kind and advance the index on kind changes:
-
-```python
-state = {"index": 0, "kind": None}
-
-def allocate_for_kind(state, new_kind):
-    if state["kind"] == new_kind:
-        return state["index"]     # concat
-    if state["kind"] is not None:
-        state["index"] += 1       # advance past previous block
-    state["kind"] = new_kind
-    return state["index"]
-```
+You can mix explicit indices with `None` in the same stream — the framework reserves your explicit values and decides the rest.
 
 ### Reasoning tokens
 
@@ -344,10 +326,10 @@ Two modes are supported:
 **Streamed reasoning text** (Anthropic extended thinking, Gemini with `includeThoughts: true`):
 
 ```python
-yield StreamEvent(type="reasoning", chunk=thinking_chunk, part_index=0)
+yield StreamEvent(type="reasoning", chunk=thinking_chunk)
 ```
 
-Text events and reasoning events at different indexes produce distinct `TextPart` and `ReasoningPart` entries in `response.messages`.
+Reasoning events that appear before/after text events become distinct `ReasoningPart` and `TextPart` entries in `response.messages` automatically. If your provider emits two thinking blocks separated by a tool call, you'll get two `ReasoningPart`s — exactly what you want.
 
 **Opaque reasoning token count** (OpenAI o-series, Gemini without `includeThoughts`):
 
@@ -363,25 +345,23 @@ For OpenAI this count lives in `usage.completion_tokens_details.reasoning_tokens
 
 ### Tool calls
 
-Each tool call emits two event types at the same `part_index`:
+Each tool call emits two event types sharing a `tool_call_id`:
 
 ```python
 yield StreamEvent(
     type="tool_call_name",
     chunk=tool_name,
-    part_index=tc_part_index,
     tool_call_id=tool_call_id,
 )
 # then, as the provider streams JSON args:
 yield StreamEvent(
     type="tool_call_args",
     chunk=partial_json_fragment,
-    part_index=tc_part_index,
     tool_call_id=tool_call_id,
 )
 ```
 
-Some providers (Gemini) emit the complete tool call in one chunk — fine; emit both events back-to-back with the full name and full JSON.
+The framework groups them by `tool_call_id` — so parallel tool calls (where args for tool A and tool B interleave on the wire) just work without any per-call index tracking. Some providers (Gemini) emit the complete tool call in one chunk — fine; emit both events back-to-back with the full name and full JSON.
 
 For client-side tool calls — tools that LLM should execute locally in a chain — **also call `response.add_tool_call()`**. The chain-execution path (`response.tool_calls()` → `execute_tool_calls()`) reads from the explicitly-added list, not from the StreamEvent buffer. Your code should do both:
 
@@ -403,14 +383,12 @@ For tools the API executes internally, set `server_executed=True` on the events.
 yield StreamEvent(
     type="tool_call_name",
     chunk="web_search",
-    part_index=tc_pi,
     tool_call_id=tool_id,
     server_executed=True,
 )
 yield StreamEvent(
     type="tool_call_args",
     chunk=json.dumps(query_args),
-    part_index=tc_pi,
     tool_call_id=tool_id,
     server_executed=True,
 )
@@ -422,7 +400,6 @@ The tool *result* (for example, the search hits) is also emitted as an event:
 yield StreamEvent(
     type="tool_result",
     chunk=human_readable_summary,
-    part_index=tr_pi,
     tool_call_id=tool_id,
     server_executed=True,
     tool_name="web_search",
@@ -442,7 +419,7 @@ Some providers require you to echo back opaque fields on the next request for mu
 - **Google Gemini** — `thoughtSignature` on `functionCall` parts when thinking is active.
 - **OpenAI Responses API** — `encrypted_content` on reasoning items in stateless mode.
 
-These values are attached to a `StreamEvent` via its `provider_metadata` field. The framework merges metadata across events at the same `part_index` (last non-None wins per top-level key) and persists it on the finalized Part.
+These values are attached to a `StreamEvent` via its `provider_metadata` field. The framework merges metadata across events that group into the same Part (last non-None wins per top-level key) and persists it on the finalized Part.
 
 Namespace under your provider's name so transcripts that mix providers don't collide:
 
@@ -451,7 +428,6 @@ Namespace under your provider's name so transcripts that mix providers don't col
 yield StreamEvent(
     type="reasoning",
     chunk="",
-    part_index=reasoning_pi,
     provider_metadata={"anthropic": {"signature": sig}},
 )
 ```
@@ -461,7 +437,6 @@ yield StreamEvent(
 yield StreamEvent(
     type="tool_call_name",
     chunk=name,
-    part_index=tc_pi,
     tool_call_id=tc_id,
     provider_metadata={"gemini": {"thoughtSignature": sig}},
 )
@@ -471,39 +446,32 @@ Treat other providers' entries as opaque; don't parse them. The framework round-
 
 ### Non-streaming path
 
-When `stream=False` (or the provider returns a complete message at once), emit one event per content block:
+When `stream=False` (or the provider returns a complete message at once), emit one event per content block — no index tracking required:
 
 ```python
 else:
     completion = client.messages.create(**kwargs)
     response.response_json = completion.model_dump()
-    pi = 0
     for block in completion.content:
         if block.type == "thinking":
             yield StreamEvent(
                 type="reasoning",
                 chunk=block.thinking,
-                part_index=pi,
                 provider_metadata={"anthropic": {"signature": block.signature}},
             )
-            pi += 1
         elif block.type == "text":
-            yield StreamEvent(type="text", chunk=block.text, part_index=pi)
-            pi += 1
+            yield StreamEvent(type="text", chunk=block.text)
         elif block.type == "tool_use":
             yield StreamEvent(
                 type="tool_call_name",
                 chunk=block.name,
-                part_index=pi,
                 tool_call_id=block.id,
             )
             yield StreamEvent(
                 type="tool_call_args",
                 chunk=json.dumps(block.input),
-                part_index=pi,
                 tool_call_id=block.id,
             )
-            pi += 1
 ```
 
 ## Consuming prompt.messages in build_messages

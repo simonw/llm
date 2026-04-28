@@ -316,9 +316,13 @@ def tool_message(
 class StreamEvent:
     """A streaming event from a model response.
 
-    `part_index` groups events into parts — events sharing an index
-    belong to the same logical part. Mixing families (e.g. text with
-    tool_call_name) at the same index is a plugin bug.
+    `part_index` groups events into parts. When left at its default of
+    `None`, the framework allocates an index automatically: consecutive
+    same-family text/reasoning events concatenate, tool-call events
+    group by `tool_call_id`, and `tool_result` always starts its own
+    part. Pass an explicit integer only to override the default
+    grouping (e.g. forcing a single TextPart across non-adjacent text
+    bursts).
 
     `provider_metadata` carries opaque provider data (Anthropic
     `signature`, Gemini `thoughtSignature`, OpenAI `encrypted_content`)
@@ -333,7 +337,7 @@ class StreamEvent:
     type: str  # "text" / "reasoning" / "tool_call_name" /
     # "tool_call_args" / "tool_result"
     chunk: str
-    part_index: int
+    part_index: Optional[int] = None
     tool_call_id: Optional[str] = None
     server_executed: bool = False
     tool_name: Optional[str] = None

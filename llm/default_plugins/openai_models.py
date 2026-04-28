@@ -948,11 +948,6 @@ class Chat(_Shared, KeyModel):
             )
             chunks = []
             tool_calls = {}
-            # part_index allocator. Text events always use 0, so tool
-            # calls start at 1 and keep a stable index per OpenAI delta
-            # index. This keeps _build_parts from mixing families.
-            tc_part_index = {}
-            next_part_index = 1
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
@@ -964,12 +959,9 @@ class Chat(_Shared, KeyModel):
                         idx = tool_call.index
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
-                            tc_part_index[idx] = next_part_index
-                            next_part_index += 1
                             yield StreamEvent(
                                 type="tool_call_name",
                                 chunk=tool_call.function.name or "",
-                                part_index=tc_part_index[idx],
                                 tool_call_id=tool_call.id,
                             )
                         else:
@@ -980,7 +972,6 @@ class Chat(_Shared, KeyModel):
                             yield StreamEvent(
                                 type="tool_call_args",
                                 chunk=tool_call.function.arguments,
-                                part_index=tc_part_index[idx],
                                 tool_call_id=tool_calls[idx].id,
                             )
                 try:
@@ -990,7 +981,7 @@ class Chat(_Shared, KeyModel):
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
-                    yield StreamEvent(type="text", chunk=content, part_index=0)
+                    yield StreamEvent(type="text", chunk=content)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
@@ -1010,7 +1001,6 @@ class Chat(_Shared, KeyModel):
             )
             usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
-            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -1019,24 +1009,20 @@ class Chat(_Shared, KeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
-                part_index += 1
                 yield StreamEvent(
                     type="tool_call_name",
                     chunk=tool_call.function.name or "",
-                    part_index=part_index,
                     tool_call_id=tool_call.id,
                 )
                 yield StreamEvent(
                     type="tool_call_args",
                     chunk=tool_call.function.arguments or "",
-                    part_index=part_index,
                     tool_call_id=tool_call.id,
                 )
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
-                    part_index=0,
                 )
         # Capture the reasoning token count BEFORE set_usage runs —
         # set_usage pops top-level keys and passes the rest through
@@ -1085,8 +1071,6 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             chunks = []
             tool_calls = {}
-            tc_part_index = {}
-            next_part_index = 1
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
@@ -1098,12 +1082,9 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         idx = tool_call.index
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
-                            tc_part_index[idx] = next_part_index
-                            next_part_index += 1
                             yield StreamEvent(
                                 type="tool_call_name",
                                 chunk=tool_call.function.name or "",
-                                part_index=tc_part_index[idx],
                                 tool_call_id=tool_call.id,
                             )
                         else:
@@ -1114,7 +1095,6 @@ class AsyncChat(_Shared, AsyncKeyModel):
                             yield StreamEvent(
                                 type="tool_call_args",
                                 chunk=tool_call.function.arguments,
-                                part_index=tc_part_index[idx],
                                 tool_call_id=tool_calls[idx].id,
                             )
                 try:
@@ -1122,7 +1102,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 except IndexError:
                     content = None
                 if content:
-                    yield StreamEvent(type="text", chunk=content, part_index=0)
+                    yield StreamEvent(type="text", chunk=content)
             if tool_calls:
                 for value in tool_calls.values():
                     response.add_tool_call(
@@ -1142,7 +1122,6 @@ class AsyncChat(_Shared, AsyncKeyModel):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             usage = completion.usage.model_dump()
-            part_index = 0
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -1151,24 +1130,20 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         arguments=json.loads(tool_call.function.arguments),
                     )
                 )
-                part_index += 1
                 yield StreamEvent(
                     type="tool_call_name",
                     chunk=tool_call.function.name or "",
-                    part_index=part_index,
                     tool_call_id=tool_call.id,
                 )
                 yield StreamEvent(
                     type="tool_call_args",
                     chunk=tool_call.function.arguments or "",
-                    part_index=part_index,
                     tool_call_id=tool_call.id,
                 )
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
-                    part_index=0,
                 )
         # See sync Chat.execute: capture reasoning before set_usage mutates.
         if usage:
