@@ -7,10 +7,10 @@ from llm import (
     KeyModel,
     Prompt,
     Response,
-    StreamEvent,
     hookimpl,
 )
 import llm
+from llm.parts import StreamEvent
 from llm.utils import (
     dicts_to_table_string,
     remove_dict_none_values,
