@@ -164,7 +164,12 @@ def resolve_fragments(
                 # Now try path
                 path = pathlib.Path(fragment)
                 if path.exists():
-                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
+                    resolved_path = path.resolve()
+                    try:
+                        resolved_path.relative_to(pathlib.Path.cwd().resolve())
+                    except ValueError:
+                        raise FragmentNotFound(f"Fragment '{fragment}' not found")
+                    resolved.append(Fragment(path.read_text(), str(resolved_path)))
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
@@ -242,6 +247,10 @@ def resolve_attachment(value):
     if not path.exists():
         raise AttachmentError(f"File {value} does not exist")
     path = path.resolve()
+    try:
+        path.relative_to(pathlib.Path.cwd().resolve())
+    except ValueError:
+        raise AttachmentError(f"File path must be within current directory: {value}")
 
     # Try to guess type
     mimetype = mimetype_from_path(str(path))
@@ -3934,6 +3943,59 @@ def load_template(name: str) -> Template:
     return template_obj
 
 
+_SAFE_BUILTINS = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bin": bin,
+    "bool": bool,
+    "bytearray": bytearray,
+    "bytes": bytes,
+    "chr": chr,
+    "dict": dict,
+    "dir": dir,
+    "divmod": divmod,
+    "enumerate": enumerate,
+    "filter": filter,
+    "float": float,
+    "format": format,
+    "frozenset": frozenset,
+    "hasattr": hasattr,
+    "hex": hex,
+    "int": int,
+    "isinstance": isinstance,
+    "issubclass": issubclass,
+    "iter": iter,
+    "len": len,
+    "list": list,
+    "map": map,
+    "max": max,
+    "min": min,
+    "next": next,
+    "oct": oct,
+    "ord": ord,
+    "pow": pow,
+    "range": range,
+    "repr": repr,
+    "reversed": reversed,
+    "round": round,
+    "set": set,
+    "slice": slice,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "type": type,
+    "vars": vars,
+    "zip": zip,
+    "locals": locals,
+    "Exception": Exception,
+    "True": True,
+    "False": False,
+    "None": None,
+}
+
+
 def _tools_from_code(code_or_path: str) -> List[Tool]:
     """
     Treat all Python functions in the code as tools
@@ -3943,7 +4005,7 @@ def _tools_from_code(code_or_path: str) -> List[Tool]:
             code_or_path = pathlib.Path(code_or_path).read_text()
         except FileNotFoundError:
             raise click.ClickException("File not found: {}".format(code_or_path))
-    namespace: Dict[str, Any] = {}
+    namespace: Dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
     tools = []
     try:
         exec(code_or_path, namespace)

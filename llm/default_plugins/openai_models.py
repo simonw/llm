@@ -30,6 +30,10 @@ import json
 import yaml
 
 
+def _sanitize_tool_output(output: str) -> str:
+    return f"<tool_result>\n{output}\n</tool_result>"
+
+
 @hookimpl
 def register_models(register):
     # GPT-4o
@@ -773,7 +777,7 @@ class _Shared:
                         {
                             "role": "tool",
                             "tool_call_id": tool_result.tool_call_id,
-                            "content": tool_result.output,
+                            "content": _sanitize_tool_output(tool_result.output),
                         }
                     )
                 prev_text = prev_response.text_or_raise()
@@ -804,7 +808,7 @@ class _Shared:
                 {
                     "role": "tool",
                     "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.output,
+                    "content": _sanitize_tool_output(tool_result.output),
                 }
             )
         if not prompt.attachments:
