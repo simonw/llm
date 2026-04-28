@@ -372,17 +372,18 @@ def test_chat_tools(logs_db):
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_fragments(tmpdir):
-    path1 = str(tmpdir / "frag1.txt")
-    path2 = str(tmpdir / "frag2.txt")
-    with open(path1, "w") as fp:
-        fp.write("one")
-    with open(path2, "w") as fp:
-        fp.write("two")
     runner = CliRunner()
-    output = runner.invoke(
-        llm.cli.cli,
-        ["chat", "-m", "echo", "-f", path1],
-        input=("hi\n!fragment {}\nquit\n".format(path2)),
-    ).output
-    assert '"prompt": "one' in output
-    assert '"prompt": "two"' in output
+    with runner.isolated_filesystem():
+        path1 = "frag1.txt"
+        path2 = "frag2.txt"
+        with open(path1, "w") as fp:
+            fp.write("one")
+        with open(path2, "w") as fp:
+            fp.write("two")
+        output = runner.invoke(
+            llm.cli.cli,
+            ["chat", "-m", "echo", "-f", path1],
+            input=("hi\n!fragment {}\nquit\n".format(path2)),
+        ).output
+        assert '"prompt": "one' in output
+        assert '"prompt": "two"' in output
