@@ -121,7 +121,20 @@ You can call `response.execute_tool_calls()` to execute those calls and get back
 tool_results = response.execute_tool_calls()
 # [ToolResult(name='upper', output='PANDA', tool_call_id='...')]
 ```
-You can use the `model.chain()` to pass the results of tool calls back to the model automatically as subsequent prompts:
+To get the model's follow-up reply, call `response.reply()` — when the previous response made tool calls, `reply()` automatically executes them and feeds the results back into the next turn:
+```python
+follow_up = response.reply()
+print(follow_up.text())
+# The word "panda" converted to uppercase is "PANDA".
+```
+You can also pass an additional user prompt: `response.reply("now translate it to French")`. To use custom or already-computed tool results (e.g. results you mutated, or synthetic ones for testing) pass them explicitly with `tool_results=` and the auto-execute step is skipped:
+```python
+follow_up = response.reply(
+    "now translate it",
+    tool_results=[llm.ToolResult(name="upper", output="PANDA", tool_call_id="...")],
+)
+```
+For an automatic loop that keeps going until the model stops requesting tools, use `model.chain()` — it passes tool call results back to the model automatically as subsequent prompts:
 ```python
 chain_response = model.chain(
     "Convert panda to upper",
@@ -702,6 +715,13 @@ async for chunk in model.chain(
     tools=[upper]
 ):
     print(chunk, end="", flush=True)
+```
+`response.reply()` is awaitable on async models — it `await`s `execute_tool_calls()` internally before building the next turn:
+```python
+response = model.prompt("Convert panda to upper", tools=[upper])
+await response.text()
+follow_up = await response.reply()
+print(await follow_up.text())
 ```
 The `before_call` and `after_call` hooks can be async functions when used with async models.
 

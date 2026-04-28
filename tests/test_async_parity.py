@@ -72,7 +72,7 @@ async def test_async_from_dict_then_reply_continues():
     payload = json.dumps(r1.to_dict())
     restored = llm.AsyncResponse.from_dict(json.loads(payload))
 
-    r2 = restored.reply("q2")
+    r2 = await restored.reply("q2")
     await r2.text()
 
     # r2 was sent the full chain including r1's output.
@@ -163,7 +163,7 @@ async def _capture_async(model):
     await r1.text()
     payload1 = json.dumps(r1.to_dict())
     restored = llm.AsyncResponse.from_dict(json.loads(payload1))
-    r2 = restored.reply("pong")
+    r2 = await restored.reply("pong")
     await r2.text()
     return r2.prompt.messages
 
@@ -315,7 +315,7 @@ async def test_async_reply_messages_kwarg_appends():
     model = llm.get_async_model("echo")
     r1 = model.prompt("q1")
     await r1.text()
-    r2 = r1.reply(messages=[llm.user("extra")])
+    r2 = await r1.reply(messages=[llm.user("extra")])
     await r2.text()
     assert [m.role for m in r2.prompt.messages] == ["user", "assistant", "user"]
     assert r2.prompt.messages[-1].parts[0].text == "extra"
@@ -338,9 +338,9 @@ async def test_async_full_chain_to_dict_round_trip_three_turns():
     model = llm.get_async_model("echo")
     r1 = model.prompt("q1")
     await r1.text()
-    r2 = r1.reply("q2")
+    r2 = await r1.reply("q2")
     await r2.text()
-    r3 = r2.reply("q3")
+    r3 = await r2.reply("q3")
     await r3.text()
 
     payload = json.dumps(r3.to_dict())
@@ -358,7 +358,7 @@ async def test_async_full_chain_to_dict_round_trip_three_turns():
     assert texts[4] == "q3"
 
     # And continuing from the restored response extends the chain.
-    r4 = restored.reply("q4")
+    r4 = await restored.reply("q4")
     await r4.text()
     assert [m.role for m in r4.prompt.messages] == [
         "user",
@@ -376,9 +376,9 @@ async def test_async_reply_chains_three_turns():
     model = llm.get_async_model("echo")
     r1 = model.prompt("q1")
     await r1.text()
-    r2 = r1.reply("q2")
+    r2 = await r1.reply("q2")
     await r2.text()
-    r3 = r2.reply("q3")
+    r3 = await r2.reply("q3")
     await r3.text()
 
     chain = r3.prompt.messages

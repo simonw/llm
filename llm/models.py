@@ -1577,23 +1577,47 @@ class Response(_BaseResponse):
         prompt: Optional[str] = None,
         *,
         messages: Optional[List[Any]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         **kwargs,
     ) -> "Response":
         """Continue the conversation from this response.
 
         Builds the next turn's chain as
-        ``self.prompt.messages + self.messages + [user(prompt)]`` and
-        calls ``self.model.prompt(messages=chain, ...)``. No
-        Conversation object required — the Response carries everything
-        needed.
+        ``self.prompt.messages + self.messages + [tool_message] +
+        [user(prompt)] + messages`` and calls
+        ``self.model.prompt(messages=chain, ...)``. No Conversation
+        object required — the Response carries everything needed.
 
-        If ``messages=`` is passed, its contents are appended to the
-        chain instead of (or in addition to) the ``prompt`` string.
+        If this response made tool calls and ``tool_results=`` is not
+        passed, ``reply()`` runs ``self.execute_tool_calls()``
+        automatically and threads the results into the chain. Pass an
+        explicit ``tool_results=`` list (e.g. results you mutated, or
+        synthetic ones for testing) to skip auto-execution.
         """
-        from .parts import Message, TextPart
+        from .parts import Message, TextPart, ToolResultPart
 
         self._force()
+        if tool_results is None and self._tool_calls:
+            tool_results = self.execute_tool_calls()
+        # Forward original tools so the next turn can call them again
+        # (mirrors Conversation.prompt's `tools or self.tools` rule).
+        if "tools" not in kwargs and self.prompt.tools:
+            kwargs["tools"] = self.prompt.tools
         chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
@@ -1891,23 +1915,46 @@ class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
-    def reply(
+    async def reply(
         self,
         prompt: Optional[str] = None,
         *,
         messages: Optional[List[Any]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
         **kwargs,
     ) -> "AsyncResponse":
         """Async counterpart of Response.reply(). Requires this response
         to have been awaited (so self.messages is available).
+
+        Awaitable so the auto-execute path can ``await
+        self.execute_tool_calls()``. See ``Response.reply`` for the
+        ``tool_results=`` semantics.
         """
-        from .parts import Message, TextPart
+        from .parts import Message, TextPart, ToolResultPart
 
         if not self._done:
             raise ValueError(
                 "Response not yet awaited — call `await response` before reply()"
             )
+        if tool_results is None and self._tool_calls:
+            tool_results = await self.execute_tool_calls()
+        if "tools" not in kwargs and self.prompt.tools:
+            kwargs["tools"] = self.prompt.tools
         chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:

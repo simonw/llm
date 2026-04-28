@@ -1179,12 +1179,342 @@ class TestResponseReply:
         async_mock_model.enqueue(["a2"])
         r1 = async_mock_model.prompt("q1")
         await r1.text()
-        r2 = r1.reply("q2")
+        r2 = await r1.reply("q2")
         await r2.text()
         assert r2.prompt.messages == [
             llm.user("q1"),
             llm.assistant("a1"),
             llm.user("q2"),
+        ]
+
+    def test_reply_with_tool_results_appends_tool_message(self, mock_model):
+        # The natural idiom: model.prompt(...) makes tool calls, the
+        # caller runs them, then reply(tool_results=...) sends the
+        # results back in one call. The chain should grow by a
+        # role="tool" message containing ToolResultParts.
+        from llm.parts import (
+            Message,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        # First-turn assistant message has a tool call.
+        first_assistant = Message(
+            role="assistant",
+            parts=[
+                ToolCallPart(
+                    name="echo", arguments={"x": 1}, tool_call_id="c1"
+                )
+            ],
+        )
+
+        class ToolCallMock(type(mock_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                # Yield the assistant turn's parts as StreamEvents so
+                # response.messages contains the tool call.
+                yield llm.StreamEvent(
+                    type="tool_call_name",
+                    chunk="echo",
+                    tool_call_id="c1",
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 1}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo")
+        r1.text()
+
+        tool_results = [
+            llm.ToolResult(name="echo", output="ok", tool_call_id="c1")
+        ]
+        # The bug we're fixing: this previously silently dropped the
+        # tool_results because reply() forwards via messages= and the
+        # Prompt synthesis path is bypassed.
+        m.enqueue(["follow-up text"])
+        r2 = r1.reply(tool_results=tool_results)
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("call echo"),
+            first_assistant,
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name="echo", output="ok", tool_call_id="c1"
+                    )
+                ],
+            ),
+        ]
+
+    def test_reply_with_tool_results_and_prompt(self, mock_model):
+        from llm.parts import (
+            Message,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        class ToolCallMock(type(mock_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                yield llm.StreamEvent(
+                    type="tool_call_name",
+                    chunk="echo",
+                    tool_call_id="c1",
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 1}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo")
+        r1.text()
+        m.enqueue(["follow-up"])
+        r2 = r1.reply(
+            "now summarise",
+            tool_results=[llm.ToolResult(name="echo", output="ok", tool_call_id="c1")],
+        )
+        r2.text()
+        roles = [m.role for m in r2.prompt.messages]
+        assert roles == ["user", "assistant", "tool", "user"]
+        # tool message goes BEFORE the new user prompt.
+        tool_msg = r2.prompt.messages[2]
+        assert tool_msg.parts == [
+            ToolResultPart(name="echo", output="ok", tool_call_id="c1")
+        ]
+        assert r2.prompt.messages[3] == llm.user("now summarise")
+
+    def test_reply_auto_executes_tool_calls_when_none_passed(self, mock_model):
+        # Zero-arg sugar: response.reply() with tool calls present
+        # auto-executes them and threads results back into the chain.
+        from llm.parts import Message, ToolResultPart
+
+        executed = []
+
+        def echo(x: int) -> str:
+            executed.append(x)
+            return f"echo:{x}"
+
+        class ToolCallMock(type(mock_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                response.add_tool_call(
+                    llm.ToolCall(
+                        name="echo", arguments={"x": 42}, tool_call_id="c1"
+                    )
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_name", chunk="echo", tool_call_id="c1"
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 42}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo", tools=[echo])
+        r1.text()
+
+        m.enqueue(["follow-up"])
+        # No tool_results passed — sugar kicks in and auto-executes.
+        r2 = r1.reply()
+        r2.text()
+
+        assert executed == [42]
+        # The tool message landed in the chain.
+        roles = [msg.role for msg in r2.prompt.messages]
+        assert roles == ["user", "assistant", "tool"]
+        tool_msg = r2.prompt.messages[2]
+        assert tool_msg.parts == [
+            ToolResultPart(name="echo", output="echo:42", tool_call_id="c1")
+        ]
+
+    def test_reply_auto_execute_with_prompt(self, mock_model):
+        # reply("more text") with tool calls present also auto-executes
+        # so the user prompt can land after the tool results.
+        executed = []
+
+        def echo(x: int) -> str:
+            executed.append(x)
+            return "out"
+
+        class ToolCallMock(type(mock_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                response.add_tool_call(
+                    llm.ToolCall(
+                        name="echo", arguments={"x": 1}, tool_call_id="c1"
+                    )
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_name", chunk="echo", tool_call_id="c1"
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 1}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo", tools=[echo])
+        r1.text()
+        m.enqueue(["follow-up"])
+        r2 = r1.reply("now summarise")
+        r2.text()
+        assert executed == [1]
+        roles = [msg.role for msg in r2.prompt.messages]
+        assert roles == ["user", "assistant", "tool", "user"]
+
+    def test_reply_explicit_tool_results_skips_auto_execute(self, mock_model):
+        # Passing tool_results= explicitly overrides the sugar — the
+        # tool function does NOT run (caller already ran it / wants
+        # custom results).
+        executed = []
+
+        def echo(x: int) -> str:
+            executed.append(x)
+            return "should not see"
+
+        class ToolCallMock(type(mock_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                yield llm.StreamEvent(
+                    type="tool_call_name", chunk="echo", tool_call_id="c1"
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 1}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo", tools=[echo])
+        r1.text()
+        m.enqueue(["follow-up"])
+        r2 = r1.reply(
+            tool_results=[llm.ToolResult(name="echo", output="custom", tool_call_id="c1")]
+        )
+        r2.text()
+        assert executed == []  # echo was NOT called
+        tool_msg = r2.prompt.messages[2]
+        assert tool_msg.parts[0].output == "custom"
+
+    def test_reply_no_tool_calls_no_tool_message(self, mock_model):
+        # reply() on a response without tool calls is unchanged — no
+        # tool message gets injected.
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+        r2 = r1.reply()
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_auto_executes_tool_calls(self, async_mock_model):
+        # Async reply() is a coroutine; with tool calls present the
+        # zero-arg sugar awaits execute_tool_calls() internally.
+        from llm.parts import ToolResultPart
+
+        executed = []
+
+        async def echo(x: int) -> str:
+            executed.append(x)
+            return f"echo:{x}"
+
+        class ToolCallMock(type(async_mock_model)):
+            supports_tools = True
+
+            async def execute(self, prompt, stream, response, conversation):
+                response.add_tool_call(
+                    llm.ToolCall(
+                        name="echo", arguments={"x": 7}, tool_call_id="c1"
+                    )
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_name", chunk="echo", tool_call_id="c1"
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 7}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo", tools=[echo])
+        await r1.text()
+        m.enqueue(["follow-up"])
+        r2 = await r1.reply()
+        await r2.text()
+        assert executed == [7]
+        tool_msg = r2.prompt.messages[2]
+        assert tool_msg.parts == [
+            ToolResultPart(name="echo", output="echo:7", tool_call_id="c1")
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_with_tool_results(self, async_mock_model):
+        from llm.parts import (
+            Message,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        class ToolCallMock(type(async_mock_model)):
+            supports_tools = True
+
+            async def execute(self, prompt, stream, response, conversation):
+                yield llm.StreamEvent(
+                    type="tool_call_name",
+                    chunk="echo",
+                    tool_call_id="c1",
+                )
+                yield llm.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"x": 1}',
+                    tool_call_id="c1",
+                )
+
+        m = ToolCallMock()
+        r1 = m.prompt("call echo")
+        await r1.text()
+        m.enqueue(["follow-up"])
+        r2 = await r1.reply(
+            tool_results=[llm.ToolResult(name="echo", output="ok", tool_call_id="c1")]
+        )
+        await r2.text()
+        assert r2.prompt.messages == [
+            llm.user("call echo"),
+            Message(
+                role="assistant",
+                parts=[
+                    ToolCallPart(
+                        name="echo", arguments={"x": 1}, tool_call_id="c1"
+                    )
+                ],
+            ),
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name="echo", output="ok", tool_call_id="c1"
+                    )
+                ],
+            ),
         ]
 
 
