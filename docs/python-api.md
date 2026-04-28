@@ -593,15 +593,16 @@ Iterating against the response object itself (`for chunk in response`) yields on
 
 #### Inspecting the finished response
 
-After a response completes, `response.messages` gives you the assembled list of `Message` objects returned by that response, excluding the messages from the original prompt:
+`response.messages()` returns the assembled list of `Message` objects produced by the model, excluding the messages from the original prompt. Calling it forces execution if the response hasn't been drained yet, so you don't need a separate `response.text()` first:
 
 ```python
 response = model.prompt("What's 2+2?")
-response.text()
-for message in response.messages:
+for message in response.messages():
     for part in message.parts:
         print(type(part).__name__, part.to_dict())
 ```
+
+On async models `messages()` is awaitable: `await response.messages()`.
 
 #### Persisting a conversation
 

@@ -314,7 +314,7 @@ class TestStreamEventsFromPlainStrPlugin:
         mock_model.enqueue(["hello"])
         response = mock_model.prompt("hi")
         response.text()
-        messages = response.messages
+        messages = response.messages()
         assert messages == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="hello")])
         ]
@@ -323,7 +323,7 @@ class TestStreamEventsFromPlainStrPlugin:
         mock_model.enqueue([])
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages == []
+        assert response.messages() == []
 
 
 class TestStreamEventsFromStreamEventPlugin:
@@ -359,7 +359,7 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages == [
+        assert response.messages() == [
             llm.Message(
                 role="assistant",
                 parts=[
@@ -394,7 +394,7 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        msgs = response.messages
+        msgs = response.messages()
         assert len(msgs) == 1
         parts = msgs[0].parts
         assert parts == [
@@ -424,7 +424,7 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        part = response.messages[0].parts[0]
+        part = response.messages()[0].parts[0]
         assert part.name == "t"
         assert part.arguments == {"_raw": "not json"}
 
@@ -442,7 +442,7 @@ class TestStreamEventsFromStreamEventPlugin:
         response = mock_model.prompt("hi")
         response.text()
         with pytest.raises(ValueError, match="part_index"):
-            response.messages  # noqa: B018
+            response.messages()  # noqa: B018
 
     def test_provider_metadata_merges_last_wins(self, mock_model):
         events = [
@@ -462,7 +462,7 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        part = response.messages[0].parts[0]
+        part = response.messages()[0].parts[0]
         assert part.provider_metadata == {"anthropic": {"signature": "final"}}
 
     def test_redacted_reasoning_event_emits_marker_part(self, mock_model):
@@ -476,15 +476,13 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("x")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ReasoningPart(text="", redacted=True),
             llm.TextPart(text="hi"),
         ]
 
-    def test_redacted_reasoning_hoisted_to_start_when_emitted_late(
-        self, mock_model
-    ):
+    def test_redacted_reasoning_hoisted_to_start_when_emitted_late(self, mock_model):
         # Plugins typically learn opaque reasoning happened only when
         # the final usage chunk arrives, so they emit the marker last.
         # The framework hoists redacted reasoning Parts to the start of
@@ -496,7 +494,7 @@ class TestStreamEventsFromStreamEventPlugin:
         mock_model.enqueue(events)
         response = mock_model.prompt("x")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ReasoningPart(text="", redacted=True),
             llm.TextPart(text="hello"),
@@ -524,7 +522,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages[0].parts == [llm.TextPart(text="hello world")]
+        assert response.messages()[0].parts == [llm.TextPart(text="hello world")]
 
     def test_text_then_reasoning_splits_into_two_parts(self, mock_model):
         events = [
@@ -534,7 +532,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages[0].parts == [
+        assert response.messages()[0].parts == [
             llm.TextPart(text="hello"),
             llm.ReasoningPart(text="thinking"),
         ]
@@ -557,7 +555,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages[0].parts == [
+        assert response.messages()[0].parts == [
             llm.TextPart(text="before"),
             llm.ToolCallPart(name="search", arguments={"q": "x"}, tool_call_id="c1"),
             llm.TextPart(text="after"),
@@ -584,7 +582,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages[0].parts == [
+        assert response.messages()[0].parts == [
             llm.ToolCallPart(
                 name="search",
                 arguments={"q": "weather"},
@@ -604,7 +602,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ToolCallPart(name="search", arguments={"q": "a"}, tool_call_id="A"),
             llm.ToolCallPart(name="lookup", arguments={"k": "b"}, tool_call_id="B"),
@@ -635,7 +633,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ToolCallPart(
                 name="web_search",
@@ -663,7 +661,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ReasoningPart(text="first"),
             llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1"),
@@ -686,7 +684,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.ToolCallPart(name="store_fact", arguments={"fact": "a"}),
             llm.ToolCallPart(name="store_fact", arguments={"fact": "b"}),
@@ -703,7 +701,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        assert response.messages[0].parts == [
+        assert response.messages()[0].parts == [
             llm.ReasoningPart(text="t"),
             llm.TextPart(text="hi"),
         ]
@@ -721,7 +719,7 @@ class TestPartIndexAutoAllocation:
         mock_model.enqueue(events)
         response = mock_model.prompt("hi")
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert parts == [
             llm.TextPart(text="before after"),
             llm.ToolCallPart(name="t", arguments={}, tool_call_id="c1"),
@@ -796,18 +794,54 @@ class TestAsyncStreamEvents:
         assert chunks == ["hi"]
 
     @pytest.mark.asyncio
-    async def test_async_messages_requires_await(self, async_mock_model):
-        async_mock_model.enqueue(["hi"])
-        response = async_mock_model.prompt("x")
-        with pytest.raises(ValueError):
-            response.messages  # noqa: B018
-
-    @pytest.mark.asyncio
     async def test_async_messages_after_await(self, async_mock_model):
         async_mock_model.enqueue(["hi"])
         response = async_mock_model.prompt("x")
         await response.text()
-        assert response.messages == [
+        assert await response.messages() == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
+        ]
+
+
+class TestMessagesIsCallable:
+    """response.messages() is a method (matching .text(), .json(),
+    .tool_calls()) — invocation forces execution if not yet done.
+    """
+
+    def test_sync_messages_is_callable_and_returns_list(self, mock_model):
+        mock_model.enqueue(["hi"])
+        response = mock_model.prompt("x")
+        # No prior .text() or iteration — calling messages() forces
+        # execution and returns the assembled list.
+        assert response.messages() == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
+        ]
+
+    def test_sync_messages_after_text_returns_same_list(self, mock_model):
+        mock_model.enqueue(["hi"])
+        response = mock_model.prompt("x")
+        response.text()
+        assert response.messages() == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_messages_is_awaitable(self, async_mock_model):
+        async_mock_model.enqueue(["hi"])
+        response = async_mock_model.prompt("x")
+        # No prior await — `await response.messages()` forces it.
+        result = await response.messages()
+        assert result == [
+            llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_messages_after_text_returns_same_list(self, async_mock_model):
+        async_mock_model.enqueue(["hi"])
+        response = async_mock_model.prompt("x")
+        await response.text()
+        result = await response.messages()
+        assert result == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="hi")])
         ]
 
@@ -1051,7 +1085,7 @@ class TestConversationFullChainInvariant:
 
 
 class TestSqliteRehydrateMessages:
-    """After Response.from_row, response.messages must still yield the
+    """After Response.from_row, response.messages() must still yield the
     assistant turn as a TextPart (+ any tool calls). Otherwise
     Conversation.prompt builds a broken chain for `llm -c`.
     """
@@ -1074,10 +1108,10 @@ class TestSqliteRehydrateMessages:
         row = next(db["responses"].rows)
         rehydrated = llm.Response.from_row(db, row)
         # _stream_events is empty (SQLite doesn't persist those), but
-        # _chunks carries the text. response.messages must fall back
+        # _chunks carries the text. response.messages() must fall back
         # to synthesizing a TextPart.
         assert rehydrated._stream_events == []
-        assert rehydrated.messages == [
+        assert rehydrated.messages() == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="answer text")])
         ]
 
@@ -1201,11 +1235,7 @@ class TestResponseReply:
         # First-turn assistant message has a tool call.
         first_assistant = Message(
             role="assistant",
-            parts=[
-                ToolCallPart(
-                    name="echo", arguments={"x": 1}, tool_call_id="c1"
-                )
-            ],
+            parts=[ToolCallPart(name="echo", arguments={"x": 1}, tool_call_id="c1")],
         )
 
         class ToolCallMock(type(mock_model)):
@@ -1213,7 +1243,7 @@ class TestResponseReply:
 
             def execute(self, prompt, stream, response, conversation):
                 # Yield the assistant turn's parts as StreamEvents so
-                # response.messages contains the tool call.
+                # response.messages() contains the tool call.
                 yield llm.StreamEvent(
                     type="tool_call_name",
                     chunk="echo",
@@ -1229,9 +1259,7 @@ class TestResponseReply:
         r1 = m.prompt("call echo")
         r1.text()
 
-        tool_results = [
-            llm.ToolResult(name="echo", output="ok", tool_call_id="c1")
-        ]
+        tool_results = [llm.ToolResult(name="echo", output="ok", tool_call_id="c1")]
         # The bug we're fixing: this previously silently dropped the
         # tool_results because reply() forwards via messages= and the
         # Prompt synthesis path is bypassed.
@@ -1243,11 +1271,7 @@ class TestResponseReply:
             first_assistant,
             Message(
                 role="tool",
-                parts=[
-                    ToolResultPart(
-                        name="echo", output="ok", tool_call_id="c1"
-                    )
-                ],
+                parts=[ToolResultPart(name="echo", output="ok", tool_call_id="c1")],
             ),
         ]
 
@@ -1307,9 +1331,7 @@ class TestResponseReply:
 
             def execute(self, prompt, stream, response, conversation):
                 response.add_tool_call(
-                    llm.ToolCall(
-                        name="echo", arguments={"x": 42}, tool_call_id="c1"
-                    )
+                    llm.ToolCall(name="echo", arguments={"x": 42}, tool_call_id="c1")
                 )
                 yield llm.StreamEvent(
                     type="tool_call_name", chunk="echo", tool_call_id="c1"
@@ -1352,9 +1374,7 @@ class TestResponseReply:
 
             def execute(self, prompt, stream, response, conversation):
                 response.add_tool_call(
-                    llm.ToolCall(
-                        name="echo", arguments={"x": 1}, tool_call_id="c1"
-                    )
+                    llm.ToolCall(name="echo", arguments={"x": 1}, tool_call_id="c1")
                 )
                 yield llm.StreamEvent(
                     type="tool_call_name", chunk="echo", tool_call_id="c1"
@@ -1403,7 +1423,9 @@ class TestResponseReply:
         r1.text()
         m.enqueue(["follow-up"])
         r2 = r1.reply(
-            tool_results=[llm.ToolResult(name="echo", output="custom", tool_call_id="c1")]
+            tool_results=[
+                llm.ToolResult(name="echo", output="custom", tool_call_id="c1")
+            ]
         )
         r2.text()
         assert executed == []  # echo was NOT called
@@ -1441,9 +1463,7 @@ class TestResponseReply:
 
             async def execute(self, prompt, stream, response, conversation):
                 response.add_tool_call(
-                    llm.ToolCall(
-                        name="echo", arguments={"x": 7}, tool_call_id="c1"
-                    )
+                    llm.ToolCall(name="echo", arguments={"x": 7}, tool_call_id="c1")
                 )
                 yield llm.StreamEvent(
                     type="tool_call_name", chunk="echo", tool_call_id="c1"
@@ -1502,18 +1522,12 @@ class TestResponseReply:
             Message(
                 role="assistant",
                 parts=[
-                    ToolCallPart(
-                        name="echo", arguments={"x": 1}, tool_call_id="c1"
-                    )
+                    ToolCallPart(name="echo", arguments={"x": 1}, tool_call_id="c1")
                 ],
             ),
             Message(
                 role="tool",
-                parts=[
-                    ToolResultPart(
-                        name="echo", output="ok", tool_call_id="c1"
-                    )
-                ],
+                parts=[ToolResultPart(name="echo", output="ok", tool_call_id="c1")],
             ),
         ]
 
@@ -1715,7 +1729,7 @@ class TestResponseToDictFromDict:
         restored = llm.Response.from_dict(json.loads(payload))
         assert restored._done
         assert restored.text() == "hello"
-        assert restored.messages == [llm.assistant("hello")]
+        assert restored.messages() == [llm.assistant("hello")]
         assert restored.prompt.messages == [llm.user("hi")]
 
     def test_from_dict_then_reply_continues_conversation(self, mock_model):
@@ -1755,7 +1769,7 @@ class TestResponseToDictFromDict:
         payload = json.dumps(r.to_dict())
         restored = llm.Response.from_dict(json.loads(payload))
 
-        msgs = restored.messages
+        msgs = restored.messages()
         assert msgs[0].role == "assistant"
         assert isinstance(msgs[0].parts[0], llm.ReasoningPart)
         assert msgs[0].parts[0].text == "thinking..."
@@ -1854,11 +1868,11 @@ class TestClientSerializationRoundTrip:
         r.text()
 
         # Serialize via Message.to_dict / json.dumps
-        payload = json.dumps([m.to_dict() for m in r.messages])
+        payload = json.dumps([m.to_dict() for m in r.messages()])
         # Deserialize — no LLM state needed beyond the types.
         restored = [llm.Message.from_dict(d) for d in json.loads(payload)]
 
-        assert restored == r.messages
+        assert restored == r.messages()
 
     def test_rebuilt_messages_reach_plugin_via_prompt(self, mock_model):
         """Round-trip: serialize messages from turn 1, re-inflate, send
@@ -1870,7 +1884,7 @@ class TestClientSerializationRoundTrip:
 
         # Persist everything the client cares about.
         history = [llm.user("turn 1 question").to_dict()] + [
-            m.to_dict() for m in r1.messages
+            m.to_dict() for m in r1.messages()
         ]
         payload = json.dumps(history)
 
@@ -1882,7 +1896,7 @@ class TestClientSerializationRoundTrip:
 
         # The plugin saw the full structured history on prompt.messages.
         assert r2.prompt.messages == rebuilt + [llm.user("turn 2 question")]
-        assert r2.messages == [llm.assistant("turn 2 answer")]
+        assert r2.messages() == [llm.assistant("turn 2 answer")]
 
     def test_roundtrip_preserves_tool_calls_and_results(self, mock_model):
         """Assistant messages with tool calls + subsequent tool role

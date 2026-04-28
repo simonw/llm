@@ -56,7 +56,7 @@ async def test_async_from_dict_rehydrates():
     # text_or_raise should match (same text as original)
     assert restored.text_or_raise() == r.text_or_raise()
     # messages structure preserved
-    assert restored.messages == r.messages
+    assert await restored.messages() == await r.messages()
     # prompt.messages (the chain that was sent) preserved
     assert restored.prompt.messages == r.prompt.messages
 
@@ -108,7 +108,7 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
 
     assert rehydrated._stream_events == []
     # response.messages falls back to _chunks — must not be empty.
-    msgs = rehydrated.messages
+    msgs = await rehydrated.messages()
     assert len(msgs) == 1
     assert msgs[0].role == "assistant"
     assert isinstance(msgs[0].parts[0], llm.TextPart)
@@ -319,16 +319,6 @@ async def test_async_reply_messages_kwarg_appends():
     await r2.text()
     assert [m.role for m in r2.prompt.messages] == ["user", "assistant", "user"]
     assert r2.prompt.messages[-1].parts[0].text == "extra"
-
-
-@pytest.mark.asyncio
-async def test_async_messages_requires_await_before_to_dict():
-    """Parity: accessing response.messages on an un-awaited
-    AsyncResponse raises, matching to_dict's guard."""
-    model = llm.get_async_model("echo")
-    r = model.prompt("hi")
-    with pytest.raises(ValueError):
-        r.messages
 
 
 @pytest.mark.asyncio

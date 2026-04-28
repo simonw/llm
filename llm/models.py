@@ -535,7 +535,7 @@ class _BaseConversation:
             # under the invariant, so use the last response only and then
             # append that response's structured output.
             chain.extend(last.prompt.messages)
-            chain.extend(last.messages)
+            chain.extend(last._messages_now())
 
         # Append the new turn's input
         if tool_results:
@@ -888,10 +888,27 @@ class _BaseResponse:
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
 
-    @property
     def messages(self) -> List[Any]:
         "Overridden by Response / AsyncResponse — declared here for type checkers."
         raise NotImplementedError
+
+    def _messages_now(self) -> List[Any]:
+        """Assemble messages assuming the response is already drained.
+
+        Public ``messages()`` forces / awaits first, then delegates here.
+        Internal sync paths (``_response_to_dict``,
+        ``_chain_for_tool_results``) call this directly so they don't
+        have to await on async responses.
+        """
+        from .parts import Message
+
+        loaded = getattr(self, "_loaded_messages", None)
+        if loaded is not None:
+            return list(loaded)
+        parts = self._build_parts()
+        if not parts:
+            return []
+        return [Message(role="assistant", parts=parts)]
 
     @staticmethod
     def _event_family(event_type: str) -> str:
@@ -1135,9 +1152,7 @@ class _BaseResponse:
         ]
         if redacted_parts:
             other_parts = [
-                p
-                for p in parts
-                if not (isinstance(p, ReasoningPart) and p.redacted)
+                p for p in parts if not (isinstance(p, ReasoningPart) and p.redacted)
             ]
             parts = redacted_parts + other_parts
 
@@ -1484,7 +1499,7 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
         "prompt": {
             "messages": [m.to_dict() for m in response.prompt.messages],
         },
-        "messages": [m.to_dict() for m in response.messages],
+        "messages": [m.to_dict() for m in response._messages_now()],
     }
     if options:
         payload["prompt"]["options"] = options
@@ -1603,7 +1618,7 @@ class Response(_BaseResponse):
         # (mirrors Conversation.prompt's `tools or self.tools` rule).
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
-        chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             chain.append(
                 Message(
@@ -1880,7 +1895,6 @@ class Response(_BaseResponse):
         self._done = True
         self._on_done()
 
-    @property
     def messages(self) -> List[Any]:
         """List of Message objects produced by this response.
 
@@ -1888,19 +1902,15 @@ class Response(_BaseResponse):
         possible for providers that emit multi-message responses during
         server-side tool execution.
 
+        Forces execution if the response has not yet been drained, so
+        ``response.messages()`` is safe to call without a prior
+        ``response.text()`` / iteration.
+
         Responses rehydrated via ``Response.from_dict`` short-circuit
         and return the stored messages directly.
         """
-        from .parts import Message
-
-        loaded = getattr(self, "_loaded_messages", None)
-        if loaded is not None:
-            return list(loaded)
         self._force()
-        parts = self._build_parts()
-        if not parts:
-            return []
-        return [Message(role="assistant", parts=parts)]
+        return self._messages_now()
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -1940,7 +1950,7 @@ class AsyncResponse(_BaseResponse):
             tool_results = await self.execute_tool_calls()
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
-        chain: List[Any] = list(self.prompt.messages) + list(self.messages)
+        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             chain.append(
                 Message(
@@ -2242,26 +2252,17 @@ class AsyncResponse(_BaseResponse):
         finally:
             pass
 
-    @property
-    def messages(self) -> List[Any]:
+    async def messages(self) -> List[Any]:
         """List of Message objects produced by this response.
 
-        Raises ValueError if the response has not yet been awaited —
-        assembly depends on the full event stream. Responses rehydrated
-        via ``AsyncResponse.from_dict`` short-circuit and return the
+        Awaits ``self._force()`` so ``await response.messages()`` is
+        safe to call without first awaiting ``response.text()`` or
+        iterating the stream. Responses rehydrated via
+        ``AsyncResponse.from_dict`` short-circuit and return the
         stored messages.
         """
-        from .parts import Message
-
-        loaded = getattr(self, "_loaded_messages", None)
-        if loaded is not None:
-            return list(loaded)
-        if not self._done:
-            raise ValueError("Response not yet awaited — use 'await response' first")
-        parts = self._build_parts()
-        if not parts:
-            return []
-        return [Message(role="assistant", parts=parts)]
+        await self._force()
+        return self._messages_now()
 
     async def _force(self):
         if not self._done:
@@ -2407,7 +2408,7 @@ def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[A
     )
 
     chain: List[Any] = list(prior_response.prompt.messages) + list(
-        prior_response.messages
+        prior_response._messages_now()
     )
     if tool_results:
         chain.append(

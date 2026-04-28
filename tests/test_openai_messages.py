@@ -425,7 +425,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY)
         response.text()
-        assert response.messages == [
+        assert response.messages() == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
         ]
 
@@ -495,7 +495,7 @@ class TestStreamingExecuteYieldsStreamEvents:
         response = model.prompt("q", tools=[get_weather], key=API_KEY)
         response.text()
         # After streaming, messages has both a TextPart and a ToolCallPart.
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert any(isinstance(p, llm.TextPart) for p in parts)
         assert any(isinstance(p, llm.ToolCallPart) for p in parts)
         text_part = next(p for p in parts if isinstance(p, llm.TextPart))
@@ -555,7 +555,7 @@ class TestReasoningTokenCount:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY)
         response.text()
-        assert response.messages == [
+        assert response.messages() == [
             llm.Message(
                 role="assistant",
                 parts=[
@@ -575,7 +575,7 @@ class TestReasoningTokenCount:
         model = llm.get_model("gpt-4o-mini")
         response = model.prompt("hi", key=API_KEY)
         response.text()
-        parts = response.messages[0].parts
+        parts = response.messages()[0].parts
         assert not any(
             isinstance(p, llm.ReasoningPart) for p in parts
         ), "should not add a redacted reasoning part when count=0"
@@ -606,6 +606,6 @@ class TestNonStreamingExecuteYieldsStreamEvents:
         response = model.prompt("hi", key=API_KEY, stream=False)
         events = list(response.stream_events())
         assert events == [llm.StreamEvent(type="text", chunk="Hello", part_index=0)]
-        assert response.messages == [
+        assert response.messages() == [
             llm.Message(role="assistant", parts=[llm.TextPart(text="Hello")])
         ]
