@@ -1295,9 +1295,10 @@ def load_conversation(
     migrate(db)
     if conversation_id is None:
         # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
+        # Find the conversation with the most recent response
+        matches = list(db["responses"].rows_where(order_by="datetime_utc desc", limit=1))
         if matches:
-            conversation_id = matches[0]["id"]
+            conversation_id = matches[0]["conversation_id"]
         else:
             return None
     try:
