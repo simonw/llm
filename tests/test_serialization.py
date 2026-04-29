@@ -325,3 +325,82 @@ class TestEndToEnd:
         parsed = json.loads(payload)
         # Parsed dict should still conform to ResponseDict.
         TypeAdapter(ResponseDict).validate_python(parsed)
+
+
+# ---- to_dict() must not emit keys absent from the TypedDict --------
+#
+# pydantic's TypeAdapter on a TypedDict silently drops keys that aren't
+# declared, so the round-trip tests above will not catch the case where
+# .to_dict() starts emitting a brand-new key that nobody added to the
+# TypedDict. These tests close that gap by asserting the set of keys
+# .to_dict() returns is a subset of the union of required + optional
+# keys declared on the corresponding TypedDict.
+
+
+def _allowed(td):
+    return td.__required_keys__ | td.__optional_keys__
+
+
+class TestNoUndeclaredKeys:
+    def test_text_part_keys(self):
+        d = llm.parts.TextPart(
+            text="hi",
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(TextPartDict)
+
+    def test_reasoning_part_keys(self):
+        d = llm.parts.ReasoningPart(
+            text="t",
+            redacted=True,
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(ReasoningPartDict)
+
+    def test_tool_call_part_keys(self):
+        d = llm.parts.ToolCallPart(
+            name="t",
+            arguments={"q": "x"},
+            tool_call_id="c1",
+            server_executed=True,
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(ToolCallPartDict)
+
+    def test_tool_result_part_keys(self):
+        d = llm.parts.ToolResultPart(
+            name="t",
+            output="r",
+            tool_call_id="c1",
+            server_executed=True,
+            exception="boom",
+            attachments=[llm.Attachment(type="image/png", url="http://x/y.png")],
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(ToolResultPartDict)
+
+    def test_attachment_part_keys(self):
+        d = llm.parts.AttachmentPart(
+            attachment=llm.Attachment(type="image/png", url="http://x/y.png"),
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(AttachmentPartDict)
+
+    def test_message_keys(self):
+        d = llm.Message(
+            role="assistant",
+            parts=[llm.parts.TextPart(text="hi")],
+            provider_metadata={"k": "v"},
+        ).to_dict()
+        assert set(d.keys()) <= _allowed(MessageDict)
+
+    def test_response_keys(self, mock_model):
+        mock_model.enqueue(["answer"])
+        r = mock_model.prompt("q", max_tokens=10)
+        r.text()
+        d = r.to_dict()
+        assert set(d.keys()) <= _allowed(ResponseDict)
+        # And the nested prompt sub-dict must conform too.
+        from llm.serialization import PromptDict
+
+        assert set(d["prompt"].keys()) <= _allowed(PromptDict)
