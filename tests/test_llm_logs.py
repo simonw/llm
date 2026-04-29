@@ -1009,3 +1009,72 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     # And the rendered logs
     result3 = runner.invoke(cli, ["logs"])
     assert "Model: **mock** (resolved: **resolved-mock**)" in result3.output
+
+
+# ---- Reasoning persistence and markdown rendering -----------------
+
+
+def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
+    """A response that streams reasoning events should round-trip the
+    visible reasoning text via the new responses.reasoning column."""
+    import llm
+
+    mock_model.enqueue(
+        [
+            llm.parts.StreamEvent(type="reasoning", chunk="thinking "),
+            llm.parts.StreamEvent(type="reasoning", chunk="hard"),
+            llm.parts.StreamEvent(type="text", chunk="hello"),
+        ]
+    )
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+
+    row = next(logs_db["responses"].rows)
+    assert row["response"] == "hello"
+    assert row["reasoning"] == "thinking hard"
+
+
+def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
+    """No reasoning emitted → empty/null reasoning column, never raises."""
+    mock_model.enqueue(["just text"])
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+    row = next(logs_db["responses"].rows)
+    assert not row.get("reasoning")
+
+
+def test_logs_markdown_renders_reasoning_heading(user_path):
+    """When a row has reasoning text, `llm logs` renders a `## Reasoning`
+    heading between System and Response."""
+    log_path = str(user_path / "logs_with_reasoning.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": None,
+            "prompt": "hi",
+            "response": "answer",
+            "reasoning": "I thought hard about it.\n\n\n",
+            "model": "mock",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "c1",
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path], catch_exceptions=False)
+    assert result.exit_code == 0
+    # rstrip() before rendering so trailing newlines from the
+    # provider output don't push `## Response` down the page.
+    assert "## Reasoning\n\nI thought hard about it.\n\n## Response" in result.output
+
+
+def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
+    """When reasoning is empty/null, no heading appears (existing
+    fixture rows have no reasoning)."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Reasoning" not in result.output

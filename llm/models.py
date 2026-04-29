@@ -12,6 +12,7 @@ import re
 import time
 from types import MethodType
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncGenerator,
     AsyncIterator,
@@ -24,8 +25,13 @@ from typing import (
     Optional,
     Set,
     Union,
+    cast,
     get_type_hints,
 )
+from .serialization import ResponseDict
+
+if TYPE_CHECKING:
+    from .parts import StreamEvent
 from .utils import (
     ensure_fragment,
     ensure_tool,
@@ -366,6 +372,7 @@ class Prompt:
         schema=None,
         tools=None,
         tool_results=None,
+        messages=None,
     ):
         self._prompt = prompt
         self.model = model
@@ -380,6 +387,9 @@ class Prompt:
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
         self.options = options or {}
+        # Explicit messages= list, if the caller supplied one. Copied so
+        # later mutation by the caller doesn't alter the Prompt.
+        self._explicit_messages = list(messages) if messages is not None else None
 
     @property
     def prompt(self):
@@ -395,6 +405,69 @@ class Prompt:
             if bit.strip()
         ]
         return "\n\n".join(bits)
+
+    @property
+    def messages(self):
+        """Canonical list of Message objects for this prompt.
+
+        **Invariant:** this property returns exactly what the model
+        was (or will be) sent for this turn — the full chain including
+        any prior conversation history.
+
+        - If ``messages=`` was passed explicitly, it is authoritative:
+          returned verbatim. Other kwargs (``prompt=``, ``system=``,
+          ``attachments=``, ``tool_results=``) are ignored for the
+          messages list (they remain available via ``prompt.prompt``,
+          ``prompt.system``, etc., for adapters that still read them).
+        - Otherwise the list is synthesized from the legacy kwargs
+          (system, tool_results, prompt, attachments), producing just
+          the current turn — prior history is not folded in, because
+          no conversation context is reachable here.
+
+        Conversation.prompt / AsyncConversation.prompt / reply() all
+        pre-compute the full chain and pass it as ``messages=``, so
+        ``response.prompt.messages`` after those paths is the full
+        chain.
+        """
+        from .parts import (
+            AttachmentPart,
+            Message,
+            TextPart,
+            ToolResultPart,
+        )
+
+        if self._explicit_messages is not None:
+            return list(self._explicit_messages)
+
+        result: List["Message"] = []
+
+        if self.system:
+            result.append(Message(role="system", parts=[TextPart(text=self.system)]))
+
+        if self.tool_results:
+            result.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in self.tool_results
+                    ],
+                )
+            )
+
+        user_parts: List[Any] = []
+        if self.prompt:
+            user_parts.append(TextPart(text=self.prompt))
+        for att in self.attachments:
+            user_parts.append(AttachmentPart(attachment=att))
+        if user_parts:
+            result.append(Message(role="user", parts=user_parts))
+
+        return result
 
 
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
@@ -425,6 +498,71 @@ class _BaseConversation:
     def from_row(cls, row: Any) -> "_BaseConversation":
         raise NotImplementedError
 
+    def _build_full_chain(
+        self,
+        prompt: Optional[str],
+        attachments,
+        tool_results,
+        explicit_messages,
+    ) -> List[Any]:
+        """Build the full message chain for the next turn.
+
+        Uses the last response's stored prompt chain to recover prior
+        history, then appends the new turn's content (explicit messages
+        first, or synthesized from prompt/attachments/tool_results).
+
+        Returns the list that should be passed as ``messages=`` to the
+        Prompt constructor so that ``response.prompt.messages`` equals
+        exactly what the model sees.
+
+        If ``explicit_messages`` is provided, the caller has opted out
+        of history reconstruction and the list is used as-is.
+        """
+        from .parts import (
+            AttachmentPart,
+            Message,
+            TextPart,
+            ToolResultPart,
+        )
+
+        if explicit_messages is not None:
+            return list(explicit_messages)
+
+        chain: List[Any] = []
+        if self.responses:
+            last = self.responses[-1]
+            # last.prompt.messages already contains the full input chain
+            # under the invariant, so use the last response only and then
+            # append that response's structured output.
+            chain.extend(last.prompt.messages)
+            chain.extend(last._messages_now())
+
+        # Append the new turn's input
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
+
+        user_parts: List[Any] = []
+        if prompt:
+            user_parts.append(TextPart(text=prompt))
+        for att in attachments or []:
+            user_parts.append(AttachmentPart(attachment=att))
+        if user_parts:
+            chain.append(Message(role="user", parts=user_parts))
+
+        return chain
+
 
 @dataclass
 class Conversation(_BaseConversation):
@@ -442,10 +580,19 @@ class Conversation(_BaseConversation):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
     ) -> "Response":
+        # Build the authoritative chain so response.prompt.messages
+        # equals exactly what the model sees for this turn.
+        chain = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return Response(
             Prompt(
                 prompt,
@@ -457,6 +604,7 @@ class Conversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -473,6 +621,7 @@ class Conversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -484,6 +633,16 @@ class Conversation(_BaseConversation):
         options: Optional[dict] = None,
     ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
+        # Parity with Conversation.prompt: pre-bake the full chain so
+        # response.prompt.messages is authoritative for the first turn
+        # of the chain loop. Subsequent tool-result turns extend the
+        # chain via _chain_for_tool_results.
+        chain_messages = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return ChainResponse(
             Prompt(
                 prompt,
@@ -494,6 +653,7 @@ class Conversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
             ),
@@ -535,6 +695,7 @@ class AsyncConversation(_BaseConversation):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -546,6 +707,12 @@ class AsyncConversation(_BaseConversation):
         options: Optional[dict] = None,
     ) -> "AsyncChainResponse":
         self.model._validate_attachments(attachments)
+        chain_messages = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return AsyncChainResponse(
             Prompt(
                 prompt,
@@ -556,6 +723,7 @@ class AsyncConversation(_BaseConversation):
                 tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
             ),
@@ -579,10 +747,17 @@ class AsyncConversation(_BaseConversation):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
         **options,
     ) -> "AsyncResponse":
+        chain = self._build_full_chain(
+            prompt=prompt,
+            attachments=attachments,
+            tool_results=tool_results,
+            explicit_messages=messages,
+        )
         return AsyncResponse(
             Prompt(
                 prompt,
@@ -594,6 +769,7 @@ class AsyncConversation(_BaseConversation):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=chain,
                 options=self.model.Options(**options),
             ),
             self.model,
@@ -674,6 +850,25 @@ class _BaseResponse:
         self.stream = stream
         self._key = key
         self._chunks: List[str] = []
+        # Every StreamEvent ever yielded by execute(), in order. Plain
+        # str yields are wrapped as text events (with part_index resolved
+        # by _resolve_part_index) so this buffer is the single source of
+        # truth for replay and for assembling response.messages.
+        self._stream_events: List[Any] = []
+        # Auto-allocator state for resolving StreamEvent.part_index=None.
+        # Plugins yield events with part_index=None (the default) and
+        # the framework assigns concrete integers based on context:
+        # consecutive same-family text/reasoning events concatenate,
+        # tool calls group by tool_call_id, and tool_result is always
+        # its own part. _auto_index_max tracks the highest index seen
+        # (explicit or allocated); _auto_last_index / _auto_last_family
+        # remember the previously-resolved event so same-family runs
+        # share an index; _auto_tool_id_to_index maps known tool ids to
+        # their assigned index for parallel-tool-call grouping.
+        self._auto_index_max: int = -1
+        self._auto_last_index: Optional[int] = None
+        self._auto_last_family: Optional[str] = None
+        self._auto_tool_id_to_index: Dict[str, int] = {}
         self._done = False
         self._tool_calls: List[ToolCall] = []
         self.response_json: Optional[Dict[str, Any]] = None
@@ -692,6 +887,272 @@ class _BaseResponse:
 
         if self.prompt.tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
+
+    def _messages_now(self) -> List[Any]:
+        """Assemble messages assuming the response is already drained.
+
+        Public ``messages()`` forces / awaits first, then delegates here.
+        Internal sync paths (``_response_to_dict``,
+        ``_chain_for_tool_results``) call this directly so they don't
+        have to await on async responses.
+        """
+        from .parts import Message
+
+        loaded = getattr(self, "_loaded_messages", None)
+        if loaded is not None:
+            return list(loaded)
+        parts = self._build_parts()
+        if not parts:
+            return []
+        return [Message(role="assistant", parts=parts)]
+
+    @staticmethod
+    def _event_family(event_type: str) -> str:
+        if event_type in ("tool_call_name", "tool_call_args"):
+            return "tool_call"
+        return event_type
+
+    def _resolve_part_index(self, event):
+        """Mutate event.part_index in place when the plugin left it None.
+
+        Resolution rules: consecutive same-family text/reasoning events
+        share an index; tool-call events are grouped by tool_call_id;
+        tool_result always allocates a fresh index. Explicit indices
+        pass through but update the allocator's bookkeeping so future
+        None resolutions avoid collisions.
+        """
+        fam = self._event_family(event.type)
+
+        if event.part_index is not None:
+            if event.part_index > self._auto_index_max:
+                self._auto_index_max = event.part_index
+            if (
+                event.type in ("tool_call_name", "tool_call_args")
+                and event.tool_call_id
+            ):
+                self._auto_tool_id_to_index[event.tool_call_id] = event.part_index
+            self._auto_last_index = event.part_index
+            self._auto_last_family = fam
+            return
+
+        if event.type in ("tool_call_name", "tool_call_args"):
+            if event.tool_call_id:
+                existing = self._auto_tool_id_to_index.get(event.tool_call_id)
+                if existing is not None:
+                    event.part_index = existing
+                    self._auto_last_index = existing
+                    self._auto_last_family = "tool_call"
+                    return
+                self._auto_index_max += 1
+                new_idx = self._auto_index_max
+                self._auto_tool_id_to_index[event.tool_call_id] = new_idx
+                event.part_index = new_idx
+                self._auto_last_index = new_idx
+                self._auto_last_family = "tool_call"
+                return
+            # No tool_call_id — providers like Gemini omit the id on
+            # parallel tool calls. tool_call_args events glue onto the
+            # most recent tool-call index; a fresh tool_call_name
+            # always starts a new part (otherwise N parallel tool calls
+            # collapse into one with concatenated names and args).
+            if (
+                event.type == "tool_call_args"
+                and self._auto_last_family == "tool_call"
+                and self._auto_last_index is not None
+            ):
+                event.part_index = self._auto_last_index
+                return
+            self._auto_index_max += 1
+            new_idx = self._auto_index_max
+            event.part_index = new_idx
+            self._auto_last_index = new_idx
+            self._auto_last_family = "tool_call"
+            return
+
+        if event.type == "tool_result":
+            self._auto_index_max += 1
+            new_idx = self._auto_index_max
+            event.part_index = new_idx
+            self._auto_last_index = new_idx
+            self._auto_last_family = "tool_result"
+            return
+
+        # text / reasoning: same family as previous → reuse, else new.
+        if self._auto_last_family == fam and self._auto_last_index is not None:
+            event.part_index = self._auto_last_index
+            return
+        self._auto_index_max += 1
+        new_idx = self._auto_index_max
+        event.part_index = new_idx
+        self._auto_last_index = new_idx
+        self._auto_last_family = fam
+
+    def _process_chunk(self, chunk):
+        """Normalize a chunk from execute() into a StreamEvent and return
+        the text str (or None) that __iter__ should yield.
+
+        Plain str yields from legacy plugins are wrapped as text events
+        with an auto-allocated part_index. Side effects: populates
+        self._stream_events and self._chunks.
+        """
+        from .parts import StreamEvent
+
+        if isinstance(chunk, StreamEvent):
+            self._resolve_part_index(chunk)
+            self._stream_events.append(chunk)
+            if chunk.type == "text":
+                self._chunks.append(chunk.chunk)
+                return chunk.chunk
+            return None
+        # Legacy plain-str plugin.
+        event = StreamEvent(type="text", chunk=chunk)
+        self._resolve_part_index(event)
+        self._stream_events.append(event)
+        self._chunks.append(chunk)
+        return chunk
+
+    def _build_parts(self) -> List[Any]:
+        """Assemble Part objects from the accumulated stream events.
+
+        Events sharing a part_index group into one Part. Mixing
+        families (text vs tool_call vs reasoning vs tool_result) at the
+        same index is a plugin bug — raises ValueError instead of
+        silently dropping content.
+
+        Fallback: when no stream events were recorded (response was
+        rehydrated from SQLite via ``from_row``), synthesize a
+        TextPart from ``self._chunks`` plus any ``self._tool_calls``
+        restored by the row loader. Reasoning signatures are not
+        recoverable from SQLite in this fallback — use
+        ``response.to_dict()`` / ``Response.from_dict()`` for
+        structure-preserving persistence.
+        """
+        from .parts import (
+            ReasoningPart,
+            TextPart,
+            ToolCallPart,
+            ToolResultPart,
+        )
+
+        if not self._stream_events:
+            # Rehydrated-from-SQLite path: assemble from _chunks +
+            # _tool_calls so response.messages isn't empty after
+            # from_row, and Conversation.prompt-built chains include
+            # the assistant turn on follow-up calls.
+            fallback_parts: List[Any] = []
+            text = "".join(self._chunks)
+            if text:
+                fallback_parts.append(TextPart(text=text))
+            for tc in self._tool_calls:
+                fallback_parts.append(
+                    ToolCallPart(
+                        name=tc.name,
+                        arguments=tc.arguments or {},
+                        tool_call_id=tc.tool_call_id,
+                    )
+                )
+            return fallback_parts
+
+        # Group events by their (resolved) part_index, preserving the
+        # order in which each index was first seen. Then build one Part
+        # per group. This handles non-adjacent same-index events (e.g.
+        # text → tool_call → text where the plugin pinned both text
+        # bursts to part_index=0) by merging them into one Part.
+        groups: Dict[int, List[Any]] = {}
+        order: List[int] = []
+        for event in self._stream_events:
+            pi = event.part_index
+            if pi not in groups:
+                groups[pi] = []
+                order.append(pi)
+            groups[pi].append(event)
+
+        parts: List[Any] = []
+        for pi in order:
+            evs = groups[pi]
+            fam_first = self._event_family(evs[0].type)
+            for e in evs:
+                if self._event_family(e.type) != fam_first:
+                    raise ValueError(
+                        f"StreamEvent type {e.type!r} is incompatible with "
+                        f"prior type at part_index={pi}. "
+                        "Allocate a new part_index for a different content type."
+                    )
+
+            pm_merged: Optional[Dict[str, Any]] = None
+            for e in evs:
+                if e.provider_metadata:
+                    merged = dict(pm_merged) if pm_merged else {}
+                    for k, v in e.provider_metadata.items():
+                        merged[k] = v
+                    pm_merged = merged
+
+            if fam_first == "text":
+                text = "".join(e.chunk for e in evs)
+                if text:
+                    parts.append(TextPart(text=text, provider_metadata=pm_merged))
+            elif fam_first == "reasoning":
+                text = "".join(e.chunk for e in evs)
+                redacted = any(e.redacted for e in evs)
+                if text or redacted:
+                    parts.append(
+                        ReasoningPart(
+                            text=text,
+                            redacted=redacted,
+                            provider_metadata=pm_merged,
+                        )
+                    )
+            elif fam_first == "tool_call":
+                tool_name = "".join(e.chunk for e in evs if e.type == "tool_call_name")
+                args_str = "".join(e.chunk for e in evs if e.type == "tool_call_args")
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {"_raw": args_str}
+                tool_call_id = next(
+                    (e.tool_call_id for e in evs if e.tool_call_id), None
+                )
+                server_executed = any(e.server_executed for e in evs)
+                parts.append(
+                    ToolCallPart(
+                        name=tool_name,
+                        arguments=arguments,
+                        tool_call_id=tool_call_id,
+                        server_executed=server_executed,
+                        provider_metadata=pm_merged,
+                    )
+                )
+            elif fam_first == "tool_result":
+                tool_result_name = next((e.tool_name for e in evs if e.tool_name), "")
+                tool_call_id = next(
+                    (e.tool_call_id for e in evs if e.tool_call_id), None
+                )
+                server_executed = any(e.server_executed for e in evs)
+                parts.append(
+                    ToolResultPart(
+                        name=tool_result_name,
+                        output="".join(e.chunk for e in evs),
+                        tool_call_id=tool_call_id,
+                        server_executed=server_executed,
+                        provider_metadata=pm_merged,
+                    )
+                )
+
+        # Hoist redacted reasoning Parts to the start of the assembled
+        # message. Plugins typically emit them late (when usage arrives
+        # in the final chunk), but UIs render reasoning before content,
+        # so the framework reorders. Relative order among redacted
+        # Parts is preserved.
+        redacted_parts = [
+            p for p in parts if isinstance(p, ReasoningPart) and p.redacted
+        ]
+        if redacted_parts:
+            other_parts = [
+                p for p in parts if not (isinstance(p, ReasoningPart) and p.redacted)
+            ]
+            parts = redacted_parts + other_parts
+
+        return parts
 
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(tool_call)
@@ -880,6 +1341,16 @@ class _BaseResponse:
 
         response_text = self.text_or_raise()
         replacements[f"r:{response_id}"] = response_text
+        # Concatenate visible reasoning text from the assembled
+        # ReasoningPart entries; redacted markers contribute nothing.
+        from .parts import ReasoningPart
+
+        reasoning_text = "".join(
+            p.text
+            for m in self._messages_now()
+            for p in m.parts
+            if isinstance(p, ReasoningPart) and p.text
+        )
         json_data = self.json()
 
         response = {
@@ -894,6 +1365,7 @@ class _BaseResponse:
                 if value is not None
             },
             "response": response_text,
+            "reasoning": reasoning_text or None,
             "response_json": condense_json(json_data, replacements),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
@@ -1017,11 +1489,193 @@ class _BaseResponse:
                 )
 
 
+def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
+    """Shared serializer for Response.to_dict / AsyncResponse.to_dict.
+
+    The output is a JSON-safe dict — store it anywhere (file, Redis,
+    Postgres, HTTP body) and round-trip via Response.from_dict or
+    AsyncResponse.from_dict.
+    """
+    options = {
+        key: value
+        for key, value in dict(response.prompt.options).items()
+        if value is not None
+    }
+    payload: Dict[str, Any] = {
+        "model": response.model.model_id,
+        "prompt": {
+            "messages": [m.to_dict() for m in response.prompt.messages],
+        },
+        "messages": [m.to_dict() for m in response._messages_now()],
+    }
+    if options:
+        payload["prompt"]["options"] = options
+    if response.prompt._system:
+        payload["prompt"]["system"] = response.prompt._system
+    # Optional audit fields — helpful for debugging, not needed for reply().
+    if response.id:
+        payload["id"] = response.id
+    if response._done:
+        if response.input_tokens is not None or response.output_tokens is not None:
+            usage: Dict[str, Any] = {}
+            if response.input_tokens is not None:
+                usage["input"] = response.input_tokens
+            if response.output_tokens is not None:
+                usage["output"] = response.output_tokens
+            if response.token_details is not None:
+                usage["details"] = response.token_details
+            payload["usage"] = usage
+        if response._start_utcnow is not None:
+            payload["datetime_utc"] = response._start_utcnow.isoformat()
+    return cast(ResponseDict, payload)
+
+
+def _response_from_dict(
+    data: ResponseDict,
+    cls,
+    *,
+    model=None,
+    async_: bool = False,
+) -> "_BaseResponse":
+    """Shared deserializer for Response.from_dict / AsyncResponse.from_dict."""
+    from .parts import Message
+
+    if model is None:
+        from llm import get_async_model, get_model
+
+        getter = get_async_model if async_ else get_model
+        model = getter(data["model"])
+
+    prompt_data = data.get("prompt", {})
+    input_messages = [Message.from_dict(m) for m in prompt_data.get("messages", [])]
+    output_messages = [Message.from_dict(m) for m in data.get("messages", [])]
+
+    options_kwargs = prompt_data.get("options") or {}
+    system = prompt_data.get("system")
+
+    prompt = Prompt(
+        None,
+        model=model,
+        messages=input_messages,
+        system=system,
+        options=model.Options(**options_kwargs),
+    )
+    response = cls(prompt, model=model, stream=False)
+    # Preserve id for audit continuity.
+    if "id" in data:
+        response.id = data["id"]
+    # Rebuild chunks from the assistant's text parts so response.text()
+    # works without re-running the assembler.
+    from .parts import TextPart
+
+    response._chunks = [
+        p.text
+        for m in output_messages
+        for p in m.parts
+        if isinstance(p, TextPart) and p.text
+    ]
+    # Stash the structured output so response.messages returns the
+    # full picture (reasoning, tool calls, signatures) without needing
+    # a StreamEvent replay.
+    response._loaded_messages = output_messages
+    response._done = True
+    # Restore usage if present.
+    usage = data.get("usage")
+    if usage:
+        response.input_tokens = usage.get("input")
+        response.output_tokens = usage.get("output")
+        response.token_details = usage.get("details")
+    return response
+
+
 class Response(_BaseResponse):
     "Sync response from a model."
 
     model: "Model"
     conversation: Optional["Conversation"] = None
+
+    def reply(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        messages: Optional[List[Any]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
+        **kwargs,
+    ) -> "Response":
+        """Continue the conversation from this response.
+
+        Builds the next turn's chain as
+        ``self.prompt.messages + self.messages + [tool_message] +
+        [user(prompt)] + messages`` and calls
+        ``self.model.prompt(messages=chain, ...)``.
+
+        If this response made tool calls and ``tool_results=`` is not
+        passed, ``reply()`` runs ``self.execute_tool_calls()``
+        automatically and threads the results into the chain. Pass an
+        explicit ``tool_results=`` list (e.g. results you mutated, or
+        synthetic ones for testing) to skip auto-execution.
+        """
+        from .parts import Message, TextPart, ToolResultPart
+
+        self._force()
+        if tool_results is None and self._tool_calls:
+            tool_results = self.execute_tool_calls()
+        # Forward original tools so the next turn can call them again
+        # (mirrors Conversation.prompt's `tools or self.tools` rule).
+        if "tools" not in kwargs and self.prompt.tools:
+            kwargs["tools"] = self.prompt.tools
+        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
+        if prompt:
+            chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
+        if messages:
+            chain.extend(messages)
+        return self.model.prompt(messages=chain, **kwargs)
+
+    def to_dict(self) -> ResponseDict:
+        """Serialize this response for JSON persistence.
+
+        Captures exactly what is needed to continue the conversation:
+        model id, the input chain that was sent
+        (``response.prompt.messages``), the structured assistant output
+        (``response.messages``), and any explicit options. Pair with
+        :meth:`Response.from_dict` to rehydrate and
+        :meth:`Response.reply` to continue.
+
+        Returns :class:`~llm.serialization.ResponseDict`.
+        """
+        return _response_to_dict(self)
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: ResponseDict,
+        *,
+        model: Optional["Model"] = None,
+    ) -> "Response":
+        """Rehydrate a Response from a ``to_dict()`` payload.
+
+        The returned Response is in the ``_done`` state with
+        ``response.text()`` and ``response.messages`` populated.
+        ``model`` overrides the stored model id (useful for continuing
+        on a different model).
+        """
+        return cast(
+            "Response", _response_from_dict(data, cls, model=model, async_=False)
+        )
 
     def on_done(self, callback):
         "Register a callback to be called when the response is complete."
@@ -1177,6 +1831,32 @@ class Response(_BaseResponse):
             details=self.token_details,
         )
 
+    def _iter_events(self):
+        """Drive self.model.execute() once and yield each raw chunk it
+        produces. Callers normalize chunks through _process_chunk.
+        """
+        if isinstance(self.model, Model):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+            )
+        elif isinstance(self.model, KeyModel):
+            generator = self.model.execute(
+                self.prompt,
+                stream=self.stream,
+                response=self,
+                conversation=self.conversation,
+                key=self.model.get_key(self._key),
+            )
+        else:
+            raise Exception("self.model must be a Model or KeyModel")
+
+        for chunk in generator:
+            assert chunk is not None
+            yield chunk
+
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
@@ -1184,35 +1864,59 @@ class Response(_BaseResponse):
             yield from self._chunks
             return
 
-        if isinstance(self.model, Model):
-            for chunk in self.model.execute(
-                self.prompt,
-                stream=self.stream,
-                response=self,
-                conversation=self.conversation,
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
-        elif isinstance(self.model, KeyModel):
-            for chunk in self.model.execute(
-                self.prompt,
-                stream=self.stream,
-                response=self,
-                conversation=self.conversation,
-                key=self.model.get_key(self._key),
-            ):
-                assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
-        else:
-            raise Exception("self.model must be a Model or KeyModel")
+        for chunk in self._iter_events():
+            text = self._process_chunk(chunk)
+            if text is not None:
+                yield text
 
         if self.conversation:
             self.conversation.responses.append(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
+
+    def stream_events(self):
+        """Yield StreamEvent objects as the model produces them.
+
+        Whichever of __iter__ and stream_events runs first during live
+        streaming consumes the underlying generator. After completion,
+        both work — each replays from its own buffer.
+        """
+        if self._done:
+            yield from self._stream_events
+            return
+
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        for chunk in self._iter_events():
+            # _process_chunk appends to self._stream_events; use it as
+            # the canonical source for what to yield so the replay path
+            # matches the live path byte-for-byte.
+            self._process_chunk(chunk)
+            yield self._stream_events[-1]
+
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+        self._on_done()
+
+    def messages(self) -> List[Any]:
+        """List of Message objects produced by this response.
+
+        Almost always a single assistant Message; multiple messages are
+        possible for providers that emit multi-message responses during
+        server-side tool execution.
+
+        Forces execution if the response has not yet been drained, so
+        ``response.messages()`` is safe to call without a prior
+        ``response.text()`` / iteration.
+
+        Responses rehydrated via ``Response.from_dict`` short-circuit
+        and return the stored messages directly.
+        """
+        self._force()
+        return self._messages_now()
 
     def __repr__(self):
         text = "... not yet done ..."
@@ -1226,6 +1930,72 @@ class AsyncResponse(_BaseResponse):
 
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
+
+    async def reply(
+        self,
+        prompt: Optional[str] = None,
+        *,
+        messages: Optional[List[Any]] = None,
+        tool_results: Optional[List[ToolResult]] = None,
+        **kwargs,
+    ) -> "AsyncResponse":
+        """Async counterpart of Response.reply(). Requires this response
+        to have been awaited (so self.messages is available).
+
+        Awaitable so the auto-execute path can ``await
+        self.execute_tool_calls()``. See ``Response.reply`` for the
+        ``tool_results=`` semantics.
+        """
+        from .parts import Message, TextPart, ToolResultPart
+
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before reply()"
+            )
+        if tool_results is None and self._tool_calls:
+            tool_results = await self.execute_tool_calls()
+        if "tools" not in kwargs and self.prompt.tools:
+            kwargs["tools"] = self.prompt.tools
+        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
+        if tool_results:
+            chain.append(
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(
+                            name=tr.name,
+                            output=tr.output,
+                            tool_call_id=tr.tool_call_id,
+                        )
+                        for tr in tool_results
+                    ],
+                )
+            )
+        if prompt:
+            chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
+        if messages:
+            chain.extend(messages)
+        return self.model.prompt(messages=chain, **kwargs)
+
+    def to_dict(self) -> ResponseDict:
+        """Async counterpart of Response.to_dict(). Requires awaiting."""
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before to_dict()"
+            )
+        return _response_to_dict(self)
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: ResponseDict,
+        *,
+        model: Optional["AsyncModel"] = None,
+    ) -> "AsyncResponse":
+        """Async counterpart of Response.from_dict()."""
+        return cast(
+            "AsyncResponse", _response_from_dict(data, cls, model=model, async_=True)
+        )
 
     @classmethod
     def from_row(cls, db, row, _async=False):
@@ -1416,12 +2186,7 @@ class AsyncResponse(_BaseResponse):
             self._iter_chunks = list(self._chunks)  # Make a copy for iteration
         return self
 
-    async def __anext__(self) -> str:
-        if self._done:
-            if hasattr(self, "_iter_chunks") and self._iter_chunks:
-                return self._iter_chunks.pop(0)
-            raise StopAsyncIteration
-
+    def _ensure_async_generator(self):
         if not hasattr(self, "_generator"):
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
@@ -1441,20 +2206,69 @@ class AsyncResponse(_BaseResponse):
             else:
                 raise ValueError("self.model must be an AsyncModel or AsyncKeyModel")
 
-        try:
-            chunk = await self._generator.__anext__()
+    async def _async_finalize(self):
+        if self.conversation:
+            self.conversation.responses.append(self)
+        self._end = time.monotonic()
+        self._done = True
+        if hasattr(self, "_generator"):
+            del self._generator
+        await self._on_done()
+
+    async def __anext__(self) -> str:
+        if self._done:
+            if hasattr(self, "_iter_chunks") and self._iter_chunks:
+                return self._iter_chunks.pop(0)
+            raise StopAsyncIteration
+
+        self._ensure_async_generator()
+        # Skip non-text events — iteration yields only text. Loop until
+        # we find a text chunk or the generator is exhausted.
+        while True:
+            try:
+                chunk = await self._generator.__anext__()
+            except StopAsyncIteration:
+                await self._async_finalize()
+                raise
             assert chunk is not None
-            self._chunks.append(chunk)
-            return chunk
-        except StopAsyncIteration:
-            if self.conversation:
-                self.conversation.responses.append(self)
-            self._end = time.monotonic()
-            self._done = True
-            if hasattr(self, "_generator"):
-                del self._generator
-            await self._on_done()
-            raise
+            text = self._process_chunk(chunk)
+            if text is not None:
+                return text
+
+    async def astream_events(self):
+        """Yield StreamEvent objects as the model produces them (async)."""
+        if self._done:
+            for event in self._stream_events:
+                yield event
+            return
+
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
+        self._ensure_async_generator()
+        try:
+            while True:
+                try:
+                    chunk = await self._generator.__anext__()
+                except StopAsyncIteration:
+                    await self._async_finalize()
+                    return
+                assert chunk is not None
+                self._process_chunk(chunk)
+                yield self._stream_events[-1]
+        finally:
+            pass
+
+    async def messages(self) -> List[Any]:
+        """List of Message objects produced by this response.
+
+        Awaits ``self._force()`` so ``await response.messages()`` is
+        safe to call without first awaiting ``response.text()`` or
+        iterating the stream. Responses rehydrated via
+        ``AsyncResponse.from_dict`` short-circuit and return the
+        stored messages.
+        """
+        await self._force()
+        return self._messages_now()
 
     async def _force(self):
         if not self._done:
@@ -1580,6 +2394,54 @@ class AsyncResponse(_BaseResponse):
         return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
+def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[Any]:
+    """Build the message chain for a tool-result turn in a chain loop.
+
+    Takes the prior response's full input chain + its structured
+    output, then appends a tool-role message carrying the new
+    ToolResult outputs. Attachments (e.g. images returned by tools)
+    are folded into a subsequent user-role message.
+
+    This is what gives ``response.prompt.messages`` on the tool-
+    result turn the complete history for the next provider call —
+    including any reasoning signatures or thoughtSignatures from the
+    prior turn.
+    """
+    from .parts import (
+        AttachmentPart,
+        Message,
+        ToolResultPart,
+    )
+
+    chain: List[Any] = list(prior_response.prompt.messages) + list(
+        prior_response._messages_now()
+    )
+    if tool_results:
+        chain.append(
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name=tr.name,
+                        output=tr.output,
+                        tool_call_id=tr.tool_call_id,
+                    )
+                    for tr in tool_results
+                ],
+            )
+        )
+    # Attachments that came back from tools ride on a trailing user
+    # message (mimics the legacy attachments=[] kwarg behavior).
+    if attachments:
+        chain.append(
+            Message(
+                role="user",
+                parts=[AttachmentPart(attachment=a) for a in attachments],
+            )
+        )
+    return chain
+
+
 class _BaseChainResponse:
     prompt: "Prompt"
     stream: bool
@@ -1648,12 +2510,27 @@ class ChainResponse(_BaseChainResponse):
             for tool_result in tool_results:
                 attachments.extend(tool_result.attachments)
             if tool_results:
+                # Pre-bake the full chain for the tool-result turn so
+                # response.prompt.messages is what gets sent — carries
+                # thoughtSignatures, thinking signatures, and everything
+                # else the model needs for the next call.
+                next_chain = _chain_for_tool_results(
+                    current_response, tool_results, attachments
+                )
                 current_response = Response(
                     Prompt(
-                        "",  # Next prompt is empty, tools drive it
+                        "",  # Next prompt text is empty; tool_results drive it
                         self.model,
                         tools=current_response.prompt.tools,
                         tool_results=tool_results,
+                        messages=next_chain,
+                        # Carry system + system_fragments forward so
+                        # stateless-per-turn adapters (OpenAI and
+                        # friends that read prompt.system directly)
+                        # keep seeing the system prompt on every call
+                        # of the chain loop.
+                        system=self.prompt._system,
+                        system_fragments=self.prompt.system_fragments,
                         options=self.prompt.options,
                         attachments=attachments,
                     ),
@@ -1669,6 +2546,11 @@ class ChainResponse(_BaseChainResponse):
     def __iter__(self) -> Iterator[str]:
         for response_item in self.responses():
             yield from response_item
+
+    def stream_events(self):
+        "Yield StreamEvents from every response in the chain."
+        for response_item in self.responses():
+            yield from response_item.stream_events()
 
     def text(self) -> str:
         return "".join(self)
@@ -1705,11 +2587,21 @@ class AsyncChainResponse(_BaseChainResponse):
                 attachments = []
                 for tool_result in tool_results:
                     attachments.extend(tool_result.attachments)
+                # Pre-bake chain so prompt.messages carries full history
+                # + any thinking/tool-call signatures from prior turn.
+                next_chain = _chain_for_tool_results(
+                    current_response, tool_results, attachments
+                )
                 prompt = Prompt(
                     "",
                     self.model,
                     tools=current_response.prompt.tools,
                     tool_results=tool_results,
+                    messages=next_chain,
+                    # Carry system + system_fragments forward — same
+                    # reasoning as the sync path.
+                    system=self.prompt._system,
+                    system_fragments=self.prompt.system_fragments,
                     options=self.prompt.options,
                     attachments=attachments,
                 )
@@ -1728,6 +2620,12 @@ class AsyncChainResponse(_BaseChainResponse):
         async for response_item in self.responses():
             async for chunk in response_item:
                 yield chunk
+
+    async def astream_events(self):
+        "Yield StreamEvents from every response in the chain."
+        async for response_item in self.responses():
+            async for event in response_item.astream_events():
+                yield event
 
     async def text(self) -> str:
         all_chunks = []
@@ -1836,6 +2734,7 @@ class _Model(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -1854,6 +2753,7 @@ class _Model(_BaseModel):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 model=self,
                 options=self.Options(**options),
             ),
@@ -1870,6 +2770,7 @@ class _Model(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -1885,6 +2786,7 @@ class _Model(_BaseModel):
             attachments=attachments,
             system=system,
             system_fragments=system_fragments,
+            messages=messages,
             stream=stream,
             schema=schema,
             tools=tools,
@@ -1904,7 +2806,7 @@ class Model(_Model):
         stream: bool,
         response: Response,
         conversation: Optional[Conversation],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
 
@@ -1917,7 +2819,7 @@ class KeyModel(_Model):
         response: Response,
         conversation: Optional[Conversation],
         key: Optional[str],
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
 
@@ -1948,6 +2850,7 @@ class _AsyncModel(_BaseModel):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         **options,
     ) -> AsyncResponse:
@@ -1963,6 +2866,7 @@ class _AsyncModel(_BaseModel):
                 tools=tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
+                messages=messages,
                 model=self,
                 options=self.Options(**options),
             ),
@@ -1979,6 +2883,7 @@ class _AsyncModel(_BaseModel):
         attachments: Optional[List[Attachment]] = None,
         system: Optional[str] = None,
         system_fragments: Optional[List[str]] = None,
+        messages: Optional[List[Any]] = None,
         stream: bool = True,
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
@@ -1994,6 +2899,7 @@ class _AsyncModel(_BaseModel):
             attachments=attachments,
             system=system,
             system_fragments=system_fragments,
+            messages=messages,
             stream=stream,
             schema=schema,
             tools=tools,
@@ -2013,7 +2919,7 @@ class AsyncModel(_AsyncModel):
         stream: bool,
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
         pass
@@ -2028,7 +2934,7 @@ class AsyncKeyModel(_AsyncModel):
         response: AsyncResponse,
         conversation: Optional[AsyncConversation],
         key: Optional[str],
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
         pass

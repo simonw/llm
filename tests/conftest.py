@@ -51,6 +51,7 @@ def env_setup(monkeypatch, user_path):
 class MockModel(llm.Model):
     model_id = "mock"
     attachment_types = {"image/png", "audio/wav"}
+    can_stream = True
     supports_schema = True
     supports_tools = True
 
@@ -105,6 +106,7 @@ class MockAsyncKeyModel(llm.AsyncKeyModel):
 
 class AsyncMockModel(llm.AsyncModel):
     model_id = "mock"
+    can_stream = True
     supports_schema = True
 
     def __init__(self):

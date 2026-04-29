@@ -418,3 +418,11 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_response_reasoning(db):
+    # Concatenated visible reasoning text emitted during the response.
+    # NULL/empty when no reasoning was emitted or when the provider
+    # only reported an opaque token count (the redacted-marker case).
+    db["responses"].add_column("reasoning", str)

@@ -26,6 +26,13 @@ from .models import (
     ToolResult,
     Usage,
 )
+from .parts import (
+    Message,
+    assistant,
+    system,
+    tool_message,
+    user,
+)
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
@@ -43,6 +50,7 @@ __all__ = [
     "AsyncKeyModel",
     "AsyncModel",
     "AsyncResponse",
+    "assistant",
     "Attachment",
     "CancelToolCall",
     "Collection",
@@ -53,21 +61,25 @@ __all__ = [
     "get_model",
     "hookimpl",
     "KeyModel",
+    "Message",
     "Model",
     "ModelError",
     "NeedsKeyException",
     "Options",
     "Prompt",
     "Response",
+    "schema_dsl",
+    "system",
     "Template",
     "Tool",
     "Toolbox",
     "ToolCall",
+    "tool_message",
     "ToolOutput",
     "ToolResult",
     "Usage",
+    "user",
     "user_dir",
-    "schema_dsl",
 ]
 DEFAULT_MODEL = "gpt-4o-mini"
 

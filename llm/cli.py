@@ -89,6 +89,39 @@ class FragmentNotFound(Exception):
     pass
 
 
+def display_stream_events(events, *, show_reasoning=True):
+    """Consume a sync iterator of StreamEvents and write them.
+
+    Text events go to stdout. Reasoning events go to stderr in dim style.
+    A newline is written to stderr at each reasoning→text transition so
+    the assistant text starts on a fresh visual line.
+    """
+    was_reasoning = False
+    for event in events:
+        if event.type == "text":
+            if was_reasoning and show_reasoning:
+                click.echo("", err=True)
+                was_reasoning = False
+            click.echo(event.chunk, nl=False)
+        elif event.type == "reasoning" and show_reasoning:
+            was_reasoning = True
+            click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
+
+
+async def display_async_stream_events(events, *, show_reasoning=True):
+    """Async counterpart of display_stream_events."""
+    was_reasoning = False
+    async for event in events:
+        if event.type == "text":
+            if was_reasoning and show_reasoning:
+                click.echo("", err=True)
+                was_reasoning = False
+            click.echo(event.chunk, nl=False)
+        elif event.type == "reasoning" and show_reasoning:
+            was_reasoning = True
+            click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
+
+
 def validate_fragment_alias(ctx, param, value):
     if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise click.BadParameter("Fragment alias must be alphanumeric")
@@ -451,6 +484,9 @@ def cli():
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--log", is_flag=True, help="Log prompt and response to the database")
 @click.option(
+    "-R", "--no-reasoning", is_flag=True, help="Don't display reasoning output"
+)
+@click.option(
     "_continue",
     "-c",
     "--continue",
@@ -499,6 +535,7 @@ def prompt(
     no_stream,
     no_log,
     log,
+    no_reasoning,
     _continue,
     conversation_id,
     key,
@@ -849,9 +886,10 @@ def prompt(
                         system_fragments=resolved_system_fragments,
                         **kwargs,
                     )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
+                    await display_async_stream_events(
+                        response.astream_events(),
+                        show_reasoning=not no_reasoning,
+                    )
                     print("")
                 else:
                     response = prompt_method(
@@ -883,9 +921,10 @@ def prompt(
                 **kwargs,
             )
             if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
+                display_stream_events(
+                    response.stream_events(),
+                    show_reasoning=not no_reasoning,
+                )
                 print("")
             else:
                 text = response.text()
@@ -982,6 +1021,9 @@ def prompt(
     help="Path to log database",
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
+@click.option(
+    "-R", "--no-reasoning", is_flag=True, help="Don't display reasoning output"
+)
 @click.option("--key", help="API key to use")
 @click.option(
     "tools",
@@ -1030,6 +1072,7 @@ def chat(
     param,
     options,
     no_stream,
+    no_reasoning,
     key,
     database,
     tools,
@@ -1234,9 +1277,10 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+        display_stream_events(
+            response.stream_events(),
+            show_reasoning=not no_reasoning,
+        )
         response.log_to_db(db)
         print("")
 
@@ -1424,6 +1468,7 @@ LOGS_COLUMNS = """    responses.id,
     responses.prompt_json,
     responses.options_json,
     responses.response,
+    responses.reasoning,
     responses.response_json,
     responses.conversation_id,
     responses.duration_ms,
@@ -2173,6 +2218,8 @@ def logs_list(
                     response = "```json\n{}\n```".format(json.dumps(parsed, indent=2))
                 except ValueError:
                     pass
+            if row.get("reasoning"):
+                click.echo("\n## Reasoning\n\n{}".format(row["reasoning"].rstrip()))
             click.echo("\n## Response\n")
             if row["tool_calls"]:
                 click.echo("### Tool calls\n")

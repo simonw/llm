@@ -60,6 +60,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
         {
             "id": ANY,
@@ -78,6 +79,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
     ]
     # Now continue that conversation
@@ -126,6 +128,7 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         }
     ]
 
@@ -170,6 +173,7 @@ def test_chat_system(mock_model, logs_db):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         }
     ]
 
@@ -213,6 +217,7 @@ def test_chat_options(mock_model, logs_db, user_path):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
         {
             "id": ANY,
@@ -231,6 +236,7 @@ def test_chat_options(mock_model, logs_db, user_path):
             "output_tokens": 1,
             "token_details": None,
             "schema_id": None,
+            "reasoning": None,
         },
     ]
 

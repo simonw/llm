@@ -1,5 +1,34 @@
 # Changelog
 
+(v0_32_a0)=
+## 0.32a0 (2026-04-28)
+
+This alpha introduces a major backwards-compatible refactor. Models can now be prompted with a list of messages, OpenAI Chat Completions style, and the response can now be iterated over as a sequence of mixed types of content, for example reasoning tokens mixed with text tokens mixed with tool calls.
+
+Prompt inputs and response outputs are now expressed as a list of `Message` objects, each containing typed `Part` objects (text, reasoning, tool calls, tool results, attachments).
+
+The `llm` CLI tool can now display reasoning tokens while executing a prompt.
+
+Plugin authors should read the expanded {ref}`Advanced model plugins <advanced-model-plugins>` documentation, which now covers `StreamEvent`, consuming `prompt.messages`, and round-tripping opaque provider metadata such as Anthropic extended-thinking signatures and Gemini `thoughtSignature` values.
+
+### Structured messages and streaming events
+
+- New `llm.Message` value type and constructor helpers `llm.user()`, `llm.assistant()`, `llm.system()`, and `llm.tool_message()` for building structured prompt inputs. The helpers accept strings, `Attachment` instances, or nested `Part` lists.
+- New `messages=` keyword argument on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts. The `prompt=`, `system=`, `attachments=`, and `tool_results=` keywords still work and synthesize into the same `Message` list internally.
+- New `response.stream_events()` and `response.astream_events()` methods yielding typed `StreamEvent` objects (`type` is one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`, plus a `redacted=True` marker for opaque reasoning). Iterating against `response` directly continues to yield only text strings.
+- New `response.messages()` method (async: `await response.messages()`) returning the assembled `list[Message]` produced by the model. Calling it forces execution if the response prompt has not yet been executed.
+- New `response.reply(prompt=None, **kwargs)` method that continues the conversation from any `Response`, regardless of origin. When the previous response made tool calls and `tool_results=` was not passed, `reply()` automatically executes the pending tool calls and threads the results into the next turn. On async responses `reply()` is awaitable.
+- New `response.to_dict()` and `Response.from_dict(data, *, model=None)` for JSON-safe serialization of a full conversation turn — model id, input chain, assembled output (including reasoning parts and provider metadata), options, and audit fields. Reasoning signatures and `thoughtSignature` values round-trip via `provider_metadata`, so multi-turn extended thinking works across process boundaries.
+- New `llm/serialization.py` module exposing `MessageDict`, `PartDict`, `ResponseDict`, `PromptDict`, `UsageDict`, `AttachmentDict`, and the per-Part TypedDicts. Every `to_dict()` / `from_dict()` method is annotated with the matching TypedDict.
+- `Response.prompt.messages` is now the canonical structured input across the entire conversation chain. `Conversation.prompt` and `AsyncConversation.prompt` pre-compute the full chain (prior input + prior output + new turn) before constructing the next `Prompt`, so `response.prompt.messages` is always exactly what the model was sent.
+
+### CLI
+
+- `llm prompt` and `llm chat` now display visible reasoning text to stderr in a dim style while the response streams.
+- New `-R/--no-reasoning` flag for `llm prompt` and `llm chat` to suppress the reasoning stream.
+- `llm logs` now renders any visible reasoning emitted during a response under a `## Reasoning` heading above the response.
+- New `reasoning` column on the `responses` table populated from the visible-reasoning text.
+
 (v0_31)=
 ## 0.31 (2026-04-24)
 
