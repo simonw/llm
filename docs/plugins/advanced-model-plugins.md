@@ -297,8 +297,6 @@ When you leave `part_index` as `None` (the default), the framework groups events
 - **Tool calls group by `tool_call_id`.** A `tool_call_name` and any number of `tool_call_args` events sharing a `tool_call_id` combine into one `ToolCallPart` — even if they're interleaved with other events (parallel tool calls).
 - **`tool_result` is always its own Part**, paired to the originating call by `tool_call_id`.
 
-This handles every common shape without a plugin-side allocator:
-
 | Stream                                    | Resulting Parts                                          |
 |-------------------------------------------|----------------------------------------------------------|
 | `text` × N                                | one `TextPart`                                           |

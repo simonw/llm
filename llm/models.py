@@ -1607,8 +1607,7 @@ class Response(_BaseResponse):
         Builds the next turn's chain as
         ``self.prompt.messages + self.messages + [tool_message] +
         [user(prompt)] + messages`` and calls
-        ``self.model.prompt(messages=chain, ...)``. No Conversation
-        object required — the Response carries everything needed.
+        ``self.model.prompt(messages=chain, ...)``.
 
         If this response made tool calls and ``tool_results=`` is not
         passed, ``reply()`` runs ``self.execute_tool_calls()``

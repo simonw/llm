@@ -63,7 +63,7 @@ async def test_async_from_dict_rehydrates():
 
 @pytest.mark.asyncio
 async def test_async_from_dict_then_reply_continues():
-    """The whole point: persist an async response across process
+    """Persist an async response across process
     boundary (via JSON), rehydrate, continue with reply()."""
     model = llm.get_async_model("echo")
     r1 = model.prompt("q1")

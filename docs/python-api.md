@@ -606,7 +606,7 @@ On async models `messages()` is awaitable: `await response.messages()`.
 
 #### Persisting a conversation
 
-A `Response` can round-trip through a plain Python dictionary via `response.to_dict()` and `llm.Response.from_dict(...)`. The dict captures the model id, the input messages that were sent, the assistant output, and any options — everything needed to continue the conversation later.
+A `Response` can round-trip through a plain Python dictionary via `response.to_dict()` and `llm.Response.from_dict(...)`. The dict captures the model id, the input messages that were sent, the assistant output, and any options. The re-inflated object can be used to continue the conversation.
 
 Use `response.reply(...)` to continue from a rehydrated response:
 
@@ -627,7 +627,7 @@ followup = rebuilt.reply("Add 3 to that")
 print(followup.text())
 ```
 
-`AttachmentPart` bytes are base64-encoded in the dict form, so multi-modal conversations round-trip faithfully via JSON too.
+`AttachmentPart` bytes are base64-encoded in the dict form, so multi-modal conversations round-trip via JSON too.
 
 Individual `Message` and `Part` objects also support `to_dict()` / `from_dict()` if you need to manipulate turns directly — for example, to edit, filter, or splice messages before passing them back via `model.prompt(messages=[...])`.
 

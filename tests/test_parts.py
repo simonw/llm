@@ -1250,7 +1250,7 @@ class TestResponseReply:
         ]
 
     def test_reply_with_tool_results_appends_tool_message(self, mock_model):
-        # The natural idiom: model.prompt(...) makes tool calls, the
+        # model.prompt(...) makes tool calls, the
         # caller runs them, then reply(tool_results=...) sends the
         # results back in one call. The chain should grow by a
         # role="tool" message containing ToolResultParts.

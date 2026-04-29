@@ -832,13 +832,7 @@ class _Shared:
         return current_system
 
     def build_messages(self, prompt, conversation, image_detail=None):
-        """Translate prompt.messages into OpenAI's wire format.
-
-        Under the Phase 7 invariant, ``prompt.messages`` is the full
-        chain for this turn — Conversation.prompt and response.reply
-        pre-bake the history into it. The ``conversation`` parameter
-        is unused and retained only for the plugin API contract.
-        """
+        """Translate prompt.messages into OpenAI's wire format."""
         messages: List[Dict[str, Any]] = []
         if image_detail is not None:
             image_detail = image_detail.value
@@ -1024,16 +1018,11 @@ class Chat(_Shared, KeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
-        # Read reasoning_tokens from usage BEFORE set_usage runs —
-        # set_usage pops top-level keys and passes the rest through
-        # simplify_usage_dict, which strips zero-valued entries.
-        if usage:
-            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
-                "reasoning_tokens", 0
-            )
-            if reasoning_tokens:
-                yield StreamEvent(type="reasoning", chunk="", redacted=True)
         self.set_usage(response, usage)
+        if usage and (usage.get("completion_tokens_details") or {}).get(
+            "reasoning_tokens"
+        ):
+            yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
 
 
@@ -1145,14 +1134,11 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
-        # See sync Chat.execute: read reasoning before set_usage mutates.
-        if usage:
-            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
-                "reasoning_tokens", 0
-            )
-            if reasoning_tokens:
-                yield StreamEvent(type="reasoning", chunk="", redacted=True)
         self.set_usage(response, usage)
+        if usage and (usage.get("completion_tokens_details") or {}).get(
+            "reasoning_tokens"
+        ):
+            yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
 
 
