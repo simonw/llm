@@ -258,7 +258,7 @@ The 0.32 alpha introduced a richer contract for plugins than "yield strings":
 2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn.
 3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, then echo it back on the next request.
 
-**Backward compatibility is guaranteed.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=...)` internally.
+**Older plugins still work.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=...)` internally.
 
 ### Yielding StreamEvent from execute()
 
@@ -276,8 +276,6 @@ def execute(self, prompt, stream, response, conversation, key=None):
             yield StreamEvent(type="reasoning", chunk=chunk.text)
 ```
 
-That's the whole pattern for most plugins. The framework figures out which events group into which Part.
-
 A `StreamEvent` has four frequently-used fields:
 
 - **`type`** — one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`.
@@ -287,7 +285,7 @@ A `StreamEvent` has four frequently-used fields:
 
 Three additional fields exist for special cases:
 
-- **`server_executed: bool`** — set `True` for server-side tool calls (for example, Anthropic web search) and their results. The model ran the tool internally.
+- **`server_executed: bool`** — set `True` for server-side tool calls (for example, Anthropic web search) and their results. This means the model ran the tool internally as part of responding to the prompt.
 - **`tool_name`** — set on `tool_result` events to identify which tool this result came from.
 - **`part_index: int | None`** — defaults to `None`, which means "let the framework decide which Part this event belongs to." Pass an explicit integer only when you need to override the default grouping (see [below](#part-index-overrides)).
 
@@ -321,27 +319,13 @@ You can mix explicit indices with `None` in the same stream — the framework re
 
 ### Reasoning tokens
 
-Two modes are supported:
-
-**Streamed reasoning text** (Anthropic extended thinking, Gemini with `includeThoughts: true`):
+For streamed reasoning text:
 
 ```python
-yield StreamEvent(type="reasoning", chunk=thinking_chunk)
+yield StreamEvent(type="reasoning", chunk=text_chunk)
 ```
 
-Reasoning events that appear before/after text events become distinct `ReasoningPart` and `TextPart` entries in `response.messages` automatically. If your provider emits two thinking blocks separated by a tool call, you'll get two `ReasoningPart`s — exactly what you want.
-
-**Opaque reasoning token count** (OpenAI o-series, Gemini without `includeThoughts`):
-
-The provider reports only a count — no reasoning text. Record the count on the Response object and the framework will prepend a redacted `ReasoningPart`:
-
-```python
-# Anywhere before set_usage runs (usually at the end of execute):
-if reasoning_tokens > 0:
-    response._reasoning_token_count = reasoning_tokens
-```
-
-For OpenAI this count lives in `usage.completion_tokens_details.reasoning_tokens`; read it **before** calling `self.set_usage()` — `set_usage()` mutates the usage dict via `pop()` and simplifies out zero-valued entries.
+Reasoning events that appear before/after text events become distinct `ReasoningPart` and `TextPart` entries in `response.messages` automatically. If your provider emits two thinking blocks separated by a tool call, you'll get two `ReasoningPart`s.
 
 ### Tool calls
 
@@ -361,9 +345,9 @@ yield StreamEvent(
 )
 ```
 
-The framework groups them by `tool_call_id` — so parallel tool calls (where args for tool A and tool B interleave on the wire) just work without any per-call index tracking. Some providers (Gemini) emit the complete tool call in one chunk — fine; emit both events back-to-back with the full name and full JSON.
+The framework groups them by `tool_call_id` — so parallel tool calls (where args for tool A and tool B interleave on the wire) work without any per-call index tracking. Some providers (Gemini) emit the complete tool call in one chunk — it's OK to emit both events back-to-back with the full name and full JSON.
 
-For client-side tool calls — tools that LLM should execute locally in a chain — **also call `response.add_tool_call()`**. The chain-execution path (`response.tool_calls()` → `execute_tool_calls()`) reads from the explicitly-added list, not from the StreamEvent buffer. Your code should do both:
+For client-side tool calls — tools that LLM should execute locally in a chain — **also call `response.add_tool_call()`**. The chain-execution path (`response.tool_calls()` → `execute_tool_calls()`) reads from the explicitly-added list, not from the StreamEvent buffer.
 
 ```python
 response.add_tool_call(
@@ -377,7 +361,7 @@ response.add_tool_call(
 
 ### Server-side tool calls
 
-For tools the API executes internally, set `server_executed=True` on the events. Anthropic web search is a good concrete example: the API returns a `server_tool_use` block for the search request, followed by a `web_search_tool_result` block containing the result payload.
+For tools the API executes internally, set `server_executed=True` on the events. Anthropic web search is an example: the API returns a `server_tool_use` block for the search request, followed by a `web_search_tool_result` block containing the result payload.
 
 ```python
 yield StreamEvent(
@@ -407,9 +391,9 @@ yield StreamEvent(
 )
 ```
 
-For providers that don't stream server-tool-result contents (Anthropic's `web_search_tool_result` blocks only arrive in the final message), do the emission as a post-stream step — after the main iteration loop completes, inspect the final message and emit tool_result events for any server-side results.
+For providers that don't stream server-tool-result contents (Anthropic's `web_search_tool_result` blocks only arrive in the final message), emit those results as a post-stream step. After the main iteration loop completes, inspect the final message and emit tool_result events for any server-side results.
 
-Do **not** call `response.add_tool_call()` for server-side tool calls unless you intentionally want LLM to run a separate local tool too. The provider has already executed these calls; represent them as `StreamEvent`s so they are preserved in `response.messages` and can be replayed in future turns.
+Do **not** call `response.add_tool_call()` for server-side tool calls. This method should only be used for tool calls that need to be executed locally by the framework.
 
 ### Opaque provider metadata
 
@@ -442,11 +426,11 @@ yield StreamEvent(
 )
 ```
 
-Treat other providers' entries as opaque; don't parse them. The framework round-trips the value verbatim via JSON, so use JSON-safe primitives (string, int, bool, dict, list) — avoid custom classes or bytes (base64-encode bytes if you need them).
+The framework round-trips the value verbatim via JSON, so use JSON-safe primitives (string, int, bool, dict, list) for provider metadata - use base64 encoding if you need to store binary data.
 
 ### Non-streaming path
 
-When `stream=False` (or the provider returns a complete message at once), emit one event per content block — no index tracking required:
+When `stream=False` (or the provider returns a complete message at once), emit one event per content block.
 
 ```python
 else:
@@ -476,9 +460,9 @@ else:
 
 ## Consuming prompt.messages in build_messages
 
-`prompt.messages` is an `list[llm.Message]` that is always **the complete input chain for this turn** — whether the caller supplied it explicitly via `model.prompt(messages=[...])`, or it was synthesized from legacy kwargs (`prompt=`, `system=`, `attachments=`, `tool_results=`), or it was pre-built by a `Conversation` or by `response.reply()`.
+`prompt.messages` is an `list[llm.Message]` that is always **the complete input chain for this turn** — whether the caller supplied it explicitly via `model.prompt(messages=[...])`, or it was synthesized from kwargs (`prompt=`, `system=`, `attachments=`, `tool_results=`), or it was pre-built by a `Conversation` or by `response.reply()`.
 
-**Do not also walk `conversation.responses`.** Under the invariant, history is already baked into `prompt.messages`; walking the conversation would double-emit.
+**Do not also walk `conversation.responses`.** History is already baked into `prompt.messages`; walking the conversation would double-emit.
 
 A plugin's `build_messages` (or equivalent) iterates `prompt.messages` and dispatches per `Part` subtype:
 
@@ -541,29 +525,6 @@ def _append_message(self, out, msg):
     else:
         out.append({"role": role, "content": parts})
 ```
-
-### Role mapping
-
-LLM uses four roles: `"user"`, `"assistant"`, `"system"`, `"tool"`. Providers differ:
-
-- **OpenAI Chat Completions** — carries system in the messages array. `"tool"` → `{"role": "tool", "tool_call_id": ..., "content": ...}` per result.
-- **Anthropic Messages** — system on a separate `system=` kwarg. `"tool"` → user-role message with `tool_result` blocks. `"assistant"` unchanged.
-- **Gemini Generate Content** — system on `systemInstruction`. `"assistant"` → `"model"`. `"tool"` → user-role with `function_response` parts.
-
-For adapters that need system separately: filter `msg.role == "system"` out of the messages loop and read the current-turn system from `prompt.system` (the synthesized string of `prompt._system` + any system_fragments). The `prompt.system` attribute remains populated by Conversation.prompt for backward compatibility.
-
-### Role-alternation merging
-
-Several providers require strict alternation between user and assistant (or equivalent) messages. When two consecutive `llm.Message` values map to the same provider-side role, merge their parts into one provider message:
-
-```python
-if out and out[-1]["role"] == role:
-    out[-1]["content"].extend(parts)
-else:
-    out.append({"role": role, "content": parts})
-```
-
-This is especially relevant for `tool` + `user` — both typically map to a `user` turn for Anthropic/Gemini.
 
 ## Restoring opaque metadata on subsequent requests
 
