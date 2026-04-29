@@ -1311,9 +1311,21 @@ def load_conversation(
     response_class = AsyncResponse if async_ else Response
     conversation = conversation_class.from_row(row)
     for response in db["responses"].rows_where(
-        "conversation_id = ?", [conversation_id]
+        "conversation_id = ?", [conversation_id], order_by="id"
     ):
-        conversation.responses.append(response_class.from_row(db, response))
+        response_obj = response_class.from_row(db, response)
+        if conversation.responses:
+            previous_response = conversation.responses[-1]
+            # SQLite rows store each response's legacy current-turn inputs
+            # (prompt text, attachments, tool_results), not the full
+            # prompt.messages chain. Rebuild that chain here so follow-up
+            # prompts via `llm -c` satisfy the Prompt.messages invariant.
+            response_obj.prompt._explicit_messages = (
+                list(previous_response.prompt.messages)
+                + list(previous_response._messages_now())
+                + list(response_obj.prompt.messages)
+            )
+        conversation.responses.append(response_obj)
     return conversation
 
 

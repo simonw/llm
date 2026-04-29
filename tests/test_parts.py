@@ -1172,6 +1172,58 @@ class TestSqliteRehydrateMessages:
             llm.user("q2"),
         ]
 
+    def test_llm_dash_c_after_logged_tool_chain_preserves_full_chain(
+        self, mock_model, tmp_path
+    ):
+        """A loaded tool-result response must carry the preceding
+        assistant tool_use. Otherwise Anthropic sees an orphan
+        tool_result at the start of the continued request."""
+        import sqlite_utils
+        from llm.cli import load_conversation
+        from llm.migrations import migrate
+
+        class ToolChainMock(type(mock_model)):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def execute(self, prompt, stream, response, conversation):
+                self.calls += 1
+                if self.calls == 1:
+                    response.add_tool_call(
+                        llm.ToolCall(name="tick", arguments={}, tool_call_id="c1")
+                    )
+                    if False:
+                        yield ""
+                else:
+                    yield "final answer"
+
+        def tick() -> str:
+            return "tock"
+
+        m = ToolChainMock()
+        chain_response = m.chain("q1", tools=[tick])
+        chain_response.text()
+
+        db_path = tmp_path / "logs.db"
+        db = sqlite_utils.Database(str(db_path))
+        migrate(db)
+        chain_response.log_to_db(db)
+
+        conv = load_conversation(None, database=str(db_path))
+        r3 = conv.prompt("q2")
+
+        assert [m.role for m in r3.prompt.messages] == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+            "user",
+        ]
+        assert isinstance(r3.prompt.messages[1].parts[0], llm.parts.ToolCallPart)
+        assert isinstance(r3.prompt.messages[2].parts[0], llm.parts.ToolResultPart)
+        assert r3.prompt.messages[2].parts[0].tool_call_id == "c1"
+
 
 class TestResponseReply:
     def test_reply_builds_next_turn_from_this_response(self, mock_model):
