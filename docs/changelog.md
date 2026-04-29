@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_32_a1)=
+## 0.32a1 (2026-04-29)
+
+- Fixed a bug in 0.32a0 where tool-calling conversations were not correctly reinflated from SQLite. [#1426](https://github.com/simonw/llm/issues/1426)
+
 (v0_32_a0)=
 ## 0.32a0 (2026-04-28)
 
