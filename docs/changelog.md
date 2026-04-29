@@ -5,6 +5,8 @@
 
 This alpha introduces a major backwards-compatible refactor. Models can now be prompted with a list of messages, OpenAI Chat Completions style, and the response can now be iterated over as a sequence of mixed types of content, for example reasoning tokens mixed with text tokens mixed with tool calls.
 
+For more background on this release take a look at [the annotated release notes](https://simonwillison.net/2026/Apr/29/llm/) on my blog.
+
 Prompt inputs and response outputs are now expressed as a list of `Message` objects, each containing typed `Part` objects (text, reasoning, tool calls, tool results, attachments).
 
 The `llm` CLI tool can now display reasoning tokens while executing a prompt.
