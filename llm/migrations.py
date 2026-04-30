@@ -1,11 +1,20 @@
 import datetime
+import sqlite3
+import time
 from typing import Callable, List
 
 MIGRATIONS: List[Callable] = []
 migration = MIGRATIONS.append
 
 
-def migrate(db):
+def _is_locked_error(ex: sqlite3.OperationalError) -> bool:
+    return any(
+        token in str(ex).lower()
+        for token in ("database is locked", "database table is locked")
+    )
+
+
+def _migrate_once(db):
     ensure_migrations_table(db)
     already_applied = {r["name"] for r in db["_llm_migrations"].rows}
     for fn in MIGRATIONS:
@@ -19,6 +28,16 @@ def migrate(db):
                 }
             )
             already_applied.add(name)
+
+
+def migrate(db, retries: int = 5, delay: float = 0.05):
+    for attempt in range(retries + 1):
+        try:
+            return _migrate_once(db)
+        except sqlite3.OperationalError as ex:
+            if attempt >= retries or not _is_locked_error(ex):
+                raise
+            time.sleep(delay * (2**attempt))
 
 
 def ensure_migrations_table(db):
