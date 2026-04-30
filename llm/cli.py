@@ -825,6 +825,19 @@ def prompt(
 
     resolved_attachments = [*attachments, *attachment_types]
 
+    # Deduplicate attachments by content hash, preserving order.  The same
+    # file passed twice (e.g. `--attachment a.png --attachment a.png`) would
+    # otherwise cause an IntegrityError when writing to the database because
+    # prompt_attachments has a composite primary key (response_id, attachment_id).
+    seen_attachment_ids: set = set()
+    unique_resolved_attachments = []
+    for att in resolved_attachments:
+        att_id = att.id()
+        if att_id not in seen_attachment_ids:
+            seen_attachment_ids.add(att_id)
+            unique_resolved_attachments.append(att)
+    resolved_attachments = unique_resolved_attachments
+
     should_stream = model.can_stream and not no_stream
     if not should_stream:
         kwargs["stream"] = False
