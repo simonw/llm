@@ -1294,10 +1294,19 @@ def load_conversation(
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
-        # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
-        if matches:
-            conversation_id = matches[0]["id"]
+        # Return the conversation with the most recent response, not merely the
+        # most recently created one. Response IDs are ULIDs that sort by time,
+        # so the newest response belongs to the conversation the user last used.
+        # See issue #1140.
+        last_response = list(
+            db["responses"].rows_where(
+                select="conversation_id",
+                order_by="id desc",
+                limit=1,
+            )
+        )
+        if last_response:
+            conversation_id = last_response[0]["conversation_id"]
         else:
             return None
     try:
