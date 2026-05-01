@@ -21,6 +21,8 @@ from llm import (
     Toolbox,
     UnknownModelError,
     KeyModel,
+    ModelError,
+    ModelWithAliases,
     encode,
     get_async_model,
     get_default_model,
@@ -201,6 +203,50 @@ def resolve_fragments(
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
+
+
+def _get_models_with_aliases_resilient() -> List[ModelWithAliases]:
+    model_aliases = []
+
+    # Include aliases from aliases.json
+    aliases_path = user_dir() / "aliases.json"
+    extra_model_aliases: Dict[str, list] = {}
+    if aliases_path.exists():
+        configured_aliases = json.loads(aliases_path.read_text())
+        for alias, model_id in configured_aliases.items():
+            extra_model_aliases.setdefault(model_id, []).append(alias)
+
+    def register(model, async_model=None, aliases=None):
+        alias_list = list(aliases or [])
+        if model.model_id in extra_model_aliases:
+            alias_list.extend(extra_model_aliases[model.model_id])
+        model_aliases.append(ModelWithAliases(model, async_model, alias_list))
+
+    load_plugins()
+
+    errors = []
+    for plugin in pm.get_plugins():
+        # Only attempt to call if the plugin implements register_models
+        # We use subset_hook_caller to isolate the dispatch while respecting pluggy contracts
+        caller = pm.subset_hook_caller(
+            "register_models",
+            remove_plugins=[p for p in pm.get_plugins() if p is not plugin],
+        )
+        try:
+            caller(register=register)
+        except (pydantic.ValidationError, httpx.HTTPError, ModelError) as ex:
+            errors.append(ex)
+            # We skip the failing backend and report it as a warning
+            click.secho(
+                f"Warning: model backend '{pm.get_name(plugin)}' failed during discovery: {ex}",
+                err=True,
+                fg="yellow",
+            )
+
+    if not model_aliases and errors:
+        raise click.ClickException("All model backends failed during discovery")
+
+    return model_aliases
 
 
 def process_fragments_in_chat(
@@ -583,7 +629,7 @@ def prompt(
     if queries and not model_id:
         # Use -q options to find model with shortest model_id
         matches = []
-        for model_with_aliases in get_models_with_aliases():
+        for model_with_aliases in _get_models_with_aliases_resilient():
             if all(model_with_aliases.matches(q) for q in queries):
                 matches.append(model_with_aliases.model.model_id)
         if not matches:
@@ -2290,7 +2336,7 @@ _type_lookup = {
 def models_list(options, async_, schemas, tools, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
-    for model_with_aliases in get_models_with_aliases():
+    for model_with_aliases in _get_models_with_aliases_resilient():
         if async_ and not model_with_aliases.async_model:
             continue
         if query:
@@ -2800,7 +2846,7 @@ def aliases_set(alias, model_id, query):
             )
         # Search for the first model matching all query strings
         found = None
-        for model_with_aliases in get_models_with_aliases():
+        for model_with_aliases in _get_models_with_aliases_resilient():
             if all(model_with_aliases.matches(q) for q in query):
                 found = model_with_aliases
                 break
