@@ -34,6 +34,38 @@ class Fragment(str):
         return hashlib.sha256(self.encode("utf-8")).hexdigest()
 
 
+_env_interpolation_re = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def interpolate_env_vars(obj):
+    """
+    Recursively resolve ${VAR} placeholders in strings from os.environ.
+    Leaves unresolved placeholders unchanged and prints a warning.
+    """
+    if isinstance(obj, dict):
+        return {k: interpolate_env_vars(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [interpolate_env_vars(item) for item in obj]
+    if isinstance(obj, str):
+        return _interpolate_env_vars_in_string(obj)
+    return obj
+
+
+def _interpolate_env_vars_in_string(value: str) -> str:
+    def replace(match):
+        var = match.group(1)
+        env_val = os.environ.get(var)
+        if env_val is None:
+            click.echo(
+                "Warning: environment variable '{}' is not set".format(var),
+                err=True,
+            )
+            return match.group(0)
+        return env_val
+
+    return _env_interpolation_re.sub(replace, value)
+
+
 def mimetype_from_string(content) -> Optional[str]:
     try:
         type_ = puremagic.from_string(content, mime=True)

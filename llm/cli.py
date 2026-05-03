@@ -51,6 +51,7 @@ from .utils import (
     find_unused_key,
     has_plugin_prefix,
     instantiate_from_spec,
+    interpolate_env_vars,
     make_schema_id,
     maybe_fenced_code,
     mimetype_from_path,
@@ -3849,7 +3850,7 @@ def get_all_model_options() -> dict:
         return {}
 
     try:
-        options = json.loads(path.read_text())
+        options = interpolate_env_vars(json.loads(path.read_text()))
     except json.JSONDecodeError:
         return {}
 
@@ -3866,16 +3867,7 @@ def get_model_options(model_id: str) -> dict:
     Returns:
         A dictionary of model options
     """
-    path = user_dir() / "model_options.json"
-    if not path.exists():
-        return {}
-
-    try:
-        options = json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return {}
-
-    return options.get(model_id, {})
+    return get_all_model_options().get(model_id, {})
 
 
 def set_model_option(model_id: str, key: str, value: Any) -> None:
