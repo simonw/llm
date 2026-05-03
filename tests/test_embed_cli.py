@@ -582,7 +582,7 @@ def test_embed_multi_files_errors(multi_files, args, expected_error):
 )
 def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
     db_path, files = multi_files
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         [
