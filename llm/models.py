@@ -1403,9 +1403,11 @@ class _BaseResponse:
 
         # Persist any tools, tool calls and tool results
         tool_ids_by_name = {}
+        tools_by_name = {}
         for tool in self.prompt.tools:
             tool_id = ensure_tool(db, tool)
             tool_ids_by_name[tool.name] = tool_id
+            tools_by_name[tool.name] = tool
             db["tool_responses"].insert(
                 {
                     "tool_id": tool_id,
@@ -1427,12 +1429,13 @@ class _BaseResponse:
             if tool_result.instance:
                 try:
                     if not tool_result.instance.instance_id:
+                        matched_tool = tools_by_name.get(tool_result.name)
                         tool_result.instance.instance_id = (
                             db["tool_instances"]
                             .insert(
                                 {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
+                                    "plugin": matched_tool.plugin if matched_tool else None,
+                                    "name": matched_tool.name.split("_")[0] if matched_tool else tool_result.name,
                                     "arguments": json.dumps(
                                         tool_result.instance._config
                                     ),
