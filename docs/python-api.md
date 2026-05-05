@@ -411,11 +411,11 @@ Some model plugins may include features that take advantage of fragments, for ex
 
 ### Model options
 
-For models that support options (view those with `llm models --options`) you can pass options as keyword arguments to the `.prompt()` method:
+For models that support options (view those with `llm models --options`) pass them as a dictionary to the `options=` argument of the `.prompt()` method:
 
 ```python
 model = llm.get_model()
-print(model.prompt("Names for otters", temperature=0.2))
+print(model.prompt("Names for otters", options={"temperature": 0.2}))
 ```
 
 (python-api-models-api-keys)=

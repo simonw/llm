@@ -484,6 +484,18 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     return wrapped_tools
 
 
+def _merge_options(options: Optional[dict], kwargs: dict) -> dict:
+    if not options:
+        return kwargs
+    overlap = set(options) & set(kwargs)
+    if overlap:
+        raise TypeError(
+            "Got values for these options both in options= and as keyword "
+            "arguments: {}".format(sorted(overlap))
+        )
+    return {**options, **kwargs}
+
+
 @dataclass
 class _BaseConversation:
     model: "_BaseModel"
@@ -583,8 +595,10 @@ class Conversation(_BaseConversation):
         messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
-        **options,
+        options: Optional[dict] = None,
+        **kwargs,
     ) -> "Response":
+        merged = _merge_options(options, kwargs)
         # Build the authoritative chain so response.prompt.messages
         # equals exactly what the model sees for this turn.
         chain = self._build_full_chain(
@@ -605,7 +619,7 @@ class Conversation(_BaseConversation):
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
-                options=self.model.Options(**options),
+                options=self.model.Options(**merged),
             ),
             self.model,
             stream,
@@ -750,8 +764,10 @@ class AsyncConversation(_BaseConversation):
         messages: Optional[List[Any]] = None,
         stream: bool = True,
         key: Optional[str] = None,
-        **options,
+        options: Optional[dict] = None,
+        **kwargs,
     ) -> "AsyncResponse":
+        merged = _merge_options(options, kwargs)
         chain = self._build_full_chain(
             prompt=prompt,
             attachments=attachments,
@@ -770,7 +786,7 @@ class AsyncConversation(_BaseConversation):
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
-                options=self.model.Options(**options),
+                options=self.model.Options(**merged),
             ),
             self.model,
             stream,
@@ -1600,6 +1616,7 @@ class Response(_BaseResponse):
         *,
         messages: Optional[List[Any]] = None,
         tool_results: Optional[List[ToolResult]] = None,
+        options: Optional[dict] = None,
         **kwargs,
     ) -> "Response":
         """Continue the conversation from this response.
@@ -1643,7 +1660,7 @@ class Response(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, **kwargs)
+        return self.model.prompt(messages=chain, options=options, **kwargs)
 
     def to_dict(self) -> ResponseDict:
         """Serialize this response for JSON persistence.
@@ -1937,6 +1954,7 @@ class AsyncResponse(_BaseResponse):
         *,
         messages: Optional[List[Any]] = None,
         tool_results: Optional[List[ToolResult]] = None,
+        options: Optional[dict] = None,
         **kwargs,
     ) -> "AsyncResponse":
         """Async counterpart of Response.reply(). Requires this response
@@ -1975,7 +1993,7 @@ class AsyncResponse(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, **kwargs)
+        return self.model.prompt(messages=chain, options=options, **kwargs)
 
     def to_dict(self) -> ResponseDict:
         """Async counterpart of Response.to_dict(). Requires awaiting."""
@@ -2739,9 +2757,11 @@ class _Model(_BaseModel):
         schema: Optional[Union[dict, type[BaseModel]]] = None,
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
-        **options,
+        options: Optional[dict] = None,
+        **kwargs,
     ) -> Response:
-        key_value = options.pop("key", None)
+        key_value = kwargs.pop("key", None)
+        merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
         return Response(
             Prompt(
@@ -2755,7 +2775,7 @@ class _Model(_BaseModel):
                 system_fragments=system_fragments,
                 messages=messages,
                 model=self,
-                options=self.Options(**options),
+                options=self.Options(**merged),
             ),
             self,
             stream,
@@ -2852,9 +2872,11 @@ class _AsyncModel(_BaseModel):
         system_fragments: Optional[List[Union[str, Fragment]]] = None,
         messages: Optional[List[Any]] = None,
         stream: bool = True,
-        **options,
+        options: Optional[dict] = None,
+        **kwargs,
     ) -> AsyncResponse:
-        key_value = options.pop("key", None)
+        key_value = kwargs.pop("key", None)
+        merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
         return AsyncResponse(
             Prompt(
@@ -2868,7 +2890,7 @@ class _AsyncModel(_BaseModel):
                 system_fragments=system_fragments,
                 messages=messages,
                 model=self,
-                options=self.Options(**options),
+                options=self.Options(**merged),
             ),
             self,
             stream,
