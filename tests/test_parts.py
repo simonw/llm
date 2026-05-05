@@ -1062,6 +1062,21 @@ class TestConversationFullChainInvariant:
         r1.text()
         assert r1.prompt.messages == [llm.user("q1")]
 
+    def test_display_reasoning_can_be_disabled(self, mock_model):
+        mock_model.enqueue(["a1"])
+        response = mock_model.prompt("q1", display_reasoning=False)
+        response.text()
+        assert mock_model.history[0][0].display_reasoning is False
+
+    def test_reply_preserves_display_reasoning(self, mock_model):
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        response = mock_model.prompt("q1", display_reasoning=False)
+        response.text()
+        follow_up = response.reply("q2")
+        follow_up.text()
+        assert mock_model.history[1][0].display_reasoning is False
+
     def test_conversation_preserves_reasoning_and_tool_call_parts(self, mock_model):
         """The chain carries reasoning and tool calls from prior turns,
         not just the flat text — required for multi-turn extended

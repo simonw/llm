@@ -822,6 +822,7 @@ def prompt(
             validated_options[key_] = value
 
     kwargs = {}
+    kwargs["display_reasoning"] = not no_reasoning
 
     resolved_attachments = [*attachments, *attachment_types]
 
@@ -1159,6 +1160,7 @@ def chat(
             raise click.ClickException(render_errors(ex.errors()))
 
     kwargs = {}
+    kwargs["display_reasoning"] = not no_reasoning
     if validated_options:
         kwargs["options"] = validated_options
 

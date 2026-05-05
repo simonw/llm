@@ -257,6 +257,7 @@ The 0.32 alpha introduced a richer contract for plugins than "yield strings":
 1. **`execute()` yields `StreamEvent` objects** (or plain `str`, still supported) so text, reasoning (thinking tokens), tool calls, and server-side tool results each surface as their own event type. The framework assembles these into typed `Part` objects.
 2. **`build_messages` (or equivalent) reads `prompt.messages`** — a `list[llm.Message]` that is the complete input chain for this turn.
 3. **Opaque provider tokens round-trip via `provider_metadata`** — Anthropic thinking signatures, Gemini thought signatures, OpenAI Responses API encrypted reasoning blobs. Plugins stash whatever the API returns, then echo it back on the next request.
+4. **`prompt.display_reasoning` tells plugins whether visible reasoning is wanted**. It defaults to `True`; the CLI's `-R/--no-reasoning` flag sets it to `False`. Providers that can omit reasoning summaries should use this to avoid requesting display-only reasoning text in the first place.
 
 **Older plugins still work.** A plugin that still yields plain `str` from `execute()` works unchanged — each string is wrapped as a `StreamEvent(type="text", chunk=...)` internally.
 

@@ -42,6 +42,7 @@ def test_reasoning_goes_to_stderr_not_stdout(mock_model):
     assert "thinking hard" in result.stderr
     assert "thinking hard" not in result.stdout
     assert "answer" in result.stdout
+    assert mock_model.history[0][0].display_reasoning is True
 
 
 def test_reasoning_rendered_in_dim_style(mock_model):
@@ -84,6 +85,7 @@ def test_no_reasoning_flag_suppresses_reasoning(mock_model):
     assert "hidden thinking" not in result.stderr
     assert "hidden thinking" not in result.stdout
     assert "answer" in result.stdout
+    assert mock_model.history[0][0].display_reasoning is False
 
 
 def test_no_reasoning_short_flag_R(mock_model):
