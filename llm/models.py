@@ -1154,6 +1154,30 @@ class _BaseResponse:
                     )
                 )
 
+        # Merge in tool calls registered via response.add_tool_call()
+        # that aren't already represented as ToolCallParts via stream
+        # events. Plugins are free to use either API (or both); when
+        # both are used for the same tool_call_id we dedupe to avoid
+        # duplicate Parts. See #1433.
+        existing_tool_call_ids = {
+            p.tool_call_id
+            for p in parts
+            if isinstance(p, ToolCallPart) and p.tool_call_id is not None
+        }
+        for tc in self._tool_calls:
+            if (
+                tc.tool_call_id is not None
+                and tc.tool_call_id in existing_tool_call_ids
+            ):
+                continue
+            parts.append(
+                ToolCallPart(
+                    name=tc.name,
+                    arguments=tc.arguments or {},
+                    tool_call_id=tc.tool_call_id,
+                )
+            )
+
         # Hoist redacted reasoning Parts to the start of the assembled
         # message. Plugins typically emit them late (when usage arrives
         # in the final chunk), but UIs render reasoning before content,
