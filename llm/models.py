@@ -2551,6 +2551,7 @@ class ChainResponse(_BaseChainResponse):
                         system_fragments=self.prompt.system_fragments,
                         options=self.prompt.options,
                         attachments=attachments,
+                        schema=current_response.prompt.schema,
                     ),
                     self.model,
                     stream=self.stream,
@@ -2622,6 +2623,7 @@ class AsyncChainResponse(_BaseChainResponse):
                     system_fragments=self.prompt.system_fragments,
                     options=self.prompt.options,
                     attachments=attachments,
+                    schema=current_response.prompt.schema,
                 )
                 current_response = AsyncResponse(
                     prompt,

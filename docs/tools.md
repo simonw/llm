@@ -89,6 +89,25 @@ Try them like this:
 llm -T llm_version -T llm_time 'Give me the current time and LLM version' --td
 ```
 
+(tools-with-schemas)=
+
+## Combining tools with schemas
+
+You can use tools and {ref}`schemas <schemas>` together.
+
+```bash
+llm --tool llm_time --schema "date: current date" "What is the time?" --td
+```
+Example output:
+```
+Tool call: llm_time({})
+  {"utc_time": "2025-02-28 14:30:00 UTC", ...}
+
+{"date": "2025-02-28"}
+```
+
+The model first calls the `llm_time` tool to get the current time, then uses that information to produce a response that matches the schema.
+
 (tools-tips)=
 
 ## Tips for implementing tools
