@@ -1907,6 +1907,81 @@ class TestResponseToDictFromDict:
         m = llm.assistant("hi")
         assert llm.Message.from_dict(m.to_dict()) == m
 
+    def test_to_dict_includes_tool_calls_added_alongside_text(self, mock_model):
+        """Regression for #1433: when a plugin yields text AND calls
+        response.add_tool_call(), the tool call must appear in
+        to_dict()["messages"] — not be silently dropped because the
+        stream-events path took precedence over _tool_calls."""
+
+        class TextAndToolCallMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                yield "Looking that up. "
+                response.add_tool_call(
+                    llm.ToolCall(
+                        name="get_weather",
+                        arguments={"city": "Paris"},
+                        tool_call_id="call_abc",
+                    )
+                )
+
+        def get_weather(city: str) -> str:
+            return "sunny"
+
+        m = TextAndToolCallMock()
+        r = m.prompt("weather?", tools=[get_weather])
+        r.text()
+
+        d = r.to_dict()
+        assistant = d["messages"][0]
+        part_types = [p["type"] for p in assistant["parts"]]
+        assert (
+            "tool_call" in part_types
+        ), f"tool_call missing from to_dict() — got {part_types}"
+        tool_call_part = next(p for p in assistant["parts"] if p["type"] == "tool_call")
+        assert tool_call_part["name"] == "get_weather"
+        assert tool_call_part["arguments"] == {"city": "Paris"}
+        assert tool_call_part["tool_call_id"] == "call_abc"
+
+    def test_to_dict_dedupes_tool_call_emitted_via_both_apis(self, mock_model):
+        """When a plugin emits a tool call via StreamEvents AND also
+        calls add_tool_call() with the same tool_call_id, the merged
+        Parts should contain it exactly once (no duplication)."""
+
+        class DualEmitMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                yield llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="get_weather",
+                    tool_call_id="call_xyz",
+                )
+                yield llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"city": "Paris"}',
+                    tool_call_id="call_xyz",
+                )
+                response.add_tool_call(
+                    llm.ToolCall(
+                        name="get_weather",
+                        arguments={"city": "Paris"},
+                        tool_call_id="call_xyz",
+                    )
+                )
+
+        def get_weather(city: str) -> str:
+            return "sunny"
+
+        m = DualEmitMock()
+        r = m.prompt("weather?", tools=[get_weather])
+        r.text()
+
+        d = r.to_dict()
+        assistant = d["messages"][0]
+        tool_calls = [p for p in assistant["parts"] if p["type"] == "tool_call"]
+        assert (
+            len(tool_calls) == 1
+        ), f"expected one merged tool_call part, got {len(tool_calls)}"
+        assert tool_calls[0]["tool_call_id"] == "call_xyz"
+
 
 class TestChainResponseStreamEvents:
     def test_sync_chain_stream_events_yields_text_when_no_tools(self, mock_model):
