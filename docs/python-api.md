@@ -591,6 +591,24 @@ Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`,
 
 Iterating against the response object itself (`for chunk in response`) yields only text strings — reasoning and tool-call events are filtered out.
 
+#### Hiding reasoning output
+
+Some model plugins can return visible reasoning text, exposed as `"reasoning"` events from `response.stream_events()` and assembled as `ReasoningPart` objects in `response.messages()`.
+
+Pass `hide_reasoning=True` to ask LLM and supported model plugins not to expose that visible reasoning output:
+
+```python
+response = model.prompt(
+    "Explain quantum computing briefly.",
+    hide_reasoning=True,
+)
+print(response.text())
+```
+
+This is the Python API equivalent of the CLI `-R/--hide-reasoning` option. It is available on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts.
+
+`hide_reasoning=True` does not ask the model to stop reasoning. It asks the plugin to hide visible reasoning text and, where the provider API supports it, avoid requesting visible reasoning summaries. Plugins may still preserve opaque provider metadata, such as reasoning signatures or encrypted reasoning blobs, so later turns in a conversation can continue correctly.
+
 #### Inspecting the finished response
 
 `response.messages()` returns the assembled list of `Message` objects produced by the model, excluding the messages from the original prompt. Calling it forces execution if the response hasn't been drained yet, so you don't need a separate `response.text()` first:

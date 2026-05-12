@@ -325,6 +325,25 @@ yield StreamEvent(type="reasoning", chunk=text_chunk)
 
 Reasoning events that appear before/after text events become distinct `ReasoningPart` and `TextPart` entries in `response.messages` automatically. If your provider emits two thinking blocks separated by a tool call, you'll get two `ReasoningPart`s.
 
+Plugins should respect `prompt.hide_reasoning`. This is set when the caller passes `hide_reasoning=True` to `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, or their async counterparts. It is also set by the CLI `-R/--hide-reasoning` option.
+
+`prompt.hide_reasoning` means "hide visible reasoning output", not "disable model reasoning". If your provider requires an explicit request for visible reasoning summaries, do not request those summaries when `prompt.hide_reasoning` is true:
+
+```python
+kwargs = {}
+if not prompt.hide_reasoning:
+    kwargs["reasoning"] = {"summary": "auto"}
+```
+
+If your provider emits reasoning blocks regardless of request parameters, keep yielding those reasoning events as usual:
+
+```python
+if chunk.type == "thinking":
+    yield StreamEvent(type="reasoning", chunk=chunk.text)
+```
+
+LLM's display layers use `prompt.hide_reasoning` to avoid showing those events to the user, while still allowing the framework to persist `ReasoningPart` objects and provider metadata for logs, serialization, and future turns.
+
 ### Tool calls
 
 Each tool call emits two event types sharing a `tool_call_id`:

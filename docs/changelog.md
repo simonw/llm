@@ -1,5 +1,9 @@
 # Changelog
 
+## unreleased
+
+- New `hide_reasoning=True` keyword argument on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts, exposed to model plugins as `prompt.hide_reasoning`. Model plugins can use this to decide if they should request visible reasoning summaries from their providers.
+
 (v0_32_a1)=
 ## 0.32a1 (2026-04-29)
 
