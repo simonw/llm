@@ -32,7 +32,7 @@ Plugin authors should read the expanded {ref}`Advanced model plugins <advanced-m
 ### CLI
 
 - `llm prompt` and `llm chat` now display visible reasoning text to stderr in a dim style while the response streams.
-- New `-R/--no-reasoning` flag for `llm prompt` and `llm chat` to suppress the reasoning stream.
+- New `-R/--hide-reasoning` flag for `llm prompt` and `llm chat` to hide the reasoning stream.
 - `llm logs` now renders any visible reasoning emitted during a response under a `## Reasoning` heading above the response.
 - New `reasoning` column on the `responses` table populated from the visible-reasoning text.
 

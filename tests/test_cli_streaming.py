@@ -1,5 +1,5 @@
 """Tests for CLI streaming display: reasoning → stderr (dim),
-text → stdout, -R / --no-reasoning flag.
+text → stdout, -R / --hide-reasoning flag.
 """
 
 import click
@@ -65,7 +65,7 @@ def test_reasoning_rendered_in_dim_style(mock_model):
     assert dim_start in result.stderr
 
 
-def test_no_reasoning_flag_suppresses_reasoning(mock_model):
+def test_hide_reasoning_flag_suppresses_reasoning(mock_model):
     mock_model.enqueue(
         [
             llm.parts.StreamEvent(
@@ -77,7 +77,7 @@ def test_no_reasoning_flag_suppresses_reasoning(mock_model):
     runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
         cli,
-        ["-m", "mock", "hi", "--no-log", "--no-reasoning"],
+        ["-m", "mock", "hi", "--no-log", "--hide-reasoning"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0
@@ -86,7 +86,7 @@ def test_no_reasoning_flag_suppresses_reasoning(mock_model):
     assert "answer" in result.stdout
 
 
-def test_no_reasoning_short_flag_R(mock_model):
+def test_hide_reasoning_short_flag_R(mock_model):
     mock_model.enqueue(
         [
             llm.parts.StreamEvent(type="reasoning", chunk="hidden", part_index=0),

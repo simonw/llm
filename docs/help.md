@@ -145,7 +145,7 @@ Options:
   --no-stream                     Do not stream output
   -n, --no-log                    Don't log to database
   --log                           Log prompt and response to the database
-  -R, --no-reasoning              Don't display reasoning output
+  -R, --hide-reasoning            Hide reasoning output
   -c, --continue                  Continue the most recent conversation.
   --cid, --conversation TEXT      Continue the conversation with the given ID.
   --key TEXT                      API key to use
@@ -177,7 +177,7 @@ Options:
   -o, --option <TEXT TEXT>...   key/value options for the model
   -d, --database FILE           Path to log database
   --no-stream                   Do not stream output
-  -R, --no-reasoning            Don't display reasoning output
+  -R, --hide-reasoning          Hide reasoning output
   --key TEXT                    API key to use
   -T, --tool TEXT               Name of a tool to make available to the model
   --functions TEXT              Python code block or file path defining
