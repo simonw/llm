@@ -146,6 +146,51 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+def test_embed_updates_store_and_metadata_on_existing_hash():
+    # Issue #224: re-embedding the same content with a new --store/metadata
+    # setting should update the existing row, not silently keep the old NULL.
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    # First call: do not store content, no metadata
+    collection.embed("a", "hello world", store=False)
+    row = next(db["embeddings"].rows_where("id = ?", ["a"]))
+    assert row["content"] is None
+    assert row["metadata"] is None
+    # Re-embed same content with store=True and metadata
+    collection.embed("a", "hello world", metadata={"k": "v"}, store=True)
+    row = next(db["embeddings"].rows_where("id = ?", ["a"]))
+    assert row["content"] == "hello world"
+    assert json.loads(row["metadata"]) == {"k": "v"}
+    # And once more, going back to store=False should clear stored content
+    collection.embed("a", "hello world", store=False)
+    row = next(db["embeddings"].rows_where("id = ?", ["a"]))
+    assert row["content"] is None
+    assert row["metadata"] is None
+
+
+def test_embed_multi_updates_store_and_metadata_on_existing_hash():
+    # Issue #224 (embed_multi variant)
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    entries = [("a", "hello world"), ("b", "goodbye world")]
+    collection.embed_multi(entries, store=False)
+    rows = {r["id"]: r for r in db["embeddings"].rows}
+    assert rows["a"]["content"] is None and rows["b"]["content"] is None
+    # Re-run with store=True for the same content
+    collection.embed_multi(entries, store=True)
+    rows = {r["id"]: r for r in db["embeddings"].rows}
+    assert rows["a"]["content"] == "hello world"
+    assert rows["b"]["content"] == "goodbye world"
+    # Re-run with metadata via embed_multi_with_metadata
+    collection.embed_multi_with_metadata(
+        [("a", "hello world", {"k": "v1"}), ("b", "goodbye world", {"k": "v2"})],
+        store=True,
+    )
+    rows = {r["id"]: r for r in db["embeddings"].rows}
+    assert json.loads(rows["a"]["metadata"]) == {"k": "v1"}
+    assert json.loads(rows["b"]["metadata"]) == {"k": "v2"}
+
+
 def test_collection_delete(collection):
     db = collection.db
     assert db["embeddings"].count == 2
