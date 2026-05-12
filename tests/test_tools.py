@@ -369,6 +369,24 @@ def test_default_tool_llm_time():
     }
 
 
+def test_duplicate_tool_name_does_not_crash(logs_db):
+    """Passing the same tool twice (same name) should not cause a sqlite UNIQUE constraint error."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_time",
+            "-T",
+            "llm_time",
+            json.dumps({"tool_calls": [{"name": "llm_time"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+
+
 def test_incorrect_tool_usage():
     model = llm.get_model("echo")
 
