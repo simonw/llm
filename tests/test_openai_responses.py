@@ -140,6 +140,47 @@ def test_default_routes_to_responses_endpoint(httpx_mock):
     assert request_body["reasoning"] == {"summary": "auto"}
 
 
+def test_hide_reasoning_omits_reasoning_summary_from_responses_request(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_test_1",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.5",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "hidden",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {
+                "input_tokens": 5,
+                "output_tokens": 3,
+                "total_tokens": 8,
+            },
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    model = llm.get_model("gpt-5.5")
+    response = model.prompt("hello", stream=False, key="test", hide_reasoning=True)
+    assert response.text() == "hidden"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["include"] == ["reasoning.encrypted_content"]
+    assert "reasoning" not in request_body
+
+
 def test_non_reasoning_responses_model_omits_encrypted_reasoning_include(httpx_mock):
     from llm.default_plugins.openai_models import Responses
 
@@ -347,6 +388,38 @@ def test_responses_kwargs_sets_reasoning_summary_without_effort():
     p.schema = None
     kwargs = model._build_responses_kwargs(p, stream=False)
     assert kwargs["reasoning"] == {"summary": "auto"}
+
+
+def test_responses_kwargs_omits_reasoning_summary_when_hide_reasoning():
+    model = llm.get_model("gpt-5.5")
+    options = model.Options(reasoning_effort="low")
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    p.hide_reasoning = True
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert kwargs["reasoning"] == {"effort": "low"}
+
+
+def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
+    model = llm.get_model("gpt-5.5")
+    options = model.Options()
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    p.hide_reasoning = True
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert "reasoning" not in kwargs
 
 
 def test_responses_streams_reasoning_summary_text(httpx_mock):

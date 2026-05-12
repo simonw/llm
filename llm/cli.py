@@ -895,6 +895,9 @@ def prompt(
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
 
+    if hide_reasoning:
+        kwargs["hide_reasoning"] = True
+
     try:
         if async_:
 
@@ -1197,6 +1200,8 @@ def chat(
 
     if key and isinstance(model, KeyModel):
         kwargs["key"] = key
+    if hide_reasoning:
+        kwargs["hide_reasoning"] = True
 
     try:
         fragments_and_attachments = resolve_fragments(

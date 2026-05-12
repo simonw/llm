@@ -357,6 +357,7 @@ class Prompt:
     tools: List[Tool]
     tool_results: List[ToolResult]
     options: "Options"
+    hide_reasoning: bool
 
     def __init__(
         self,
@@ -373,6 +374,7 @@ class Prompt:
         tools=None,
         tool_results=None,
         messages=None,
+        hide_reasoning=False,
     ):
         self._prompt = prompt
         self.model = model
@@ -387,6 +389,7 @@ class Prompt:
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
         self.options = options or {}
+        self.hide_reasoning = hide_reasoning
         # Explicit messages= list, if the caller supplied one. Copied so
         # later mutation by the caller doesn't alter the Prompt.
         self._explicit_messages = list(messages) if messages is not None else None
@@ -596,6 +599,7 @@ class Conversation(_BaseConversation):
         stream: bool = True,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
         **kwargs,
     ) -> "Response":
         merged = _merge_options(options, kwargs)
@@ -620,6 +624,7 @@ class Conversation(_BaseConversation):
                 system_fragments=system_fragments,
                 messages=chain,
                 options=self.model.Options(**merged),
+                hide_reasoning=hide_reasoning,
             ),
             self.model,
             stream,
@@ -645,6 +650,7 @@ class Conversation(_BaseConversation):
         after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
     ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
         # Parity with Conversation.prompt: pre-bake the full chain so
@@ -670,6 +676,7 @@ class Conversation(_BaseConversation):
                 messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
+                hide_reasoning=hide_reasoning,
             ),
             model=self.model,
             stream=stream,
@@ -719,6 +726,7 @@ class AsyncConversation(_BaseConversation):
         after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
     ) -> "AsyncChainResponse":
         self.model._validate_attachments(attachments)
         chain_messages = self._build_full_chain(
@@ -740,6 +748,7 @@ class AsyncConversation(_BaseConversation):
                 messages=chain_messages,
                 model=self.model,
                 options=self.model.Options(**(options or {})),
+                hide_reasoning=hide_reasoning,
             ),
             model=self.model,
             stream=stream,
@@ -765,6 +774,7 @@ class AsyncConversation(_BaseConversation):
         stream: bool = True,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
         **kwargs,
     ) -> "AsyncResponse":
         merged = _merge_options(options, kwargs)
@@ -787,6 +797,7 @@ class AsyncConversation(_BaseConversation):
                 system_fragments=system_fragments,
                 messages=chain,
                 options=self.model.Options(**merged),
+                hide_reasoning=hide_reasoning,
             ),
             self.model,
             stream,
@@ -2570,6 +2581,7 @@ class ChainResponse(_BaseChainResponse):
                         system_fragments=self.prompt.system_fragments,
                         options=self.prompt.options,
                         attachments=attachments,
+                        hide_reasoning=current_response.prompt.hide_reasoning,
                     ),
                     self.model,
                     stream=self.stream,
@@ -2641,6 +2653,7 @@ class AsyncChainResponse(_BaseChainResponse):
                     system_fragments=self.prompt.system_fragments,
                     options=self.prompt.options,
                     attachments=attachments,
+                    hide_reasoning=current_response.prompt.hide_reasoning,
                 )
                 current_response = AsyncResponse(
                     prompt,
@@ -2777,6 +2790,7 @@ class _Model(_BaseModel):
         tools: Optional[List[ToolDef]] = None,
         tool_results: Optional[List[ToolResult]] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
         **kwargs,
     ) -> Response:
         key_value = kwargs.pop("key", None)
@@ -2795,6 +2809,7 @@ class _Model(_BaseModel):
                 messages=messages,
                 model=self,
                 options=self.Options(**merged),
+                hide_reasoning=hide_reasoning,
             ),
             self,
             stream,
@@ -2818,6 +2833,7 @@ class _Model(_BaseModel):
         after_call: Optional[AfterCallSync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
     ) -> ChainResponse:
         return self.conversation().chain(
             prompt=prompt,
@@ -2834,6 +2850,7 @@ class _Model(_BaseModel):
             after_call=after_call,
             key=key,
             options=options,
+            hide_reasoning=hide_reasoning,
         )
 
 
@@ -2892,6 +2909,7 @@ class _AsyncModel(_BaseModel):
         messages: Optional[List[Any]] = None,
         stream: bool = True,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
         **kwargs,
     ) -> AsyncResponse:
         key_value = kwargs.pop("key", None)
@@ -2910,6 +2928,7 @@ class _AsyncModel(_BaseModel):
                 messages=messages,
                 model=self,
                 options=self.Options(**merged),
+                hide_reasoning=hide_reasoning,
             ),
             self,
             stream,
@@ -2933,6 +2952,7 @@ class _AsyncModel(_BaseModel):
         after_call: Optional[AfterCallAsync] = None,
         key: Optional[str] = None,
         options: Optional[dict] = None,
+        hide_reasoning: bool = False,
     ) -> AsyncChainResponse:
         return self.conversation().chain(
             prompt=prompt,
@@ -2949,6 +2969,7 @@ class _AsyncModel(_BaseModel):
             after_call=after_call,
             key=key,
             options=options,
+            hide_reasoning=hide_reasoning,
         )
 
 

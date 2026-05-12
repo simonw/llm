@@ -1349,10 +1349,13 @@ class _SharedResponses(_Shared):
         if seed is not None:
             kwargs["seed"] = seed
         if self._reasoning:
-            reasoning = {"summary": "auto"}
+            reasoning = {}
+            if not getattr(prompt, "hide_reasoning", False):
+                reasoning["summary"] = "auto"
             if reasoning_effort:
                 reasoning["effort"] = reasoning_effort
-            kwargs["reasoning"] = reasoning
+            if reasoning:
+                kwargs["reasoning"] = reasoning
 
         text: Dict[str, Any] = {}
         if verbosity:

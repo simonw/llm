@@ -84,6 +84,7 @@ def test_hide_reasoning_flag_suppresses_reasoning(mock_model):
     assert "hidden thinking" not in result.stderr
     assert "hidden thinking" not in result.stdout
     assert "answer" in result.stdout
+    assert mock_model.history[0][0].hide_reasoning is True
 
 
 def test_hide_reasoning_short_flag_R(mock_model):
