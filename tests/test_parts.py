@@ -1249,9 +1249,7 @@ class TestAddToolCallWithStreamEvents:
         response.text()
         parts = response.messages()[0].parts
         assert llm.parts.TextPart(text="answer") in parts
-        tool_call_parts = [
-            p for p in parts if isinstance(p, llm.parts.ToolCallPart)
-        ]
+        tool_call_parts = [p for p in parts if isinstance(p, llm.parts.ToolCallPart)]
         assert tool_call_parts == [
             llm.parts.ToolCallPart(
                 name="search",
