@@ -164,6 +164,9 @@ def register_models(register):
             "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
         ),
     )
+    # Looking for o3-pro support? Try the llm-openai-plugin repo:
+    # https://github.com/simonw/llm-openai-plugin. (It requires the Responses
+    # API, which this library currently does not support).
     register(
         Responses(
             "o4-mini",
