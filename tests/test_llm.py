@@ -522,9 +522,7 @@ def test_llm_models_options(user_path):
 
 def test_prompt_options_shows_selected_model_options(user_path):
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["-m", "gpt-5.5", "--options"], catch_exceptions=False
-    )
+    result = runner.invoke(cli, ["-m", "gpt-5.5", "--options"], catch_exceptions=False)
     expected = runner.invoke(
         cli, ["models", "-m", "gpt-5.5", "--options"], catch_exceptions=False
     )
