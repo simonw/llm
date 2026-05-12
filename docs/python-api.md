@@ -607,7 +607,7 @@ print(response.text())
 
 This is the Python API equivalent of the CLI `-R/--hide-reasoning` option. It is available on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts.
 
-`hide_reasoning=True` does not ask the model to stop reasoning. It asks the plugin to hide visible reasoning text and, where the provider API supports it, avoid requesting visible reasoning summaries. Plugins may still preserve opaque provider metadata, such as reasoning signatures or encrypted reasoning blobs, so later turns in a conversation can continue correctly.
+Note that this only requests that the underlying model does not return visible tokens. This request may not be supported by your provider, in which case this hint will not prevent visible reasoning tokens from being returned in the stream.
 
 #### Inspecting the finished response
 
