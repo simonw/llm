@@ -187,6 +187,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Trying out tools](https://llm.datasette.io/en/stable/tools.html#trying-out-tools)
   * [LLM’s implementation of tools](https://llm.datasette.io/en/stable/tools.html#llm-s-implementation-of-tools)
   * [Default tools](https://llm.datasette.io/en/stable/tools.html#default-tools)
+  * [Combining tools with schemas](https://llm.datasette.io/en/stable/tools.html#combining-tools-with-schemas)
   * [Tips for implementing tools](https://llm.datasette.io/en/stable/tools.html#tips-for-implementing-tools)
 * [Schemas](https://llm.datasette.io/en/stable/schemas.html)
   * [Schemas tutorial](https://llm.datasette.io/en/stable/schemas.html#schemas-tutorial)
