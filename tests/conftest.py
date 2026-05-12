@@ -46,6 +46,12 @@ def templates_path(user_path):
 @pytest.fixture(autouse=True)
 def env_setup(monkeypatch, user_path):
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("LLM_EMBEDDING_MODEL", raising=False) 
+    monkeypatch.delenv("LLM_EMBEDDINGS_DB", raising=False)
+    monkeypatch.delenv("LLM_LOAD_PLUGINS", raising=False)
+    monkeypatch.delenv("LLM_TOOLS_DEBUG", raising=False)
+    monkeypatch.delenv("LLM_RAISE_ERRORS", raising=False)
 
 
 class MockModel(llm.Model):
