@@ -86,6 +86,30 @@ LLM will attempt to automatically detect the content type of the image. If this 
 cat myfile | llm "describe this image" --at - image/jpeg
 ```
 
+(usage-clipboard)=
+#### Attaching from clipboard
+
+You can attach content directly from your system clipboard using the `-C/--clipboard` flag:
+
+```bash
+llm "describe this image" --clipboard
+```
+
+This is particularly useful when you've copied an image (for example, with a screenshot tool) and want to quickly send it to a model.
+
+If the clipboard contains an image, it will be attached to your prompt. If the clipboard contains text (and no image), that text will be prepended to your prompt:
+
+```bash
+# Copy some code, then:
+llm "explain this code" -C
+```
+
+You can combine `--clipboard` with other attachments:
+
+```bash
+llm "compare these images" -a reference.jpg --clipboard
+```
+
 (usage-system-prompts)=
 ### System prompts
 
