@@ -33,7 +33,7 @@ from .parts import (
     tool_message,
     user,
 )
-from .utils import schema_dsl, Fragment
+from .utils import schema_dsl, Fragment, interpolate_env_vars
 from .embeddings import Collection
 from .templates import Template
 from .plugins import pm, load_plugins
@@ -111,7 +111,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     aliases_path = user_dir() / "aliases.json"
     extra_model_aliases: Dict[str, list] = {}
     if aliases_path.exists():
-        configured_aliases = json.loads(aliases_path.read_text())
+        configured_aliases = interpolate_env_vars(json.loads(aliases_path.read_text()))
         for alias, model_id in configured_aliases.items():
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
@@ -236,7 +236,7 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
     aliases_path = user_dir() / "aliases.json"
     extra_model_aliases: Dict[str, list] = {}
     if aliases_path.exists():
-        configured_aliases = json.loads(aliases_path.read_text())
+        configured_aliases = interpolate_env_vars(json.loads(aliases_path.read_text()))
         for alias, model_id in configured_aliases.items():
             extra_model_aliases.setdefault(model_id, []).append(alias)
 
@@ -401,7 +401,7 @@ def get_key(
 def load_keys():
     path = user_dir() / "keys.json"
     if path.exists():
-        return json.loads(path.read_text())
+        return interpolate_env_vars(json.loads(path.read_text()))
     else:
         return {}
 
