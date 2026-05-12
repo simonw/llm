@@ -3,6 +3,7 @@ import click
 import importlib
 import json
 import llm
+import pluggy
 from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
@@ -43,6 +44,115 @@ def test_register_commands():
         plugins.pm.unregister(name="HelloWorldPlugin")
         importlib.reload(cli)
         assert "HelloWorldPlugin" not in plugin_names()
+
+
+class FakeEntryPoint:
+    def __init__(self, name, plugin=None, error=None, dist=None):
+        self.name = name
+        self._plugin = plugin
+        self._error = error
+        self.dist = dist
+
+    def load(self):
+        if self._error:
+            raise self._error
+        return self._plugin
+
+
+def test_load_entrypoint_plugins_continues_on_failure(monkeypatch, capsys):
+    plugin_manager = pluggy.PluginManager("llm")
+    good_plugin = object()
+    entry_points = [
+        FakeEntryPoint("broken", error=RuntimeError("boom")),
+        FakeEntryPoint("good", plugin=good_plugin),
+    ]
+    monkeypatch.delenv("LLM_STRICT_PLUGIN_LOADING", raising=False)
+    plugins._load_entrypoint_plugins(plugin_manager, entry_points=entry_points)
+    captured = capsys.readouterr()
+    assert "Plugin broken failed to load: boom" in captured.err
+    assert plugin_manager.get_plugin("broken") is None
+    assert plugin_manager.get_plugin("good") is good_plugin
+
+
+def test_load_entrypoint_plugins_cleans_up_partial_registration(monkeypatch, capsys):
+    """register() that raises after adding plugin to _name2plugin gets rolled back."""
+    plugin_manager = pluggy.PluginManager("llm")
+    good_plugin = object()
+    partial_plugin = object()
+
+    original_register = plugin_manager.register
+
+    def failing_register(plugin, name=None):
+        # Simulate pluggy's non-transactional register: the plugin gets added
+        # to _name2plugin, then an error occurs during hook processing.
+        original_register(plugin, name=name)
+        if name == "partial":
+            raise RuntimeError("mid-registration failure")
+
+    monkeypatch.setattr(plugin_manager, "register", failing_register)
+
+    entry_points = [
+        FakeEntryPoint("partial", plugin=partial_plugin),
+        FakeEntryPoint("good", plugin=good_plugin),
+    ]
+    monkeypatch.delenv("LLM_STRICT_PLUGIN_LOADING", raising=False)
+    plugins._load_entrypoint_plugins(plugin_manager, entry_points=entry_points)
+    captured = capsys.readouterr()
+    assert "Plugin partial failed to load" in captured.err
+    assert plugin_manager.get_plugin("partial") is None
+    assert plugin_manager.get_plugin("good") is good_plugin
+
+
+def test_load_entrypoint_plugins_skips_already_registered(monkeypatch):
+    """Entry points whose name is already registered are silently skipped."""
+    plugin_manager = pluggy.PluginManager("llm")
+    existing_plugin = object()
+    plugin_manager.register(existing_plugin, name="existing")
+
+    loaded = []
+    original_load = FakeEntryPoint.load
+
+    class TrackingEntryPoint(FakeEntryPoint):
+        def load(self):
+            loaded.append(self.name)
+            return original_load(self)
+
+    entry_points = [
+        TrackingEntryPoint("existing", plugin=object()),
+    ]
+    monkeypatch.delenv("LLM_STRICT_PLUGIN_LOADING", raising=False)
+    plugins._load_entrypoint_plugins(plugin_manager, entry_points=entry_points)
+    assert loaded == []
+    assert plugin_manager.get_plugin("existing") is existing_plugin
+
+
+def test_load_entrypoint_plugins_skips_blocked(monkeypatch):
+    """Entry points whose name is blocked are not imported."""
+    plugin_manager = pluggy.PluginManager("llm")
+    plugin_manager.set_blocked("blocked")
+
+    loaded = []
+
+    class TrackingEntryPoint(FakeEntryPoint):
+        def load(self):
+            loaded.append(self.name)
+            return super().load()
+
+    entry_points = [
+        TrackingEntryPoint("blocked", plugin=object()),
+    ]
+    monkeypatch.delenv("LLM_STRICT_PLUGIN_LOADING", raising=False)
+    plugins._load_entrypoint_plugins(plugin_manager, entry_points=entry_points)
+    assert loaded == []
+    assert plugin_manager.get_plugin("blocked") is None
+
+
+def test_load_entrypoint_plugins_strict_mode(monkeypatch):
+    plugin_manager = pluggy.PluginManager("llm")
+    entry_points = [FakeEntryPoint("broken", error=RuntimeError("boom"))]
+    monkeypatch.setenv("LLM_STRICT_PLUGIN_LOADING", "1")
+    with pytest.raises(RuntimeError, match="boom"):
+        plugins._load_entrypoint_plugins(plugin_manager, entry_points=entry_points)
 
 
 def test_register_template_loaders():
