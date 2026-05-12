@@ -489,9 +489,7 @@ def cli():
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("--log", is_flag=True, help="Log prompt and response to the database")
-@click.option(
-    "-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output"
-)
+@click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option(
     "_continue",
     "-c",
@@ -1047,9 +1045,7 @@ def prompt(
     help="Path to log database",
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
-@click.option(
-    "-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output"
-)
+@click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option("--key", help="API key to use")
 @click.option(
     "tools",
