@@ -134,6 +134,7 @@ Options:
   --cl, --chain-limit INTEGER     How many chained tool responses to allow,
                                   default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
+  --options                       Show options for the selected model
   --schema TEXT                   JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
   -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to

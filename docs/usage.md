@@ -59,7 +59,7 @@ Some models support options. You can pass these using `-o/--option name value` -
 llm 'Ten names for cheesecakes' -o temperature 1.5
 ```
 
-Use the `llm models --options` command to see which options are supported by each model.
+Use the `llm models --options` command to see which options are supported by each model, or `llm -m gpt-5.5 --options` to show the options for a specific selected model.
 
 You can also {ref}`configure default options <usage-executing-default-options>` for a model using the `llm models options` commands.
 

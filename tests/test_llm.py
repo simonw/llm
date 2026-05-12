@@ -520,6 +520,23 @@ def test_llm_models_options(user_path):
     assert "AsyncMockModel (async): mock" not in result.output
 
 
+def test_prompt_options_shows_selected_model_options(user_path):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["-m", "gpt-5.5", "--options"], catch_exceptions=False
+    )
+    expected = runner.invoke(
+        cli, ["models", "-m", "gpt-5.5", "--options"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert expected.exit_code == 0
+    assert result.output == expected.output
+    assert "OpenAI Chat: gpt-5.5" in result.output
+    assert "  Options:" in result.output
+    assert "    reasoning_effort: str" in result.output
+    assert not (user_path / "logs.db").exists()
+
+
 def test_llm_models_async(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)

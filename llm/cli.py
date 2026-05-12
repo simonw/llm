@@ -453,6 +453,12 @@ def cli():
     multiple=True,
     help="key/value options for the model",
 )
+@click.option(
+    "show_model_options",
+    "--options",
+    is_flag=True,
+    help="Show options for the selected model",
+)
 @schema_option
 @click.option(
     "--schema-multi",
@@ -526,6 +532,7 @@ def prompt(
     tools_approve,
     chain_limit,
     options,
+    show_model_options,
     schema_input,
     schema_multi,
     fragments,
@@ -575,11 +582,6 @@ def prompt(
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
-    log_path = pathlib.Path(database) if database else logs_db_path()
-    (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-
     if queries and not model_id:
         # Use -q options to find model with shortest model_id
         matches = []
@@ -591,6 +593,23 @@ def prompt(
                 "No model found matching queries {}".format(", ".join(queries))
             )
         model_id = min(matches, key=len)
+
+    if show_model_options and not (conversation_id or _continue or template):
+        model_id = model_id or get_default_model()
+        try:
+            if async_:
+                get_async_model(model_id)
+            else:
+                get_model(model_id)
+        except UnknownModelError as ex:
+            raise click.ClickException(ex)
+        click.echo(render_model_with_options(model_id, async_=async_))
+        return
+
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
 
     if schema_multi:
         schema_input = schema_multi
@@ -794,6 +813,10 @@ def prompt(
             model = get_model(model_id)
     except UnknownModelError as ex:
         raise click.ClickException(ex)
+
+    if show_model_options:
+        click.echo(render_model_with_options(model_id, async_=async_))
+        return
 
     if conversation is None and (tools or python_tools):
         conversation = model.conversation()
@@ -2273,6 +2296,93 @@ _type_lookup = {
 }
 
 
+def model_matches_id_or_alias(model_with_aliases, model_ids):
+    ids_and_aliases = set(
+        [model_with_aliases.model.model_id] + model_with_aliases.aliases
+    )
+    return ids_and_aliases.intersection(model_ids)
+
+
+def render_model_with_aliases(
+    model_with_aliases,
+    *,
+    options=False,
+    async_=False,
+    models_that_have_shown_options=None,
+):
+    extra_info = []
+    if model_with_aliases.aliases:
+        extra_info.append("aliases: {}".format(", ".join(model_with_aliases.aliases)))
+    model = model_with_aliases.model if not async_ else model_with_aliases.async_model
+    output = str(model)
+    if extra_info:
+        output += " ({})".format(", ".join(extra_info))
+    if options and model.Options.model_json_schema()["properties"]:
+        output += "\n  Options:"
+        for name, field in model.Options.model_json_schema()["properties"].items():
+            any_of = field.get("anyOf")
+            if any_of is None:
+                any_of = [{"type": field.get("type", "str")}]
+            types = ", ".join(
+                [
+                    _type_lookup.get(item.get("type"), item.get("type", "str"))
+                    for item in any_of
+                    if item.get("type") != "null"
+                ]
+            )
+            bits = ["\n    ", name, ": ", types]
+            description = field.get("description", "")
+            if (
+                description
+                and models_that_have_shown_options is not None
+                and model.__class__ not in models_that_have_shown_options
+            ):
+                wrapped = textwrap.wrap(description, 70)
+                bits.append("\n      ")
+                bits.extend("\n      ".join(wrapped))
+            output += "".join(bits)
+        if models_that_have_shown_options is not None:
+            models_that_have_shown_options.add(model.__class__)
+    if options and model.attachment_types:
+        attachment_types = ", ".join(sorted(model.attachment_types))
+        wrapper = textwrap.TextWrapper(
+            width=min(max(shutil.get_terminal_size().columns, 30), 70),
+            initial_indent="    ",
+            subsequent_indent="    ",
+        )
+        output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
+    features = (
+        []
+        + (["streaming"] if model.can_stream else [])
+        + (["schemas"] if model.supports_schema else [])
+        + (["tools"] if model.supports_tools else [])
+        + (["async"] if model_with_aliases.async_model else [])
+    )
+    if options and features:
+        output += "\n  Features:\n{}".format(
+            "\n".join("  - {}".format(feature) for feature in features)
+        )
+    if options and hasattr(model, "needs_key") and model.needs_key:
+        output += "\n  Keys:"
+        if hasattr(model, "needs_key") and model.needs_key:
+            output += "\n    key: {}".format(model.needs_key)
+        if hasattr(model, "key_env_var") and model.key_env_var:
+            output += "\n    env_var: {}".format(model.key_env_var)
+    return output
+
+
+def render_model_with_options(model_id, *, async_=False):
+    for model_with_aliases in get_models_with_aliases():
+        if model_matches_id_or_alias(model_with_aliases, [model_id]):
+            return render_model_with_aliases(
+                model_with_aliases,
+                options=True,
+                async_=async_,
+                models_that_have_shown_options=set(),
+            )
+    raise click.ClickException("'{}' is not a known model".format(model_id))
+
+
 @models.command(name="list")
 @click.option(
     "--options", is_flag=True, help="Show options for each model, if available"
@@ -2298,75 +2408,20 @@ def models_list(options, async_, schemas, tools, query, model_ids):
             if not all(model_with_aliases.matches(q) for q in query):
                 continue
         if model_ids:
-            ids_and_aliases = set(
-                [model_with_aliases.model.model_id] + model_with_aliases.aliases
-            )
-            if not ids_and_aliases.intersection(model_ids):
+            if not model_matches_id_or_alias(model_with_aliases, model_ids):
                 continue
         if schemas and not model_with_aliases.model.supports_schema:
             continue
         if tools and not model_with_aliases.model.supports_tools:
             continue
-        extra_info = []
-        if model_with_aliases.aliases:
-            extra_info.append(
-                "aliases: {}".format(", ".join(model_with_aliases.aliases))
+        click.echo(
+            render_model_with_aliases(
+                model_with_aliases,
+                options=options,
+                async_=async_,
+                models_that_have_shown_options=models_that_have_shown_options,
             )
-        model = (
-            model_with_aliases.model if not async_ else model_with_aliases.async_model
         )
-        output = str(model)
-        if extra_info:
-            output += " ({})".format(", ".join(extra_info))
-        if options and model.Options.model_json_schema()["properties"]:
-            output += "\n  Options:"
-            for name, field in model.Options.model_json_schema()["properties"].items():
-                any_of = field.get("anyOf")
-                if any_of is None:
-                    any_of = [{"type": field.get("type", "str")}]
-                types = ", ".join(
-                    [
-                        _type_lookup.get(item.get("type"), item.get("type", "str"))
-                        for item in any_of
-                        if item.get("type") != "null"
-                    ]
-                )
-                bits = ["\n    ", name, ": ", types]
-                description = field.get("description", "")
-                if description and (
-                    model.__class__ not in models_that_have_shown_options
-                ):
-                    wrapped = textwrap.wrap(description, 70)
-                    bits.append("\n      ")
-                    bits.extend("\n      ".join(wrapped))
-                output += "".join(bits)
-            models_that_have_shown_options.add(model.__class__)
-        if options and model.attachment_types:
-            attachment_types = ", ".join(sorted(model.attachment_types))
-            wrapper = textwrap.TextWrapper(
-                width=min(max(shutil.get_terminal_size().columns, 30), 70),
-                initial_indent="    ",
-                subsequent_indent="    ",
-            )
-            output += "\n  Attachment types:\n{}".format(wrapper.fill(attachment_types))
-        features = (
-            []
-            + (["streaming"] if model.can_stream else [])
-            + (["schemas"] if model.supports_schema else [])
-            + (["tools"] if model.supports_tools else [])
-            + (["async"] if model_with_aliases.async_model else [])
-        )
-        if options and features:
-            output += "\n  Features:\n{}".format(
-                "\n".join("  - {}".format(feature) for feature in features)
-            )
-        if options and hasattr(model, "needs_key") and model.needs_key:
-            output += "\n  Keys:"
-            if hasattr(model, "needs_key") and model.needs_key:
-                output += "\n    key: {}".format(model.needs_key)
-            if hasattr(model, "key_env_var") and model.key_env_var:
-                output += "\n    env_var: {}".format(model.key_env_var)
-        click.echo(output)
     if not query and not options and not schemas and not model_ids:
         click.echo(f"Default: {get_default_model()}")
 
