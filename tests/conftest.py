@@ -46,6 +46,9 @@ def templates_path(user_path):
 @pytest.fixture(autouse=True)
 def env_setup(monkeypatch, user_path):
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    for var in ("LLM_MODEL", "LLM_EMBEDDING_MODEL", "LLM_EMBEDDINGS_DB"):
+        monkeypatch.delenv(var, raising=False)
 
 
 class MockModel(llm.Model):
