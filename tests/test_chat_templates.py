@@ -31,6 +31,30 @@ def test_chat_template_system_only_no_duplicate_prompt(
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_template_prompt_does_not_capture_quit(
+    mock_model, logs_db, templates_path
+):
+    (templates_path / "french-greeting.yaml").write_text(
+        "system: Speak in French\nprompt: Say hello\n", "utf-8"
+    )
+
+    runner = CliRunner()
+    mock_model.enqueue(["Bonjour !"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock", "-t", "french-greeting"],
+        input="hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+
+    rows = list(logs_db["responses"].rows)
+    assert len(rows) == 1
+    assert rows[0]["prompt"] == "Say hello\nhi"
+    assert rows[0]["system"] == "Speak in French"
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_system_fragments_only_first_turn(tmpdir, mock_model, logs_db):
     # Create a system fragment file
     sys_frag_path = str(tmpdir / "sys.txt")
