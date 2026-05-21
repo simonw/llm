@@ -468,6 +468,29 @@ def test_monotonic_ulids():
     assert ulids == sorted(ulids)
 
 
+def test_monotonic_ulid_survives_backward_clock(monkeypatch):
+    # A backward clock jump (NTP correction, VM migration, manual change)
+    # must not produce a ULID that sorts before the previous one.
+    import llm.utils as utils
+
+    ms = utils.NANOSECS_IN_MILLISECS
+    times_ns = iter(
+        [
+            2_000_000 * ms,  # first call
+            1_000_000 * ms,  # clock jumps a million ms backward
+            1_000_001 * ms,  # still behind the first call
+        ]
+    )
+    monkeypatch.setattr(utils.time, "time_ns", lambda: next(times_ns))
+    monkeypatch.setattr(utils, "_last", None)
+
+    first = monotonic_ulid()
+    after_backward = monotonic_ulid()
+    third = monotonic_ulid()
+
+    assert first < after_backward < third
+
+
 def test_toolbox_config_capture():
     """Test that Toolbox captures __init__ parameters in _config"""
 
