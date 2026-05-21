@@ -31,6 +31,27 @@ import yaml
             None,
             None,
         ),
+        # ${braced} variables are valid string.Template syntax too
+        ("S: ${input}", None, None, {}, "S: input", None, None),
+        (
+            "${one} and ${two}",
+            None,
+            None,
+            {"one": 1, "two": 2},
+            "1 and 2",
+            None,
+            None,
+        ),
+        (
+            "${one} and ${two}",
+            None,
+            None,
+            {},
+            None,
+            None,
+            "Missing variables: one, two",
+        ),
+        ("$one and ${two}", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
     ),
 )
 def test_template_evaluate(
