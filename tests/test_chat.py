@@ -1,3 +1,4 @@
+import click
 from click.testing import CliRunner
 from unittest.mock import ANY
 import json
@@ -131,6 +132,31 @@ def test_chat_basic(mock_model, logs_db):
             "reasoning": None,
         }
     ]
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_eof_exits_cleanly(mock_model, logs_db, monkeypatch):
+    # Ctrl+D (EOF) at the prompt raises click.Abort, which should exit the
+    # chat cleanly instead of bubbling up and printing "Aborted!"
+    runner = CliRunner()
+    mock_model.enqueue(["one world"])
+    prompts = iter(["Hi"])
+
+    def fake_prompt(*args, **kwargs):
+        try:
+            return next(prompts)
+        except StopIteration:
+            raise click.Abort()
+
+    monkeypatch.setattr("llm.cli.click.prompt", fake_prompt)
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "Aborted!" not in result.output
+    assert "one world" in result.output
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
