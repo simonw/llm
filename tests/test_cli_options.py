@@ -136,3 +136,28 @@ def test_prompt_uses_model_options(user_path):
         "previous": [],
         "options": {"example_bool": True},
     }
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    (
+        "--find me",
+        "--option value",
+        "-x test",
+        "--help-me-please",
+    ),
+)
+def test_prompts_starting_with_dash_are_not_rejected(prompt):
+    """Prompts starting with -- or - should be treated as prompt text,
+    not CLI options. Regression test for issue #245."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--no-log", prompt])
+    # Should NOT get Click's "No such option" error (exit 2)
+    assert result.exit_code != 2, (
+        f"Click rejected '{prompt}' as an option. "
+        f"Exit code: {result.exit_code}. Output: {result.output}"
+    )
+    # Should NOT contain "No such option" anywhere
+    assert "No such option" not in result.output, (
+        f"Click error in output for prompt '{prompt}': {result.output}"
+    )
