@@ -448,6 +448,28 @@ def test_extra_openai_models_async(user_path):
 
 
 @pytest.mark.parametrize(
+    "yaml_contents",
+    (
+        "",  # truly empty file
+        "   \n  \n",  # only whitespace
+        "# this is a placeholder\n# I'll fill it in later\n",  # only comments
+    ),
+)
+def test_extra_openai_models_empty_yaml(user_path, yaml_contents):
+    # Regression test for https://github.com/simonw/llm/issues/505 — an empty
+    # extra-openai-models.yaml file (or one that contains only whitespace /
+    # comments) used to crash model registration with
+    # "TypeError: 'NoneType' object is not iterable" because
+    # yaml.safe_load returns None for these inputs.
+    config_path = user_path / "extra-openai-models.yaml"
+    config_path.write_text(yaml_contents, "utf-8")
+    # Just calling get_models() forces register_models() to run for the
+    # default plugin; before the fix this raised TypeError.
+    models = llm.get_models()
+    assert any(m.model_id == "gpt-4o-mini" for m in models)
+
+
+@pytest.mark.parametrize(
     "args,exit_code",
     (
         (["-q", "mo", "-q", "ck"], 0),
