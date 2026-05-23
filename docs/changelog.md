@@ -1,5 +1,245 @@
 # Changelog
 
+(v0_32_a2)=
+## 0.32a2 (2026-05-12)
+
+### Support for the OpenAI Responses API
+
+Most reasoning-capable OpenAI models now use the [`/v1/responses`](https://developers.openai.com/api/reference/responses/overview) endpoint instead of `/v1/chat/completions`. This enables interleaved reasoning across tool calls for GPT-5 class models. [#1435](https://github.com/simonw/llm/pull/1435)
+
+- New `Responses` and `AsyncResponses` model classes driving the OpenAI Responses API. The existing `Chat` and `AsyncChat` classes are unchanged so other plugins that import them keep working.
+- The following models now use the Responses API by default: `o1`, `o3-mini`, `o3`, `o4-mini`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.2`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.5` (and their pinned date variants).
+- Use `-o chat_completions 1` to fall back to the older `/v1/chat/completions` code path for any of these models.
+- Encrypted reasoning items are captured as `provider_metadata` on `ReasoningPart` objects and round-tripped back to OpenAI on subsequent turns.
+- Reasoning summaries are now requested with `"summary": "auto"` so visible reasoning text is streamed back where the model produces it, unless `--hide-reasoning` or `hide_reasoning=` is set.
+- This means OpenAI prompts run using `llm prompt` that return reasoning tokens will display those on standard error.
+
+### CLI
+
+- New `llm -m model --options` flag to list the options supported by a given model. [#1441](https://github.com/simonw/llm/pull/1441)
+- The `-R/--no-reasoning` option has been renamed to `-R/--hide-reasoning`.
+
+### Python API
+
+- New `hide_reasoning=True` keyword argument on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts, exposed to model plugins as `prompt.hide_reasoning`. Model plugins can {ref}`use this to decide <advanced-model-plugins-reasoning-tokens>` if they should request visible reasoning summaries from their providers. [#1442](https://github.com/simonw/llm/pull/1442)
+- New `options=` dict keyword argument on `Model.prompt()`, `Conversation.prompt()`, `Response.reply()`, and their async equivalents, matching the pattern already used by `.chain()`. The previous `**kwargs` form continues to work for backwards compatibility but is no longer documented, and will be removed in the future. [#1432](https://github.com/simonw/llm/pull/1432)
+
+### Bug fixes
+
+- `add_tool_call()` calls that were not also recorded as stream events are now correctly emitted as `ToolCallPart` objects when assembling response parts, so they survive serialization via `response.to_dict()`. [#1433](https://github.com/simonw/llm/issues/1433)
+
+(v0_32_a1)=
+## 0.32a1 (2026-04-29)
+
+- Fixed a bug in 0.32a0 where tool-calling conversations were not correctly reinflated from SQLite. [#1426](https://github.com/simonw/llm/issues/1426)
+
+(v0_32_a0)=
+## 0.32a0 (2026-04-28)
+
+This alpha introduces a major backwards-compatible refactor. Models can now be prompted with a list of messages, OpenAI Chat Completions style, and the response can now be iterated over as a sequence of mixed types of content, for example reasoning tokens mixed with text tokens mixed with tool calls.
+
+For more background on this release take a look at [the annotated release notes](https://simonwillison.net/2026/Apr/29/llm/) on my blog.
+
+Prompt inputs and response outputs are now expressed as a list of `Message` objects, each containing typed `Part` objects (text, reasoning, tool calls, tool results, attachments).
+
+The `llm` CLI tool can now display reasoning tokens while executing a prompt.
+
+Plugin authors should read the expanded {ref}`Advanced model plugins <advanced-model-plugins>` documentation, which now covers `StreamEvent`, consuming `prompt.messages`, and round-tripping opaque provider metadata such as Anthropic extended-thinking signatures and Gemini `thoughtSignature` values.
+
+### Structured messages and streaming events
+
+- New `llm.Message` value type and constructor helpers `llm.user()`, `llm.assistant()`, `llm.system()`, and `llm.tool_message()` for building structured prompt inputs. The helpers accept strings, `Attachment` instances, or nested `Part` lists.
+- New `messages=` keyword argument on `model.prompt()`, `conversation.prompt()`, `model.chain()`, `conversation.chain()`, and their async counterparts. The `prompt=`, `system=`, `attachments=`, and `tool_results=` keywords still work and synthesize into the same `Message` list internally.
+- New `response.stream_events()` and `response.astream_events()` methods yielding typed `StreamEvent` objects (`type` is one of `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, `"tool_result"`, plus a `redacted=True` marker for opaque reasoning). Iterating against `response` directly continues to yield only text strings.
+- New `response.messages()` method (async: `await response.messages()`) returning the assembled `list[Message]` produced by the model. Calling it forces execution if the response prompt has not yet been executed.
+- New `response.reply(prompt=None, **kwargs)` method that continues the conversation from any `Response`, regardless of origin. When the previous response made tool calls and `tool_results=` was not passed, `reply()` automatically executes the pending tool calls and threads the results into the next turn. On async responses `reply()` is awaitable.
+- New `response.to_dict()` and `Response.from_dict(data, *, model=None)` for JSON-safe serialization of a full conversation turn — model id, input chain, assembled output (including reasoning parts and provider metadata), options, and audit fields. Reasoning signatures and `thoughtSignature` values round-trip via `provider_metadata`, so multi-turn extended thinking works across process boundaries.
+- New `llm/serialization.py` module exposing `MessageDict`, `PartDict`, `ResponseDict`, `PromptDict`, `UsageDict`, `AttachmentDict`, and the per-Part TypedDicts. Every `to_dict()` / `from_dict()` method is annotated with the matching TypedDict.
+- `Response.prompt.messages` is now the canonical structured input across the entire conversation chain. `Conversation.prompt` and `AsyncConversation.prompt` pre-compute the full chain (prior input + prior output + new turn) before constructing the next `Prompt`, so `response.prompt.messages` is always exactly what the model was sent.
+
+### CLI
+
+- `llm prompt` and `llm chat` now display visible reasoning text to stderr in a dim style while the response streams.
+- New `-R/--hide-reasoning` flag for `llm prompt` and `llm chat` to hide the reasoning stream.
+- `llm logs` now renders any visible reasoning emitted during a response under a `## Reasoning` heading above the response.
+- New `reasoning` column on the `responses` table populated from the visible-reasoning text.
+
+(v0_31)=
+## 0.31 (2026-04-24)
+
+- New GPT-5.5 OpenAI model: `llm -m gpt-5.5`. [#1418](https://github.com/simonw/llm/issues/1418)
+- New option to set the [text verbosity level](https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_new_params_and_tools#1-verbosity-parameter) for GPT-5+ OpenAI models: `-o verbosity low`. Values are `low`, `medium`, `high`.
+- New option for setting the [image detail level](https://developers.openai.com/api/docs/guides/images-vision#choose-an-image-detail-level) used for image attachments to OpenAI models: `-o image_detail low` - values are `low`, `high` and `auto`, and GPT-5.4 and 5.5 also accept `original`.
+- Models listed in `extra-openai-models.yaml` are now also registered as asynchronous. [#1395](https://github.com/simonw/llm/issues/1395)
+
+(v0_30)=
+## 0.30 (2026-03-31)
+
+- The {ref}`register_models() plugin hook <plugin-hooks-register-models>` now takes an optional `model_aliases` parameter listing all of the models, async models and aliases that have been registered so far by other plugins. A plugin with `@hookimpl(trylast=True)` can use this to take previously registered models into account. [#1389](https://github.com/simonw/llm/issues/1389)
+- Added docstrings to public classes and methods and included those directly in the documentation.
+
+(v0_29)=
+## 0.29 (2026-03-17)
+
+- The `-t/--template` option now works correctly with the `-x/--extract` and `--xl/--extract-last` flags.
+- `llm logs` now shows any additional model options in the Markdown output. [#1322](https://github.com/simonw/llm/issues/1322)
+- New OpenAI models: `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`. [#1376](https://github.com/simonw/llm/issues/1376)
+
+(v0_28)=
+## 0.28 (2025-12-12)
+
+- New OpenAI models: `gpt-5.1`, `gpt-5.1-chat-latest`, `gpt-5.2` and `gpt-5.2-chat-latest`. [#1300](https://github.com/simonw/llm/issues/1300), [#1317](https://github.com/simonw/llm/issues/1317)
+- LLM now requires Python 3.10 or higher. Python 3.14 is now covered by the tests.
+- When fetching URLs as fragments using `llm -f URL`, the request now includes a custom user-agent header: `llm/VERSION (https://llm.datasette.io/)`. [#1309](https://github.com/simonw/llm/issues/1309)
+- Fixed a bug where fragments were not correctly registered with their source when using `llm chat`. Thanks, [Giuseppe Rota](https://github.com/grota). [#1316](https://github.com/simonw/llm/pull/1316)
+- Fixed some file descriptor leak warnings. Thanks, [Eric Bloch](https://github.com/eedeebee). [#1313](https://github.com/simonw/llm/issues/1313)
+- Fixed a deprecation warning for `asyncio.iscoroutinefunction`.
+- Type annotations for the OpenAI Chat, AsyncChat and Completion `execute()` methods. Thanks, [Arjan Mossel](https://github.com/ar-jan). [#1315](https://github.com/simonw/llm/pull/1315)
+- The project now uses `uv` and dependency groups for development. See the updated {ref}`contributing documentation <contributing>`. [#1318](https://github.com/simonw/llm/issues/1318)
+
+(v0_27_1)=
+## 0.27.1 (2025-08-11)
+
+- `llm chat -t template` now correctly loads any tools that are included in that template. [#1239](https://github.com/simonw/llm/issues/1239)
+- Fixed a bug where `llm -m gpt5 -o reasoning_effort minimal --save gm` saved a template containing invalid YAML. [#1237](https://github.com/simonw/llm/issues/1237)
+- Fixed a bug where running `llm chat -t template` could cause prompts to be duplicated. [#1240](https://github.com/simonw/llm/issues/1240)
+- Less confusing error message if a requested toolbox class is unavailable. [#1238](https://github.com/simonw/llm/issues/1238)
+
+(v0_27)=
+## 0.27 (2025-08-11)
+
+This release adds support for the new **GPT-5 family** of models from OpenAI. It also enhances tool calling in a number of ways, including allowing {ref}`templates <prompt-templates>` to bundle pre-configured tools.
+
+### New features
+
+- New models: `gpt-5`, `gpt-5-mini` and `gpt-5-nano`. [#1229](https://github.com/simonw/llm/issues/1229)
+- LLM {ref}`templates <prompt-templates>` can now include a list of tools. These can be named tools from plugins or arbitrary Python function blocks, see {ref}`Tools in templates <prompt-templates-tools>`. [#1009](https://github.com/simonw/llm/issues/1009)
+- Tools {ref}`can now return attachments <python-api-tools-attachments>`, for models that support features such as image input. [#1014](https://github.com/simonw/llm/issues/1014)
+- New methods on the `Toolbox` class: `.add_tool()`, `.prepare()` and `.prepare_async()`, described in {ref}`Dynamic toolboxes <python-api-tools-dynamic>`. [#1111](https://github.com/simonw/llm/issues/1111)
+- New `model.conversation(before_call=x, after_call=y)` attributes for registering callback functions to run before and after tool calls. See  {ref}`tool debugging hooks <python-api-tools-debug-hooks>` for details. [#1088](https://github.com/simonw/llm/issues/1088)
+- Some model providers can serve different models from the same configured URL - [llm-llama-server](https://github.com/simonw/llm-llama-server) for example. Plugins for these providers can now record the resolved model ID of the model that was used to the LLM logs using the `response.set_resolved_model(model_id)` method. [#1117](https://github.com/simonw/llm/issues/1117)
+- Raising `llm.CancelToolCall` now only cancels the current tool call, passing an error back to the model and allowing it to continue. [#1148](https://github.com/simonw/llm/issues/1148)
+- New `-l/--latest` option for `llm logs -q searchterm` for searching logs ordered by date (most recent first) instead of the default relevance search. [#1177](https://github.com/simonw/llm/issues/1177)
+
+### Bug fixes and documentation
+
+- Fix for various bugs with different formats of streaming function responses for OpenAI-compatible models. Thanks, [James Sanford](https://github.com/jamessanford). [#1218](https://github.com/simonw/llm/pull/1218)
+- The `register_embedding_models` hook is [now documented](https://llm.datasette.io/en/stable/plugins/plugin-hooks.html#register-embedding-models-register). [#1049](https://github.com/simonw/llm/issues/1049)
+- Show visible stack trace for `llm templates show invalid-template-name`. [#1053](https://github.com/simonw/llm/issues/1053)
+- Handle invalid tool names more gracefully in `llm chat`. [#1104](https://github.com/simonw/llm/issues/1104)
+- Add a {ref}`Tool plugins <plugin-directory-tools>` section to the plugin directory. [#1110](https://github.com/simonw/llm/issues/1110)
+- Error on `register(Klass)` if the passed class is not a subclass of `Toolbox`. [#1114](https://github.com/simonw/llm/issues/1114)
+- Add `-h` for `--help` for all `llm` CLI commands. [#1134](https://github.com/simonw/llm/issues/1134)
+- Add missing `dataclasses` to advanced model plugins docs. [#1137](https://github.com/simonw/llm/issues/1137)
+- Fixed a bug where `llm logs -T llm_version "version" --async` incorrectly recorded just one single log entry when it should have recorded two. [#1150](https://github.com/simonw/llm/issues/1150)
+- All extra OpenAI model keys in `extra-openai-models.yaml` are {ref}`now documented <openai-compatible-models>`. [#1228](https://github.com/simonw/llm/issues/1228)
+
+(v0_26)=
+## 0.26 (2025-05-27)
+
+**Tool support** is finally here! This release adds support exposing {ref}`tools <tools>` to LLMs, previously described in the release notes for {ref}`0.26a0 <v0_26_a0>` and {ref}`0.26a1 <v0_26_a1>`.
+
+Read **[Large Language Models can run tools in your terminal with LLM 0.26](https://simonwillison.net/2025/May/27/llm-tools/)** for a detailed overview of the new features.
+
+Also in this release:
+
+- Two new {ref}`default tools <tools-default>`: `llm_version()` and `llm_time()`. [#1096](https://github.com/simonw/llm/issues/1096), [#1103](https://github.com/simonw/llm/issues/1103)
+- Documentation on {ref}`how to add tool supports to a model plugin <advanced-model-plugins-tools>`. [#1000](https://github.com/simonw/llm/issues/1000)
+- Added a {ref}`prominent warning <tools-warning>` about the risk of prompt injection when using tools. [#1097](https://github.com/simonw/llm/issues/1097)
+- Switched to using monotonic ULIDs for the response IDs in the logs, fixing some intermittent test failures. [#1099](https://github.com/simonw/llm/issues/1099)
+- New `tool_instances` table records details of Toolbox instances created while executing a prompt. [#1089](https://github.com/simonw/llm/issues/1089)
+- `llm.get_key()` is now a {ref}`documented utility function <plugin-utilities-get-key>`. [#1094](https://github.com/simonw/llm/issues/1094)
+
+(v0_26_a1)=
+## 0.26a1 (2025-05-25)
+
+Hopefully the last alpha before a stable release that includes tool support.
+
+### Features
+
+*   **Plugin-provided tools can now be grouped into "Toolboxes".**
+    *   Toolboxes (`llm.Toolbox` classes) allow plugins to expose multiple related tools that share state or configuration (e.g., a `Memory` tool or `Filesystem` tool). ([#1059](https://github.com/simonw/llm/issues/1059), [#1086](https://github.com/simonw/llm/issues/1086))
+*   **Tool support for `llm chat`.**
+    *   The `llm chat` command now accepts `--tool` and `--functions` arguments, allowing interactive chat sessions to use tools. ([#1004](https://github.com/simonw/llm/issues/1004), [#1062](https://github.com/simonw/llm/issues/1062))
+*   **Tools can now execute asynchronously.**
+    *   Models that implement `AsyncModel` can now run tools, including tool functions defined as `async def`. ([#1063](https://github.com/simonw/llm/issues/1063))
+*   **`llm chat` now supports adding fragments during a session.**
+    *   Use the new `!fragment <id>` command while chatting to insert content from a fragment. Initial fragments can also be passed to `llm chat` using `-f` or `--sf`. Thanks, [Dan Turkel](https://github.com/daturkel). ([#1044](https://github.com/simonw/llm/issues/1044), [#1048](https://github.com/simonw/llm/issues/1048))
+*   **Filter `llm logs` by tools.**
+    *   New `--tool <name>` option to filter logs to show only responses that involved a specific tool (e.g., `--tool simple_eval`).
+    *   The `--tools` flag shows all responses that used any tool. ([#1013](https://github.com/simonw/llm/issues/1013), [#1072](https://github.com/simonw/llm/issues/1072))
+*   **`llm schemas list` can output JSON.**
+    *   Added `--json` and `--nl` (newline-delimited JSON) options to `llm schemas list` for programmatic access to saved schema definitions. ([#1070](https://github.com/simonw/llm/issues/1070))
+*   **Filter `llm similar` results by ID prefix.**
+    *   The new `--prefix` option for `llm similar` allows searching for similar items only within IDs that start with a specified string (e.g., `llm similar my-collection --prefix 'docs/'`). Thanks, [Dan Turkel](https://github.com/daturkel). ([#1052](https://github.com/simonw/llm/issues/1052))
+*   **Control chained tool execution limit.**
+    *   New `--chain-limit <N>` (or `--cl`) option for `llm prompt` and `llm chat` to specify the maximum number of consecutive tool calls allowed for a single prompt. Defaults to 5; set to 0 for unlimited. ([#1025](https://github.com/simonw/llm/issues/1025))
+*   **`llm plugins --hook <NAME>` option.**
+    *   Filter the list of installed plugins to only show those that implement a specific plugin hook. ([#1047](https://github.com/simonw/llm/issues/1047))
+* `llm tools list` now shows toolboxes and their methods. ([#1013](https://github.com/simonw/llm/issues/1013))
+* `llm prompt` and `llm chat` now automatically re-enable plugin-provided tools when continuing a conversation (`-c` or `--cid`). ([#1020](https://github.com/simonw/llm/issues/1020))
+* The `--tools-debug` option now pretty-prints JSON tool results for improved readability. ([#1083](https://github.com/simonw/llm/issues/1083))
+* New `LLM_TOOLS_DEBUG` environment variable to permanently enable `--tools-debug`. ([#1045](https://github.com/simonw/llm/issues/1045))
+* `llm chat` sessions now correctly respect default model options configured with `llm models set-options`. Thanks, [André Arko](https://github.com/indirect). ([#985](https://github.com/simonw/llm/issues/985))
+* New `--pre` option for `llm install` to allow installing pre-release packages. ([#1060](https://github.com/simonw/llm/issues/1060))
+* OpenAI models (`gpt-4o`, `gpt-4o-mini`) now explicitly declare support for tools and vision. ([#1037](https://github.com/simonw/llm/issues/1037))
+* The `supports_tools` parameter is now supported in `extra-openai-models.yaml`. Thanks, [Mahesh Hegde ](https://github.com/mahesh-hegde). ([#1068](https://github.com/simonw/llm/issues/1068))
+
+### Bug fixes
+
+*   Fixed a bug where the `name` parameter in `register(function, name="name")` was ignored for tool plugins. ([#1032](https://github.com/simonw/llm/issues/1032))
+*   Ensure `pathlib.Path` objects are cast to `str` before passing to `click.edit` in `llm templates edit`. Thanks, [Abizer Lokhandwala](https://github.com/abizer). ([#1031](https://github.com/simonw/llm/issues/1031))
+
+
+(v0_26_a0)=
+## 0.26a0 (2025-05-13)
+
+This is the first alpha to introduce {ref}`support for tools<tools>`! Models with tool capability (which includes the default OpenAI model family) can now be granted access to execute Python functions as part of responding to a prompt.
+
+Tools are supported by {ref}`the command-line interface <usage-tools>`:
+
+```bash
+llm --functions '
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+' 'what is 34234 * 213345'
+```
+And in {ref}`the Python API <python-api-tools>`, using a new `model.chain()` method for executing multiple prompts in a sequence:
+```python
+import llm
+
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+
+model = llm.get_model("gpt-4.1-mini")
+response = model.chain(
+    "What is 34234 * 213345?",
+    tools=[multiply]
+)
+print(response.text())
+```
+New tools can also be defined using the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`. They can then be called by name from the command-line like this:
+```bash
+llm -T multiply 'What is 34234 * 213345?'
+```
+Tool support is currently under **active development**. Consult [this milestone](https://github.com/simonw/llm/milestone/12) for the latest status.
+
+(v0_25)=
+## 0.25 (2025-05-04)
+
+- New plugin feature: {ref}`plugin-hooks-register-fragment-loaders` plugins can now return a mixture of fragments and attachments. The [llm-video-frames](https://github.com/simonw/llm-video-frames) plugin is the first to take advantage of this mechanism. [#972](https://github.com/simonw/llm/issues/972)
+- New OpenAI models: `gpt-4.1`, `gpt-4.1-mini`, `gpt-41-nano`, `o3`, `o4-mini`. [#945](https://github.com/simonw/llm/issues/945), [#965](https://github.com/simonw/llm/issues/965), [#976](https://github.com/simonw/llm/issues/976).
+- New environment variables: `LLM_MODEL` and `LLM_EMBEDDING_MODEL` for setting the model to use without needing to specify `-m model_id` every time. [#932](https://github.com/simonw/llm/issues/932)
+- New command: `llm fragments loaders`, to list all currently available fragment loader prefixes provided by plugins. [#941](https://github.com/simonw/llm/issues/941)
+- `llm fragments` command now shows fragments ordered by the date they were first used. [#973](https://github.com/simonw/llm/issues/973)
+- `llm chat` now includes a `!edit` command for editing a prompt using your default terminal text editor. Thanks, [Benedikt Willi](https://github.com/Hopiu). [#969](https://github.com/simonw/llm/pull/969)
+- Allow `-t` and `--system` to be used at the same time. [#916](https://github.com/simonw/llm/issues/916)
+- Fixed a bug where accessing a model via its alias would fail to respect any default options set for that model. [#968](https://github.com/simonw/llm/issues/968)
+- Improved documentation for {ref}`extra-openai-models.yaml <openai-compatible-models>`. Thanks, [Rahim Nathwani](https://github.com/rahimnathwani) and [Dan Guido](https://github.com/dguido). [#950](https://github.com/simonw/llm/pull/950), [#957](https://github.com/simonw/llm/pull/957)
+- `llm -c/--continue` now works correctly with the `-d/--database` option. `llm chat` now accepts that `-d/--database` option. Thanks, [Sukhbinder Singh](https://github.com/sukhbinder). [#933](https://github.com/simonw/llm/issues/933)
+
 (v0_25a0)=
 ## 0.25a0 (2025-04-10)
 
@@ -419,6 +659,7 @@ This starts a chat session:
 ```
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
 > Who are you?
 Hello! I'm just an AI, here to assist you with any questions you may have.
 My name is LLaMA, and I'm a large language model trained to provide helpful

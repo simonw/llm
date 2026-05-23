@@ -431,6 +431,22 @@ def test_openai_localai_configuration(mocked_localai, user_path):
     }
 
 
+def test_extra_openai_models_async(user_path):
+    from llm.default_plugins.openai_models import AsyncChat
+
+    config_path = user_path / "extra-openai-models.yaml"
+    config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
+    async_model = llm.get_async_model("orca")
+    assert isinstance(async_model, AsyncChat)
+    assert async_model.model_id == "orca"
+    assert async_model.model_name == "orca-mini-3b"
+    assert async_model.api_base == "http://localai.localhost"
+    assert async_model.needs_key is None
+    # Completion models should not have an async variant
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_async_model("completion-babbage")
+
+
 @pytest.mark.parametrize(
     "args,exit_code",
     (
@@ -504,6 +520,21 @@ def test_llm_models_options(user_path):
     assert "AsyncMockModel (async): mock" not in result.output
 
 
+def test_prompt_options_shows_selected_model_options(user_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "gpt-5.5", "--options"], catch_exceptions=False)
+    expected = runner.invoke(
+        cli, ["models", "-m", "gpt-5.5", "--options"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert expected.exit_code == 0
+    assert result.output == expected.output
+    assert "OpenAI Responses: gpt-5.5" in result.output
+    assert "  Options:" in result.output
+    assert "    reasoning_effort: str" in result.output
+    assert not (user_path / "logs.db").exists()
+
+
 def test_llm_models_async(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)
@@ -568,6 +599,8 @@ def test_get_models():
     assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
+    assert "gpt-5.4-mini" in model_ids
+    assert "gpt-5.4-nano" in model_ids
     # Ensure no model_ids are duplicated
     # https://github.com/simonw/llm/issues/667
     assert len(model_ids) == len(set(model_ids))
@@ -580,6 +613,8 @@ def test_get_async_models():
     )
     model_ids = [model.model_id for model in models]
     assert "gpt-4o-mini" in model_ids
+    assert "gpt-5.4-mini" in model_ids
+    assert "gpt-5.4-nano" in model_ids
 
 
 def test_mock_model(mock_model):
@@ -633,7 +668,13 @@ def test_model_environment_variable(monkeypatch):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.output == "system:\nsys\n\nprompt:\nhello\n"
+    assert json.loads(result.output) == {
+        "prompt": "hello",
+        "system": "sys",
+        "attachments": [],
+        "stream": False,
+        "previous": [],
+    }
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
@@ -642,7 +683,8 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
     schema_value = '{"schema": "one"}'
-    open(schema_path, "w").write(schema_value)
+    with open(schema_path, "w") as f:
+        f.write(schema_value)
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     if use_filename:
         schema_value = str(schema_path)
@@ -789,3 +831,65 @@ def test_schemas_dsl():
         },
         "required": ["items"],
     }
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("custom_database_path", (False, True))
+def test_llm_prompt_continue_with_database(
+    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Terry"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    user_path = tmpdir / "user"
+    custom_db_path = tmpdir / "custom_log.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+
+    # First prompt
+    runner = CliRunner()
+    args = ["three names \nfor a pet pelican", "--no-stream"]
+    if custom_database_path:
+        args.extend(["--database", str(custom_db_path)])
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert result.output == "Bob, Alice, Eve\n"
+
+    # Now ask a follow-up
+    args2 = ["one more", "-c", "--no-stream"]
+    if custom_database_path:
+        args2.extend(["--database", str(custom_db_path)])
+    result2 = runner.invoke(cli, args2, catch_exceptions=False)
+    assert result2.exit_code == 0, result2.output
+    assert result2.output == "Terry\n"
+
+    if custom_database_path:
+        assert custom_db_path.exists()
+        db_path = str(custom_db_path)
+    else:
+        assert (user_path / "logs.db").exists()
+        db_path = str(user_path / "logs.db")
+    assert sqlite_utils.Database(db_path)["responses"].count == 2
+
+
+def test_default_exports():
+    "Check key exports in the llm __all__ list"
+    for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
+        assert name in llm.__all__, f"{name} not in llm.__all__"

@@ -2,6 +2,7 @@ import pytest
 import sqlite_utils
 import json
 import llm
+import llm_echo
 from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
@@ -50,7 +51,9 @@ def env_setup(monkeypatch, user_path):
 class MockModel(llm.Model):
     model_id = "mock"
     attachment_types = {"image/png", "audio/wav"}
+    can_stream = True
     supports_schema = True
+    supports_tools = True
 
     class Options(llm.Options):
         max_tokens: Optional[int] = Field(
@@ -60,6 +63,7 @@ class MockModel(llm.Model):
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -80,15 +84,8 @@ class MockModel(llm.Model):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
-
-
-class EchoModel(llm.Model):
-    model_id = "echo"
-    can_stream = True
-
-    def execute(self, prompt, stream, response, conversation):
-        yield "system:\n{}\n\n".format(prompt.system or "")
-        yield "prompt:\n{}".format(prompt.prompt or "")
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class MockKeyModel(llm.KeyModel):
@@ -109,11 +106,13 @@ class MockAsyncKeyModel(llm.AsyncKeyModel):
 
 class AsyncMockModel(llm.AsyncModel):
     model_id = "mock"
+    can_stream = True
     supports_schema = True
 
     def __init__(self):
         self.history = []
         self._queue = []
+        self.resolved_model_name = None
 
     def enqueue(self, messages):
         assert isinstance(messages, list)
@@ -134,6 +133,8 @@ class AsyncMockModel(llm.AsyncModel):
         response.set_usage(
             input=len((prompt.prompt or "").split()), output=len(gathered)
         )
+        if self.resolved_model_name is not None:
+            response.set_resolved_model(self.resolved_model_name)
 
 
 class EmbedDemo(llm.EmbeddingModel):
@@ -223,7 +224,7 @@ def register_echo_model():
 
         @llm.hookimpl
         def register_models(self, register):
-            register(EchoModel())
+            register(llm_echo.Echo(), llm_echo.EchoAsync())
 
     pm.register(EchoModelPlugin(), name="undo-EchoModelPlugin")
     try:
@@ -473,3 +474,16 @@ def collection():
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"filter_headers": ["Authorization"]}
+
+
+def extract_braces(s):
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and first < last:
+        return s[first : last + 1]
+    return None

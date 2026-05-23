@@ -1,11 +1,15 @@
+import json
 import pytest
 from llm.utils import (
-    simplify_usage_dict,
     extract_fenced_code_block,
+    instantiate_from_spec,
     maybe_fenced_code,
-    truncate_string,
     schema_dsl,
+    simplify_usage_dict,
+    truncate_string,
+    monotonic_ulid,
 )
+from llm import get_key, Toolbox
 
 
 @pytest.mark.parametrize(
@@ -391,3 +395,124 @@ def test_backtick_count_adjustment(content: str, backtick_count: int):
 
     assert result.startswith(expected_start)
     assert result.endswith(expected_end)
+
+
+class Files:
+    def __init__(self, dir="."):
+        self.dir = dir
+
+
+class ValueFlag:
+    def __init__(self, value=None, flag=False):
+        self.value = value
+        self.flag = flag
+
+
+@pytest.mark.parametrize(
+    "spec, expected_cls, expected_attrs",
+    [
+        ("Files", Files, {"dir": "."}),
+        ("Files()", Files, {"dir": "."}),
+        ('Files("tmp")', Files, {"dir": "tmp"}),
+        ('Files({"dir": "/tmp"})', Files, {"dir": "/tmp"}),
+        ('Files(dir="/data")', Files, {"dir": "/data"}),
+        (
+            'ValueFlag({"value": 123, "flag": true})',
+            ValueFlag,
+            {"value": 123, "flag": True},
+        ),
+        ("ValueFlag(flag=true)", ValueFlag, {"flag": True}),
+        ("ValueFlag(value=123, flag=false)", ValueFlag, {"value": 123, "flag": False}),
+    ],
+)
+def test_instantiate_valid(spec, expected_cls, expected_attrs):
+    obj = instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+    assert isinstance(obj, expected_cls)
+    for key, val in expected_attrs.items():
+        assert getattr(obj, key) == val
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        'Files({"dir":})',
+        "Files(",
+        "Files(dir=)",
+        'Files({"dir": [})',
+        "Files(.)",
+        "Files(this is invalid)",
+        "ValueFlag(value=123, flag=falseTypo)",
+    ],
+)
+def test_instantiate_invalid(spec):
+    with pytest.raises(ValueError):
+        instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+
+
+def test_get_key(user_path, monkeypatch):
+    monkeypatch.setenv("ENV", "from-env")
+    (user_path / "keys.json").write_text(json.dumps({"testkey": "TEST"}), "utf-8")
+    assert get_key(alias="testkey") == "TEST"
+    assert get_key(input="testkey") == "TEST"
+    assert get_key(alias="missing", env="ENV") == "from-env"
+    assert get_key(alias="missing") is None
+    # found key should over-ride env
+    assert get_key(input="testkey", env="ENV") == "TEST"
+    # explicit key should over-ride alias
+    assert get_key(input="explicit", alias="testkey") == "explicit"
+    assert get_key(input="explicit", alias="testkey", env="ENV") == "explicit"
+
+
+def test_monotonic_ulids():
+    ulids = [monotonic_ulid() for i in range(1000)]
+    assert ulids == sorted(ulids)
+
+
+def test_toolbox_config_capture():
+    """Test that Toolbox captures __init__ parameters in _config"""
+
+    # Single positional arg
+    class Tool1(Toolbox):
+        def __init__(self, value):
+            pass
+
+    assert Tool1(42)._config == {"value": 42}
+
+    # Multiple positional args
+    class Tool2(Toolbox):
+        def __init__(self, a, b, c):
+            pass
+
+    assert Tool2(1, 2, 3)._config == {"a": 1, "b": 2, "c": 3}
+
+    # Keyword args with defaults
+    class Tool3(Toolbox):
+        def __init__(self, name="default", count=10):
+            pass
+
+    assert Tool3()._config == {"name": "default", "count": 10}
+    assert Tool3(name="custom", count=20)._config == {"name": "custom", "count": 20}
+
+    # Mixed args
+    class Tool4(Toolbox):
+        def __init__(self, required, optional="default"):
+            pass
+
+    assert Tool4("hello")._config == {"required": "hello", "optional": "default"}
+    assert Tool4("world", optional="custom")._config == {
+        "required": "world",
+        "optional": "custom",
+    }
+
+    # Var args excluded
+    class Tool5(Toolbox):
+        def __init__(self, regular, *args, **kwargs):
+            pass
+
+    assert Tool5("test", 1, 2, extra="value")._config == {"regular": "test"}
+
+    # No init
+    class Tool6(Toolbox):
+        pass
+
+    assert Tool6()._config == {}

@@ -1,8 +1,8 @@
 from click.testing import CliRunner
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.utils import monotonic_ulid
 from llm import Fragment
-from ulid import ULID
 import datetime
 import json
 import pathlib
@@ -10,9 +10,10 @@ import pytest
 import re
 import sqlite_utils
 import sys
+import textwrap
 import time
+from ulid import ULID
 import yaml
-
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
 MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
@@ -26,7 +27,7 @@ def log_path(user_path):
     start = datetime.datetime.now(datetime.timezone.utc)
     db["responses"].insert_all(
         {
-            "id": str(ULID()).lower(),
+            "id": str(monotonic_ulid()).lower(),
             "system": "system",
             "prompt": "prompt",
             "response": 'response\n```python\nprint("hello word")\n```',
@@ -111,7 +112,7 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
@@ -120,7 +121,7 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
         + (
             "# YYYY-MM-DDTHH:MM:SS    conversation: abc123 id: xxx\n\n"
             "Model: **davinci**\n\n"
@@ -129,9 +130,45 @@ def test_logs_text(log_path, usage):
             "## Response\n\n"
             'response\n```python\nprint("hello word")\n```\n\n'
         )
-        + ("## Token usage:\n\n2 input, 5 output\n\n" if usage else "")
+        + ("## Token usage\n\n2 input, 5 output\n\n" if usage else "")
     )
     assert output == expected
+
+
+def test_logs_text_with_options(user_path):
+    """Test that ## Options section appears when options_json is set"""
+    log_path = str(user_path / "logs_with_options.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+
+    # Create response with options
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": start.isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "options_json": json.dumps(
+                {"thinking_level": "high", "media_resolution": "low"}
+            ),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
+    assert result.exit_code == 0
+    output = result.output
+
+    # Verify ## Options section is present
+    assert "## Options\n\n" in output
+    assert "- thinking_level: high" in output
+    assert "- media_resolution: low" in output
 
 
 @pytest.mark.parametrize("n", (None, 0, 2))
@@ -268,7 +305,7 @@ def test_logs_filtered(user_path, model, path_option):
     migrate(db)
     db["responses"].insert_all(
         {
-            "id": str(ULID()).lower(),
+            "id": str(monotonic_ulid()).lower(),
             "system": "system",
             "prompt": "prompt",
             "response": "response",
@@ -298,6 +335,10 @@ def test_logs_filtered(user_path, model, path_option):
         # Model filter should work too
         ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
         ("llama", ["-m", "davinci2"], []),
+        # Adding -l/--latest should return latest first (order by id desc)
+        ("llama", [], ["doc1", "doc3"]),
+        ("llama", ["-l"], ["doc3", "doc1"]),
+        ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
 )
 def test_logs_search(user_path, query, extra_args, expected):
@@ -427,6 +468,52 @@ def test_logs_schema_data_ids(schema_log_path):
     }
     for row in rows:
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
+
+
+_expected_yaml_re = r"""- id: [a-f0-9]{32}
+  summary: \|
+    
+  usage: \|
+    4 times, most recently \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00
+- id: [a-f0-9]{32}
+  summary: \|
+    
+  usage: \|
+    2 times, most recently \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00"""
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    (
+        (["schemas"], _expected_yaml_re),
+        (["schemas", "list"], _expected_yaml_re),
+    ),
+)
+def test_schemas_list_yaml(schema_log_path, args, expected):
+    result = CliRunner().invoke(cli, args + ["-d", str(schema_log_path)])
+    assert result.exit_code == 0
+    assert re.match(expected, result.output.strip())
+
+
+@pytest.mark.parametrize("is_nl", (False, True))
+def test_schemas_list_json(schema_log_path, is_nl):
+    result = CliRunner().invoke(
+        cli,
+        ["schemas", "list"]
+        + (["--nl"] if is_nl else ["--json"])
+        + ["-d", str(schema_log_path)],
+    )
+    assert result.exit_code == 0
+    if is_nl:
+        rows = [json.loads(line) for line in result.output.strip().split("\n")]
+    else:
+        rows = json.loads(result.output)
+    assert len(rows) == 2
+    assert rows[0]["content"] == {"name": "array"}
+    assert rows[0]["times_used"] == 4
+    assert rows[1]["content"] == {"name": "string"}
+    assert rows[1]["times_used"] == 2
+    assert set(rows[0].keys()) == {"id", "content", "recently_used", "times_used"}
 
 
 @pytest.fixture
@@ -845,6 +932,41 @@ def test_expand_fragment_markdown(fragments_fixture):
     assert interesting_bit.endswith("</details>")
 
 
+def test_logs_tools(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def demo():
+        return "one\\ntwo\\nthree"
+    """)
+    result1 = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            code,
+            json.dumps({"tool_calls": [{"name": "demo"}]}),
+        ],
+    )
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, ["logs", "-c"])
+    assert (
+        "### Tool results\n"
+        "\n"
+        "- **demo**: `None`<br>\n"
+        "    one\n"
+        "    two\n"
+        "    three\n"
+        "\n"
+    ) in result2.output
+    # Log one that did NOT use tools, check that `llm logs --tools` ignores it
+    assert runner.invoke(cli, ["-m", "echo", "badger"]).exit_code == 0
+    assert "badger" in runner.invoke(cli, ["logs"]).output
+    logs_tools_output = runner.invoke(cli, ["logs", "--tools"]).output
+    assert "badger" not in logs_tools_output
+    assert "three" in logs_tools_output
+
+
 def test_logs_backup(logs_db):
     assert not logs_db.tables
     runner = CliRunner()
@@ -859,3 +981,100 @@ def test_logs_backup(logs_db):
         assert result.output.startswith("Backed up ")
         assert result.output.endswith("to backup.db\n")
         assert expected_path.exists()
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
+    mock_model.resolved_model_name = "resolved-mock"
+    async_mock_model.resolved_model_name = "resolved-mock"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["-m", "mock", "simple prompt"] + (["--async"] if async_ else [])
+    )
+    assert result.exit_code == 0
+    # Should have logged the resolved model name
+    assert logs_db["responses"].count
+    response = list(logs_db["responses"].rows)[0]
+    assert response["model"] == "mock"
+    assert response["resolved_model"] == "resolved-mock"
+
+    # Should show up in the JSON logs
+    result2 = runner.invoke(cli, ["logs", "--json"])
+    assert result2.exit_code == 0
+    logs = json.loads(result2.output.strip())
+    assert len(logs) == 1
+    assert logs[0]["model"] == "mock"
+    assert logs[0]["resolved_model"] == "resolved-mock"
+
+    # And the rendered logs
+    result3 = runner.invoke(cli, ["logs"])
+    assert "Model: **mock** (resolved: **resolved-mock**)" in result3.output
+
+
+# ---- Reasoning persistence and markdown rendering -----------------
+
+
+def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
+    """A response that streams reasoning events should round-trip the
+    visible reasoning text via the new responses.reasoning column."""
+    import llm
+
+    mock_model.enqueue(
+        [
+            llm.parts.StreamEvent(type="reasoning", chunk="thinking "),
+            llm.parts.StreamEvent(type="reasoning", chunk="hard"),
+            llm.parts.StreamEvent(type="text", chunk="hello"),
+        ]
+    )
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+
+    row = next(logs_db["responses"].rows)
+    assert row["response"] == "hello"
+    assert row["reasoning"] == "thinking hard"
+
+
+def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
+    """No reasoning emitted → empty/null reasoning column, never raises."""
+    mock_model.enqueue(["just text"])
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+    row = next(logs_db["responses"].rows)
+    assert not row.get("reasoning")
+
+
+def test_logs_markdown_renders_reasoning_heading(user_path):
+    """When a row has reasoning text, `llm logs` renders a `## Reasoning`
+    heading between System and Response."""
+    log_path = str(user_path / "logs_with_reasoning.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": None,
+            "prompt": "hi",
+            "response": "answer",
+            "reasoning": "I thought hard about it.\n\n\n",
+            "model": "mock",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "c1",
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path], catch_exceptions=False)
+    assert result.exit_code == 0
+    # rstrip() before rendering so trailing newlines from the
+    # provider output don't push `## Response` down the page.
+    assert "## Reasoning\n\nI thought hard about it.\n\n## Response" in result.output
+
+
+def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
+    """When reasoning is empty/null, no heading appears (existing
+    fixture rows have no reasoning)."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Reasoning" not in result.output

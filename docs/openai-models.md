@@ -39,6 +39,9 @@ OpenAI Chat: gpt-4o-audio-preview-2024-12-17
 OpenAI Chat: gpt-4o-audio-preview-2024-10-01
 OpenAI Chat: gpt-4o-mini-audio-preview
 OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
+OpenAI Chat: gpt-4.1 (aliases: 4.1)
+OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
+OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
 OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
 OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
 OpenAI Chat: gpt-4 (aliases: 4, gpt4)
@@ -49,11 +52,31 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
 OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
 OpenAI Chat: gpt-4.5-preview-2025-02-27
 OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
-OpenAI Chat: o1
-OpenAI Chat: o1-2024-12-17
+OpenAI Responses: o1
+OpenAI Responses: o1-2024-12-17
 OpenAI Chat: o1-preview
 OpenAI Chat: o1-mini
-OpenAI Chat: o3-mini
+OpenAI Responses: o3-mini
+OpenAI Responses: o3
+OpenAI Responses: o4-mini
+OpenAI Responses: gpt-5
+OpenAI Responses: gpt-5-mini
+OpenAI Responses: gpt-5-nano
+OpenAI Responses: gpt-5-2025-08-07
+OpenAI Responses: gpt-5-mini-2025-08-07
+OpenAI Responses: gpt-5-nano-2025-08-07
+OpenAI Responses: gpt-5.1
+OpenAI Responses: gpt-5.1-chat-latest
+OpenAI Responses: gpt-5.2
+OpenAI Responses: gpt-5.2-chat-latest
+OpenAI Responses: gpt-5.4
+OpenAI Responses: gpt-5.4-2026-03-05
+OpenAI Responses: gpt-5.4-mini
+OpenAI Responses: gpt-5.4-mini-2026-03-17
+OpenAI Responses: gpt-5.4-nano
+OpenAI Responses: gpt-5.4-nano-2026-03-17
+OpenAI Responses: gpt-5.5
+OpenAI Responses: gpt-5.5-2026-04-23
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
@@ -134,11 +157,14 @@ Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want 
 
 ```yaml
 - model_id: gpt-3.5-turbo-0613
+  model_name: gpt-3.5-turbo-0613
   aliases: ["0613"]
 ```
-The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model.
+The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+
+If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
 For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
 

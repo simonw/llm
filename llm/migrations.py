@@ -310,3 +310,119 @@ def m016_fragments_table_pks(db):
     # https://github.com/simonw/llm/issues/863#issuecomment-2781720064
     db["prompt_fragments"].transform(pk=("response_id", "fragment_id", "order"))
     db["system_fragments"].transform(pk=("response_id", "fragment_id", "order"))
+
+
+@migration
+def m017_tools_tables(db):
+    db["tools"].create(
+        {
+            "id": int,
+            "hash": str,
+            "name": str,
+            "description": str,
+            "input_schema": str,
+        },
+        pk="id",
+    )
+    db["tools"].create_index(["hash"], unique=True)
+    # Many-to-many relationship between tools and responses
+    db["tool_responses"].create(
+        {
+            "tool_id": int,
+            "response_id": str,
+        },
+        foreign_keys=(
+            ("tool_id", "tools", "id"),
+            ("response_id", "responses", "id"),
+        ),
+        pk=("tool_id", "response_id"),
+    )
+    # tool_calls and tool_results are one-to-many against responses
+    db["tool_calls"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "arguments": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+    db["tool_results"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "output": str,
+            "tool_call_id": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+
+
+@migration
+def m017_tools_plugin(db):
+    db["tools"].add_column("plugin")
+
+
+@migration
+def m018_tool_instances(db):
+    # Used to track instances of Toolbox classes that may be
+    # used multiple times by different tools
+    db["tool_instances"].create(
+        {
+            "id": int,
+            "plugin": str,
+            "name": str,
+            "arguments": str,
+        },
+        pk="id",
+    )
+    # We record which instance was used only on the results
+    db["tool_results"].add_column("instance_id", fk="tool_instances")
+
+
+@migration
+def m019_resolved_model(db):
+    # For models like gemini-1.5-flash-latest where we wish to record
+    # the resolved model name in addition to the alias
+    db["responses"].add_column("resolved_model", str)
+
+
+@migration
+def m020_tool_results_attachments(db):
+    db["tool_results_attachments"].create(
+        {
+            "tool_result_id": int,
+            "attachment_id": str,
+            "order": int,
+        },
+        foreign_keys=(
+            ("tool_result_id", "tool_results", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+        pk=("tool_result_id", "attachment_id"),
+    )
+
+
+@migration
+def m021_tool_results_exception(db):
+    db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_response_reasoning(db):
+    # Concatenated visible reasoning text emitted during the response.
+    # NULL/empty when no reasoning was emitted or when the provider
+    # only reported an opaque token count (the redacted-marker case).
+    db["responses"].add_column("reasoning", str)

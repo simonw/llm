@@ -11,7 +11,7 @@ def register_commands(cli):
 
 
 @hookspec
-def register_models(register):
+def register_models(register, model_aliases):
     "Register additional model instances representing LLM models that can be called"
 
 
@@ -28,3 +28,8 @@ def register_template_loaders(register):
 @hookspec
 def register_fragment_loaders(register):
     "Register additional fragment loaders with prefixes"
+
+
+@hookspec
+def register_tools(register):
+    "Register functions that can be used as tools by the LLMs"

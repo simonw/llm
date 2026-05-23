@@ -9,6 +9,8 @@ class AttachmentType(BaseModel):
 
 
 class Template(BaseModel):
+    """A reusable prompt template."""
+
     name: str
     prompt: Optional[str] = None
     system: Optional[str] = None
@@ -22,15 +24,24 @@ class Template(BaseModel):
     schema_object: Optional[dict] = None
     fragments: Optional[List[str]] = None
     system_fragments: Optional[List[str]] = None
+    tools: Optional[List[str]] = None
+    functions: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
     class MissingVariables(Exception):
         pass
 
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Not a pydantic field to avoid YAML being able to set it
+        # this controls if Python inline functions code is trusted
+        self._functions_is_trusted = False
+
     def evaluate(
         self, input: str, params: Optional[Dict[str, Any]] = None
     ) -> Tuple[Optional[str], Optional[str]]:
+        """Evaluate the template with the given input and parameters, returning (prompt, system)."""
         params = params or {}
         params["input"] = input
         if self.defaults:
@@ -48,6 +59,7 @@ class Template(BaseModel):
         return prompt, system
 
     def vars(self) -> set:
+        """Return the set of variable names used in the prompt and system templates."""
         all_vars = set()
         for text in [self.prompt, self.system]:
             if not text:
@@ -57,6 +69,7 @@ class Template(BaseModel):
 
     @classmethod
     def interpolate(cls, text: Optional[str], params: Dict[str, Any]) -> Optional[str]:
+        """Substitute template variables in text with values from params, raising MissingVariables if any are absent."""
         if not text:
             return text
         # Confirm all variables in text are provided
@@ -71,6 +84,7 @@ class Template(BaseModel):
 
     @staticmethod
     def extract_vars(string_template: string.Template) -> List[str]:
+        """Extract and return the list of named variable identifiers from a string.Template."""
         return [
             match.group("named")
             for match in string_template.pattern.finditer(string_template.template)

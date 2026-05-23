@@ -25,6 +25,14 @@ llm -f https://llm.datasette.io/robots.txt "Explain this robots.txt file in deta
 ```
 Here we are specifying a fragment using a URL. The contents of that URL will be included in the prompt that is sent to the model, prepended prior to the prompt text.
 
+<!--[[[cog
+from importlib.metadata import version
+llm_version = version("llm")
+cog.out(f'The URL will be fetched with the user-agent `llm/{llm_version} (https://llm.datasette.io/)`.')
+]]]-->
+The URL will be fetched with the user-agent `llm/0.32a2 (https://llm.datasette.io/)`.
+<!--[[[end]]]-->
+
 The `-f` option can be used multiple times to combine together multiple fragments.
 
 Fragments can also be files on disk, for example:
@@ -38,6 +46,42 @@ llm -f - 'extract the metadata' < setup.py
 This will read the contents of `setup.py` from standard input and use it as a fragment.
 
 Fragments can also be used as part of your system prompt. Use `--sf value` or `--system-fragment value` instead of `-f`.
+
+## Using fragments in chat
+
+The `chat` command also supports the `-f` and `--sf` arguments to start a chat with fragments.
+
+```bash
+llm chat -f my_doc.txt
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> Explain this document to me
+```
+
+Fragments can also be added *during* a chat conversation using the `!fragment <my_fragment>` command.
+
+```bash
+Chatting with gpt-4
+Type 'exit' or 'quit' to exit
+Type '!multi' to enter multiple lines, then '!end' to finish
+Type '!edit' to open your default editor and modify the prompt.
+Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+> !fragment https://llm.datasette.io/en/stable/fragments.html
+```
+
+This can be combined with `!multi`:
+
+```bash
+> !multi
+Explain the difference between fragments and templates to me
+!fragment https://llm.datasette.io/en/stable/fragments.html https://llm.datasette.io/en/stable/templates.html
+!end
+```
+
+Any `!fragment` lines found in a prompt created with `!edit` will not be parsed.
 
 (fragments-browsing)=
 ## Browsing fragments
@@ -143,7 +187,9 @@ This plugin turns a single call to `-f github:simonw/s3-credentials` into multip
 
 Running `llm logs -c` will show that this prompt incorporated 26 fragments, one for each file.
 
-Running `llm logs -c --usage --expand` includes token usage information and turns each fragment ID into a full copy of that file. [Here's the output of that command](https://gist.github.com/simonw/c9bbbc5f6560b01f4b7882ac0194fb25).
+Running `llm logs -c --usage --expand` (shortcut: `llm logs -cue`) includes token usage information and turns each fragment ID into a full copy of that file. [Here's the output of that command](https://gist.github.com/simonw/c9bbbc5f6560b01f4b7882ac0194fb25).
+
+Fragment plugins can return {ref}`attachments <usage-attachments>` (such as images) as well.
 
 See the {ref}`register_fragment_loaders() plugin hook <plugin-hooks-register-fragment-loaders>` documentation for details on writing your own custom fragment plugin.
 

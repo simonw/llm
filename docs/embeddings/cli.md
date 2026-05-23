@@ -347,7 +347,7 @@ This embeds the provided string and returns a newline-delimited list of JSON obj
 ```
 Use `-p/--plain` to get back results in plain text instead of JSON:
 ```bash
-llm -similar quotations -c 'computer science' -p
+llm similar quotations -c 'computer science' -p
 ```
 Example output:
 ```
@@ -364,6 +364,12 @@ echo 'computer science' | llm similar quotations -i -
 When using a model like CLIP, you can find images similar to an input image using `-i filename` with `--binary`:
 ```bash
 llm similar photos -i image.jpg --binary
+```
+
+You can filter results to only show IDs that begin with a specific prefix using --prefix:
+
+```bash
+llm similar quotations --prefix 'movies/' -c 'star wars'
 ```
 
 (embeddings-cli-embed-models)=

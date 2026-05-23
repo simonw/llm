@@ -63,20 +63,16 @@ def m004_store_content_hash(db):
     db.conn.create_function("temp_random_md5", 0, random_md5)
 
     with db.conn:
-        db.execute(
-            """
+        db.execute("""
             update embeddings
             set content_hash = temp_md5(content)
             where content is not null
-        """
-        )
-        db.execute(
-            """
+        """)
+        db.execute("""
             update embeddings
             set content_hash = temp_random_md5()
             where content is null
-        """
-        )
+        """)
 
     db["embeddings"].create_index(["content_hash"])
 

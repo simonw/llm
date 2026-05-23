@@ -6,5 +6,9 @@ venv
 .eggs
 .pytest_cache
 *.egg-info
+build/
 .DS_Store
 .idea/
+.vscode/
+uv.lock
+*.db
