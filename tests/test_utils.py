@@ -6,6 +6,7 @@ from llm.utils import (
     maybe_fenced_code,
     schema_dsl,
     simplify_usage_dict,
+    token_usage_string,
     truncate_string,
     monotonic_ulid,
 )
@@ -288,6 +289,13 @@ def test_schema_dsl_multi():
             "12345...",
         ),  # Too small for keep_end, use regular
         ("1234567890", 9, False, True, "12... 90"),  # Just enough for keep_end
+        # Multibyte character tests
+        ("日本語", 3, False, False, "日本語"),  # Exact fit with CJK
+        ("日本語文テスト", 5, False, False, "日本..."),  # CJK truncation
+        ("😀😁😂", 3, False, False, "😀😁😂"),  # Exact fit with emoji
+        ("😀😁😂🤣😃😄", 5, False, False, "😀😁..."),  # Emoji truncation
+        ("日本語文テスト更多字符", 9, False, True, "日本... 字符"),  # CJK keep_end
+        ("😀😁😂🤣😃😄😅😆😇🥰", 9, False, True, "😀😁... 😇🥰"),  # Emoji keep_end
     ],
 )
 def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expected):
@@ -299,6 +307,22 @@ def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expec
         keep_end=keep_end,
     )
     assert result == expected
+
+
+@pytest.mark.parametrize(
+    "input_tokens,output_tokens,token_details,expected",
+    [
+        (None, None, None, ""),
+        (None, None, {}, ""),
+        (100, None, None, "100 input"),
+        (None, 200, None, "200 output"),
+        (100, 200, None, "100 input, 200 output"),
+        (None, None, {"cached": 50}, '{"cached": 50}'),
+        (1000, 500, {"audio": 0}, '1,000 input, 500 output, {"audio": 0}'),
+    ],
+)
+def test_token_usage_string(input_tokens, output_tokens, token_details, expected):
+    assert token_usage_string(input_tokens, output_tokens, token_details) == expected
 
 
 @pytest.mark.parametrize(
