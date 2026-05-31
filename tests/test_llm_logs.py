@@ -470,6 +470,35 @@ def test_logs_schema_data_ids(schema_log_path):
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
 
 
+def test_logs_schema_data_ids_values(schema_log_path):
+    # Regression test: --data-ids should populate the conversation_id key
+    # with the row's conversation_id, not the response id. See issue #800
+    # for the original feature intent.
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "logs",
+            "-n",
+            "0",
+            "-p",
+            str(schema_log_path),
+            "--data-ids",
+            "--schema",
+            SINGLE_ID,
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    rows = [json.loads(line) for line in result.output.strip().splitlines()]
+    assert rows, "expected at least one row from --data-ids output"
+    for row in rows:
+        # response_id should look like a ULID (26 chars, base32) lowercased
+        assert row["response_id"] != row["conversation_id"]
+        # The fixture sets every SINGLE_ID response's conversation_id to "abc123"
+        assert row["conversation_id"] == "abc123"
+
+
 _expected_yaml_re = r"""- id: [a-f0-9]{32}
   summary: \|
     

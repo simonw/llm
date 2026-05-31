@@ -1913,7 +1913,9 @@ def logs_list(
                 if data_ids:
                     for item in new_items:
                         item[find_unused_key(item, "response_id")] = row["id"]
-                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row[
+                            "conversation_id"
+                        ]
                 to_output.extend(new_items)
             except ValueError:
                 pass
