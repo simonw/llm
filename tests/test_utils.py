@@ -225,6 +225,19 @@ def test_schema_dsl(schema, expected):
     assert result == expected
 
 
+def test_schema_dsl_empty_field_name():
+    # Fields with no name before the colon (e.g. ':description') should be
+    # silently skipped rather than raising IndexError.
+    result = schema_dsl(":just a description")
+    assert result == {"type": "object", "properties": {}, "required": []}
+    result2 = schema_dsl("name, :no name before colon")
+    assert result2 == {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+
+
 def test_schema_dsl_multi():
     result = schema_dsl("name, age int: The age", multi=True)
     assert result == {
