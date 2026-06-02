@@ -107,6 +107,22 @@ def test_simplify_usage_dict(input_data, expected_output):
             False,
             "def foo():\n    return `bar`\n",
         ],
+        # Language/info tags containing non-word characters must still match.
+        [
+            "```c++\nint x = 1;\n```",
+            False,
+            "int x = 1;\n",
+        ],
+        [
+            '```objective-c\nNSLog(@"hi");\n```',
+            False,
+            'NSLog(@"hi");\n',
+        ],
+        [
+            "```c#\nvar x = 1;\n```",
+            False,
+            "var x = 1;\n",
+        ],
     ],
 )
 def test_extract_fenced_code_block(input, last, expected):
