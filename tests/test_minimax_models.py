@@ -22,6 +22,12 @@ from pytest_httpx import IteratorStream
 class TestModelRegistration:
     """Verify MiniMax models appear in the model registry."""
 
+    def test_minimax_m3_registered(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["models", "list"])
+        assert result.exit_code == 0
+        assert "MiniMax-M3" in result.output
+
     def test_minimax_m27_registered(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["models", "list"])
@@ -34,45 +40,42 @@ class TestModelRegistration:
         assert result.exit_code == 0
         assert "MiniMax-M2.7-highspeed" in result.output
 
-    def test_minimax_m25_registered(self):
+    def test_minimax_m25_removed(self):
+        """Older MiniMax-M2.5 models should no longer be registered."""
         runner = CliRunner()
         result = runner.invoke(cli, ["models", "list"])
         assert result.exit_code == 0
-        assert "MiniMax-M2.5" in result.output
-
-    def test_minimax_m25_highspeed_registered(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["models", "list"])
-        assert result.exit_code == 0
-        assert "MiniMax-M2.5-highspeed" in result.output
+        assert "MiniMax-M2.5" not in result.output
+        assert "MiniMax-M2.5-highspeed" not in result.output
 
     def test_minimax_aliases(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["aliases", "list"])
         assert result.exit_code == 0
         assert "minimax" in result.output
+        assert "m3" in result.output
         assert "m2.7" in result.output
         assert "minimax-fast" in result.output
         assert "m2.7-highspeed" in result.output
 
-    def test_minimax_default_alias_points_to_m27(self):
-        """The 'minimax' alias should resolve to MiniMax-M2.7."""
+    def test_minimax_default_alias_points_to_m3(self):
+        """The 'minimax' alias should resolve to MiniMax-M3."""
         runner = CliRunner()
         result = runner.invoke(cli, ["aliases", "list"])
         assert result.exit_code == 0
         for line in result.output.splitlines():
             if line.strip().startswith("minimax"):
-                assert "MiniMax-M2.7" in line
+                assert "MiniMax-M3" in line
                 break
 
-    def test_m27_registered_before_m25(self):
-        """M2.7 should appear before M2.5 in the model list."""
+    def test_m3_registered_before_m27(self):
+        """M3 should appear before M2.7 in the model list."""
         runner = CliRunner()
         result = runner.invoke(cli, ["models", "list"])
         assert result.exit_code == 0
+        m3_pos = result.output.index("MiniMax-M3")
         m27_pos = result.output.index("MiniMax-M2.7")
-        m25_pos = result.output.index("MiniMax-M2.5")
-        assert m27_pos < m25_pos
+        assert m3_pos < m27_pos
 
 
 class TestMiniMaxChatModel:
@@ -87,12 +90,18 @@ class TestMiniMaxChatModel:
         assert model.key_env_var == "MINIMAX_API_KEY"
 
     def test_str(self):
-        model = MiniMaxChat("MiniMax-M2.5", api_base=MINIMAX_API_BASE)
-        assert str(model) == "MiniMax Chat: MiniMax-M2.5"
+        model = MiniMaxChat("MiniMax-M3", api_base=MINIMAX_API_BASE)
+        assert str(model) == "MiniMax Chat: MiniMax-M3"
 
     def test_api_base(self):
-        model = MiniMaxChat("MiniMax-M2.5", api_base=MINIMAX_API_BASE)
+        model = MiniMaxChat("MiniMax-M3", api_base=MINIMAX_API_BASE)
         assert model.api_base == "https://api.minimax.io/v1"
+
+    def test_m3_supports_vision(self):
+        """MiniMax-M3 should accept image attachments."""
+        model = MiniMaxChat("MiniMax-M3", api_base=MINIMAX_API_BASE, vision=True)
+        assert "image/png" in model.attachment_types
+        assert "image/jpeg" in model.attachment_types
 
 
 class TestMiniMaxAsyncChatModel:
@@ -107,8 +116,8 @@ class TestMiniMaxAsyncChatModel:
         assert model.key_env_var == "MINIMAX_API_KEY"
 
     def test_str(self):
-        model = MiniMaxAsyncChat("MiniMax-M2.5", api_base=MINIMAX_API_BASE)
-        assert str(model) == "MiniMax Chat: MiniMax-M2.5"
+        model = MiniMaxAsyncChat("MiniMax-M3", api_base=MINIMAX_API_BASE)
+        assert str(model) == "MiniMax Chat: MiniMax-M3"
 
 
 class TestMiniMaxOptions:
@@ -160,7 +169,7 @@ def mocked_minimax_chat(httpx_mock):
             "id": "chatcmpl-minimax-001",
             "object": "chat.completion",
             "created": 1700000000,
-            "model": "MiniMax-M2.5",
+            "model": "MiniMax-M3",
             "choices": [
                 {
                     "index": 0,
@@ -192,7 +201,7 @@ class TestMiniMaxNonStreaming:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -217,7 +226,7 @@ class TestMiniMaxNonStreaming:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -235,7 +244,7 @@ class TestMiniMaxNonStreaming:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -254,7 +263,7 @@ class TestMiniMaxNonStreaming:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -274,7 +283,7 @@ class TestMiniMaxNonStreaming:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -308,7 +317,7 @@ def minimax_stream_events():
                     "id": "chatcmpl-minimax-stream-001",
                     "object": "chat.completion.chunk",
                     "created": 1700000000,
-                    "model": "MiniMax-M2.5",
+                    "model": "MiniMax-M3",
                     "choices": [
                         {
                             "index": 0,
@@ -340,7 +349,7 @@ class TestMiniMaxStreaming:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["-m", "MiniMax-M2.5", "--key", "test-key", "Hello"],
+            ["-m", "MiniMax-M3", "--key", "test-key", "Hello"],
         )
         assert result.exit_code == 0
         assert "Streaming from MiniMax!" in result.output
@@ -360,7 +369,7 @@ def mocked_minimax_highspeed(httpx_mock):
             "id": "chatcmpl-minimax-hs-001",
             "object": "chat.completion",
             "created": 1700000000,
-            "model": "MiniMax-M2.5-highspeed",
+            "model": "MiniMax-M2.7-highspeed",
             "choices": [
                 {
                     "index": 0,
@@ -384,7 +393,7 @@ def mocked_minimax_highspeed(httpx_mock):
 
 
 class TestMiniMaxHighspeed:
-    """Test MiniMax-M2.5-highspeed model variant."""
+    """Test MiniMax-M2.7-highspeed model variant."""
 
     def test_highspeed_prompt(self, mocked_minimax_highspeed):
         runner = CliRunner()
@@ -392,7 +401,7 @@ class TestMiniMaxHighspeed:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5-highspeed",
+                "MiniMax-M2.7-highspeed",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -435,7 +444,7 @@ class TestMiniMaxUsage:
             cli,
             [
                 "-m",
-                "MiniMax-M2.5",
+                "MiniMax-M3",
                 "--key",
                 "test-key",
                 "--no-stream",
@@ -468,7 +477,24 @@ class TestMiniMaxIntegration:
     """Integration tests that call the real MiniMax API."""
 
     @pytest.mark.integration
-    def test_live_prompt(self, minimax_api_key):
+    def test_live_prompt_m3(self, minimax_api_key):
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "-m",
+                "MiniMax-M3",
+                "--key",
+                minimax_api_key,
+                "--no-stream",
+                "Say hello in exactly three words.",
+            ],
+        )
+        assert result.exit_code == 0
+        assert len(result.output.strip()) > 0
+
+    @pytest.mark.integration
+    def test_live_prompt_m27(self, minimax_api_key):
         runner = CliRunner()
         result = runner.invoke(
             cli,
@@ -491,7 +517,7 @@ class TestMiniMaxIntegration:
             cli,
             [
                 "-m",
-                "MiniMax-M2.7",
+                "MiniMax-M3",
                 "--key",
                 minimax_api_key,
                 "What is 2+2? Answer with just the number.",

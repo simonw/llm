@@ -104,10 +104,13 @@ llm -m claude-4-opus 'Impress me with wild facts about turnips'
 ```bash
 llm keys set minimax
 # Paste MiniMax API key here
-llm -m MiniMax-M2.7 'Tell me about the Great Wall of China'
+llm -m MiniMax-M3 'Tell me about the Great Wall of China'
+
+# Use the previous-generation model
+llm -m MiniMax-M2.7 'Summarize this text' < article.txt
 
 # Use the faster model variant
-llm -m MiniMax-M2.7-highspeed 'Summarize this text' < article.txt
+llm -m MiniMax-M2.7-highspeed 'Write a haiku about databases'
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):

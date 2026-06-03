@@ -50,6 +50,22 @@ MINIMAX_API_BASE = "https://api.minimax.io/v1"
 
 @hookimpl
 def register_models(register):
+    # MiniMax-M3 is the latest flagship model, set as the default.
+    register(
+        MiniMaxChat(
+            "MiniMax-M3",
+            model_name="MiniMax-M3",
+            api_base=MINIMAX_API_BASE,
+            vision=True,
+        ),
+        MiniMaxAsyncChat(
+            "MiniMax-M3",
+            model_name="MiniMax-M3",
+            api_base=MINIMAX_API_BASE,
+            vision=True,
+        ),
+        aliases=("minimax", "m3"),
+    )
     register(
         MiniMaxChat(
             "MiniMax-M2.7",
@@ -61,7 +77,7 @@ def register_models(register):
             model_name="MiniMax-M2.7",
             api_base=MINIMAX_API_BASE,
         ),
-        aliases=("minimax", "m2.7"),
+        aliases=("m2.7",),
     )
     register(
         MiniMaxChat(
@@ -75,30 +91,4 @@ def register_models(register):
             api_base=MINIMAX_API_BASE,
         ),
         aliases=("minimax-fast", "m2.7-highspeed"),
-    )
-    register(
-        MiniMaxChat(
-            "MiniMax-M2.5",
-            model_name="MiniMax-M2.5",
-            api_base=MINIMAX_API_BASE,
-        ),
-        MiniMaxAsyncChat(
-            "MiniMax-M2.5",
-            model_name="MiniMax-M2.5",
-            api_base=MINIMAX_API_BASE,
-        ),
-        aliases=("m2.5",),
-    )
-    register(
-        MiniMaxChat(
-            "MiniMax-M2.5-highspeed",
-            model_name="MiniMax-M2.5-highspeed",
-            api_base=MINIMAX_API_BASE,
-        ),
-        MiniMaxAsyncChat(
-            "MiniMax-M2.5-highspeed",
-            model_name="MiniMax-M2.5-highspeed",
-            api_base=MINIMAX_API_BASE,
-        ),
-        aliases=("m2.5-highspeed",),
     )
