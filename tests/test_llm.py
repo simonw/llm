@@ -833,6 +833,22 @@ def test_schemas_dsl():
     }
 
 
+def test_schemas_dsl_invalid_empty_field_name():
+    result = CliRunner().invoke(cli, ["schemas", "dsl", ":foo"], catch_exceptions=False)
+    assert result.exit_code == 1
+    assert result.output == "Error: Schema field is missing a name before ':'\n"
+
+
+def test_schema_using_dsl_invalid_empty_field_name(mock_model):
+    result = CliRunner().invoke(
+        cli,
+        ["prompt", "-m", "mock", "--schema", "name, :foo"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "Invalid value: Schema field is missing a name before ':'" in result.output
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
