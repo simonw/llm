@@ -28,7 +28,7 @@ jobs:
 
       - name: Run cog
         run: |
-          cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
+          cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'; os.environ.setdefault('OPENAI_API_KEY', 'sk-abc123')" docs/**/*.md docs/*.md README.md
 
       - name: Check for changes
         id: check-changes

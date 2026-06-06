@@ -2,11 +2,19 @@ import asyncio
 from click.testing import CliRunner
 from importlib.metadata import version
 import json
+import os
+
+# Ensure OpenAI models are registered for tests that use them (the default plugin
+# now skips registration when no OPENAI_API_KEY is present at import time).
+os.environ.setdefault(
+    "OPENAI_API_KEY",
+    os.environ.get("PYTEST_OPENAI_API_KEY") or "badkey",
+)
+
 import llm
 from llm import cli, CancelToolCall
 from llm.migrations import migrate
 from llm.tools import llm_time
-import os
 import pytest
 import sqlite_utils
 import time
