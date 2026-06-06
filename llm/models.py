@@ -1813,13 +1813,19 @@ class Response(_BaseResponse):
             # Call before_tool_execution hooks for trust/policy verification
             try:
                 from .plugins import pm
-                hook_results = pm.hook.before_tool_execution(
-                    tool_name=tool_call.name,
-                    parameters=tool_call.arguments,
-                    tool=tool,
-                ) or []
+
+                hook_results = (
+                    pm.hook.before_tool_execution(
+                        tool_name=tool_call.name,
+                        parameters=tool_call.arguments,
+                        tool=tool,
+                    )
+                    or []
+                )
                 if any(r is False for r in hook_results if r is not None):
-                    raise Exception("Tool execution blocked by before_tool_execution hook")
+                    raise Exception(
+                        "Tool execution blocked by before_tool_execution hook"
+                    )
             except Exception as hook_ex:
                 if "blocked" in str(hook_ex).lower():
                     attachments = []

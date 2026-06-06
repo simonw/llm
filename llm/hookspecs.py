@@ -37,7 +37,9 @@ def register_tools(register):
 
 
 @hookspec
-def before_tool_execution(tool_name: str, parameters: dict, tool: Optional["Tool"] = None) -> Optional[bool]:
+def before_tool_execution(
+    tool_name: str, parameters: dict, tool: Optional["Tool"] = None
+) -> Optional[bool]:
     """Called before a tool is executed.
 
     Return False to block execution, or raise an exception to abort with a message.
