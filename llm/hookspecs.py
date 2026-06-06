@@ -33,3 +33,23 @@ def register_fragment_loaders(register):
 @hookspec
 def register_tools(register):
     "Register functions that can be used as tools by the LLMs"
+
+
+@hookspec
+def before_tool_execution(tool_name: str, parameters: dict, tool: Optional["Tool"] = None) -> Optional[bool]:
+    """Called before a tool is executed.
+
+    Return False to block execution, or raise an exception to abort with a message.
+    Return True or None to allow.
+    Plugins can use this for trust verification, logging, policy checks etc before tool calls (including MCP servers).
+    """
+
+
+@hookspec
+def before_tool_execution(tool_name: str, parameters: dict, tool: Optional["Tool"] = None) -> Optional[bool]:
+    """Called before a tool is executed.
+
+    Return False to block execution, or raise an exception to abort with a message.
+    Return True or None to allow.
+    Plugins can use this for trust verification, logging, policy checks etc before tool calls (including MCP servers).
+    """
