@@ -43,8 +43,10 @@ import yaml
 
 @hookimpl
 def register_models(register):
-    # Skip registration if no key configured (enhancement per issue to avoid registering unusable models)
-    if not os.environ.get("OPENAI_API_KEY"):
+    # Skip registration if no key configured (enhancement per issue to avoid registering unusable models).
+    # We also respect PYTEST_OPENAI_API_KEY (used by the test suite) so existing tests continue to see
+    # the OpenAI models registered when they set the pytest-specific key.
+    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("PYTEST_OPENAI_API_KEY")):
         return
     # GPT-4o
     register(
