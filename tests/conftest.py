@@ -1,13 +1,10 @@
 import os
 
-# Set a dummy OpenAI key early (before any llm imports) so that the default
-# openai_models plugin registers the gpt-4* models. This is needed for tests
-# that call llm.get_model("gpt-4o-mini") etc. The new behavior skips registration
-# when no OPENAI_API_KEY (or PYTEST_OPENAI_API_KEY) is present at import time.
-os.environ.setdefault(
-    "OPENAI_API_KEY",
-    os.environ.get("PYTEST_OPENAI_API_KEY") or "badkey",
-)
+# Force a dummy OpenAI key very early (before any llm imports) so that the default
+# openai_models plugin registers the gpt-4* models during test collection and execution.
+# The feature skips registration when no key is present for normal usage, but tests
+# that directly do llm.get_model("gpt-4o-mini") etc. need the models present.
+os.environ["OPENAI_API_KEY"] = os.environ.get("PYTEST_OPENAI_API_KEY") or "badkey"
 
 import pytest
 import sqlite_utils
