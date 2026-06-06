@@ -43,6 +43,9 @@ import yaml
 
 @hookimpl
 def register_models(register):
+    # Skip registration if no key configured (enhancement per issue to avoid registering unusable models)
+    if not os.environ.get("OPENAI_API_KEY"):
+        return
     # GPT-4o
     register(
         Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
