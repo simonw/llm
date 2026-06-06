@@ -1828,9 +1828,9 @@ class Response(_BaseResponse):
                     )
             except Exception as hook_ex:
                 if "blocked" in str(hook_ex).lower():
-                    attachments = []
-                    exception = hook_ex
-                    result = f"Blocked: {hook_ex}"
+                    attachments: List[Attachment] = []
+                    exception: Optional[Exception] = hook_ex
+                    result: str = f"Blocked: {hook_ex}"
                     tool_result_obj = ToolResult(
                         name=tool_call.name,
                         output=result,
@@ -1855,7 +1855,7 @@ class Response(_BaseResponse):
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
-                    result = result.output
+                    result = result.output  # type: ignore[assignment]
 
                 if not isinstance(result, str):
                     result = json.dumps(result, default=repr)

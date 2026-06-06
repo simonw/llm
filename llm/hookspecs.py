@@ -1,6 +1,9 @@
 from pluggy import HookimplMarker
 from pluggy import HookspecMarker
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .models import Tool
 
 hookspec = HookspecMarker("llm")
 hookimpl = HookimplMarker("llm")
