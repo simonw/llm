@@ -47,7 +47,11 @@ def register_models(register):
     # During test runs (when 'pytest' is in sys.modules) we always register so that the large
     # number of existing tests that do llm.get_model("gpt-4o-mini") etc. continue to work.
     # We also respect PYTEST_OPENAI_API_KEY for the same reason.
-    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("PYTEST_OPENAI_API_KEY") or "pytest" in __import__("sys").modules):
+    if not (
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("PYTEST_OPENAI_API_KEY")
+        or "pytest" in __import__("sys").modules
+    ):
         return
     # GPT-4o
     register(

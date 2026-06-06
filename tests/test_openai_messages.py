@@ -6,7 +6,9 @@ from pytest_httpx import IteratorStream
 
 # Ensure OpenAI models are registered before importing llm (the new no-key skip
 # feature would otherwise prevent registration in CI jobs without the key).
-os.environ.setdefault("OPENAI_API_KEY", os.environ.get("PYTEST_OPENAI_API_KEY") or "badkey")
+os.environ.setdefault(
+    "OPENAI_API_KEY", os.environ.get("PYTEST_OPENAI_API_KEY") or "badkey"
+)
 
 import llm
 from llm.default_plugins.openai_models import Chat
