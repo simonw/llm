@@ -592,3 +592,141 @@ async def test_chain_async_cancel_only_first_of_two():
     assert results[1].name == "t2"
     assert results[1].output == "ran2"
     assert results[1].exception is None
+
+
+def test_tool_function_receives_llm_tool_call():
+    captured = {}
+
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[lookup],
+    )
+    chain_response.text()
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == "lookup"
+    assert tool_call.arguments == {"name": "simon"}
+    second = chain_response._responses[1]
+    assert second.prompt.tool_results[0].output == "result for simon"
+
+
+def test_async_tool_function_receives_llm_tool_call_with_sync_model():
+    captured = {}
+
+    async def lookup(name: str, llm_tool_call: llm.ToolCall) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[lookup],
+    )
+    chain_response.text()
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == "lookup"
+    assert tool_call.arguments == {"name": "simon"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_tool", (False, True))
+async def test_tool_function_receives_llm_tool_call_async_model(async_tool):
+    captured = {}
+
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    async def async_lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    fn = async_lookup if async_tool else lookup
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": fn.__name__, "arguments": {"name": "simon"}}]}
+        ),
+        tools=[fn],
+    )
+    output = await chain_response.text()
+    assert '"output": "result for simon"' in output
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == fn.__name__
+    assert tool_call.arguments == {"name": "simon"}
+
+
+def test_llm_tool_call_excluded_from_input_schema():
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        return name
+
+    tool = llm.Tool.function(lookup)
+    assert "llm_tool_call" not in tool.input_schema.get("properties", {})
+    assert "llm_tool_call" not in tool.input_schema.get("required", [])
+    assert "name" in tool.input_schema["properties"]
+
+
+def test_kwargs_only_function_does_not_receive_llm_tool_call():
+    # A tool that accepts **kwargs but does not name llm_tool_call
+    # explicitly should NOT have it injected.
+    captured = {}
+
+    async def impl(**kwargs):
+        captured.update(kwargs)
+        return "ok"
+
+    tool = llm.Tool(
+        name="t",
+        description="A tool",
+        input_schema={"type": "object", "properties": {"name": {"type": "string"}}},
+        implementation=impl,
+    )
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "t", "arguments": {"name": "x"}}]}),
+        tools=[tool],
+    )
+    chain_response.text()
+    assert captured == {"name": "x"}
+
+
+def test_toolbox_method_receives_llm_tool_call():
+    captured = {}
+
+    class Tools(llm.Toolbox):
+        def lookup(self, name: str, llm_tool_call) -> str:
+            captured["tool_call"] = llm_tool_call
+            return "hi " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "Tools_lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[Tools()],
+    )
+    output = chain_response.text()
+    assert '"output": "hi simon"' in output
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.arguments == {"name": "simon"}

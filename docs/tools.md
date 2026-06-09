@@ -97,4 +97,6 @@ Consult the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>` do
 
 If your plugin needs access to API secrets I recommend storing those using `llm keys set api-name` and then reading them using the {ref}`plugin-utilities-get-key` utility function. This avoids secrets being logged to the database as part of tool calls.
 
+If your tool implementation needs to know which tool call invoked it - for example to key state against the unique `tool_call_id` - add a parameter named `llm_tool_call` to your function. It will be passed the `llm.ToolCall` object for the current invocation, and is hidden from the schema the model sees. See {ref}`python-api-tools-llm-tool-call` for details.
+
 <!-- Uncomment when this is true: The [llm-tools-datasette](https://github.com/simonw/llm-tools-datasette) plugin is a good example of this pattern in action. -->
