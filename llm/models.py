@@ -564,9 +564,7 @@ class _BaseConversation:
             # is already carried forward in last.prompt.messages.
             system_text = _combine_system(system, system_fragments)
             if system_text:
-                chain.append(
-                    Message(role="system", parts=[TextPart(text=system_text)])
-                )
+                chain.append(Message(role="system", parts=[TextPart(text=system_text)]))
 
         # Append the new turn's input
         if tool_results:

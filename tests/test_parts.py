@@ -1694,7 +1694,6 @@ class TestChainPropagatesSystem:
             assert e in prompt.system
             assert e in prompt.messages[0].parts[0].text
 
-
     def test_sync_chain_tool_result_turn_preserves_system(self, mock_model):
         # First turn: fake a tool call so the chain iterates.
         tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
@@ -1752,7 +1751,9 @@ class TestChainPropagatesSystem:
             tools=[tick],
         )
         list(chain.responses())
-        self.assert_system(chain._responses[1].prompt, "inline sys", "fragment A", "fragment B")
+        self.assert_system(
+            chain._responses[1].prompt, "inline sys", "fragment A", "fragment B"
+        )
 
     @pytest.mark.asyncio
     async def test_async_chain_tool_result_turn_preserves_system(
