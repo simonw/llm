@@ -451,12 +451,7 @@ class Prompt:
     @property
     def system(self):
         "The system prompt, with any system fragments concatenated."
-        bits = [
-            bit.strip()
-            for bit in (self.system_fragments + [self._system or ""])
-            if bit.strip()
-        ]
-        return "\n\n".join(bits)
+        return _combine_system(self._system, self.system_fragments)
 
     @property
     def messages(self):
@@ -536,6 +531,16 @@ def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
     return wrapped_tools
 
 
+def _combine_system(system, system_fragments):
+    "Concatenate the system prompt and any system fragments into one string."
+    bits = [
+        bit.strip()
+        for bit in ((system_fragments or []) + [system or ""])
+        if bit.strip()
+    ]
+    return "\n\n".join(bits)
+
+
 def _merge_options(options: Optional[dict], kwargs: dict) -> dict:
     if not options:
         return kwargs
@@ -568,6 +573,8 @@ class _BaseConversation:
         attachments,
         tool_results,
         explicit_messages,
+        system=None,
+        system_fragments=None,
     ) -> List[Any]:
         """Build the full message chain for the next turn.
 
@@ -600,6 +607,13 @@ class _BaseConversation:
             # append that response's structured output.
             chain.extend(last.prompt.messages)
             chain.extend(last._messages_now())
+        else:
+            # Start with the system prompt as the first message so adapters
+            # that build from prompt.messages see it. On later turns it
+            # is already carried forward in last.prompt.messages.
+            system_text = _combine_system(system, system_fragments)
+            if system_text:
+                chain.append(Message(role="system", parts=[TextPart(text=system_text)]))
 
         # Append the new turn's input
         if tool_results:
@@ -659,6 +673,8 @@ class Conversation(_BaseConversation):
             attachments=attachments,
             tool_results=tool_results,
             explicit_messages=messages,
+            system=system,
+            system_fragments=system_fragments,
         )
         return Response(
             Prompt(
@@ -711,6 +727,8 @@ class Conversation(_BaseConversation):
             attachments=attachments,
             tool_results=tool_results,
             explicit_messages=messages,
+            system=system,
+            system_fragments=system_fragments,
         )
         return ChainResponse(
             Prompt(
@@ -783,6 +801,8 @@ class AsyncConversation(_BaseConversation):
             attachments=attachments,
             tool_results=tool_results,
             explicit_messages=messages,
+            system=system,
+            system_fragments=system_fragments,
         )
         return AsyncChainResponse(
             Prompt(
@@ -832,6 +852,8 @@ class AsyncConversation(_BaseConversation):
             attachments=attachments,
             tool_results=tool_results,
             explicit_messages=messages,
+            system=system,
+            system_fragments=system_fragments,
         )
         return AsyncResponse(
             Prompt(
