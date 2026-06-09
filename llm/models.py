@@ -2192,13 +2192,48 @@ class AsyncResponse(_BaseResponse):
             tool: Optional[Tool] = tools_by_name.get(tc.name)
             exception: Optional[Exception] = None
 
-            if tool is None:
-                output = f'Error: tool "{tc.name}" does not exist'
-                exception = KeyError(tc.name)
-            elif not tool.implementation:
-                output = f'Error: tool "{tc.name}" has no implementation'
-                exception = KeyError(tc.name)
-            elif inspect.iscoroutinefunction(tool.implementation):
+            if tool is None or not tool.implementation:
+                # Mirror the sync executor: append an error ToolResult so
+                # the provider still receives a result for every tool
+                # call. before_call fires even though the tool is
+                # unavailable.
+                if before_call:
+                    try:
+                        cb = before_call(tool, tc)
+                        if inspect.isawaitable(cb):
+                            await cb
+                    except CancelToolCall as ex:
+                        indexed_results.append(
+                            (
+                                idx,
+                                ToolResult(
+                                    name=tc.name,
+                                    output="Cancelled: " + str(ex),
+                                    tool_call_id=tc.tool_call_id,
+                                    exception=ex,
+                                ),
+                            )
+                        )
+                        continue
+                    except Exception as ex:
+                        failures.append((idx, ex))
+                        break
+                reason = "does not exist" if tool is None else "has no implementation"
+                msg = 'tool "{}" {}'.format(tc.name, reason)
+                indexed_results.append(
+                    (
+                        idx,
+                        ToolResult(
+                            name=tc.name,
+                            output="Error: " + msg,
+                            tool_call_id=tc.tool_call_id,
+                            exception=KeyError(msg),
+                        ),
+                    )
+                )
+                continue
+
+            if inspect.iscoroutinefunction(tool.implementation):
 
                 async def run_async(tc=tc, tool=tool, idx=idx):
                     # before_call inside the task
@@ -2286,52 +2321,46 @@ class AsyncResponse(_BaseResponse):
                 exception = None
                 attachments = []
 
-                if tool is None:
-                    output = f'Error: tool "{tc.name}" does not exist'
-                    exception = KeyError(tc.name)
-                else:
-                    try:
-                        res = tool.implementation(**_implementation_arguments(tool, tc))
-                        if inspect.isawaitable(res):
-                            res = await res
-                        if isinstance(res, ToolOutput):
-                            attachments.extend(res.attachments)
-                            res = res.output
-                        output = (
-                            res
-                            if isinstance(res, str)
-                            else json.dumps(res, default=repr)
-                        )
-                    except PauseChain as ex:
-                        # Inline execution stops here; later calls never
-                        # start. Tasks already started are still awaited
-                        # below before the pause propagates.
-                        ex.tool_call = tc
-                        paused.append((idx, ex))
-                        break
-                    except Exception as ex:
-                        output = f"Error: {ex}"
-                        exception = ex
-
-                    tr = ToolResult(
-                        name=tc.name,
-                        output=output,
-                        attachments=attachments,
-                        tool_call_id=tc.tool_call_id,
-                        instance=_get_instance(tool.implementation),
-                        exception=exception,
+                try:
+                    res = tool.implementation(**_implementation_arguments(tool, tc))
+                    if inspect.isawaitable(res):
+                        res = await res
+                    if isinstance(res, ToolOutput):
+                        attachments.extend(res.attachments)
+                        res = res.output
+                    output = (
+                        res if isinstance(res, str) else json.dumps(res, default=repr)
                     )
+                except PauseChain as ex:
+                    # Inline execution stops here; later calls never
+                    # start. Tasks already started are still awaited
+                    # below before the pause propagates.
+                    ex.tool_call = tc
+                    paused.append((idx, ex))
+                    break
+                except Exception as ex:
+                    output = f"Error: {ex}"
+                    exception = ex
 
-                    try:
-                        if tool is not None and after_call:
-                            cb2 = after_call(tool, tc, tr)
-                            if inspect.isawaitable(cb2):
-                                await cb2
-                    except Exception as ex:
-                        failures.append((idx, ex))
-                        break
+                tr = ToolResult(
+                    name=tc.name,
+                    output=output,
+                    attachments=attachments,
+                    tool_call_id=tc.tool_call_id,
+                    instance=_get_instance(tool.implementation),
+                    exception=exception,
+                )
 
-                    indexed_results.append((idx, tr))
+                try:
+                    if after_call:
+                        cb2 = after_call(tool, tc, tr)
+                        if inspect.isawaitable(cb2):
+                            await cb2
+                except Exception as ex:
+                    failures.append((idx, ex))
+                    break
+
+                indexed_results.append((idx, tr))
 
         # Await every task that was started; return_exceptions so a pause
         # or hook failure in one task cannot orphan its siblings mid-flight.

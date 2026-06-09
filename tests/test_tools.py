@@ -820,3 +820,79 @@ async def test_tool_call_ids_guaranteed_async_model():
     await chain_response.text()
     assert len(seen) == 1
     assert seen[0] is not None and seen[0].startswith("tc_")
+
+
+@pytest.mark.asyncio
+async def test_async_missing_tool_produces_error_result():
+    # Async executor parity with sync: a call to a tool that is not in
+    # tools= must produce an error ToolResult, not silently vanish -
+    # otherwise the next provider call has a tool_call with no result.
+    before_calls = []
+
+    async def real_tool() -> str:
+        return "ok"
+
+    async def before(tool, tool_call):
+        # before_call fires even when tool is None, like the sync path
+        before_calls.append((tool.name if tool else None, tool_call.name))
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        before_call=before,
+    )
+    await chain_response.text()
+
+    second = chain_response._responses[1]
+    results = [(r.name, r.output) for r in second.prompt.tool_results]
+    assert results == [
+        ("missing_tool", 'Error: tool "missing_tool" does not exist'),
+        ("real_tool", "ok"),
+    ]
+    assert isinstance(second.prompt.tool_results[0].exception, KeyError)
+    assert (None, "missing_tool") in before_calls
+
+
+@pytest.mark.asyncio
+async def test_async_missing_tool_can_be_cancelled_by_before_call():
+    async def real_tool() -> str:
+        return "ok"
+
+    async def before(tool, tool_call):
+        if tool is None:
+            raise CancelToolCall("no such tool")
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        before_call=before,
+    )
+    await chain_response.text()
+    second = chain_response._responses[1]
+    results = [(r.name, r.output) for r in second.prompt.tool_results]
+    assert results == [
+        ("missing_tool", "Cancelled: no such tool"),
+        ("real_tool", "ok"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_tool_without_implementation_produces_error_result():
+    tool = llm.Tool(
+        name="no_impl",
+        description="A tool with no implementation",
+        input_schema={"type": "object", "properties": {}},
+        implementation=None,
+    )
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
+        tools=[tool],
+    )
+    await chain_response.text()
+    second = chain_response._responses[1]
+    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
+        ("no_impl", 'Error: tool "no_impl" has no implementation'),
+    ]
