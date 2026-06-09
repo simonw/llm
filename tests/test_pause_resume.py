@@ -8,7 +8,6 @@ import pytest
 import llm
 from llm.parts import Message, TextPart, ToolCallPart, ToolResultPart
 
-
 # ---- PauseChain ----
 
 

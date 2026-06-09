@@ -2651,9 +2651,7 @@ def _trailing_pending_tool_calls(messages) -> List[ToolCall]:
     for i, msg in enumerate(messages or []):
         parts = getattr(msg, "parts", None) or []
         calls = [
-            p
-            for p in parts
-            if isinstance(p, ToolCallPart) and not p.server_executed
+            p for p in parts if isinstance(p, ToolCallPart) and not p.server_executed
         ]
         if getattr(msg, "role", None) == "assistant" and calls:
             last_index = i
