@@ -2773,7 +2773,7 @@ class ChainResponse(_BaseChainResponse):
     def responses(self) -> Iterator[Response]:
         prompt = self.prompt
         count = 0
-        current_response: Optional[Response] = Response(
+        initial_response = Response(
             prompt,
             self.model,
             self.stream,
@@ -2787,18 +2787,19 @@ class ChainResponse(_BaseChainResponse):
         # the tool-result turn. This could raise llm.PauseChain.
         pending_tool_calls = self._pending_tool_calls()
         if pending_tool_calls:
-            tool_results = current_response.execute_tool_calls(
+            tool_results = initial_response.execute_tool_calls(
                 before_call=self.before_call,
                 after_call=self.after_call,
                 tool_calls_list=pending_tool_calls,
             )
-            current_response = Response(
+            initial_response = Response(
                 self._resume_prompt(tool_results),
                 self.model,
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
             )
+        current_response: Optional[Response] = initial_response
         while current_response:
             count += 1
             yield current_response
@@ -2869,7 +2870,7 @@ class AsyncChainResponse(_BaseChainResponse):
     async def responses(self) -> AsyncIterator[AsyncResponse]:
         prompt = self.prompt
         count = 0
-        current_response: Optional[AsyncResponse] = AsyncResponse(
+        initial_response = AsyncResponse(
             prompt,
             self.model,
             self.stream,
@@ -2881,18 +2882,19 @@ class AsyncChainResponse(_BaseChainResponse):
         # could raise llm.PauseChain.
         pending_tool_calls = self._pending_tool_calls()
         if pending_tool_calls:
-            tool_results = await current_response.execute_tool_calls(
+            tool_results = await initial_response.execute_tool_calls(
                 before_call=self.before_call,
                 after_call=self.after_call,
                 tool_calls_list=pending_tool_calls,
             )
-            current_response = AsyncResponse(
+            initial_response = AsyncResponse(
                 self._resume_prompt(tool_results),
                 self.model,
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
             )
+        current_response: Optional[AsyncResponse] = initial_response
         while current_response:
             count += 1
             yield current_response
