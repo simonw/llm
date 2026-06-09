@@ -3,7 +3,7 @@
 (v0_32_a3)=
 ## 0.32a3 (2026-06-09)
 
-Driven by the needs of [datasette-agent](https://github.com/datasette/datasette-agent)'s human-in-the-loop `ask_user()` feature, made the following improvements to how tool calls work:
+Driven by the needs of [Datasette Agent](https://github.com/datasette/datasette-agent)'s human-in-the-loop `ask_user()` feature, made the following improvements to how tool calls work:
 
 - Tool implementations can declare a parameter named `llm_tool_call` in order to be passed the `llm.ToolCall` object for the current invocation. This allows them to access the current `llm_tool_call.tool_call_id`. See {ref}`python-api-tools-llm-tool-call`. [#1480](https://github.com/simonw/llm/pull/1480)
 - Every tool call is now guaranteed a unique `tool_call_id` - providers that do not supply one get a synthesized `tc_`-prefixed ULID. [#1481](https://github.com/simonw/llm/pull/1481)
