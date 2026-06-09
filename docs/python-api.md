@@ -116,6 +116,7 @@ response = model.prompt("Convert panda to upper", tools=[upper])
 tool_calls = response.tool_calls()
 # [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
 ```
+Every tool call is guaranteed to have a unique `tool_call_id`. Most providers supply their own; for providers that do not, LLM synthesizes one of the form `tc_01...`, so you can always use the id to correlate a tool call with its result or to key external state against a specific invocation.
 You can call `response.execute_tool_calls()` to execute those calls and get back the results:
 ```python
 tool_results = response.execute_tool_calls()
@@ -215,7 +216,7 @@ print(response.text())
 
 #### Accessing the tool call from inside a tool
 
-Tool implementations sometimes need to know about the `llm.ToolCall` that triggered them - most often the `tool_call_id`, which can be used to key external state against that specific invocation.
+Tool implementations sometimes need to know about the `llm.ToolCall` that triggered them - most often the `tool_call_id` (always populated, see above), which can be used to key external state against that specific invocation.
 
 If your tool function accepts a parameter named `llm_tool_call` it will be passed the `llm.ToolCall` object for the current call:
 

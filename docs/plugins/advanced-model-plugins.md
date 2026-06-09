@@ -138,7 +138,7 @@ Adding {ref}`tools support <tools>` involves several steps:
 
 1. Add `supports_tools = True` to your model class.
 2. If `prompt.tools` is populated, turn that list of `llm.Tool` objects into the correct format for your model.
-3. Look out for requests to call tools in the responses from your model. Call `response.add_tool_call(llm.ToolCall(...))` for each of those. This should work for streaming and non-streaming and async and non-async cases.
+3. Look out for requests to call tools in the responses from your model. Call `response.add_tool_call(llm.ToolCall(...))` for each of those. This should work for streaming and non-streaming and async and non-async cases. Pass the provider's tool call ID as `tool_call_id=` if there is one; if you omit it LLM synthesizes a unique `tc_`-prefixed id, since consumers rely on every tool call having one.
 4. If your prompt has a `prompt.tool_results` list, pass the information from those `llm.ToolResult` objects to your model.
 5. Include `prompt.tools` and `prompt.tool_results` and tool calls from `response.tool_calls_or_raise()` in the conversation history constructed by your plugin.
 6. Make sure your code is OK with prompts that do not have `prompt.prompt` set to a value, since they may be carrying exclusively the results of a tool call.

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 from condense_json import condense_json
+import dataclasses
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
@@ -1223,6 +1224,15 @@ class _BaseResponse:
         return parts
 
     def add_tool_call(self, tool_call: ToolCall):
+        if tool_call.tool_call_id is None:
+            # Guarantee every locally-executable tool call has a unique id.
+            # Some providers never supply one, which otherwise forces every
+            # consumer correlating calls with results (or keying external
+            # state on a call) to invent fallback matching schemes.
+            tool_call = dataclasses.replace(
+                tool_call,
+                tool_call_id="tc_{}".format(str(monotonic_ulid()).lower()),
+            )
         self._tool_calls.append(tool_call)
 
     def set_usage(
