@@ -188,7 +188,9 @@ def _get_arguments_input_schema(function, name):
     type_hints = get_type_hints(function)
     fields = {}
     for param_name, param in signature.parameters.items():
-        if param_name == "self":
+        if param_name in ("self", "llm_tool_call"):
+            # llm_tool_call is reserved: populated with the ToolCall object
+            # at execution time, never exposed to the model.
             continue
         # Determine the type annotation (default to string if missing)
         annotated_type = type_hints.get(param_name, str)
@@ -200,6 +202,26 @@ def _get_arguments_input_schema(function, name):
             fields[param_name] = (annotated_type, param.default)
 
     return create_model(f"{name}InputSchema", **fields)
+
+
+def _accepts_llm_tool_call(implementation) -> bool:
+    try:
+        signature = inspect.signature(implementation)
+    except (TypeError, ValueError):
+        return False
+    return "llm_tool_call" in signature.parameters
+
+
+def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
+    """Arguments to invoke a tool implementation with.
+
+    Implementations with an explicit ``llm_tool_call`` parameter receive
+    the ToolCall object itself - a ``**kwargs`` catch-all does not count.
+    """
+    arguments = dict(tool_call.arguments)
+    if _accepts_llm_tool_call(tool.implementation):
+        arguments["llm_tool_call"] = tool_call
+    return arguments
 
 
 class Toolbox:
@@ -1814,10 +1836,13 @@ class Response(_BaseResponse):
             exception = None
 
             try:
+                implementation_arguments = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(tool.implementation(**tool_call.arguments))
+                    result = asyncio.run(
+                        tool.implementation(**implementation_arguments)
+                    )
                 else:
-                    result = tool.implementation(**tool_call.arguments)
+                    result = tool.implementation(**implementation_arguments)
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
@@ -2127,7 +2152,9 @@ class AsyncResponse(_BaseResponse):
                     attachments = []
 
                     try:
-                        result = await tool.implementation(**tc.arguments)
+                        result = await tool.implementation(
+                            **_implementation_arguments(tool, tc)
+                        )
                         if isinstance(result, ToolOutput):
                             attachments.extend(result.attachments)
                             result = result.output
@@ -2188,7 +2215,7 @@ class AsyncResponse(_BaseResponse):
                     exception = KeyError(tc.name)
                 else:
                     try:
-                        res = tool.implementation(**tc.arguments)
+                        res = tool.implementation(**_implementation_arguments(tool, tc))
                         if inspect.isawaitable(res):
                             res = await res
                         if isinstance(res, ToolOutput):

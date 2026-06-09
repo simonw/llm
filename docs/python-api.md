@@ -211,6 +211,26 @@ response = model.chain(
 print(response.text())
 ```
 
+(python-api-tools-llm-tool-call)=
+
+#### Accessing the tool call from inside a tool
+
+Tool implementations sometimes need to know about the `llm.ToolCall` that triggered them - most often the `tool_call_id`, which can be used to key external state against that specific invocation.
+
+If your tool function accepts a parameter named `llm_tool_call` it will be passed the `llm.ToolCall` object for the current call:
+
+```python
+import llm
+
+def lookup(name: str, llm_tool_call: llm.ToolCall) -> str:
+    "Look up a name."
+    return do_lookup(name, request_id=llm_tool_call.tool_call_id)
+```
+
+The `llm_tool_call` parameter name is reserved: it is excluded from the input schema that is exposed to the model and is populated automatically when the tool executes. The type annotation is optional.
+
+This works for both sync and async tool functions, and for methods on `llm.Toolbox` subclasses. The parameter must be declared explicitly - a `**kwargs` catch-all will not receive `llm_tool_call`.
+
 (python-api-tools-attachments)=
 
 #### Tools can return attachments
