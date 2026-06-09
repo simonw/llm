@@ -1,4 +1,5 @@
 from click.testing import CliRunner
+import re
 from unittest.mock import ANY
 import json
 import llm.cli
@@ -338,7 +339,8 @@ def test_chat_tools(logs_db):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.output == (
+    normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result.output)
+    assert normalized_output == (
         "Chatting with echo\n"
         "Type 'exit' or 'quit' to exit\n"
         "Type '!multi' to enter multiple lines, then '!end' to finish\n"
@@ -368,7 +370,7 @@ def test_chat_tools(logs_db):
         "    {\n"
         '      "name": "upper",\n'
         '      "output": "HELLO",\n'
-        '      "tool_call_id": null\n'
+        '      "tool_call_id": "tc_TCID"\n'
         "    }\n"
         "  ]\n"
         "}\n"

@@ -1,4 +1,5 @@
 import asyncio
+import re
 from click.testing import CliRunner
 from importlib.metadata import version
 import json
@@ -114,6 +115,9 @@ def test_tool_use_async_tool_function():
     bits = output.split("\n}{\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    tool_call_id = objects[1]["tool_results"][0]["tool_call_id"]
+    assert tool_call_id.startswith("tc_")
+    objects[1]["tool_results"][0]["tool_call_id"] = None
     assert objects == [
         {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
         {
@@ -155,6 +159,11 @@ async def test_async_tools_run_tools_in_parallel():
     bits = output.split("\n}{\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    ids = [r["tool_call_id"] for r in objects[1]["tool_results"]]
+    assert all(i.startswith("tc_") for i in ids)
+    assert len(set(ids)) == 2
+    for r in objects[1]["tool_results"]:
+        r["tool_call_id"] = None
     assert objects == [
         {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
         {
@@ -512,11 +521,14 @@ def test_tool_errors(async_):
     # llm logs -c output
     log_text_result = runner.invoke(cli.cli, ["logs", "-c"])
     assert log_text_result.exit_code == 0
+    normalized_log_text = re.sub(
+        r"tc_[0-9a-z]{26}", "tc_TCID", log_text_result.output
+    )
     assert (
-        "- **trigger_error**: `None`<br>\n"
+        "- **trigger_error**: `tc_TCID`<br>\n"
         "    Error: Error!<br>\n"
         "    **Error**: Exception: Error!\n"
-    ) in log_text_result.output
+    ) in normalized_log_text
 
 
 def test_chain_sync_cancel_only_first_of_two():
@@ -730,3 +742,83 @@ def test_toolbox_method_receives_llm_tool_call():
     tool_call = captured["tool_call"]
     assert isinstance(tool_call, llm.ToolCall)
     assert tool_call.arguments == {"name": "simon"}
+
+
+def test_add_tool_call_synthesizes_missing_tool_call_id():
+    model = llm.get_model("echo")
+    response = model.prompt("hello")
+    response.add_tool_call(llm.ToolCall(name="a", arguments={}))
+    response.add_tool_call(llm.ToolCall(name="b", arguments={}, tool_call_id="given"))
+    response.add_tool_call(llm.ToolCall(name="c", arguments={}))
+    ids = [tc.tool_call_id for tc in response._tool_calls]
+    assert ids[0] is not None and ids[0].startswith("tc_")
+    assert ids[1] == "given"
+    assert ids[2] is not None and ids[2].startswith("tc_")
+    assert ids[0] != ids[2]
+
+
+def test_tool_call_ids_guaranteed_through_chain():
+    seen_before_call = []
+    captured = {}
+
+    def first(llm_tool_call) -> str:
+        captured["first_id"] = llm_tool_call.tool_call_id
+        return "one"
+
+    def second() -> str:
+        return "two"
+
+    def before(tool, tool_call):
+        seen_before_call.append(tool_call.tool_call_id)
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "first"}, {"name": "second"}]}),
+        tools=[first, second],
+        before_call=before,
+    )
+    chain_response.text()
+
+    assert len(seen_before_call) == 2
+    assert all(i is not None and i.startswith("tc_") for i in seen_before_call)
+    assert seen_before_call[0] != seen_before_call[1]
+    # The implementation saw the same id via llm_tool_call
+    assert captured["first_id"] == seen_before_call[0]
+
+    # ToolResults and the next prompt's tool message carry the same ids
+    second_response = chain_response._responses[1]
+    result_ids = [r.tool_call_id for r in second_response.prompt.tool_results]
+    assert result_ids == seen_before_call
+
+    # The assistant message parts carry the synthesized ids too, so a
+    # persisted-and-replayed history stays correlated
+    from llm.parts import ToolCallPart
+
+    first_response = chain_response._responses[0]
+    part_ids = [
+        p.tool_call_id
+        for p in first_response._messages_now()[0].parts
+        if isinstance(p, ToolCallPart)
+    ]
+    assert part_ids == seen_before_call
+
+
+@pytest.mark.asyncio
+async def test_tool_call_ids_guaranteed_async_model():
+    seen = []
+
+    async def hello() -> str:
+        return "world"
+
+    async def before(tool, tool_call):
+        seen.append(tool_call.tool_call_id)
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}),
+        tools=[hello],
+        before_call=before,
+    )
+    await chain_response.text()
+    assert len(seen) == 1
+    assert seen[0] is not None and seen[0].startswith("tc_")
