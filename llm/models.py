@@ -365,6 +365,32 @@ class CancelToolCall(Exception):
     pass
 
 
+class PauseChain(Exception):
+    """Raise inside a tool implementation to pause the chain.
+
+    Unlike other exceptions - which are converted into error ToolResults
+    and sent back to the model - PauseChain propagates out of
+    ``execute_tool_calls()`` and ``chain()``. Before it is re-raised the
+    framework populates two attributes:
+
+    - ``tool_call``: the ToolCall whose implementation paused
+    - ``tool_results``: ToolResults of sibling calls in the same batch
+      that completed
+
+    Concurrent (async) sibling tool calls always run to completion
+    before the exception propagates; sequential (sync) execution stops
+    at the paused call, leaving later calls unexecuted so they can
+    safely run when the chain is resumed. Resume by re-running the
+    chain with a ``messages=`` history that ends in the unresolved tool
+    calls.
+    """
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.tool_call: Optional["ToolCall"] = None
+        self.tool_results: List["ToolResult"] = []
+
+
 @dataclass
 class Prompt:
     "The prompt being sent to the model."
@@ -1787,9 +1813,18 @@ class Response(_BaseResponse):
         *,
         before_call: Optional[BeforeCallSync] = None,
         after_call: Optional[AfterCallSync] = None,
+        tool_calls_list: Optional[List[ToolCall]] = None,
     ) -> List[ToolResult]:
+        """Execute tool calls using this response's tools.
+
+        By default executes ``self.tool_calls()``; pass
+        ``tool_calls_list=`` to execute an explicit list instead (used
+        when resuming a chain whose history ends in unresolved calls).
+        """
         tool_results = []
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        if tool_calls_list is None:
+            tool_calls_list = self.tool_calls()
 
         # Run prepare() on all Toolbox instances that need it
         instances_to_prepare: list[Toolbox] = []
@@ -1802,7 +1837,7 @@ class Response(_BaseResponse):
             inst.prepare()
             inst._prepared = True
 
-        for tool_call in self.tool_calls():
+        for tool_call in tool_calls_list:
             tool: Optional[Tool] = tools_by_name.get(tool_call.name)
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
@@ -1860,6 +1895,13 @@ class Response(_BaseResponse):
 
                 if not isinstance(result, str):
                     result = json.dumps(result, default=repr)
+            except PauseChain as ex:
+                # Pause: propagate instead of converting to an error
+                # result. Sequential execution stops here - later calls
+                # never started, so they can safely run on resume.
+                ex.tool_call = tool_call
+                ex.tool_results = list(tool_results)
+                raise
             except Exception as ex:
                 result = f"Error: {ex}"
                 exception = ex
@@ -2111,8 +2153,16 @@ class AsyncResponse(_BaseResponse):
         *,
         before_call: Optional[BeforeCallAsync] = None,
         after_call: Optional[AfterCallAsync] = None,
+        tool_calls_list: Optional[List[ToolCall]] = None,
     ) -> List[ToolResult]:
-        tool_calls_list = await self.tool_calls()
+        """Execute tool calls using this response's tools.
+
+        By default executes ``await self.tool_calls()``; pass
+        ``tool_calls_list=`` to execute an explicit list instead (used
+        when resuming a chain whose history ends in unresolved calls).
+        """
+        if tool_calls_list is None:
+            tool_calls_list = await self.tool_calls()
         tools_by_name = {tool.name: tool for tool in self.prompt.tools}
 
         # Run async prepare_async() on all Toolbox instances that need it
@@ -2130,6 +2180,13 @@ class AsyncResponse(_BaseResponse):
 
         indexed_results: List[tuple[int, ToolResult]] = []
         async_tasks: List[asyncio.Task] = []
+        async_task_indexes: List[int] = []
+        # Defined failure semantics: a pause or error in one call must not
+        # orphan concurrently-running siblings. Pauses and hook failures
+        # are collected here and raised only after every task that was
+        # started has finished.
+        paused: List[tuple[int, PauseChain]] = []
+        failures: List[tuple[int, BaseException]] = []
 
         for idx, tc in enumerate(tool_calls_list):
             tool: Optional[Tool] = tools_by_name.get(tc.name)
@@ -2173,6 +2230,11 @@ class AsyncResponse(_BaseResponse):
                             if isinstance(result, str)
                             else json.dumps(result, default=repr)
                         )
+                    except PauseChain as ex:
+                        # Propagates out of the task; collected after
+                        # the gather so siblings finish first.
+                        ex.tool_call = tc
+                        raise
                     except Exception as ex:
                         output = f"Error: {ex}"
                         exception = ex
@@ -2195,6 +2257,7 @@ class AsyncResponse(_BaseResponse):
                     return idx, tr
 
                 async_tasks.append(asyncio.create_task(run_async()))
+                async_task_indexes.append(idx)
 
             else:
                 # Sync implementation: do hooks and call inline
@@ -2216,6 +2279,9 @@ class AsyncResponse(_BaseResponse):
                             )
                         )
                         continue
+                    except Exception as ex:
+                        failures.append((idx, ex))
+                        break
 
                 exception = None
                 attachments = []
@@ -2236,6 +2302,13 @@ class AsyncResponse(_BaseResponse):
                             if isinstance(res, str)
                             else json.dumps(res, default=repr)
                         )
+                    except PauseChain as ex:
+                        # Inline execution stops here; later calls never
+                        # start. Tasks already started are still awaited
+                        # below before the pause propagates.
+                        ex.tool_call = tc
+                        paused.append((idx, ex))
+                        break
                     except Exception as ex:
                         output = f"Error: {ex}"
                         exception = ex
@@ -2249,20 +2322,46 @@ class AsyncResponse(_BaseResponse):
                         exception=exception,
                     )
 
-                    if tool is not None and after_call:
-                        cb2 = after_call(tool, tc, tr)
-                        if inspect.isawaitable(cb2):
-                            await cb2
+                    try:
+                        if tool is not None and after_call:
+                            cb2 = after_call(tool, tc, tr)
+                            if inspect.isawaitable(cb2):
+                                await cb2
+                    except Exception as ex:
+                        failures.append((idx, ex))
+                        break
 
                     indexed_results.append((idx, tr))
 
-        # Await all async tasks in parallel
+        # Await every task that was started; return_exceptions so a pause
+        # or hook failure in one task cannot orphan its siblings mid-flight.
         if async_tasks:
-            indexed_results.extend(await asyncio.gather(*async_tasks))
+            outcomes = await asyncio.gather(*async_tasks, return_exceptions=True)
+            for task_idx, outcome in zip(async_task_indexes, outcomes):
+                if isinstance(outcome, PauseChain):
+                    paused.append((task_idx, outcome))
+                elif isinstance(outcome, BaseException):
+                    failures.append((task_idx, outcome))
+                else:
+                    indexed_results.append(outcome)
 
         # Reorder by original index
         indexed_results.sort(key=lambda x: x[0])
-        return [tr for _, tr in indexed_results]
+        results = [tr for _, tr in indexed_results]
+
+        # Hook failures are bugs: raise the first by call order.
+        if failures:
+            failures.sort(key=lambda item: item[0])
+            raise failures[0][1]
+
+        # Pauses propagate with the completed sibling results attached.
+        if paused:
+            paused.sort(key=lambda item: item[0])
+            pause = paused[0][1]
+            pause.tool_results = results
+            raise pause
+
+        return results
 
     def __aiter__(self):
         self._start = time.monotonic()
@@ -2479,28 +2578,16 @@ class AsyncResponse(_BaseResponse):
         return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
 
 
-def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[Any]:
-    """Build the message chain for a tool-result turn in a chain loop.
-
-    Takes the prior response's full input chain + its structured
-    output, then appends a tool-role message carrying the new
-    ToolResult outputs. Attachments (e.g. images returned by tools)
-    are folded into a subsequent user-role message.
-
-    This is what gives ``response.prompt.messages`` on the tool-
-    result turn the complete history for the next provider call —
-    including any reasoning signatures or thoughtSignatures from the
-    prior turn.
-    """
+def _append_tool_results_to_chain(chain, tool_results, attachments) -> List[Any]:
+    """Append a tool-role message carrying ToolResults to a message
+    chain, plus a trailing user-role message for any attachments the
+    tools returned (mimics the legacy attachments=[] kwarg behavior)."""
     from .parts import (
         AttachmentPart,
         Message,
         ToolResultPart,
     )
 
-    chain: List[Any] = list(prior_response.prompt.messages) + list(
-        prior_response._messages_now()
-    )
     if tool_results:
         chain.append(
             Message(
@@ -2515,8 +2602,6 @@ def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[A
                 ],
             )
         )
-    # Attachments that came back from tools ride on a trailing user
-    # message (mimics the legacy attachments=[] kwarg behavior).
     if attachments:
         chain.append(
             Message(
@@ -2525,6 +2610,86 @@ def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[A
             )
         )
     return chain
+
+
+def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[Any]:
+    """Build the message chain for a tool-result turn in a chain loop.
+
+    Takes the prior response's full input chain + its structured
+    output, then appends a tool-role message carrying the new
+    ToolResult outputs.
+
+    This is what gives ``response.prompt.messages`` on the tool-
+    result turn the complete history for the next provider call —
+    including any reasoning signatures or thoughtSignatures from the
+    prior turn.
+    """
+    chain: List[Any] = list(prior_response.prompt.messages) + list(
+        prior_response._messages_now()
+    )
+    return _append_tool_results_to_chain(chain, tool_results, attachments)
+
+
+def _trailing_pending_tool_calls(messages) -> List[ToolCall]:
+    """Find unresolved tool calls at the end of a message history.
+
+    Returns ToolCall objects from the last assistant message containing
+    locally-executable tool_call parts, minus any that already have a
+    matching tool_result in subsequent tool-role messages. Returns []
+    when the history has moved on past those calls (a user/assistant/
+    system message follows them) - resuming only makes sense when the
+    calls are the latest thing that happened.
+
+    Matching uses tool_call_id when present; id-less calls (histories
+    persisted before ids were guaranteed) match results by name, one
+    result consumed per call.
+    """
+    from .parts import ToolCallPart, ToolResultPart
+
+    last_index = None
+    call_parts: List[Any] = []
+    for i, msg in enumerate(messages or []):
+        parts = getattr(msg, "parts", None) or []
+        calls = [
+            p for p in parts if isinstance(p, ToolCallPart) and not p.server_executed
+        ]
+        if getattr(msg, "role", None) == "assistant" and calls:
+            last_index = i
+            call_parts = calls
+    if last_index is None:
+        return []
+
+    results: List[Any] = []
+    for msg in messages[last_index + 1 :]:
+        role = getattr(msg, "role", None)
+        if role == "tool":
+            results.extend(
+                p
+                for p in (getattr(msg, "parts", None) or [])
+                if isinstance(p, ToolResultPart)
+            )
+        else:
+            # Conversation moved on past these calls
+            return []
+
+    matched_ids = {r.tool_call_id for r in results if r.tool_call_id}
+    unmatched_names = [r.name for r in results if not r.tool_call_id]
+    pending = []
+    for part in call_parts:
+        if part.tool_call_id:
+            if part.tool_call_id in matched_ids:
+                continue
+        elif part.name in unmatched_names:
+            unmatched_names.remove(part.name)
+            continue
+        pending.append(
+            ToolCall(
+                name=part.name,
+                arguments=part.arguments or {},
+                tool_call_id=part.tool_call_id,
+            )
+        )
+    return pending
 
 
 class _BaseChainResponse:
@@ -2564,6 +2729,41 @@ class _BaseChainResponse:
                 assert False, "Should have been a Response or AsyncResponse"
             sync_response.log_to_db(db)
 
+    def _pending_tool_calls(self) -> List[ToolCall]:
+        """Unresolved tool calls at the end of this chain's history.
+
+        Non-empty when the supplied messages= end in an assistant
+        message whose tool calls have no results yet - e.g. a chain
+        that paused on PauseChain and is being resumed from persisted
+        history."""
+        if not self.prompt.tools:
+            return []
+        return _trailing_pending_tool_calls(self.prompt.messages)
+
+    def _resume_prompt(self, tool_results: List[ToolResult]) -> Prompt:
+        """The first prompt for a resumed chain: the original history
+        plus a tool-role message carrying the freshly-executed results -
+        the same shape as the chain loop's own tool-result turns."""
+        prompt = self.prompt
+        attachments = []
+        for tool_result in tool_results:
+            attachments.extend(tool_result.attachments)
+        next_chain = _append_tool_results_to_chain(
+            list(prompt.messages), tool_results, attachments
+        )
+        return Prompt(
+            "",
+            self.model,
+            tools=prompt.tools,
+            tool_results=tool_results,
+            messages=next_chain,
+            system=prompt._system,
+            system_fragments=prompt.system_fragments,
+            options=prompt.options,
+            attachments=attachments,
+            hide_reasoning=prompt.hide_reasoning,
+        )
+
 
 class ChainResponse(_BaseChainResponse):
     _responses: List["Response"]
@@ -2573,13 +2773,33 @@ class ChainResponse(_BaseChainResponse):
     def responses(self) -> Iterator[Response]:
         prompt = self.prompt
         count = 0
-        current_response: Optional[Response] = Response(
+        initial_response = Response(
             prompt,
             self.model,
             self.stream,
             key=self._key,
             conversation=self.conversation,
         )
+        # Resume: a history ending in unresolved tool calls means a
+        # previous run stopped (paused or crashed) before executing
+        # them. Execute those calls first - through the normal
+        # before_call/after_call machinery - then start the loop on
+        # the tool-result turn. This could raise llm.PauseChain.
+        pending_tool_calls = self._pending_tool_calls()
+        if pending_tool_calls:
+            tool_results = initial_response.execute_tool_calls(
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tool_calls_list=pending_tool_calls,
+            )
+            initial_response = Response(
+                self._resume_prompt(tool_results),
+                self.model,
+                self.stream,
+                key=self._key,
+                conversation=self.conversation,
+            )
+        current_response: Optional[Response] = initial_response
         while current_response:
             count += 1
             yield current_response
@@ -2650,13 +2870,31 @@ class AsyncChainResponse(_BaseChainResponse):
     async def responses(self) -> AsyncIterator[AsyncResponse]:
         prompt = self.prompt
         count = 0
-        current_response: Optional[AsyncResponse] = AsyncResponse(
+        initial_response = AsyncResponse(
             prompt,
             self.model,
             self.stream,
             key=self._key,
             conversation=self.conversation,
         )
+        # Resume: see ChainResponse.responses() - execute trailing
+        # unresolved tool calls before the first provider call. This
+        # could raise llm.PauseChain.
+        pending_tool_calls = self._pending_tool_calls()
+        if pending_tool_calls:
+            tool_results = await initial_response.execute_tool_calls(
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tool_calls_list=pending_tool_calls,
+            )
+            initial_response = AsyncResponse(
+                self._resume_prompt(tool_results),
+                self.model,
+                self.stream,
+                key=self._key,
+                conversation=self.conversation,
+            )
+        current_response: Optional[AsyncResponse] = initial_response
         while current_response:
             count += 1
             yield current_response
