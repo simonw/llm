@@ -1,5 +1,17 @@
 # Changelog
 
+(v0_32_a3)=
+## 0.32a3 (2026-06-09)
+
+Driven by the needs of [datasette-agent](https://github.com/datasette/datasette-agent)'s human-in-the-loop `ask_user()` feature, made the following improvements to how tool calls work:
+
+- Tool implementations can declare a parameter named `llm_tool_call` in order to be passed the `llm.ToolCall` object for the current invocation. This allows them to access the current `llm_tool_call.tool_call_id`. See {ref}`python-api-tools-llm-tool-call`. [#1480](https://github.com/simonw/llm/pull/1480)
+- Every tool call is now guaranteed a unique `tool_call_id` - providers that do not supply one get a synthesized `tc_`-prefixed ULID. [#1481](https://github.com/simonw/llm/pull/1481)
+- Tools can raise a `llm.PauseChain` exception to cleanly pause the tool chain, useful for things like waiting for human approval. The exception propagates to the caller with `.tool_call` and `.tool_results` (completed sibling results) attached, and no model call is made with a placeholder result. See {ref}`python-api-tools-pause`. [#1482](https://github.com/simonw/llm/pull/1482)
+- Failure semantics for concurrent tool execution: async sibling tool calls always run to completion before a pause or hook exception propagates. [#1482](https://github.com/simonw/llm/pull/1482)
+- Chains can now resume from a `messages=` history ending in unresolved tool calls: the calls are executed through the normal `before_call`/`after_call` machinery before the first model call, skipping any that already have results. The `execute_tool_calls()` method also accepts a new optional `tool_calls_list=` argument for executing an explicit list of `ToolCall` objects in place of the calls requested by the response. See {ref}`python-api-tools-resume`. [#1482](https://github.com/simonw/llm/pull/1482)
+- Fixed a bug where the async tool executor silently dropped calls to tools not present in `tools=` - these now return `Error: tool "..." does not exist` results, matching the sync executor. [#1483](https://github.com/simonw/llm/pull/1483)
+
 (v0_32_a2)=
 ## 0.32a2 (2026-05-12)
 
