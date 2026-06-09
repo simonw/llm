@@ -604,7 +604,9 @@ def test_tool_function_receives_llm_tool_call():
 
     model = llm.get_model("echo")
     chain_response = model.chain(
-        json.dumps({"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}),
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
         tools=[lookup],
     )
     chain_response.text()
@@ -627,7 +629,9 @@ def test_async_tool_function_receives_llm_tool_call_with_sync_model():
 
     model = llm.get_model("echo")
     chain_response = model.chain(
-        json.dumps({"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}),
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
         tools=[lookup],
     )
     chain_response.text()
