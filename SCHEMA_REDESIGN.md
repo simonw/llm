@@ -1,6 +1,6 @@
 # Design proposal: persisting Messages and Parts to SQLite
 
-Status: proposal, revision 4 (0.32 alpha series)
+Status: proposal, revision 5 (0.32 alpha series)
 
 This is the final stage before a non-alpha release: persisting the new
 Message/Part shape (`llm/parts.py`, `llm/serialization.py`) to a redesigned
@@ -19,12 +19,14 @@ How this proposal got here:
 - **Revision 3** added a clean break: new table names, no writes to or
   compatibility with the legacy tables — at the cost of making existing
   history invisible to `llm logs` until an explicit backfill.
-- **Revision 4** (this one) fixes that cost: the legacy `responses`
-  table is **renamed to `responses_archive`** — freeing the natural
-  name for the new table — and a union view lets `llm logs` keep
-  returning old and new rows together. Old conversations are lazily
-  backfilled the first time `llm -c` touches them. New code never
-  writes legacy shapes; nothing is ever dropped.
+- **Revision 4** kept old logs visible via a union view over a renamed
+  `responses_archive` plus lazy per-conversation backfill.
+- **Revision 5** (this one) goes one step further: the migration
+  **eagerly converts all legacy data into the new schema**. The legacy
+  tables are renamed to `*_archive` and kept untouched as a safety net,
+  but after migration there is exactly one era of data: no union view,
+  no dual FTS, no lazy backfill, no `archived` flag. `llm logs` and
+  `llm -c` work on the full history through a single code path.
 
 ## Why the current tables can't round-trip the new shape
 
@@ -72,67 +74,82 @@ The new schema makes the stored form the authoritative form.
    a client echoing a degraded copy of an assistant message, or two
    sessions diverging from a shared prefix should be forks in a tree,
    not duplicated or orphaned data.
-4. **Old logs stay visible.** `llm logs` must keep returning
-   pre-upgrade history, and `llm -c` must keep working against
-   pre-upgrade conversations, without requiring the user to run
-   anything first. The logs database is a personal archive; an upgrade
-   that hides it is not acceptable.
-5. **Queryable in plain SQLite/Datasette.** Typed columns for the common
+4. **Old logs stay visible and usable.** `llm logs` must keep returning
+   pre-upgrade history and `llm -c` must keep working against
+   pre-upgrade conversations, without the user running anything. The
+   logs database is a personal archive; an upgrade that hides it is not
+   acceptable.
+5. **The migration must never brick the install.** `migrate(db)` runs
+   on every llm invocation; a data-conversion migration that raises on
+   one weird legacy row would make every command fail. Conversion must
+   be defensive per row, with failures recorded rather than raised.
+6. **Queryable in plain SQLite/Datasette.** Typed columns for the common
    questions ("all tool calls", "all reasoning", "which responses used
    this image"), JSON1-queryable text columns for the open-ended parts.
-6. **Clean break for writes; reuse of value tables.** New code never
-   writes the legacy shapes. The content-addressed value stores
+7. **Reuse the value tables.** The content-addressed stores
    (`attachments`, `fragments`, `fragment_aliases`, `schemas`, `tools`,
-   `tool_instances`) are reused as-is — old and new rows coexist
-   harmlessly in a content-addressed table, and reuse keeps
-   fragment/attachment dedupe spanning the upgrade.
+   `tool_instances`) keep their names and rows — old and new references
+   coexist harmlessly in a content-addressed table, and attachment
+   blobs (the bulk of a large logs.db) are never copied.
 
-## The archive rule
+## The conversion rule
 
-The legacy `responses` table is renamed to **`responses_archive`** — a
-metadata-only `ALTER TABLE ... RENAME`, instant at any size, and
-nothing is destroyed. That frees the natural name: the new table is
-simply `responses`. The legacy satellite tables (`tool_calls`,
-`tool_results`, `prompt_attachments`, `tool_results_attachments`,
-`prompt_fragments`, `system_fragments`, `tool_responses`) keep their
-names — their `response_id` values still resolve against the archive,
-none of their names collide with the new family, and the only code
-that reads them is the backfill.
+The migration renames `responses` to **`responses_archive`** (freeing
+the natural name — a metadata-only `ALTER TABLE ... RENAME`), creates
+the new tables, then **converts every archived response into the new
+schema**, preserving response ids and conversation ids. The archive and
+the legacy satellite tables (`tool_calls`, `tool_results`,
+`prompt_attachments`, `tool_results_attachments`, `prompt_fragments`,
+`system_fragments`, `tool_responses`) are kept untouched as a safety
+net — nothing is ever destroyed — but no code reads them after
+conversion except a repair command.
+
+**Feasibility.** Conversion is mechanical because the synthesized
+messages are exactly what `Response.from_row` + `load_conversation`
+already fabricate on every `llm -c` today: per turn, a system message,
+a tool message from `tool_results`, a user message from prompt text +
+attachments, an assistant message from response text + `tool_calls` +
+the concatenated `reasoning` column — each turn's chain extending the
+previous turn's leaf, conversation by conversation in id order. Nothing
+is lost that exists (old rows never stored metadata or interleaving;
+they convert as sparsely as they were recorded, no worse than reading
+them today). The cost is O(total logged text) — hashing and row inserts;
+attachment blobs stay where they are and are only *linked* — which is
+the same order of work as the m011 migration that built the FTS index
+over every existing prompt and response, so llm has shipped this class
+of migration before.
+
+Three engineering requirements make it safe:
+
+- **Plugin-free.** The converter builds `MessageDict`s directly from
+  raw rows. It must not call `get_model()` or validate `Options` —
+  models logged by since-uninstalled plugins must convert fine.
+  `options_json` is copied verbatim.
+- **Defensive per conversation.** Each conversation converts inside a
+  try/except; a malformed row (broken JSON, dangling FK, half-written
+  legacy data) falls back to a minimal text-only conversion, and if
+  even that fails the failure is recorded in a `_conversion_errors`
+  table (conversation id, response id, error) and skipped — the
+  migration itself never raises (constraint 5). `llm logs backfill`
+  remains as the re-runnable repair command that retries recorded
+  failures after a fix.
+- **Transactional and resumable.** Conversion runs in a transaction so
+  an interrupt (Ctrl-C mid-migration) rolls back cleanly and re-runs
+  next invocation. Idempotent by construction: preserved ids + content
+  hashes + node dedupe mean re-converting is a no-op. For large tables
+  a progress line goes to stderr.
+
+What single-era steady state buys, beyond revision 4: no union view, no
+`archived` rendering branch, no dual FTS query in `llm logs -q`, no
+lazy-backfill trigger in `load_conversation` — the new tables simply
+contain everything, and the tree views cover the whole archive from day
+one. The legacy FTS artifacts (`responses_fts` and its triggers) are
+dropped outright: derived indexes are not user data, and the new
+table's FTS now covers the converted rows.
 
 `conversations` is **reused, not renamed**: its shape (`id`, `name`,
-`model`) is unchanged in the new design, so old and new conversations
-live in one table and conversation ids stay continuous across the
-upgrade — which is what lets `llm -c` continue a pre-upgrade
-conversation at all.
-
-After the rename, new code:
-
-- writes only the new family;
-- reads only the new family on the hot path;
-- lists history through a **union view** spanning both eras;
-- lazily backfills a conversation from the archive the first time it
-  is continued.
-
-What this buys, relative to maintaining in-place compatibility
-(revision 2):
-
-- **A near-pure migration.** One rename plus `CREATE TABLE`s. No
-  `add_column`/`transform()` against populated tables, no FTS rebuild
-  dance (m014 is the precedent for `transform()` silently dropping FTS
-  config). The new table's FTS is defined once, on an empty table.
-- **One hot read path.** `from_row` has no "new-style or legacy?"
-  branch. The legacy reconstruction logic is quarantined inside the
-  backfill module, where it can eventually be deleted.
-- **Free column design.** `first_input_node_id` goes on the new
-  `responses` table from day one, deleting the contorted "new input
-  since the previous leaf" SQL that compatibility forced in revision 2.
-- **A table-merge cleanup.** `prompt_fragments` and `system_fragments`
-  were always one relation with a type flag — `FRAGMENT_SQL` in
-  `models.py` unions them back together with a synthesized
-  `fragment_type` column. The new schema stores them that way.
-
-And relative to revision 3's invisible-until-backfill: constraint 4 is
-satisfied with zero user action, which was the whole point.
+`model`) is unchanged, so conversation ids stay continuous and no
+conversion is needed for it at all.
 
 ## Core idea: content-addressed values, tree-shaped identity
 
@@ -167,8 +184,8 @@ message granularity rather than response granularity.
 
 ## The new tables
 
-All created by migration `m023_messages_tables`; all writes go here and
-nowhere else.
+All created by `m023_messages_tables`; all writes go here and nowhere
+else.
 
 ### `messages`
 
@@ -213,8 +230,9 @@ Note on `instance_id`: `ToolResultPart` deliberately doesn't model
 Toolbox instances (identity again), but the instance used is worth
 auditing. It is populated at log time by correlating
 `prompt.tool_results` with the part via `tool_call_id`, exactly as
-`log_to_db` tracks it today. It does not participate in the message hash
-and is not part of the round trip — same as current behavior.
+`log_to_db` tracks it today (and preserved from `tool_results.instance_id`
+during conversion). It does not participate in the message hash and is
+not part of the round trip — same as current behavior.
 
 ### `part_attachments`
 
@@ -257,8 +275,9 @@ separated with comparisons (see the chain view).
 ### `responses` (new)
 
 One row per model call, under the natural name freed by the archive
-rename. Ids are ULIDs (`Response.id`), as they have been since m010 —
-which matters for the union view (see below):
+rename. Ids are ULIDs (`Response.id`) — converted rows keep their
+original ids, so `r:<id>` replacement keys in condensed JSON still
+resolve and ordering by id stays chronological across the upgrade:
 
 | column                | type | notes                                     |
 |-----------------------|------|--------------------------------------------|
@@ -290,15 +309,18 @@ extends `output_node_id`. A regenerated turn extends the same parent —
 a sibling branch, visible in the data instead of impossible to express.
 
 The derived text columns are projections kept for `llm logs` rendering
-speed and FTS — defined once, on this empty table, as
-`enable_fts(["prompt", "response"], create_triggers=True)`. The node
-tree is the source of truth. The column set deliberately matches the
-archive's so the union view is a straight `UNION ALL`.
+speed and FTS — defined once via
+`enable_fts(["prompt", "response"], create_triggers=True)` before
+conversion populates the table, so converted rows are indexed by the
+triggers as they insert. The node tree is the source of truth. The
+column set matches the archive's 1:1, which is what makes conversion a
+column-copy plus message synthesis.
 
 ### `response_fragments`
 
 Merges the legacy `prompt_fragments` + `system_fragments` pair into the
-single relation it always was:
+single relation it always was (`FRAGMENT_SQL` in `models.py` already
+unions them back together with a synthesized `fragment_type` column):
 
 | column          | type | notes                          |
 |-----------------|------|--------------------------------|
@@ -323,45 +345,10 @@ Replaces `tool_responses` — which tool *definitions* were offered:
 
 PK `(response_id, tool_id)`.
 
-### The union view: old and new logs together
-
-```sql
-CREATE VIEW all_responses AS
-SELECT id, conversation_id, model, resolved_model, prompt, system,
-       response, reasoning, schema_id, options_json, prompt_json,
-       response_json, duration_ms, datetime_utc,
-       input_tokens, output_tokens, token_details,
-       0 AS archived
-FROM responses
-UNION ALL
-SELECT id, conversation_id, model, resolved_model, prompt, system,
-       response, reasoning, schema_id, options_json, prompt_json,
-       response_json, duration_ms, datetime_utc,
-       input_tokens, output_tokens, token_details,
-       1 AS archived
-FROM responses_archive
-WHERE id NOT IN (SELECT id FROM responses);
-```
-
-`llm logs list` reads this view instead of a table. Both eras use ULID
-ids, so `ORDER BY id` remains chronological across the boundary. The
-`archived` flag tells the renderer to draw an old row from its
-flattened columns — which is all the data those rows ever had — while
-new rows can additionally render parts, reasoning markers, and tool
-interleaving from the tree. The `NOT IN` clause makes backfill
-idempotent from the view's perspective: a backfilled conversation's
-rows keep their original ids in the new table, so the archive copies
-drop out of the view automatically (both pk-indexed; the subquery is
-cheap).
-
-Search: the archive keeps its FTS index (renamed alongside the table),
-the new table gets its own, and `llm logs -q` queries both and merges —
-two index probes, not a compatibility fork.
-
 ### The chain view
 
 Reads walk parent pointers with a recursive CTE. To keep that out of
-casual queries, the migration ships a view reconstructing every new-era
+casual queries, the migration ships a view reconstructing every
 response's full chain with three scopes — `history` (inherited from
 prior turns), `input` (this turn's new input), `output`:
 
@@ -387,7 +374,9 @@ FROM chain;
 (Ordering: `depth` ascending. Exact SQL to be settled during
 implementation; the shape is what matters here.)
 
-Tool calls and results then fall out as trivial filters:
+Tool calls and results then fall out as trivial filters — and because
+the archive is fully converted, these views cover pre-upgrade history
+too:
 
 ```sql
 CREATE VIEW response_tool_calls AS
@@ -406,13 +395,14 @@ CREATE VIEW response_tool_results AS
 The tree assumes each turn **extends** the previous leaf. This holds
 today by construction: `_BaseConversation._build_full_chain` builds the
 next prompt as `last.prompt.messages + last._messages_now() + new
-input`, strictly appending. The design makes that a stated invariant
-with a test, because anything that rewrites earlier history (context
-condensing, retroactive redaction à la #1396) would no longer match the
-stored path and would fork the tree on every subsequent turn — correct,
-never lossy, but storage-costly. If history rewriting becomes a feature,
-it should be modeled as an explicit branch with provenance, not a
-silent mutation.
+input`, strictly appending — and the converter builds archived
+conversations the same way, turn by turn. The design makes that a
+stated invariant with a test, because anything that rewrites earlier
+history (context condensing, retroactive redaction à la #1396) would no
+longer match the stored path and would fork the tree on every
+subsequent turn — correct, never lossy, but storage-costly. If history
+rewriting becomes a feature, it should be modeled as an explicit branch
+with provenance, not a silent mutation.
 
 When a caller passes an arbitrary explicit `messages=` list that does
 not extend any stored chain, the write path degrades gracefully:
@@ -439,16 +429,18 @@ and materializes only the divergent suffix as a new branch. Worst case
      history — but O(new content) rows.
 4. Append output messages as nodes from the input leaf; record
    `input_node_id` / `first_input_node_id` / `output_node_id` on the
-   new `responses` row.
+   `responses` row.
 5. Write the `responses` row including the derived text columns, the
    `conversations` row (`ignore=True`), `response_fragments`,
    `response_tools`, schemas — same logic as today, new table names.
 
+The conversion in m024 is this same write path fed by synthesized
+messages — one code path produces both fresh and converted data.
 Legacy shapes are never written.
 
 ## Read path (`from_row` / `load_conversation`)
 
-The hot path is single-era:
+One path, one era, no fallback:
 
 - recursive walk from `input_node_id` to root, reversed → input
   messages → `Prompt(messages=input, system=row["system"], options=...)`
@@ -458,20 +450,11 @@ The hot path is single-era:
   (inclusive) → `response._loaded_messages`, with `_chunks` rebuilt from
   text parts — exactly what `_response_from_dict` does today
 
-`load_conversation` adds one step before reading: if the requested
-conversation has rows in `responses_archive` whose ids are not yet in
-`responses`, run the **lazy backfill** for that conversation — convert
-its archived rows (via the quarantined legacy reconstruction) through
-the standard write path, preserving response ids — then proceed down
-the normal single path. Idempotent by construction (content hashes +
-node dedupe + preserved ids), bounded to one conversation, and
-invisible to the user beyond a brief first-touch delay. The
-chain-rebuilding patch in `load_conversation` is deleted; for archived
-conversations the backfill performs that reconstruction exactly once,
-after which the stored path *is* the chain.
-
-`llm logs list` reads `all_responses` (both eras); rich part-level
-rendering applies to new-era rows.
+`load_conversation` deletes its chain-rebuilding patch: the stored path
+*is* the chain — for pre-upgrade conversations because the converter
+performed that reconstruction exactly once, for new ones because
+`log_to_db` stored it directly. `llm logs` reads the new `responses`
+only; `llm logs -q` queries one FTS index covering all history.
 
 ## The stateless server case
 
@@ -525,52 +508,58 @@ the response level: path-to-messages over the stored nodes reproduces
 6. **Hash stability** — golden hashes for fixed messages, so an
    accidental change to canonical serialization fails loudly rather than
    silently forking the dedupe space.
-7. **Union view** — fixture DB with legacy rows; after migration,
-   `llm logs` lists old and new rows interleaved in chronological
-   order; `llm logs -q` finds text in both eras.
-8. **Lazy backfill** — `llm -c` against an archived conversation
-   converts it once, continues correctly, and the archive copies drop
-   out of `all_responses`; a second continuation performs no
-   conversion; `llm logs backfill` over the whole database is a no-op
-   for already-converted conversations.
+7. **Conversion equivalence** — fixture DBs from real prior llm
+   versions (tools, attachments, fragments, schemas, reasoning,
+   multi-turn conversations); after migration, `llm logs` output and
+   `load_conversation` results match what the legacy reader produced on
+   the same fixtures before migration; ids preserved; re-running
+   conversion is a no-op.
+8. **Conversion never raises** — fixtures with malformed options_json,
+   dangling schema_id/conversation_id, NULL response text; migration
+   completes, damage is confined to `_conversion_errors`, and every
+   other row converts.
+9. **Conversion without plugins** — fixture logged by a model whose
+   plugin is not installed converts fully.
 
 ## Migration and rollout
 
-`m023_messages_tables`, in order:
+`m023_messages_tables`:
 
 1. `ALTER TABLE responses RENAME TO responses_archive` — metadata-only,
-   instant, nothing destroyed. Drop the legacy FTS triggers
-   (`responses_ai`/`_ad`/`_au` — the archive is frozen, they will never
-   fire again) and rename `responses_fts` to `responses_archive_fts`
-   (FTS5 renames carry their shadow tables along).
+   instant, nothing destroyed. Drop the legacy FTS triggers and FTS
+   tables (derived indexes, not user data; their replacement covers
+   everything once conversion runs).
 2. Create `messages`, `parts`, `part_attachments`, `nodes`, the new
-   `responses`, `response_fragments`, `response_tools`, indexes, and
-   the new table's FTS — all empty, all pure creates.
-3. Create the `all_responses`, `response_chains`,
-   `response_tool_calls`, `response_tool_results` views.
+   `responses`, `response_fragments`, `response_tools`,
+   `_conversion_errors`, indexes, the new FTS, and the views — all
+   pure creates.
 
-`conversations` is untouched and shared. The other legacy tables are
-untouched under their existing names. Earlier migrations remain in
-`migrations.py` so old databases reach a consistent legacy state before
-m023 runs.
+`m024_convert_legacy`:
 
-Backfill:
+3. For each conversation in `responses_archive` (id order), synthesize
+   each turn's messages from the flattened columns and satellite
+   tables — exactly the reconstruction `from_row` performs today, but
+   plugin-free — and feed them through the standard write path,
+   preserving response ids. Copy `prompt_fragments` +
+   `system_fragments` → `response_fragments`, `tool_responses` →
+   `response_tools`, link attachments in place. Transactional,
+   idempotent, defensive per conversation (failures land in
+   `_conversion_errors`, never raise), progress to stderr for large
+   tables. Cost is O(total logged text) — the same class of one-time
+   work as m011's FTS build.
 
-- **Lazy, per-conversation** — triggered by `llm -c` /
-  `load_conversation` as described above. Covers the only case where
-  old data must become new-shaped to be *used* rather than *viewed*.
-- **`llm logs backfill`** — explicit bulk conversion for users who want
-  their whole archive queryable through the tree views. Idempotent;
-  shares the same quarantined conversion code, which is the only
-  legacy-reading Python in the codebase.
+`conversations` is untouched and shared. The archive tables stay,
+unread, under `*_archive` and their original satellite names — a
+safety net for at least one release cycle; a far-future migration (or
+`llm logs prune-archive`) can offer to drop them.
+
+`llm logs backfill` survives only as the repair command: it retries
+conversations recorded in `_conversion_errors` (after a bugfix
+release) and is a no-op otherwise.
 
 ## Example queries this unlocks
 
 ```sql
--- Old and new logs together, newest first (what llm logs reads)
-SELECT id, model, prompt, response, archived
-FROM all_responses ORDER BY id DESC LIMIT 20;
-
 -- Reasoning emitted per response, with redaction markers visible
 SELECT c.response_id, p."order", p.redacted, p.text
 FROM response_chains c JOIN parts p ON p.message_id = c.message_id
@@ -591,6 +580,8 @@ SELECT parent_id, count(*) AS branches
 FROM nodes GROUP BY parent_id HAVING count(*) > 1;
 ```
 
+All of these span the user's entire history, pre- and post-upgrade.
+
 ## Alternatives considered
 
 **Flat per-response link table** (revision 1): a
@@ -603,15 +594,24 @@ represent branching at all; it was encoding paths the expensive way.
 
 **In-place compatible evolution** (revision 2): reuse the `responses`
 table, keep legacy columns alive through `add_column`, maintain a dual
-read path and compatibility views forever. Rejected: the migration
-complexity, the permanent legacy branch in `from_row`, and the
-contorted compat SQL all bought compatibility that the archive rename
-plus union view provide more cheaply.
+read path and compatibility views forever. Rejected: permanent
+complexity buying what a one-time conversion provides more honestly.
 
 **Invisible-until-backfill clean break** (revision 3): new names,
-legacy tables ignored entirely, explicit backfill as the only bridge.
-Rejected because it makes `llm logs` stop returning pre-upgrade history
-until the user intervenes — unacceptable for a personal archive.
+legacy tables ignored, explicit backfill as the only bridge. Rejected
+because it makes `llm logs` stop returning pre-upgrade history until
+the user intervenes — unacceptable for a personal archive.
+
+**Union view + lazy backfill** (revision 4): instant migration, old
+rows visible through an `all_responses` view, conversations converted
+on first `llm -c` touch. Strictly safer at upgrade time than eager
+conversion and the designated **fallback if benchmarking the converter
+on large real-world databases shows unacceptable migration times** —
+but it leaves two eras of data in the steady state: a union view, dual
+FTS queries, an `archived` rendering branch, and tree views that only
+cover post-upgrade history. Eager conversion was chosen because the
+upgrade moment is one-time and bounded while the dual-era complexity
+is forever.
 
 **Response-level predecessor** (resurrect `reply_to_id` + per-turn
 delta messages): simpler still, but it can't represent the echo-fork or
@@ -627,23 +627,25 @@ audit-the-raw-payload need.
 
 ## Open questions
 
-1. **View naming** — `all_responses` here; alternatives include
-   `responses_combined` or resurrecting `logs` (risky: pre-m009
-   databases may still contain a real `logs` table that m009 declined
-   to drop). Same low-stakes question for `parts` vs `message_parts`,
-   `nodes` vs `message_nodes`.
-2. **Eager option** — should `llm logs backfill` be suggested (or
-   offered interactively) after migration for small databases, so the
-   tree views cover the whole archive immediately? Lazy backfill makes
-   this optional rather than load-bearing.
+1. **Converter benchmark** — measure m024 on a large real logs.db
+   (years of history, hundreds of thousands of responses) before the
+   non-alpha release. If it lands in minutes-not-seconds territory on
+   realistic databases, fall back to the revision 4 design (union view
+   + lazy backfill), which is preserved in this document's history.
+2. **Naming** — `parts` vs `message_parts`, `nodes` vs `message_nodes`
+   in a logs.db users also query directly. Low stakes.
 3. **FTS over parts** — should `parts.text` / `parts.output` get their
    own FTS table so `llm logs -q` can find text inside tool output and
    reasoning? Proposed as a follow-up, not part of this migration.
 4. **`prompt_json` / `response_json`** — the raw provider payloads stay
-   for audit/debugging, but with the structured shape stored faithfully
-   they could become opt-in (`--log-raw`?) in a future release to cut
-   database size.
-5. **Branch garbage collection** — abandoned branches (echo forks,
+   for audit/debugging (and are copied through conversion), but with
+   the structured shape stored faithfully they could become opt-in
+   (`--log-raw`?) in a future release to cut database size.
+5. **Archive retention** — how long do the `*_archive` tables stick
+   around, and does dropping them eventually warrant an interactive
+   `llm logs prune-archive` rather than a migration? Nothing in this
+   proposal ever drops them automatically.
+6. **Branch garbage collection** — abandoned branches (echo forks,
    regenerated turns) accumulate; nodes are cheap, but a future
    `llm logs prune` would need delete-ordering rules for shared
    ancestry. Out of scope for the migration.
