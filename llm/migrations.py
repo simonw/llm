@@ -698,3 +698,16 @@ def m024_new_responses(db):
         db.execute(RESPONSE_TOOL_CALLS_VIEW)
         db.execute(RESPONSE_TOOL_RESULTS_VIEW)
         db.execute(RESPONSE_ATTACHMENTS_VIEW)
+
+
+@migration
+def m025_convert_legacy(db):
+    # Copy archived legacy responses into the node-tree schema,
+    # preserving ids. Never raises on malformed rows - failures are
+    # recorded in _conversion_errors for `llm logs backfill` to retry.
+    # The archive itself is left untouched.
+    if not db["responses_archive"].exists():
+        return
+    from .conversion import convert_legacy_data
+
+    convert_legacy_data(db)

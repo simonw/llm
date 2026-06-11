@@ -329,6 +329,22 @@ def append_chain(
     return parent_id, first_new
 
 
+def append_messages(
+    db,
+    parent_id: Optional[str],
+    messages: List[Message],
+    instance_ids: Optional[Dict[str, int]] = None,
+) -> List[str]:
+    """Like append_chain but returns the node id for every message in
+    order, whether newly created or already present at that position."""
+    node_ids: List[str] = []
+    for message in messages:
+        message_id = ensure_message(db, message, instance_ids=instance_ids)
+        parent_id, _ = ensure_node(db, parent_id, message_id)
+        node_ids.append(parent_id)
+    return node_ids
+
+
 NODE_PATH_SQL = """
 with recursive path(id, parent_id, message_id, depth) as (
     select id, parent_id, message_id, depth from nodes where id = :leaf

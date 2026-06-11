@@ -1472,6 +1472,37 @@ def backup(path):
     )
 
 
+@logs.command(name="backfill")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def logs_backfill(database):
+    """Retry converting any legacy logged data that failed to convert
+
+    The upgrade to the node-tree schema converts old logs automatically;
+    rows it could not handle are recorded and skipped. After fixing the
+    underlying data (or upgrading llm) run this to convert the rest.
+    """
+    from .conversion import convert_legacy_data
+
+    path = pathlib.Path(database) if database else logs_db_path()
+    db = sqlite_utils.Database(path)
+    migrate(db)
+    converted, errors = convert_legacy_data(db, retry_errors=True)
+    bits = ["Converted {} response{}".format(converted, "s" if converted != 1 else "")]
+    if errors:
+        bits.append(
+            "{} conversation{} could not be converted - "
+            "see the _conversion_errors table".format(
+                errors, "s" if errors != 1 else ""
+            )
+        )
+    click.echo("; ".join(bits))
+
+
 @logs.command(name="on")
 def logs_turn_on():
     "Turn on logging for all prompts"
