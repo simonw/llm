@@ -455,7 +455,13 @@ def test_register_tools(tmpdir, logs_db):
             (
                 log_row["prompt"],
                 re.sub(
-                    r"tc_[0-9a-z]{26}", "tc_TCID", json.dumps(log_row["tool_results"])
+                    r'"id": \d+',
+                    '"id": 0',
+                    re.sub(
+                        r"tc_[0-9a-z]{26}",
+                        "tc_TCID",
+                        json.dumps(log_row["tool_results"]),
+                    ),
                 ),
             )
             for log_row in log_rows
@@ -464,12 +470,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": 0, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": 0, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -477,7 +483,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": 0, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -947,7 +953,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_set",
                     "output": "null",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -956,7 +962,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_get",
                     "output": "two",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -1001,7 +1007,7 @@ def test_plugins_command():
 
 
 TOOL_RESULTS_SQL = """
--- First, create ordered subqueries for tool_calls and tool_results
+-- First, create ordered subqueries for tool calls and tool results
 with ordered_tool_calls as (
     select
         tc.response_id,
@@ -1012,9 +1018,8 @@ with ordered_tool_calls as (
             )
         ) as tool_calls_json
     from (
-        select * from tool_calls order by id
+        select * from response_tool_calls order by depth, "order"
     ) tc
-    where tc.id is not null
     group by tc.response_id
 ),
 ordered_tool_results as (
@@ -1035,14 +1040,9 @@ ordered_tool_results as (
             )
         ) as tool_results_json
     from (
-        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
-               ti.plugin, ti.arguments as ti_arguments
-        from tool_results tr
-        left join tool_instances ti on tr.instance_id = ti.id
-        order by tr.id
+        select * from response_tool_results order by depth, "order"
     ) tr
     left join tool_instances ti on tr.instance_id = ti.id
-    where tr.id is not null
     group by tr.response_id
 )
 select

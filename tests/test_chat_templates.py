@@ -55,7 +55,9 @@ def test_chat_system_fragments_only_first_turn(tmpdir, mock_model, logs_db):
     first_id = responses[0]["id"]
     second_id = responses[1]["id"]
 
-    sys_frags = list(logs_db["system_fragments"].rows)
+    sys_frags = list(
+        logs_db["response_fragments"].rows_where("fragment_type = 'system'")
+    )
     # Exactly one system fragment row, attached to the first response only
     assert len(sys_frags) == 1
     assert sys_frags[0]["response_id"] == first_id
@@ -90,8 +92,8 @@ def test_chat_template_loads_tools_into_logs(logs_db, templates_path):
         logs_db.query(
             """
             select tools.name from tools
-            join tool_responses tr on tr.tool_id = tools.id
-            where tr.response_id = ?
+            join response_tools rt on rt.tool_id = tools.id
+            where rt.response_id = ?
             order by tools.name
             """,
             [response_id],

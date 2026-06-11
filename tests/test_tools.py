@@ -42,8 +42,9 @@ def test_tool_use_basic(vcr):
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset(
-        {"tools", "tool_responses", "tool_calls", "tool_results"}
+    assert set(db.table_names()).issuperset({"tools", "response_tools"})
+    assert set(db.view_names()).issuperset(
+        {"response_tool_calls", "response_tool_results"}
     )
 
     responses = list(db["responses"].rows)
@@ -56,13 +57,13 @@ def test_tool_use_basic(vcr):
     assert tools[0]["description"] == "Multiply two numbers."
     assert tools[0]["plugin"] is None
 
-    tool_results = list(db["tool_results"].rows)
-    tool_calls = list(db["tool_calls"].rows)
+    tool_results = list(db["response_tool_results"].rows)
+    tool_calls = list(db["response_tool_calls"].rows)
 
     assert len(tool_calls) == 1
     assert tool_calls[0]["response_id"] == first_response["id"]
     assert tool_calls[0]["name"] == "multiply"
-    assert tool_calls[0]["arguments"] == '{"a": 1231, "b": 2331}'
+    assert json.loads(tool_calls[0]["arguments"]) == {"a": 1231, "b": 2331}
 
     assert len(tool_results) == 1
     assert tool_results[0]["response_id"] == second_response["id"]

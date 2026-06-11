@@ -563,13 +563,23 @@ def fragments_fixture(user_path):
             }
         )
         # Link fragments to this response
-        for fragment_id in prompt_fragment_ids or []:
-            db["prompt_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
+        for i, fragment_id in enumerate(prompt_fragment_ids or []):
+            db["response_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "fragment_type": "prompt",
+                    "order": i,
+                }
             )
-        for fragment_id in system_fragment_ids or []:
-            db["system_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
+        for i, fragment_id in enumerate(system_fragment_ids or []):
+            db["response_fragments"].insert(
+                {
+                    "response_id": response_id,
+                    "fragment_id": fragment_id,
+                    "fragment_type": "system",
+                    "order": i,
+                }
             )
         return {name: response_id}
 

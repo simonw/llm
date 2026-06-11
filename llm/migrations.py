@@ -500,3 +500,201 @@ def m023_parts_tables(db):
     # The lookup that makes prefix walking cheap: nodes are deduplicated
     # on (parent_id, message_id) by storage.ensure_node()
     db["nodes"].create_index(["parent_id", "message_id"])
+
+
+RESPONSE_CHAINS_VIEW = """
+create view response_chains as
+with recursive chain (
+    response_id, node_id, parent_id, message_id, depth,
+    first_input_depth, input_depth
+) as (
+    select
+        responses.id, nodes.id, nodes.parent_id, nodes.message_id, nodes.depth,
+        coalesce(
+            (select depth from nodes n2 where n2.id = responses.first_input_node_id),
+            1000000000
+        ),
+        coalesce(
+            (select depth from nodes n3 where n3.id = responses.input_node_id),
+            -1
+        )
+    from responses
+    join nodes on nodes.id = coalesce(
+        responses.output_node_id, responses.input_node_id
+    )
+    union all
+    select
+        chain.response_id, nodes.id, nodes.parent_id, nodes.message_id,
+        nodes.depth, chain.first_input_depth, chain.input_depth
+    from chain
+    join nodes on nodes.id = chain.parent_id
+)
+select
+    response_id,
+    node_id,
+    message_id,
+    depth,
+    case
+        when depth > input_depth then 'output'
+        when depth >= first_input_depth then 'input'
+        else 'history'
+    end as scope
+from chain
+"""
+
+RESPONSE_TOOL_CALLS_VIEW = """
+create view response_tool_calls as
+select
+    chains.response_id,
+    parts.id as part_id,
+    parts.name,
+    parts.arguments,
+    parts.tool_call_id,
+    parts.server_executed,
+    parts.provider_metadata,
+    chains.depth,
+    parts."order"
+from response_chains chains
+join parts on parts.message_id = chains.message_id
+where chains.scope = 'output' and parts.type = 'tool_call'
+"""
+
+RESPONSE_TOOL_RESULTS_VIEW = """
+create view response_tool_results as
+select
+    chains.response_id,
+    parts.id as part_id,
+    parts.name,
+    parts.output,
+    parts.tool_call_id,
+    parts.server_executed,
+    parts.exception,
+    parts.instance_id,
+    chains.depth,
+    parts."order"
+from response_chains chains
+join parts on parts.message_id = chains.message_id
+where chains.scope = 'input' and parts.type = 'tool_result'
+"""
+
+RESPONSE_ATTACHMENTS_VIEW = """
+create view response_attachments as
+select
+    chains.response_id,
+    parts.attachment_id,
+    chains.depth,
+    parts."order"
+from response_chains chains
+join parts on parts.message_id = chains.message_id
+where chains.scope = 'input'
+    and parts.type = 'attachment'
+    and parts.attachment_id is not null
+"""
+
+
+@migration
+def m024_new_responses(db):
+    # Retire the legacy responses table in favour of one backed by the
+    # node tree. Logged data is never deleted or modified: the legacy
+    # table is renamed to responses_archive when it holds data (a
+    # metadata-only operation) and its satellite tables keep their rows
+    # under their existing names. Only two kinds of drop happen here:
+    # the legacy FTS index (derived data, replaced by the new table's
+    # FTS over the converted rows) and legacy tables that are entirely
+    # empty (the m009 precedent).
+    legacy_satellites = (
+        "tool_calls",
+        "tool_results",
+        "tool_results_attachments",
+        "prompt_attachments",
+        "prompt_fragments",
+        "system_fragments",
+        "tool_responses",
+    )
+    if db["responses"].exists():
+        db["responses"].disable_fts()
+        if not db["responses"].count:
+            for name in legacy_satellites:
+                if db[name].exists() and not db[name].count:
+                    db[name].drop()
+            db["responses"].drop()
+        else:
+            with db.conn:
+                db.execute("alter table responses rename to responses_archive")
+    db["responses"].create(
+        {
+            "id": str,
+            "model": str,
+            "resolved_model": str,
+            "conversation_id": str,
+            "input_node_id": str,
+            "first_input_node_id": str,
+            "output_node_id": str,
+            "prompt": str,
+            "system": str,
+            "response": str,
+            "reasoning": str,
+            "options_json": str,
+            "schema_id": str,
+            "prompt_json": str,
+            "response_json": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+            "input_tokens": int,
+            "output_tokens": int,
+            "token_details": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("conversation_id", "conversations", "id"),
+            ("input_node_id", "nodes", "id"),
+            ("first_input_node_id", "nodes", "id"),
+            ("output_node_id", "nodes", "id"),
+            ("schema_id", "schemas", "id"),
+        ),
+    )
+    db["responses"].create_index(["conversation_id"])
+    db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+    # prompt_fragments + system_fragments were always one relation with
+    # a type flag - store them that way now
+    db["response_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": int,
+            "fragment_type": str,
+            "order": int,
+        },
+        pk=("response_id", "fragment_type", "order"),
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+    )
+    # Which tool definitions were offered to the prompt
+    db["response_tools"].create(
+        {
+            "response_id": str,
+            "tool_id": int,
+        },
+        pk=("response_id", "tool_id"),
+        foreign_keys=(
+            ("response_id", "responses", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+    # Legacy rows the converter could not handle, for llm logs backfill
+    db["_conversion_errors"].create(
+        {
+            "id": int,
+            "conversation_id": str,
+            "response_id": str,
+            "error": str,
+            "datetime_utc": str,
+        },
+        pk="id",
+    )
+    with db.conn:
+        db.execute(RESPONSE_CHAINS_VIEW)
+        db.execute(RESPONSE_TOOL_CALLS_VIEW)
+        db.execute(RESPONSE_TOOL_RESULTS_VIEW)
+        db.execute(RESPONSE_ATTACHMENTS_VIEW)

@@ -56,9 +56,9 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
         "url": None,
         "content": attachment_content,
     }
-    prompt_attachment = list(logs_db["prompt_attachments"].rows)[0]
-    assert prompt_attachment["attachment_id"] == attachment["id"]
-    assert prompt_attachment["response_id"] == response["id"]
+    response_attachment = list(logs_db["response_attachments"].rows)[0]
+    assert response_attachment["attachment_id"] == attachment["id"]
+    assert response_attachment["response_id"] == response["id"]
 
 
 def _count_open_fds():

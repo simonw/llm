@@ -1337,19 +1337,10 @@ def load_conversation(
     for response in db["responses"].rows_where(
         "conversation_id = ?", [conversation_id], order_by="id"
     ):
-        response_obj = response_class.from_row(db, response)
-        if conversation.responses:
-            previous_response = conversation.responses[-1]
-            # SQLite rows store each response's legacy current-turn inputs
-            # (prompt text, attachments, tool_results), not the full
-            # prompt.messages chain. Rebuild that chain here so follow-up
-            # prompts via `llm -c` satisfy the Prompt.messages invariant.
-            response_obj.prompt._explicit_messages = (
-                list(previous_response.prompt.messages)
-                + list(previous_response._messages_now())
-                + list(response_obj.prompt.messages)
-            )
-        conversation.responses.append(response_obj)
+        # Each stored row records its full input chain via the node
+        # tree, so response.prompt.messages already satisfies the
+        # Prompt.messages invariant - no chain rebuilding needed.
+        conversation.responses.append(response_class.from_row(db, response))
     return conversation
 
 
@@ -1546,10 +1537,10 @@ select
     attachments.url,
     length(attachments.content) as content_length
 from attachments
-join prompt_attachments
-    on attachments.id = prompt_attachments.attachment_id
-where prompt_attachments.response_id in ({})
-order by prompt_attachments."order"
+join response_attachments
+    on attachments.id = response_attachments.attachment_id
+where response_attachments.response_id in ({})
+order by response_attachments.depth, response_attachments."order"
 """
 
 
@@ -1781,16 +1772,9 @@ def logs_list(
         for i, fragment_hash in enumerate(fragment_hashes):
             exists_clause = f"""
             exists (
-                select 1 from prompt_fragments
-                where prompt_fragments.response_id = responses.id
-                and prompt_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
-                )
-                union
-                select 1 from system_fragments
-                where system_fragments.response_id = responses.id
-                and system_fragments.fragment_id in (
+                select 1 from response_fragments
+                where response_fragments.response_id = responses.id
+                and response_fragments.fragment_id in (
                     select fragments.id from fragments
                     where hash = :f{i}
                 )
@@ -1806,9 +1790,9 @@ def logs_list(
         where_bits.append("""
             exists (
               select 1
-                from tool_results
+                from response_tool_results
               where
-                tool_results.response_id = responses.id
+                response_tool_results.response_id = responses.id
             )
         """)
     if tools:
@@ -1824,9 +1808,13 @@ def logs_list(
             tool_clauses.append(f"""
             exists (
               select 1
-                from tool_results
-                join tools on tools.id = tool_results.tool_id
-               where tool_results.response_id = responses.id
+                from response_tool_results
+                join response_tools
+                  on response_tools.response_id = response_tool_results.response_id
+                join tools
+                  on tools.id = response_tools.tool_id
+                 and tools.name = response_tool_results.name
+               where response_tool_results.response_id = responses.id
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
@@ -1865,7 +1853,7 @@ def logs_list(
 
     FRAGMENTS_SQL = """
     select
-        {table}.response_id,
+        response_fragments.response_id,
         fragments.hash,
         fragments.id as fragment_id,
         fragments.content,
@@ -1874,22 +1862,23 @@ def logs_list(
             from fragment_aliases
             where fragment_aliases.fragment_id = fragments.id
         ) as aliases
-    from {table}
-    join fragments on {table}.fragment_id = fragments.id
-    where {table}.response_id in ({placeholders})
-    order by {table}."order"
+    from response_fragments
+    join fragments on response_fragments.fragment_id = fragments.id
+    where response_fragments.response_id in ({placeholders})
+        and response_fragments.fragment_type = ?
+    order by response_fragments."order"
     """
 
     # Fetch any prompt or system prompt fragments
     prompt_fragments_by_id = {}
     system_fragments_by_id = {}
-    for table, dictionary in (
-        ("prompt_fragments", prompt_fragments_by_id),
-        ("system_fragments", system_fragments_by_id),
+    for fragment_type, dictionary in (
+        ("prompt", prompt_fragments_by_id),
+        ("system", system_fragments_by_id),
     ):
         for fragment in db.query(
-            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
-            ids,
+            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids))),
+            [*ids, fragment_type],
         ):
             dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
@@ -1934,21 +1923,20 @@ def logs_list(
             'input_schema', json(t.input_schema)
         ))
         FROM tools t
-        JOIN tool_responses tr ON t.id = tr.tool_id
-        WHERE tr.response_id = responses.id
+        JOIN response_tools rt ON t.id = rt.tool_id
+        WHERE rt.response_id = responses.id
         ),
         '[]'
     ) AS tools,
     -- Tool calls for this response
     COALESCE(
         (SELECT json_group_array(json_object(
-            'id', tc.id,
-            'tool_id', tc.tool_id,
+            'id', tc.part_id,
             'name', tc.name,
             'arguments', json(tc.arguments),
             'tool_call_id', tc.tool_call_id
         ))
-        FROM tool_calls tc
+        FROM response_tool_calls tc
         WHERE tc.response_id = responses.id
         ),
         '[]'
@@ -1956,8 +1944,7 @@ def logs_list(
     -- Tool results for this response
     COALESCE(
         (SELECT json_group_array(json_object(
-            'id', tr.id,
-            'tool_id', tr.tool_id,
+            'id', tr.part_id,
             'name', tr.name,
             'output', tr.output,
             'tool_call_id', tr.tool_call_id,
@@ -1968,16 +1955,16 @@ def logs_list(
                     'type', a.type,
                     'path', a.path,
                     'url', a.url,
-                    'content', a.content
+                    'content_length', length(a.content)
                 ))
-                FROM tool_results_attachments tra
-                JOIN attachments a ON tra.attachment_id = a.id
-                WHERE tra.tool_result_id = tr.id
+                FROM part_attachments pa
+                JOIN attachments a ON pa.attachment_id = a.id
+                WHERE pa.part_id = tr.part_id
                 ),
                 '[]'
             )
         ))
-        FROM tool_results tr
+        FROM response_tool_results tr
         WHERE tr.response_id = responses.id
         ),
         '[]'
@@ -2204,7 +2191,7 @@ def logs_list(
                             desc += attachment["path"]
                         elif attachment.get("url"):
                             desc += attachment["url"]
-                        elif attachment.get("content"):
+                        elif attachment.get("content_length"):
                             desc += f"<{attachment['content_length']:,} bytes>"
                         attachments += "\n    - {}".format(desc)
                     click.echo(
