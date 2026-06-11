@@ -1,6 +1,6 @@
 # Design proposal: persisting Messages and Parts to SQLite
 
-Status: proposal, revision 2 (0.32 alpha series)
+Status: proposal, revision 3 (0.32 alpha series)
 
 This is the final stage before a non-alpha release: persisting the new
 Message/Part shape (`llm/parts.py`, `llm/serialization.py`) to a redesigned
@@ -9,11 +9,17 @@ round-trippable — `log_to_db()` followed by `from_row()` must reproduce
 the same structure that `Response.to_dict()` / `Response.from_dict()`
 round-trips today.
 
-Revision 2 replaces the flat per-response link table from revision 1
-with a **node tree**: positions in a conversation point at their parent,
-a chain is a root-to-leaf path, and a response records the leaf it sent
-and the leaf it produced. See "Alternatives considered" for the
-comparison.
+Revision 2 replaced revision 1's flat per-response link table with a
+**node tree**: positions in a conversation point at their parent, a
+chain is a root-to-leaf path, and a response records the leaf it sent
+and the leaf it produced.
+
+Revision 3 adds the **clean-break rule**: the new schema uses new table
+names and never writes to, reads from, or maintains compatibility with
+the legacy identity tables. They are not dropped — existing data is
+never destroyed — but new code ignores their existence. A one-time
+backfill command is the only bridge. See "The clean-break rule" below
+for what this simplifies and what it costs.
 
 ## Why the current tables can't round-trip the new shape
 
@@ -64,10 +70,50 @@ The new schema makes the stored form the authoritative form.
 4. **Queryable in plain SQLite/Datasette.** Typed columns for the common
    questions ("all tool calls", "all reasoning", "which responses used
    this image"), JSON1-queryable text columns for the open-ended parts.
-5. **Keep what works.** Content-addressing (attachments/fragments are
-   sha256, schemas blake2b, tools hashed), sqlite-utils migrations, the
-   `responses` table as the unit of `llm logs`, FTS on prompt/response,
-   and the fragments/tools/schemas tables — all unchanged.
+5. **Clean break from legacy identity tables; reuse of value tables.**
+   New table names for everything keyed by response or conversation
+   identity. The content-addressed value stores (`attachments`,
+   `fragments`, `fragment_aliases`, `schemas`, `tools`,
+   `tool_instances`) are reused as-is — old and new rows coexist
+   harmlessly in a content-addressed table, and reuse keeps
+   fragment/attachment dedupe spanning the upgrade.
+
+## The clean-break rule
+
+New code never writes to or reads from `responses`, `conversations`,
+`tool_calls`, `tool_results`, `prompt_attachments`,
+`tool_results_attachments`, `prompt_fragments`, `system_fragments`, or
+`tool_responses`. They are left in place untouched (the m009 precedent:
+never destroy user data), and `llm logs backfill` is the only code that
+ever looks at them.
+
+What this buys, relative to revision 2:
+
+- **The migration is pure `CREATE TABLE`.** No `add_column` or
+  `transform()` against populated tables, and therefore no FTS rebuild
+  dance (m014 is the precedent for `transform()` silently dropping FTS
+  config). FTS is defined once, on an empty table.
+- **One read path.** `from_row` has no "new-style or legacy?" branch to
+  maintain forever. The legacy reconstruction logic is quarantined
+  inside the backfill command, where it can eventually be deleted.
+- **Free column design.** `first_input_node_id` goes on the exchanges
+  table from day one, which deletes the clumsiest SQL in revision 2
+  (the `v_tool_results` "new input since the previous leaf"
+  correlation). The tool views become trivial scope filters — and they
+  are now optional conveniences, not compatibility shims.
+- **A table-merge cleanup.** `prompt_fragments` and `system_fragments`
+  were always one relation with a type flag — `FRAGMENT_SQL` in
+  `models.py` unions them back together with a synthesized
+  `fragment_type` column. The new schema stores them that way.
+
+What it costs: **the upgrade story.** After upgrading, existing history
+is invisible to `llm logs` and un-continuable via `llm -c` until the
+user runs the backfill. For a tool whose database is a personal archive
+going back years, this is the most user-visible decision in the
+redesign. Mitigation: when legacy rows exist and the new tables are
+empty, `llm logs` and `llm -c` print a one-time pointer to
+`llm logs backfill`. Whether small databases should backfill
+automatically during migration is an open question below.
 
 ## Core idea: content-addressed values, tree-shaped identity
 
@@ -87,22 +133,23 @@ globally, regardless of which conversation it appears in.
 **Identity** — a `nodes` table gives content a *position*: each node
 points at its parent node and at the message occupying that position.
 A conversation chain is the path from a root (parent `NULL`) to a leaf.
-A response records two pointers: the leaf of the chain it sent
-(`input_node_id`) and the leaf of the chain after its output messages
-were appended (`output_node_id`). The next turn extends
+An exchange (one model call) records two pointers: the leaf of the
+chain it sent (`input_node_id`) and the leaf of the chain after its
+output messages were appended (`output_node_id`). The next turn extends
 `output_node_id`. Same message under two different parents = two nodes,
 one `messages` row.
 
 Appending a turn therefore writes O(1) rows: nodes for the new input
-message(s), nodes for the output message(s), one `responses` row. The
+message(s), nodes for the output message(s), one `exchanges` row. The
 shared history is never touched. Forks are just siblings. This is the
 shape llm had in embryo as `reply_to_id` (migrations m006–m008) and the
 shape of the OpenAI Responses API's `previous_response_id` — applied at
 message granularity rather than response granularity.
 
-## New tables
+## The new tables
 
-Five new tables, created by migration `m023_messages_tables`:
+All created by migration `m023_messages_tables`; all writes go here and
+nowhere else.
 
 ### `messages`
 
@@ -171,7 +218,7 @@ The identity layer — positions in conversation trees:
 
 | column       | type | notes                                          |
 |--------------|------|------------------------------------------------|
-| `id`         | TEXT PK | ULID, consistent with conversation/response ids |
+| `id`         | TEXT PK | ULID, consistent with thread/exchange ids   |
 | `parent_id`  | TEXT FK → nodes | `NULL` for roots                    |
 | `message_id` | TEXT FK → messages | the value at this position       |
 | `depth`      | INTEGER | denormalized: 0 for roots, parent + 1       |
@@ -180,110 +227,134 @@ Index `(parent_id, message_id)` — this is the lookup that makes prefix
 walking cheap. Nodes are deduplicated on that pair by an
 `ensure_node(db, parent_id, message_id)` helper (lookup-or-insert; the
 application handles the `parent_id IS NULL` root case, since SQLite
-unique indexes treat NULLs as distinct). Two responses that extend the
-same leaf with the same message share a node; two conversations with
+unique indexes treat NULLs as distinct). Two exchanges that extend the
+same leaf with the same message share a node; two threads with
 identical openings share a path. Nodes are **immutable** once written.
 
 `depth` exists so "first N messages" and chain ordering don't require
-counting recursion steps, and so input/output scopes can be separated
-with a comparison (see the view below).
+counting recursion steps, and so history/input/output scopes can be
+separated with comparisons (see the chain view).
 
-### Changes to `responses` — kept, two new columns
+### `threads`
 
-| new column       | type | notes                                          |
-|------------------|------|------------------------------------------------|
-| `input_node_id`  | TEXT FK → nodes | leaf of `prompt.messages` as sent; `NULL` for an empty chain |
-| `output_node_id` | TEXT FK → nodes | leaf after appending `_messages_now()`; `NULL` if no output (error/cancelled) |
+Replaces `conversations` (new name so listings never mix eras):
 
-The path from root to `input_node_id` *is* `prompt.messages`. The path
-segment from (exclusive) `input_node_id` to (inclusive) `output_node_id`
-is the response's output messages. The next turn in the conversation
+| column  | type | notes                       |
+|---------|------|------------------------------|
+| `id`    | TEXT PK | ULID                      |
+| `name`  | TEXT | derived from the first turn  |
+| `model` | TEXT | model of the first turn      |
+
+### `exchanges`
+
+Replaces `responses` — one row per model call. The Python object is
+still `Response`; the table records the exchange it participated in:
+
+| column                | type | notes                                     |
+|-----------------------|------|--------------------------------------------|
+| `id`                  | TEXT PK | ULID (`Response.id`)                    |
+| `model`               | TEXT |                                            |
+| `resolved_model`      | TEXT | nullable                                   |
+| `thread_id`           | TEXT FK → threads |                               |
+| `input_node_id`       | TEXT FK → nodes | leaf of `prompt.messages` as sent; `NULL` for an empty chain |
+| `first_input_node_id` | TEXT FK → nodes | first node of *this turn's new* input (after inherited history); `NULL` when the turn added no new input |
+| `output_node_id`      | TEXT FK → nodes | leaf after appending `_messages_now()`; `NULL` if no output (error/cancelled) |
+| `options_json`        | TEXT | JSON                                       |
+| `schema_id`           | TEXT FK → schemas |                              |
+| `prompt`              | TEXT | derived: this turn's user prompt text      |
+| `system`              | TEXT | derived: system prompt text                |
+| `response`            | TEXT | derived: concatenated output text parts    |
+| `reasoning`           | TEXT | derived: concatenated visible reasoning    |
+| `prompt_json`         | TEXT | raw provider request payload (condensed)   |
+| `response_json`       | TEXT | raw provider response payload (condensed)  |
+| `duration_ms`         | INTEGER |                                         |
+| `datetime_utc`        | TEXT |                                            |
+| `input_tokens`        | INTEGER |                                         |
+| `output_tokens`       | INTEGER |                                         |
+| `token_details`       | TEXT | JSON                                       |
+
+The path from root to `input_node_id` *is* `prompt.messages`. The
+segment from (exclusive) `input_node_id` to (inclusive)
+`output_node_id` is the exchange's output messages. The next turn
 extends `output_node_id`. A regenerated turn extends the same parent —
 a sibling branch, visible in the data instead of impossible to express.
 
-`id` (ULID), `model`, `resolved_model`, `conversation_id`,
-`options_json`, `schema_id`, `prompt_json`, `response_json`,
-`duration_ms`, `datetime_utc`, `input_tokens`, `output_tokens`,
-`token_details` all keep their current roles.
+The derived text columns are projections kept for `llm logs` rendering
+speed and FTS — defined once, on this empty table, as
+`enable_fts(["prompt", "response"], create_triggers=True)`. The node
+tree is the source of truth.
 
-`prompt`, `system`, `response`, `reasoning` remain as **derived
-convenience columns** — written from the same data that produces the
-node/message rows, so `llm logs`, FTS (`responses_fts` on
-prompt/response), and existing Datasette dashboards keep working
-untouched. They are documented as projections; the node tree is the
-source of truth.
+### `exchange_fragments`
+
+Merges the legacy `prompt_fragments` + `system_fragments` pair into the
+single relation it always was:
+
+| column          | type | notes                          |
+|-----------------|------|--------------------------------|
+| `exchange_id`   | TEXT FK → exchanges |                 |
+| `fragment_id`   | INTEGER FK → fragments |              |
+| `fragment_type` | TEXT | `prompt` or `system`           |
+| `order`         | INTEGER |                             |
+
+PK `(exchange_id, fragment_type, "order")` — the same fragment may
+appear at multiple orders (issue #863). Fragments remain a
+text-expansion feature that operates *before* messages are built;
+these rows are provenance for `condense_json` and `llm logs --expand`.
+
+### `exchange_tools`
+
+Replaces `tool_responses` — which tool *definitions* were offered:
+
+| column        | type |
+|---------------|------|
+| `exchange_id` | TEXT FK → exchanges |
+| `tool_id`     | INTEGER FK → tools |
+
+PK `(exchange_id, tool_id)`.
 
 ### The chain view
 
 Reads walk parent pointers with a recursive CTE. To keep that out of
-casual queries, the migration ships a view that reconstructs every
-response's full chain with scopes:
+casual queries, the migration ships a view reconstructing every
+exchange's full chain with three scopes — `history` (inherited from
+prior turns), `input` (this turn's new input), `output`:
 
 ```sql
-CREATE VIEW v_response_chains AS
-WITH RECURSIVE chain(response_id, node_id, message_id, depth, input_depth) AS (
-  SELECT r.id, n.id, n.message_id, n.depth,
-         coalesce((SELECT depth FROM nodes WHERE id = r.input_node_id), -1)
-  FROM responses r JOIN nodes n ON n.id = coalesce(r.output_node_id, r.input_node_id)
+CREATE VIEW exchange_chains AS
+WITH RECURSIVE chain(exchange_id, node_id, message_id, depth, first_input_depth, input_depth) AS (
+  SELECT e.id, n.id, n.message_id, n.depth,
+         coalesce((SELECT depth FROM nodes WHERE id = e.first_input_node_id), 1e9),
+         coalesce((SELECT depth FROM nodes WHERE id = e.input_node_id), -1)
+  FROM exchanges e JOIN nodes n ON n.id = coalesce(e.output_node_id, e.input_node_id)
   UNION ALL
-  SELECT chain.response_id, n.id, n.message_id, n.depth, chain.input_depth
+  SELECT chain.exchange_id, n.id, n.message_id, n.depth,
+         chain.first_input_depth, chain.input_depth
   FROM chain JOIN nodes n ON n.id = (SELECT parent_id FROM nodes WHERE id = chain.node_id)
 )
-SELECT response_id, node_id, message_id, depth,
-       CASE WHEN depth > input_depth THEN 'output' ELSE 'input' END AS scope
+SELECT exchange_id, node_id, message_id, depth,
+       CASE WHEN depth > input_depth THEN 'output'
+            WHEN depth >= first_input_depth THEN 'input'
+            ELSE 'history' END AS scope
 FROM chain;
 ```
 
 (Ordering: `depth` ascending. Exact SQL to be settled during
 implementation; the shape is what matters here.)
 
-## Superseded and unchanged tables
-
-**Superseded (kept for legacy rows, no longer written):** `tool_calls`,
-`tool_results`, `tool_results_attachments`, `prompt_attachments` are
-replaced by `parts`. Following the m009/m010 precedent the migration
-does not drop or rewrite them — old rows remain readable through the
-existing `from_row` fallback. Compat views select from the new shape:
+Tool calls and results then fall out as trivial filters — shipped as
+conveniences, with no legacy compatibility burden:
 
 ```sql
-CREATE VIEW v_tool_calls AS
-  SELECT c.response_id, p.name, p.arguments, p.tool_call_id, p.server_executed
-  FROM v_response_chains c
-  JOIN parts p ON p.message_id = c.message_id
+CREATE VIEW exchange_tool_calls AS
+  SELECT c.exchange_id, p.name, p.arguments, p.tool_call_id, p.server_executed
+  FROM exchange_chains c JOIN parts p ON p.message_id = c.message_id
   WHERE c.scope = 'output' AND p.type = 'tool_call';
 
-CREATE VIEW v_tool_results AS
-  SELECT c.response_id, p.name, p.output, p.tool_call_id, p.exception, p.instance_id
-  FROM v_response_chains c
-  JOIN parts p ON p.message_id = c.message_id
-  WHERE c.scope = 'input' AND c.depth > (
-    SELECT coalesce(max(depth), -1) FROM v_response_chains prev
-    JOIN responses pr ON pr.id = prev.response_id
-    WHERE pr.conversation_id = (SELECT conversation_id FROM responses WHERE id = c.response_id)
-      AND pr.id < c.response_id
-  ) AND p.type = 'tool_result';
+CREATE VIEW exchange_tool_results AS
+  SELECT c.exchange_id, p.name, p.output, p.tool_call_id, p.exception, p.instance_id
+  FROM exchange_chains c JOIN parts p ON p.message_id = c.message_id
+  WHERE c.scope = 'input' AND p.type = 'tool_result';
 ```
-
-(Tool *calls* are model output; tool *results* arrive as new input on
-the next response — scope plus "newer than the previous leaf" encodes
-that. The second view's correlation is the clumsiest SQL in this
-proposal; if it stays clumsy in practice, a `first_input_node_id`
-column on responses marking where its *new* input begins is the
-escape hatch.)
-
-**Unchanged:**
-
-- `conversations` — unchanged. Conversation membership lives on
-  `responses.conversation_id`; the tree itself is conversation-agnostic,
-  which is what lets identical prefixes share storage across
-  conversations.
-- `fragments`, `fragment_aliases`, `prompt_fragments`, `system_fragments`
-  — unchanged. Fragments are a text-expansion feature that operates
-  *before* messages are built, keyed on `response_id` for provenance.
-- `tools`, `tool_responses`, `tool_instances` — unchanged. Tool
-  *definitions* offered to a prompt are not part of the message chain.
-- `schemas`, `attachments` — unchanged.
-- Embeddings tables — out of scope.
 
 ## The append-only invariant
 
@@ -302,8 +373,7 @@ When a caller passes an arbitrary explicit `messages=` list that does
 not extend any stored chain, the write path degrades gracefully:
 `ensure_node` walking from the root finds the longest existing prefix
 and materializes only the divergent suffix as a new branch. Worst case
-(no shared prefix) it writes the whole path once — which is what every
-turn cost under a flat link-table design.
+(no shared prefix) it writes the whole path once.
 
 ## Write path (`log_to_db`)
 
@@ -313,27 +383,27 @@ turn cost under a flat link-table design.
    `part_attachments`) in the same transaction; if the hash exists, skip.
    Mirrors `ensure_fragment` / `ensure_tool`.
 3. Establish the input leaf:
-   - **Conversation flow** (the common case): the previous response's
+   - **Conversation flow** (the common case): the previous exchange's
      `output_node_id` is a known leaf and, under the append-only
      invariant, `prompt.messages` extends it — so only the suffix
      beyond that leaf's depth is walked through `ensure_node`. O(1)
-     lookups and rows.
+     lookups and rows. The first new node is `first_input_node_id`.
    - **Explicit `messages=` / no prior leaf** (includes the stateless
      server case): walk the full list from the root via `ensure_node`.
      O(chain) indexed lookups — unavoidable when the client re-sends
      history — but O(new content) rows.
 4. Append output messages as nodes from the input leaf; record
-   `input_node_id` / `output_node_id` on the `responses` row.
-5. Write the `responses` row including the derived text columns
-   (`prompt`, `system`, `response`, `reasoning`) exactly as today.
-6. Stop writing `tool_calls` / `tool_results` / `prompt_attachments` /
-   `tool_results_attachments`.
+   `input_node_id` / `first_input_node_id` / `output_node_id` on the
+   `exchanges` row.
+5. Write the `exchanges` row including the derived text columns, the
+   `threads` row (`ignore=True`), `exchange_fragments`,
+   `exchange_tools`, schemas — same logic as today, new table names.
 
-Fragments, tools, schemas, `condense_json` replacements: unchanged.
+Legacy tables are never written.
 
 ## Read path (`from_row` / `load_conversation`)
 
-If the response has `input_node_id` or `output_node_id` (new-style row):
+One path, no fallback:
 
 - recursive walk from `input_node_id` to root, reversed → input
   messages → `Prompt(messages=input, system=row["system"], options=...)`
@@ -343,11 +413,11 @@ If the response has `input_node_id` or `output_node_id` (new-style row):
   (inclusive) → `response._loaded_messages`, with `_chunks` rebuilt from
   text parts — exactly what `_response_from_dict` does today
 
-Otherwise fall back to the current legacy reconstruction. This lets
-`load_conversation` delete its chain-rebuilding patch for new rows: the
-stored path *is* the chain, with signatures and redacted markers intact,
-which is what makes `llm -c` onto a reasoning model and chain resume
-from pending tool calls actually correct.
+`load_conversation` reads `threads`/`exchanges` only and deletes its
+chain-rebuilding patch: the stored path *is* the chain, with signatures
+and redacted markers intact, which is what makes `llm -c` onto a
+reasoning model and chain resume from pending tool calls actually
+correct.
 
 ## The stateless server case
 
@@ -380,7 +450,7 @@ rows_to_message(message_to_rows(m)).to_dict() == m.to_dict()
 ```
 
 for every Part type with every optional field present and absent, and at
-the response level: path-to-messages over the stored nodes reproduces
+the exchange level: path-to-messages over the stored nodes reproduces
 `prompt.messages` and `_messages_now()` exactly. Tests:
 
 1. **Property/parametrized part round trip** — all five part types ×
@@ -401,41 +471,45 @@ the response level: path-to-messages over the stored nodes reproduces
 6. **Hash stability** — golden hashes for fixed messages, so an
    accidental change to canonical serialization fails loudly rather than
    silently forking the dedupe space.
-7. **Legacy fallback** — fixture DB with pre-m023 rows still loads, and
-   `llm -c` still works against it.
+7. **Backfill** — fixture DB with legacy rows; `llm logs backfill`
+   produces threads/exchanges that load and round-trip as faithfully as
+   the legacy columns allow; running it twice is a no-op.
 
 ## Migration and rollout
 
 - `m023_messages_tables`: create `messages`, `parts`,
-  `part_attachments`, `nodes`, the indexes, the views, and the two
-  `responses` columns. No automatic rewriting of historical data (m009
-  precedent: never destroy or churn user data in a migration).
-- Optional backfill as an explicit command — `llm logs backfill-messages`
-  — which runs the legacy `from_row` reconstruction per response in
-  conversation order and feeds it through the standard write path.
-  Idempotent by construction (content hashes + node dedupe). Old rows
-  it can't fully reconstruct (they never stored metadata) backfill as
-  faithfully as the legacy columns allow, which is no worse than
-  reading them today.
+  `part_attachments`, `nodes`, `threads`, `exchanges`,
+  `exchange_fragments`, `exchange_tools`, the indexes, the FTS table,
+  and the views. Pure creates — it never touches an existing table.
+- Legacy tables (`responses`, `conversations`, `tool_calls`,
+  `tool_results`, `prompt_attachments`, `tool_results_attachments`,
+  `prompt_fragments`, `system_fragments`, `tool_responses`) are left
+  exactly as they are. Their migrations remain in `migrations.py` so
+  old databases still reach a consistent legacy state before backfill.
+- `llm logs backfill` — explicit, idempotent (content hashes + node
+  dedupe), reads legacy rows via the old reconstruction logic in
+  conversation order and feeds them through the standard write path.
+  This command is the only place legacy-reading code survives.
+- When legacy rows exist and the new tables are empty, `llm logs` and
+  `llm -c` print a one-time notice pointing at the backfill command.
 
 ## Example queries this unlocks
 
 ```sql
--- Reasoning emitted per response, with redaction markers visible
-SELECT c.response_id, p."order", p.redacted, p.text
-FROM v_response_chains c
-JOIN parts p ON p.message_id = c.message_id
+-- Reasoning emitted per exchange, with redaction markers visible
+SELECT c.exchange_id, p."order", p.redacted, p.text
+FROM exchange_chains c JOIN parts p ON p.message_id = c.message_id
 WHERE c.scope = 'output' AND p.type = 'reasoning';
 
--- Every response that ever saw a given attachment, input or output
-SELECT DISTINCT c.response_id, c.scope
-FROM v_response_chains c
-JOIN parts p ON p.message_id = c.message_id
+-- Every exchange that ever saw a given attachment, and how
+SELECT DISTINCT c.exchange_id, c.scope
+FROM exchange_chains c JOIN parts p ON p.message_id = c.message_id
 WHERE p.attachment_id = :attachment_id;
 
 -- Tool calls with their matching results, across the turn boundary
 SELECT c.name, c.arguments, r.output, r.exception
-FROM v_tool_calls c LEFT JOIN v_tool_results r USING (tool_call_id);
+FROM exchange_tool_calls c
+LEFT JOIN exchange_tool_results r USING (tool_call_id);
 
 -- Branch points: positions where a conversation forked
 SELECT parent_id, count(*) AS branches
@@ -444,7 +518,7 @@ FROM nodes GROUP BY parent_id HAVING count(*) > 1;
 
 ## Alternatives considered
 
-**Flat per-response link table** (revision 1 of this proposal): a
+**Flat per-response link table** (revision 1): a
 `response_messages(response_id, message_id, scope, "order")` table
 recording the full chain per response. Same content-addressed value
 layer, simpler reads (one indexed join, no recursion). Rejected because
@@ -452,11 +526,18 @@ it writes O(chain) link rows per turn — quadratic over a conversation
 and exactly wrong for the stateless server case — and because it cannot
 represent branching at all; it was encoding paths the expensive way.
 
+**In-place compatible evolution** (revision 2): reuse the `responses`
+table, keep legacy columns and FTS alive through `add_column`, maintain
+a dual read path and compatibility views forever. Rejected by the
+clean-break rule: the migration complexity, the permanent legacy branch
+in `from_row`, and the contorted compat SQL all bought compatibility
+that an explicit one-time backfill provides more honestly.
+
 **Response-level predecessor** (resurrect `reply_to_id` + per-turn
 delta messages): simpler still, but it can't represent the echo-fork or
 mid-turn branching, a regenerated turn awkwardly shares a parent
-*response* rather than a parent *message*, and reconstruction reintroduces
-the chain-stitching logic this redesign is trying to delete. If the
+*response* rather than a parent *message*, and reconstruction
+reintroduces the chain-stitching logic this redesign deletes. If the
 tree is worth doing, it's worth doing at node granularity.
 
 **Verbatim JSON blobs** (store `Response.to_dict()` per response):
@@ -466,21 +547,25 @@ audit-the-raw-payload need.
 
 ## Open questions
 
-1. **Table naming** — `parts` is short and matches `llm/parts.py`;
-   `message_parts` is more self-describing in a shared logs.db. Same
-   question for `nodes` vs `message_nodes`.
-2. **FTS over parts** — should `parts.text` / `parts.output` get their
+1. **Naming** — `exchanges`/`threads` are descriptive but diverge from
+   the Python API names (`Response`, `Conversation`); the boring
+   alternative is `responses_v2`/`conversations_v2`. The legacy tables
+   squatting on the natural names is the one real annoyance of the
+   clean-break rule. Same low-stakes question for `parts` vs
+   `message_parts`, `nodes` vs `message_nodes`.
+2. **Auto-backfill threshold** — should the migration backfill
+   automatically when the legacy `responses` table is small (say, under
+   a few thousand rows), reserving the explicit command for large
+   archives? Keeps the common case seamless at the cost of a migration
+   that writes data.
+3. **FTS over parts** — should `parts.text` / `parts.output` get their
    own FTS table so `llm logs -q` can find text inside tool output and
    reasoning? Proposed as a follow-up, not part of this migration.
-3. **`prompt_json` / `response_json`** — the raw provider payloads stay
+4. **`prompt_json` / `response_json`** — the raw provider payloads stay
    for audit/debugging, but with the structured shape stored faithfully
    they could become opt-in (`--log-raw`?) in a future release to cut
    database size.
-4. **Branch garbage collection** — abandoned branches (echo forks,
+5. **Branch garbage collection** — abandoned branches (echo forks,
    regenerated turns) accumulate; nodes are cheap, but a future
    `llm logs prune` would need delete-ordering rules for shared
    ancestry. Out of scope for the migration.
-5. **`v_tool_results` correlation** — if the "new input since the
-   previous leaf" SQL proves too clumsy, add a
-   `responses.first_input_node_id` column marking where the turn's new
-   input begins.
