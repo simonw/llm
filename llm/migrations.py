@@ -426,3 +426,77 @@ def m022_response_reasoning(db):
     # NULL/empty when no reasoning was emitted or when the provider
     # only reported an opaque token count (the redacted-marker case).
     db["responses"].add_column("reasoning", str)
+
+
+@migration
+def m023_parts_tables(db):
+    # Content-addressed Message/Part value storage plus the node tree
+    # identity layer. Messages are pure values: the id is a hash of the
+    # canonical JSON form, so identical content is stored once. Nodes
+    # give content a position - a conversation chain is the path from a
+    # root node (parent NULL) to a leaf.
+    db["messages"].create(
+        {
+            "id": str,
+            "role": str,
+            "provider_metadata": str,
+        },
+        pk="id",
+    )
+    db["parts"].create(
+        {
+            "id": int,
+            "message_id": str,
+            "order": int,
+            "type": str,
+            "text": str,
+            "redacted": int,
+            "name": str,
+            "arguments": str,
+            "output": str,
+            "tool_call_id": str,
+            "server_executed": int,
+            "exception": str,
+            "instance_id": int,
+            "attachment_id": str,
+            "provider_metadata": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("message_id", "messages", "id"),
+            ("instance_id", "tool_instances", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+    )
+    db["parts"].create_index(["message_id", "order"], unique=True)
+    db["parts"].create_index(["tool_call_id"])
+    # Ordered attachment lists for tool_result parts; attachment parts
+    # use the 1:1 parts.attachment_id column instead
+    db["part_attachments"].create(
+        {
+            "part_id": int,
+            "attachment_id": str,
+            "order": int,
+        },
+        pk=("part_id", "order"),
+        foreign_keys=(
+            ("part_id", "parts", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+    )
+    db["nodes"].create(
+        {
+            "id": str,
+            "parent_id": str,
+            "message_id": str,
+            "depth": int,
+        },
+        pk="id",
+        foreign_keys=(
+            ("parent_id", "nodes", "id"),
+            ("message_id", "messages", "id"),
+        ),
+    )
+    # The lookup that makes prefix walking cheap: nodes are deduplicated
+    # on (parent_id, message_id) by storage.ensure_node()
+    db["nodes"].create_index(["parent_id", "message_id"])
