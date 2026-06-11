@@ -625,6 +625,24 @@ trivially round-trippable, zero queryability, quadratic storage. The
 `prompt_json` / `response_json` columns already cover the
 audit-the-raw-payload need.
 
+## Implementation notes
+
+The implementation (llm/storage.py, llm/conversion.py, migrations
+m023-m025) follows this design with three deviations:
+
+1. **Migration split.** Three migrations instead of two:
+   `m023_parts_tables` (messages/parts/part_attachments/nodes, purely
+   additive), `m024_new_responses` (the cutover: archive rename, new
+   responses table, views), `m025_convert_legacy` (the converter).
+2. **`first_input_node_id` semantics.** On the live write path it is
+   the first *newly created* node in the input walk — NULL when an
+   identical chain was replayed (no new input). The converter, which
+   knows the turn boundary exactly, records the first node of the new
+   input segment whether or not it was deduplicated.
+3. **Extra view.** `response_attachments` (input-scope attachment
+   parts) ships alongside the three views described here, replacing the
+   CLI's join against the legacy `prompt_attachments` table.
+
 ## Open questions
 
 1. **Converter benchmark** — measure m024 on a large real logs.db

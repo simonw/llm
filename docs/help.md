@@ -271,12 +271,13 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  list*   Show logged prompts and their responses
-  backup  Backup your logs database to this file
-  off     Turn off logging for all prompts
-  on      Turn on logging for all prompts
-  path    Output the path to the logs.db file
-  status  Show current status of database logging
+  list*     Show logged prompts and their responses
+  backfill  Retry converting any legacy logged data that failed to convert
+  backup    Backup your logs database to this file
+  off       Turn off logging for all prompts
+  on        Turn on logging for all prompts
+  path      Output the path to the logs.db file
+  status    Show current status of database logging
 ```
 
 (help-logs-path)=
@@ -310,6 +311,22 @@ Usage: llm logs backup [OPTIONS] PATH
 
 Options:
   -h, --help  Show this message and exit.
+```
+
+(help-logs-backfill)=
+#### llm logs backfill --help
+```
+Usage: llm logs backfill [OPTIONS]
+
+  Retry converting any legacy logged data that failed to convert
+
+  The upgrade to the node-tree schema converts old logs automatically; rows it
+  could not handle are recorded and skipped. After fixing the underlying data
+  (or upgrading llm) run this to convert the rest.
+
+Options:
+  -d, --database FILE  Path to log database
+  -h, --help           Show this message and exit.
 ```
 
 (help-logs-on)=

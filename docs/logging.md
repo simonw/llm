@@ -298,9 +298,10 @@ def cleanup_sql(sql):
 
 cog.out("```sql\n")
 for table in (
-    "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
-    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
-    "tool_responses", "tool_calls", "tool_results", "tool_instances"
+    "conversations", "schemas", "responses", "responses_fts", "attachments",
+    "fragments", "fragment_aliases", "tools", "tool_instances",
+    "messages", "parts", "part_attachments", "nodes",
+    "response_fragments", "response_tools",
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -317,24 +318,27 @@ CREATE TABLE [schemas] (
   [id] TEXT PRIMARY KEY,
   [content] TEXT
 );
-CREATE TABLE "responses" (
+CREATE TABLE [responses] (
   [id] TEXT PRIMARY KEY,
   [model] TEXT,
+  [resolved_model] TEXT,
+  [conversation_id] TEXT REFERENCES [conversations]([id]),
+  [input_node_id] TEXT REFERENCES [nodes]([id]),
+  [first_input_node_id] TEXT REFERENCES [nodes]([id]),
+  [output_node_id] TEXT REFERENCES [nodes]([id]),
   [prompt] TEXT,
   [system] TEXT,
-  [prompt_json] TEXT,
-  [options_json] TEXT,
   [response] TEXT,
+  [reasoning] TEXT,
+  [options_json] TEXT,
+  [schema_id] TEXT REFERENCES [schemas]([id]),
+  [prompt_json] TEXT,
   [response_json] TEXT,
-  [conversation_id] TEXT REFERENCES [conversations]([id]),
   [duration_ms] INTEGER,
   [datetime_utc] TEXT,
   [input_tokens] INTEGER,
   [output_tokens] INTEGER,
-  [token_details] TEXT,
-  [schema_id] TEXT REFERENCES [schemas]([id]),
-  [resolved_model] TEXT,
-  [reasoning] TEXT
+  [token_details] TEXT
 );
 CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
   [prompt],
@@ -348,13 +352,6 @@ CREATE TABLE [attachments] (
   [url] TEXT,
   [content] BLOB
 );
-CREATE TABLE [prompt_attachments] (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [attachment_id] TEXT REFERENCES [attachments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [attachment_id])
-);
 CREATE TABLE [fragments] (
   [id] INTEGER PRIMARY KEY,
   [hash] TEXT,
@@ -366,22 +363,6 @@ CREATE TABLE [fragment_aliases] (
   [alias] TEXT PRIMARY KEY,
   [fragment_id] INTEGER REFERENCES [fragments]([id])
 );
-CREATE TABLE "prompt_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
-);
-CREATE TABLE "system_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
-);
 CREATE TABLE [tools] (
   [id] INTEGER PRIMARY KEY,
   [hash] TEXT,
@@ -390,36 +371,98 @@ CREATE TABLE [tools] (
   [input_schema] TEXT,
   [plugin] TEXT
 );
-CREATE TABLE [tool_responses] (
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [response_id] TEXT REFERENCES [responses]([id]),
-  PRIMARY KEY ([tool_id],
-  [response_id])
-);
-CREATE TABLE [tool_calls] (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [arguments] TEXT,
-  [tool_call_id] TEXT
-);
-CREATE TABLE "tool_results" (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [output] TEXT,
-  [tool_call_id] TEXT,
-  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
-  [exception] TEXT
-);
 CREATE TABLE [tool_instances] (
   [id] INTEGER PRIMARY KEY,
   [plugin] TEXT,
   [name] TEXT,
   [arguments] TEXT
 );
+CREATE TABLE [messages] (
+  [id] TEXT PRIMARY KEY,
+  [role] TEXT,
+  [provider_metadata] TEXT
+);
+CREATE TABLE [parts] (
+  [id] INTEGER PRIMARY KEY,
+  [message_id] TEXT REFERENCES [messages]([id]),
+  [order] INTEGER,
+  [type] TEXT,
+  [text] TEXT,
+  [redacted] INTEGER,
+  [name] TEXT,
+  [arguments] TEXT,
+  [output] TEXT,
+  [tool_call_id] TEXT,
+  [server_executed] INTEGER,
+  [exception] TEXT,
+  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [provider_metadata] TEXT
+);
+CREATE TABLE [part_attachments] (
+  [part_id] INTEGER REFERENCES [parts]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([part_id],
+  [order])
+);
+CREATE TABLE [nodes] (
+  [id] TEXT PRIMARY KEY,
+  [parent_id] TEXT REFERENCES [nodes]([id]),
+  [message_id] TEXT REFERENCES [messages]([id]),
+  [depth] INTEGER
+);
+CREATE TABLE [response_fragments] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [fragment_type] TEXT,
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_type],
+  [order])
+);
+CREATE TABLE [response_tools] (
+  [response_id] TEXT REFERENCES [responses]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  PRIMARY KEY ([response_id],
+  [tool_id])
+);
 ```
 <!-- [[[end]]] -->
 `responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table.
+
+(logging-messages-nodes)=
+
+## Messages, parts and nodes
+
+Each row in `responses` records one model call. The full structured content of that call - text, reasoning, tool calls, tool results and attachments, in their original order with any provider metadata - lives in three further tables:
+
+- `messages` stores each message exactly once. The `id` is a content hash of the message's canonical JSON form, so a message that appears in many conversation turns (or many conversations) is stored a single time.
+- `parts` stores the typed content of each message: one row per part with columns for the part `type` (`text`, `reasoning`, `tool_call`, `tool_result` or `attachment`) and its fields.
+- `nodes` gives messages a position. Each node points at its parent node and the message at that position; a conversation is the path from a root node to a leaf. Each response records the leaf of the chain it sent (`input_node_id`), where its new input began (`first_input_node_id`) and the leaf after its output (`output_node_id`). The next turn extends `output_node_id`, so a long conversation stores each message once no matter how many turns follow it.
+
+Four SQL views make this convenient to query:
+
+- `response_chains` - every message each response saw or produced, with a `scope` column of `history`, `input` or `output`
+- `response_tool_calls` - tool calls made by each response
+- `response_tool_results` - tool results each response received
+- `response_attachments` - attachments included with each response's input
+
+For example, to see all reasoning text along with any redacted-reasoning markers:
+
+```sql
+select response_id, parts.redacted, parts.text
+from response_chains
+join parts on parts.message_id = response_chains.message_id
+where scope = 'output' and parts.type = 'reasoning'
+```
+
+## Upgrading from older versions
+
+Databases created before the node-tree schema are converted automatically the first time a newer LLM touches them. The original tables are never modified: the old `responses` table is renamed to `responses_archive` and the old `tool_calls`, `tool_results`, `prompt_attachments`, `prompt_fragments`, `system_fragments` and `tool_responses` tables keep their names and rows as an untouched safety net. Conversion copies everything into the new tables, preserving response and conversation IDs.
+
+If any rows fail to convert they are recorded in the `_conversion_errors` table and skipped - your other logs are unaffected. Run this command to retry them:
+
+```bash
+llm logs backfill
+```
