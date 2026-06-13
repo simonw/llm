@@ -235,7 +235,7 @@ Note that `functions:` provided by templates using this plugin hook will not be 
 (plugin-hooks-register-fragment-loaders)=
 ## register_fragment_loaders(register)
 
-Plugins can register new fragment loaders using the `register_template_loaders` hook. These can then be used with the `llm -f prefix:argument` syntax.
+Plugins can register new fragment loaders using the `register_fragment_loaders` hook. These can then be used with the `llm -f prefix:argument` syntax.
 
 Fragment loader plugins differ from template loader plugins in that you can stack more than one fragment loader call together in the same prompt.
 
@@ -289,4 +289,4 @@ llm -f my-fragments:argument
 ```
 If multiple fragments are returned they will be used as if the user passed multiple `-f X` arguments to the command.
 
-Multiple fragments are particularly useful for things like plugins that return every file in a directory. If these were concatenated together by the plugin, a change to a single file would invalidate the de-duplicatino cache for that whole fragment. Giving each file its own fragment means we can avoid storing multiple copies of that full collection if only a single file has changed.
+Multiple fragments are particularly useful for things like plugins that return every file in a directory. If these were concatenated together by the plugin, a change to a single file would invalidate the de-duplication cache for that whole fragment. Giving each file its own fragment means we can avoid storing multiple copies of that full collection if only a single file has changed.
