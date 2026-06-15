@@ -64,11 +64,11 @@ Further tools can be installed using plugins, or you can use the `llm --function
 
 ## LLM's implementation of tools
 
-In LLM every tool is a defined as a Python function. The function can take any number of arguments and can return a string or an object that can be converted to a string.
+In LLM every tool is defined as a Python function. The function can take any number of arguments and can return a string or an object that can be converted to a string.
 
 Tool functions should include a docstring that describes what the function does. This docstring will become the description that is passed to the model.
 
-Tools can also be defined as {ref}`toolbox classes <python-api-toolbox>`, a subclass of `llm.Toolbox` that allows multiple related tools to be bundled together. Toolbox classes can be be configured when they are instantiated, and can also maintain state in between multiple tool calls.
+Tools can also be defined as {ref}`toolbox classes <python-api-toolbox>`, a subclass of `llm.Toolbox` that allows multiple related tools to be bundled together. Toolbox classes can be configured when they are instantiated, and can also maintain state in between multiple tool calls.
 
 The Python API can accept functions directly. The command-line interface has two ways for tools to be defined: via plugins that implement the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`, or directly on the command-line using the `--functions` argument to specify a block of Python code defining one or more functions - or a path to a Python file containing the same.
 
