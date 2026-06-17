@@ -13,13 +13,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         cache: pip
-        cache-dependency-path: setup.py
+        cache-dependency-path: pyproject.toml
     - name: Install dependencies
       run: |
         pip install . --group dev
@@ -54,7 +54,7 @@ jobs:
         ./tests/test-llm-load-plugins.sh
     - name: Upload artifact of builds
       if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: dist-${{ matrix.os }}-${{ matrix.python-version }}
         path: dist/*

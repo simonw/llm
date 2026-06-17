@@ -1688,6 +1688,12 @@ class TestChainPropagatesSystem:
     adapters that read prompt.system (OpenAI and other
     stateless-per-turn providers) see it on every call."""
 
+    def assert_system(self, prompt, *expected):
+        assert prompt.messages[0].role == "system"
+        for e in expected:
+            assert e in prompt.system
+            assert e in prompt.messages[0].parts[0].text
+
     def test_sync_chain_tool_result_turn_preserves_system(self, mock_model):
         # First turn: fake a tool call so the chain iterates.
         tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
@@ -1714,8 +1720,7 @@ class TestChainPropagatesSystem:
         chain = m.chain("q", system="be brief", tools=[tick])
         list(chain.responses())
         # Second response was the tool-result turn.
-        second = chain._responses[1]
-        assert second.prompt.system == "be brief"
+        self.assert_system(chain._responses[1].prompt, "be brief")
 
     def test_sync_chain_tool_result_turn_preserves_system_fragments(self, mock_model):
         tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
@@ -1746,12 +1751,9 @@ class TestChainPropagatesSystem:
             tools=[tick],
         )
         list(chain.responses())
-        second = chain._responses[1]
-        # prompt.system concatenates _system + system_fragments; all
-        # three strings should be preserved on the tool-result turn.
-        assert "inline sys" in second.prompt.system
-        assert "fragment A" in second.prompt.system
-        assert "fragment B" in second.prompt.system
+        self.assert_system(
+            chain._responses[1].prompt, "inline sys", "fragment A", "fragment B"
+        )
 
     @pytest.mark.asyncio
     async def test_async_chain_tool_result_turn_preserves_system(
@@ -1784,8 +1786,11 @@ class TestChainPropagatesSystem:
         responses = []
         async for r in chain.responses():
             responses.append(r)
-        second = chain._responses[1]
-        assert second.prompt.system == "be brief"
+        self.assert_system(responses[1].prompt, "be brief")
+
+    def test_chain_includes_system_in_messages(self, mock_model):
+        chain = mock_model.chain("q", system="be brief")
+        self.assert_system(chain.prompt, "be brief")
 
 
 # chain() accepts messages= (parity with prompt())

@@ -27,7 +27,7 @@ The default OpenAI plugin has a debugging mechanism for showing the exact reques
 
 Set the `LLM_OPENAI_SHOW_RESPONSES` environment variable like this:
 ```bash
-LLM_OPENAI_SHOW_RESPONSES=1 uv run llm -m chatgpt 'three word slogan for an an otter-run bakery'
+LLM_OPENAI_SHOW_RESPONSES=1 uv run llm -m chatgpt 'three word slogan for an otter-run bakery'
 ```
 This will output details of the API requests and responses to the console.
 
@@ -35,7 +35,7 @@ Use `--no-stream` to see a more readable version of the body that avoids streami
 
 ```bash
 LLM_OPENAI_SHOW_RESPONSES=1 uv run llm -m chatgpt --no-stream \
-  'three word slogan for an an otter-run bakery'
+  'three word slogan for an otter-run bakery'
 ```
 
 ## Documentation

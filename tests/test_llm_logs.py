@@ -950,15 +950,16 @@ def test_logs_tools(logs_db):
     )
     assert result1.exit_code == 0
     result2 = runner.invoke(cli, ["logs", "-c"])
+    normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
     assert (
         "### Tool results\n"
         "\n"
-        "- **demo**: `None`<br>\n"
+        "- **demo**: `tc_TCID`<br>\n"
         "    one\n"
         "    two\n"
         "    three\n"
         "\n"
-    ) in result2.output
+    ) in normalized_output
     # Log one that did NOT use tools, check that `llm logs --tools` ignores it
     assert runner.invoke(cli, ["-m", "echo", "badger"]).exit_code == 0
     assert "badger" in runner.invoke(cli, ["logs"]).output

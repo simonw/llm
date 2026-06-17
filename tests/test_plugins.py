@@ -6,6 +6,8 @@ import llm
 from llm.tools import llm_version, llm_time
 from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
+import re
+from unittest.mock import ANY
 import pytest
 import textwrap
 
@@ -450,19 +452,24 @@ def test_register_tools(tmpdir, logs_db):
             runner.invoke(cli.cli, ["logs", "-c", "-n", "0", "--json"]).output
         )
         results = tuple(
-            (log_row["prompt"], json.dumps(log_row["tool_results"]))
+            (
+                log_row["prompt"],
+                re.sub(
+                    r"tc_[0-9a-z]{26}", "tc_TCID", json.dumps(log_row["tool_results"])
+                ),
+            )
             for log_row in log_rows
         )
         assert results == (
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": null, "exception": null, "attachments": []}]',
+                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": null, "exception": null, "attachments": []}]',
+                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -470,7 +477,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": null, "exception": null, "attachments": []}]',
+                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -739,8 +746,8 @@ def test_register_toolbox(tmpdir, logs_db):
             "[" + result3.output.split('"tool_results": [')[1].split("]")[0] + "]"
         )
         assert tool_results == [
-            {"name": "Memory_set", "output": "null", "tool_call_id": None},
-            {"name": "Memory_get", "output": "two", "tool_call_id": None},
+            {"name": "Memory_set", "output": "null", "tool_call_id": ANY},
+            {"name": "Memory_get", "output": "two", "tool_call_id": ANY},
         ]
 
         # Test the CLI running a configured toolbox prompt
@@ -767,7 +774,7 @@ def test_register_toolbox(tmpdir, logs_db):
             {
                 "name": "Filesystem_list_files",
                 "output": json.dumps([str(other_path)]),
-                "tool_call_id": None,
+                "tool_call_id": ANY,
             }
         ]
 
@@ -909,9 +916,9 @@ def test_toolbox_logging_async(logs_db, tmpdir):
             "[" + result.output.split('"tool_results": [')[1].rsplit("]", 1)[0] + "]"
         )
         assert tool_results == [
-            {"name": "Memory_set", "output": "null", "tool_call_id": None},
-            {"name": "Memory_get", "output": "two", "tool_call_id": None},
-            {"name": "Filesystem_list_files", "output": "[]", "tool_call_id": None},
+            {"name": "Memory_set", "output": "null", "tool_call_id": ANY},
+            {"name": "Memory_get", "output": "two", "tool_call_id": ANY},
+            {"name": "Filesystem_list_files", "output": "[]", "tool_call_id": ANY},
         ]
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")

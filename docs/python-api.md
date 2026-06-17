@@ -116,6 +116,7 @@ response = model.prompt("Convert panda to upper", tools=[upper])
 tool_calls = response.tool_calls()
 # [ToolCall(name='upper', arguments={'text': 'panda'}, tool_call_id='...')]
 ```
+Every tool call is guaranteed to have a unique `tool_call_id`. Most providers supply their own; for providers that do not, LLM synthesizes one of the form `tc_01...`, so you can always use the id to correlate a tool call with its result or to key external state against a specific invocation.
 You can call `response.execute_tool_calls()` to execute those calls and get back the results:
 ```python
 tool_results = response.execute_tool_calls()
@@ -210,6 +211,76 @@ response = model.chain(
 )
 print(response.text())
 ```
+
+(python-api-tools-llm-tool-call)=
+
+#### Accessing the tool call from inside a tool
+
+Tool implementations sometimes need to know about the `llm.ToolCall` that triggered them - most often the `tool_call_id` (always populated, see above), which can be used to key external state against that specific invocation.
+
+If your tool function accepts a parameter named `llm_tool_call` it will be passed the `llm.ToolCall` object for the current call:
+
+```python
+import llm
+
+def lookup(name: str, llm_tool_call: llm.ToolCall) -> str:
+    "Look up a name."
+    return do_lookup(name, request_id=llm_tool_call.tool_call_id)
+```
+
+The `llm_tool_call` parameter name is reserved: it is excluded from the input schema that is exposed to the model and is populated automatically when the tool executes. The type annotation is optional.
+
+This works for both sync and async tool functions, and for methods on `llm.Toolbox` subclasses. The parameter must be declared explicitly - a `**kwargs` catch-all will not receive `llm_tool_call`.
+
+(python-api-tools-pause)=
+
+#### Pausing a chain from inside a tool
+
+Sometimes a tool cannot finish without outside input - human approval being the classic case. Raise `llm.PauseChain` inside a tool implementation to stop the chain cleanly:
+
+```python
+import llm
+
+def delete_files(path: str) -> str:
+    if not approval_already_recorded(path):
+        record_approval_request(path)
+        raise llm.PauseChain("waiting for approval to delete " + path)
+    do_delete(path)
+    return "deleted"
+```
+
+Unlike other exceptions - which are converted into `"Error: ..."` tool results and sent back to the model - `PauseChain` propagates out of the chain to your code. No provider call is made with a placeholder result. Before re-raising, the framework populates two attributes:
+
+- `pause.tool_call` - the `llm.ToolCall` whose implementation paused
+- `pause.tool_results` - results of sibling calls in the same batch that completed
+
+```python
+try:
+    chain_response.text()
+except llm.PauseChain as pause:
+    print("Paused on", pause.tool_call.name, pause.tool_call.tool_call_id)
+```
+
+The failure semantics are defined: concurrent (async) sibling tool calls always run to completion before the exception propagates - their `after_call` hooks fire and their results are preserved - while sequential (sync) execution stops at the paused call, leaving later calls unexecuted so they can safely run on resume. If several concurrent calls pause, the first by call order propagates. `after_call` does not fire for a paused call, and no `ToolResult` is recorded for it - which is what marks it as still pending.
+
+(python-api-tools-resume)=
+
+#### Resuming a chain with pending tool calls
+
+To resume after a pause (or a crash, or a server restart), re-run the chain with a `messages=` history that ends in the unresolved tool calls. When the last assistant message in the history contains tool calls that have no matching results, the chain executes them first - through the normal `before_call`/`after_call` machinery - and then sends the results to the model:
+
+```python
+chain = model.chain(
+    messages=persisted_messages,  # ends in assistant tool calls with no results
+    tools=[delete_files],
+    system=system_prompt,
+)
+chain.text()
+```
+
+Calls that already have results in trailing tool-role messages are skipped, so a batch where some calls completed before the pause only re-executes the unresolved ones. A re-executed tool may raise `PauseChain` again - multi-step approval flows work by repeating the cycle. If a user or assistant message follows the tool calls in the history, the conversation has moved on and nothing is re-executed.
+
+Matching uses `tool_call_id` (always populated for newly-created tool calls); id-less calls from older persisted histories match results by name. You can also execute an explicit list of calls directly with `response.execute_tool_calls(tool_calls_list=[...])`.
 
 (python-api-tools-attachments)=
 
