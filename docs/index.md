@@ -111,6 +111,7 @@ maxdepth: 3
 setup
 usage
 openai-models
+pinstripes-models
 other-models
 tools
 schemas
