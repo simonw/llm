@@ -7,7 +7,12 @@ import json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 import time
-from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import cast, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+
+EmbedEntry = Tuple[str, Union[str, bytes], Optional[Dict[str, Any]]]
+# Called with (entry, exception) when an item is skipped due to an embedding
+# error; entry is the (id, value, metadata) tuple that failed.
+OnErrorCallback = Callable[[EmbedEntry, Exception], None]
 
 
 @dataclass
@@ -155,6 +160,7 @@ class Collection:
         entries: Iterable[Tuple[str, Union[str, bytes]]],
         store: bool = False,
         batch_size: int = 100,
+        on_error: Optional[OnErrorCallback] = None,
     ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
@@ -163,11 +169,16 @@ class Collection:
             entries (iterable): Iterable of (id: str, text: str) tuples
             store (bool, optional): Whether to store the text in the content column
             batch_size (int, optional): custom maximum batch size to use
+            on_error (callable, optional): If provided, called with
+                ``(entry, exception)`` for any item that fails to embed (for
+                example because it is too long) instead of raising. The failed
+                item is skipped and the remaining items are still embedded.
         """
         self.embed_multi_with_metadata(
             ((id, value, None) for id, value in entries),
             store=store,
             batch_size=batch_size,
+            on_error=on_error,
         )
 
     def embed_multi_with_metadata(
@@ -175,6 +186,7 @@ class Collection:
         entries: Iterable[Tuple[str, Union[str, bytes], Optional[Dict[str, Any]]]],
         store: bool = False,
         batch_size: int = 100,
+        on_error: Optional[OnErrorCallback] = None,
     ) -> None:
         """
         Embed multiple values along with metadata and store them in the collection with given IDs.
@@ -183,10 +195,15 @@ class Collection:
             entries (iterable): Iterable of (id: str, value: str or bytes, metadata: None or dict)
             store (bool, optional): Whether to store the value in the content or content_blob column
             batch_size (int, optional): custom maximum batch size to use
+            on_error (callable, optional): If provided, called with
+                ``(entry, exception)`` for any item that fails to embed (for
+                example because it is too long) instead of raising. The failed
+                item is skipped and the remaining items are still embedded.
         """
         import llm
 
-        batch_size = min(batch_size, (self.model().batch_size or batch_size))
+        model = self.model()
+        batch_size = min(batch_size, (model.batch_size or batch_size))
         iterator = iter(entries)
         collection_id = self.id
         while True:
@@ -208,9 +225,12 @@ class Collection:
                 )
             ]
             filtered_batch = [item for item in batch if item[0] not in existing_ids]
-            embeddings = list(
-                self.model().embed_multi(item[1] for item in filtered_batch)
-            )
+            if on_error is None:
+                # Default behaviour: any failure aborts the whole operation
+                embeddings = list(model.embed_multi(item[1] for item in filtered_batch))
+                pairs = list(zip(embeddings, filtered_batch))
+            else:
+                pairs = self._embed_filtered_batch(model, filtered_batch, on_error)
             with self.db.conn:
                 cast(Table, self.db["embeddings"]).insert_all(
                     (
@@ -228,12 +248,34 @@ class Collection:
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
                         }
-                        for (embedding, (id, value, metadata)) in zip(
-                            embeddings, filtered_batch
-                        )
+                        for (embedding, (id, value, metadata)) in pairs
                     ),
                     replace=True,
                 )
+
+    def _embed_filtered_batch(
+        self,
+        model: EmbeddingModel,
+        filtered_batch: List[EmbedEntry],
+        on_error: OnErrorCallback,
+    ) -> List[Tuple[List[float], EmbedEntry]]:
+        """
+        Embed a filtered batch, but if the batch as a whole fails fall back to
+        embedding each item on its own. Items that still fail are passed to
+        ``on_error`` and skipped, so a single bad item (for example one that is
+        too long) no longer discards the entire batch.
+        """
+        try:
+            embeddings = list(model.embed_multi(item[1] for item in filtered_batch))
+            return list(zip(embeddings, filtered_batch))
+        except Exception:
+            pairs: List[Tuple[List[float], EmbedEntry]] = []
+            for item in filtered_batch:
+                try:
+                    pairs.append((model.embed(item[1]), item))
+                except Exception as item_exception:
+                    on_error(item, item_exception)
+            return pairs
 
     def similar_by_vector(
         self,

@@ -170,6 +170,23 @@ class EmbedTextOnly(EmbedDemo):
     supports_binary = False
 
 
+class EmbedDemoErrors(EmbedDemo):
+    """
+    Like EmbedDemo but raises if any text in a batch contains "FAIL".
+
+    This mimics a provider (such as OpenAI) rejecting an entire batch request
+    because one of the items is too long.
+    """
+
+    model_id = "embed-demo-errors"
+
+    def embed_batch(self, texts):
+        texts = list(texts)
+        if any(isinstance(text, str) and "FAIL" in text for text in texts):
+            raise ValueError("Simulated embedding failure")
+        yield from super().embed_batch(texts)
+
+
 @pytest.fixture
 def embed_demo():
     return EmbedDemo()
@@ -205,6 +222,7 @@ def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
             register(embed_demo)
             register(EmbedBinaryOnly())
             register(EmbedTextOnly())
+            register(EmbedDemoErrors())
 
         @llm.hookimpl
         def register_models(self, register):
