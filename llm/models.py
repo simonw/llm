@@ -91,9 +91,12 @@ class Attachment:
         if self.path:
             return mimetype_from_path(self.path)
         if self.url:
-            response = httpx.head(self.url)
+            response = httpx.head(self.url, follow_redirects=True)
             response.raise_for_status()
-            return response.headers.get("content-type")
+            content_type = response.headers.get("content-type", "")
+            # Strip parameters (e.g. "charset=utf-8") so "image/jpeg; charset=utf-8"
+            # becomes "image/jpeg" for consistent matching against attachment_types.
+            return content_type.split(";")[0].strip()
         if self.content:
             return mimetype_from_string(self.content)
         raise ValueError("Attachment has no type and no content to derive it from")
@@ -105,7 +108,7 @@ class Attachment:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
-                response = httpx.get(self.url)
+                response = httpx.get(self.url, follow_redirects=True)
                 response.raise_for_status()
                 content = response.content
         return content
