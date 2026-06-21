@@ -263,9 +263,12 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx.head(value, follow_redirects=True)
             response.raise_for_status()
-            mimetype = response.headers.get("content-type")
+            mimetype = response.headers.get("content-type", "")
+            # Strip parameters (e.g. "charset=utf-8") so "image/jpeg; charset=utf-8"
+            # becomes "image/jpeg" for consistent matching against attachment_types.
+            mimetype = mimetype.split(";")[0].strip()
         except httpx.HTTPError as ex:
             raise AttachmentError(str(ex))
         return Attachment(type=mimetype, path=None, url=value, content=None)
