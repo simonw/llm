@@ -1,6 +1,8 @@
+import importlib.metadata
 import pytest
 import sqlite_utils
 import json
+import sqlite3
 import llm
 import llm_echo
 from llm.plugins import pm
@@ -13,6 +15,17 @@ def pytest_configure(config):
     import sys
 
     sys._called_from_test = True
+
+
+def pytest_report_header(config):
+    conn = sqlite3.connect(":memory:")
+    version = conn.execute("select sqlite_version()").fetchone()[0]
+    conn.close()
+    sqlite_utils_version = importlib.metadata.version("sqlite-utils")
+    return [
+        "SQLite: {}".format(version),
+        "sqlite-utils: {}".format(sqlite_utils_version),
+    ]
 
 
 @pytest.fixture
