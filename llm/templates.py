@@ -86,7 +86,7 @@ class Template(BaseModel):
     def extract_vars(string_template: string.Template) -> List[str]:
         """Extract and return the list of named variable identifiers from a string.Template."""
         return [
-            match.group("named")
+            match.group("named") or match.group("braced")
             for match in string_template.pattern.finditer(string_template.template)
-            if match.group("named")
+            if match.group("named") or match.group("braced")
         ]
