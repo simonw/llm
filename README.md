@@ -161,6 +161,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Model options](https://llm.datasette.io/en/stable/usage.html#model-options)
     * [Attachments](https://llm.datasette.io/en/stable/usage.html#attachments)
     * [System prompts](https://llm.datasette.io/en/stable/usage.html#system-prompts)
+    * [Message histories](https://llm.datasette.io/en/stable/usage.html#message-histories)
     * [Tools](https://llm.datasette.io/en/stable/usage.html#tools)
     * [Extracting fenced code blocks](https://llm.datasette.io/en/stable/usage.html#extracting-fenced-code-blocks)
     * [Schemas](https://llm.datasette.io/en/stable/usage.html#schemas)
