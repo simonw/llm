@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from importlib.metadata import version
 from llm.cli import cli
+from llm.migrations import migrate
 from unittest import mock
 import os
 import yaml
@@ -69,61 +70,60 @@ def test_fragments_set_show_remove(user_path):
 
 def test_fragments_list(user_path):
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # This is just to create the database schema
-        with open("fragment1.txt", "w") as f:
-            f.write("1")
-        assert (
-            runner.invoke(cli, ["fragments", "set", "f1", "fragment1.txt"]).exit_code
-            == 0
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    with db.conn:
+        migrate(db)
+        db["fragments"].insert_all(
+            [
+                {
+                    "id": 1,
+                    "content": "1",
+                    "datetime_utc": "2023-10-01T00:00:00Z",
+                    "source": "file1.txt",
+                    "hash": "hash1",
+                },
+                {
+                    "id": 2,
+                    "content": "2",
+                    "datetime_utc": "2022-10-01T00:00:00Z",
+                    "source": "file2.txt",
+                    "hash": "hash2",
+                },
+                {
+                    "id": 3,
+                    "content": "3",
+                    "datetime_utc": "2024-10-01T00:00:00Z",
+                    "source": "file3.txt",
+                    "hash": "hash3",
+                },
+            ]
         )
-        # Now add the rest directly to the database
-        db = sqlite_utils.Database(str(user_path / "logs.db"))
-        db["fragments"].delete_where()
-        db["fragments"].insert(
+        db["fragment_aliases"].insert(
             {
-                "content": "1",
-                "datetime_utc": "2023-10-01T00:00:00Z",
-                "source": "file1.txt",
-                "hash": "hash1",
-            },
+                "alias": "f1",
+                "fragment_id": 1,
+            }
         )
-        db["fragments"].insert(
-            {
-                "content": "2",
-                "datetime_utc": "2022-10-01T00:00:00Z",
-                "source": "file2.txt",
-                "hash": "hash2",
-            },
-        )
-        db["fragments"].insert(
-            {
-                "content": "3",
-                "datetime_utc": "2024-10-01T00:00:00Z",
-                "source": "file3.txt",
-                "hash": "hash3",
-            },
-        )
-        result = runner.invoke(cli, ["fragments", "list"])
-        assert result.exit_code == 0
-        assert result.output.strip() == (textwrap.dedent("""
-                - hash: hash2
-                  aliases: []
-                  datetime_utc: '2022-10-01T00:00:00Z'
-                  source: file2.txt
-                  content: '2'
-                - hash: hash1
-                  aliases:
-                  - f1
-                  datetime_utc: '2023-10-01T00:00:00Z'
-                  source: file1.txt
-                  content: '1'
-                - hash: hash3
-                  aliases: []
-                  datetime_utc: '2024-10-01T00:00:00Z'
-                  source: file3.txt
-                  content: '3'
-                """).strip())
+    result = runner.invoke(cli, ["fragments", "list"])
+    assert result.exit_code == 0
+    assert result.output.strip() == (textwrap.dedent("""
+            - hash: hash2
+              aliases: []
+              datetime_utc: '2022-10-01T00:00:00Z'
+              source: file2.txt
+              content: '2'
+            - hash: hash1
+              aliases:
+              - f1
+              datetime_utc: '2023-10-01T00:00:00Z'
+              source: file1.txt
+              content: '1'
+            - hash: hash3
+              aliases: []
+              datetime_utc: '2024-10-01T00:00:00Z'
+              source: file3.txt
+              content: '3'
+            """).strip())
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
