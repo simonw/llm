@@ -203,6 +203,80 @@ def test_llm_prompt_continue(httpx_mock, user_path, async_):
     assert len(rows) == 2
 
 
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_llm_prompt_continue_uses_most_recently_used_conversation(
+    httpx_mock, user_path
+):
+    """Regression test for issue #1140.
+
+    --continue should resume the conversation with the most recent response,
+    not the most recently *created* conversation. When a user resumes an
+    older conversation with --cid and then runs --continue, that older
+    conversation should be picked up again.
+    """
+    for text in ("first-a", "second-b", "third-a-again", "fourth-continue"):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "usage": {},
+                "choices": [{"message": {"content": text}}],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+
+    log_path = user_path / "logs.db"
+    log_db = sqlite_utils.Database(str(log_path))
+    log_db["responses"].delete_where()
+
+    runner = CliRunner()
+
+    # 1. First prompt creates conversation A
+    result = runner.invoke(
+        cli, ["start a", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    conv_a = list(log_db["conversations"].rows)[0]["id"]
+
+    # 2. Second prompt creates conversation B (newer id than A)
+    result = runner.invoke(
+        cli, ["start b", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    conv_ids = {row["id"] for row in log_db["conversations"].rows}
+    conv_b = (conv_ids - {conv_a}).pop()
+
+    # 3. Resume conversation A explicitly via --cid
+    result = runner.invoke(
+        cli,
+        ["continue a", "--cid", conv_a, "--no-stream"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # A now has the most recent response, but B has the newer conversation id
+    last_response = list(
+        log_db["responses"].rows_where(order_by="id desc", limit=1)
+    )[0]
+    assert last_response["conversation_id"] == conv_a
+
+    # 4. --continue should resume A (most recently used), not B (newest created)
+    result = runner.invoke(
+        cli, ["continue again", "-c", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+
+    # The last response must belong to conversation A, not B
+    final_response = list(
+        log_db["responses"].rows_where(order_by="id desc", limit=1)
+    )[0]
+    assert final_response["conversation_id"] == conv_a, (
+        f"Expected --continue to resume most recently used conversation "
+        f"{conv_a}, but it resumed {final_response['conversation_id']}"
+    )
+
+
 @pytest.mark.parametrize(
     "args,expect_just_code",
     (
