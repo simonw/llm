@@ -246,6 +246,11 @@ def test_schema_dsl_multi():
     }
 
 
+def test_schema_dsl_rejects_empty_field_name():
+    with pytest.raises(ValueError, match="missing a name before ':'"):
+        schema_dsl(":just a description")
+
+
 @pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [

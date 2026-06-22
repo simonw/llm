@@ -293,7 +293,10 @@ def resolve_schema_input(db, schema_input, load_template):
             pass
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
-        return schema_dsl(schema_input)
+        try:
+            return schema_dsl(schema_input)
+        except ValueError as ex:
+            raise click.BadParameter(str(ex))
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():
@@ -392,6 +395,8 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
 
         # Process field name and type
         field_parts = field_info.strip().split()
+        if not field_parts:
+            raise ValueError("Schema field is missing a name before ':'")
         field_name = field_parts[0].strip()
 
         # Default type is string
