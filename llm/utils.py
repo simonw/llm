@@ -22,6 +22,12 @@ MIME_TYPE_FIXES = {
 
 
 class Fragment(str):
+    """A string subclass that carries an optional source attribution.
+
+    Used to track where prompt/system content originated so that provenance
+    can be stored alongside the text in the database.
+    """
+
     def __new__(cls, content, *args, **kwargs):
         # For immutable classes like str, __new__ creates the string object
         return super().__new__(cls, content)
@@ -35,6 +41,10 @@ class Fragment(str):
 
 
 def mimetype_from_string(content) -> Optional[str]:
+    """Detect the MIME type of binary content using magic bytes.
+
+    Returns None if the type cannot be determined.
+    """
     try:
         type_ = puremagic.from_string(content, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
@@ -43,6 +53,10 @@ def mimetype_from_string(content) -> Optional[str]:
 
 
 def mimetype_from_path(path) -> Optional[str]:
+    """Detect the MIME type of a file using magic bytes.
+
+    Returns None if the type cannot be determined.
+    """
     try:
         type_ = puremagic.from_file(path, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
@@ -53,6 +67,11 @@ def mimetype_from_path(path) -> Optional[str]:
 def dicts_to_table_string(
     headings: List[str], dicts: List[Dict[str, str]]
 ) -> List[str]:
+    """Format a list of dicts as a plain-text table, returning one string per row.
+
+    Columns are separated by four spaces and each value is left-justified to the
+    width of the widest entry in that column (including the heading).
+    """
     max_lengths = [len(h) for h in headings]
 
     # Compute maximum length for each column
@@ -218,6 +237,11 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
 
 
 def make_schema_id(schema: dict) -> Tuple[str, str]:
+    """Return a stable (id, compact-JSON) pair for the given JSON schema dict.
+
+    The id is a 32-character hex BLAKE2b digest of the compact JSON
+    representation, suitable for use as a database key.
+    """
     schema_json = json.dumps(schema, separators=(",", ":"))
     schema_id = hashlib.blake2b(schema_json.encode(), digest_size=16).hexdigest()
     return schema_id, schema_json
@@ -272,6 +296,15 @@ def output_rows_as_json(rows, nl=False, compact=False, json_cols=()):
 
 
 def resolve_schema_input(db, schema_input, load_template):
+    """Resolve a schema input string to a JSON schema dict.
+
+    Accepts the following formats (tried in order):
+    - ``t:name`` — look up a stored template and return its schema
+    - Inline JSON starting with ``{``
+    - Schema DSL (comma- or space-separated field specs)
+    - A filesystem path to a JSON file
+    - A schema ID stored in the database
+    """
     # schema_input might be JSON or a filepath or an ID or t:name
     if not schema_input:
         return
@@ -476,6 +509,12 @@ def truncate_string(
 
 
 def ensure_fragment(db, content):
+    """Insert a fragment into the database if it does not already exist.
+
+    Returns the integer primary-key id of the (possibly pre-existing) row.
+    ``content`` may be a plain str or a :class:`Fragment` instance; in the
+    latter case its ``source`` attribute is persisted alongside the text.
+    """
     sql = """
     insert into fragments (hash, content, datetime_utc, source)
     values (:hash, :content, datetime('now'), :source)
@@ -493,6 +532,12 @@ def ensure_fragment(db, content):
 
 
 def ensure_tool(db, tool):
+    """Insert a tool into the database if it does not already exist.
+
+    Returns the integer primary-key id of the (possibly pre-existing) row.
+    Deduplication is based on a hash of the tool's name, description, and
+    input schema.
+    """
     sql = """
     insert into tools (hash, name, description, input_schema, plugin)
     values (:hash, :name, :description, :input_schema, :plugin)
