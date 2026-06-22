@@ -392,6 +392,8 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
 
         # Process field name and type
         field_parts = field_info.strip().split()
+        if not field_parts:
+            raise ValueError(f"Field is missing a name: {field!r}")
         field_name = field_parts[0].strip()
 
         # Default type is string
