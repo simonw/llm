@@ -947,7 +947,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_set",
                     "output": "null",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -956,7 +956,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_get",
                     "output": "two",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
