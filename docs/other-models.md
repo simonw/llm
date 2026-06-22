@@ -45,7 +45,7 @@ You can set `api_key_name` to the name of a key stored using the {ref}`api-keys`
 
 Other keys you can use here:
 
-- `completion: true` for completion models that should use the `/completion` endpoint as opposed to `/completion/chat`
+- `completion: true` for completion models that should use the `v1/completions` endpoint as opposed to `v1/chat/completions`
 - `supports_tools: true` for models that support tool calling
 - `can_stream: false` to disable streaming mode for models that cannot stream
 - `supports_schema: true` for models that support JSON structured schema output
