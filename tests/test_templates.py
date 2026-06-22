@@ -31,6 +31,22 @@ import yaml
             None,
             None,
         ),
+        # Braced ${var} syntax should behave the same as $var
+        ("S: ${input}", None, None, {}, "S: input", None, None),
+        ("Dear ${name}", None, None, {}, None, None, "Missing variables: name"),
+        ("Dear ${name}", None, None, {"name": "Alice"}, "Dear Alice", None, None),
+        ("Dear ${name}", None, {"name": "Bob"}, {}, "Dear Bob", None, None),
+        # Mix of $var and ${var}
+        ("$one and ${two}", None, None, {}, None, None, "Missing variables: one, two"),
+        (
+            "$one and ${two}",
+            None,
+            None,
+            {"one": 1, "two": 2},
+            "1 and 2",
+            None,
+            None,
+        ),
     ),
 )
 def test_template_evaluate(
