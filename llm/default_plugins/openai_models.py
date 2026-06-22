@@ -320,6 +320,11 @@ def register_models(register):
         return
     with open(extra_path) as f:
         extra_models = yaml.safe_load(f)
+    # yaml.safe_load returns None for an empty / whitespace-only / comments-only
+    # file. Treat that the same as "no extra models" instead of crashing with
+    # TypeError when we try to iterate. See https://github.com/simonw/llm/issues/505
+    if not extra_models:
+        return
     for extra_model in extra_models:
         model_id = extra_model["model_id"]
         aliases = extra_model.get("aliases", [])
