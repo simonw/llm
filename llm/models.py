@@ -766,8 +766,8 @@ class Conversation(_BaseConversation):
 
     def __repr__(self):
         count = len(self.responses)
-        s = "s" if count == 1 else ""
-        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
+        s = "" if count == 1 else "s"
+        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}>"
 
 
 @dataclass
@@ -898,8 +898,8 @@ class AsyncConversation(_BaseConversation):
 
     def __repr__(self):
         count = len(self.responses)
-        s = "s" if count == 1 else ""
-        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}"
+        s = "" if count == 1 else "s"
+        return f"<{self.__class__.__name__}: {self.id} - {count} response{s}>"
 
 
 FRAGMENT_SQL = """
