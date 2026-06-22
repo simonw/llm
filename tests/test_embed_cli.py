@@ -713,3 +713,53 @@ def test_duplicate_content_embedded_only_once(embed_demo):
     # Should have only embedded one more thing
     assert db["embeddings"].count == 4
     assert len(embed_demo.embedded_content) == 4
+
+
+def test_embed_multi_skip_errors_cli(tmpdir):
+    db_path = tmpdir / "embeddings.db"
+    csv_path = tmpdir / "input.csv"
+    csv_path.write_text(
+        "id,content\n1,hello one\n2,this will FAIL\n3,hello three\n", "utf-8"
+    )
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "docs",
+            str(csv_path),
+            "-d",
+            str(db_path),
+            "-m",
+            "embed-demo-errors",
+            "--skip-errors",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    db = sqlite_utils.Database(str(db_path))
+    ids = sorted(row["id"] for row in db["embeddings"].rows)
+    assert ids == ["1", "3"]
+    assert "Skipped 1 item" in result.stderr
+    assert "2:" in result.stderr
+
+
+def test_embed_multi_without_skip_errors_cli_fails(tmpdir):
+    db_path = tmpdir / "embeddings.db"
+    csv_path = tmpdir / "input.csv"
+    csv_path.write_text("id,content\n1,hello one\n2,this will FAIL\n", "utf-8")
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(
+        cli,
+        [
+            "embed-multi",
+            "docs",
+            str(csv_path),
+            "-d",
+            str(db_path),
+            "-m",
+            "embed-demo-errors",
+        ],
+    )
+    # Without --skip-errors the command aborts
+    assert result.exit_code != 0

@@ -157,8 +157,11 @@ All three mechanisms support these options:
 - `--prefix` to prepend a prefix to the stored ID of each item
 - `--prepend` to prepend a string to the content before embedding 
 - `--batch-size SIZE` to process embeddings in batches of the specified size
+- `--skip-errors` to skip any items that fail to embed (for example because they are too long) and continue, rather than aborting the entire operation
 
 The `--prepend` option is useful for embedding models that require you to prepend a special token to the content before embedding it. [nomic-embed-text-v2-moe](https://huggingface.co/nomic-ai/nomic-embed-text-v2-moe) for example requires documents to be prepended `'search_document: '` and search queries to be prepended `'search_query: '`.
+
+By default, if any item fails to embed the entire `llm embed-multi` operation stops with an error and nothing is stored. Pass `--skip-errors` to skip the items that fail, store everything that succeeds, and print a warning listing the IDs that were skipped.
 
 (embeddings-cli-embed-multi-csv-etc)=
 ### Embedding data from a CSV, TSV or JSON file

@@ -146,6 +146,59 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+def test_embed_multi_skip_errors():
+    # on_error lets a single bad item be skipped instead of aborting everything
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo-errors")
+    entries = [
+        ("1", "hello one"),
+        ("2", "this one will FAIL"),
+        ("3", "hello three"),
+    ]
+    skipped = []
+    collection.embed_multi(
+        entries,
+        on_error=lambda entry, exception: skipped.append((entry[0], exception)),
+    )
+    # The two good items in the same batch as the bad one are still stored
+    ids = sorted(row["id"] for row in db["embeddings"].rows)
+    assert ids == ["1", "3"]
+    assert [entry_id for entry_id, _ in skipped] == ["2"]
+    assert isinstance(skipped[0][1], ValueError)
+
+
+def test_embed_multi_without_on_error_raises():
+    # Without on_error the old behaviour is preserved: the whole batch fails
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo-errors")
+    entries = [("1", "hello one"), ("2", "this one will FAIL")]
+    with pytest.raises(ValueError):
+        collection.embed_multi(entries)
+    assert db["embeddings"].count == 0
+
+
+def test_embed_multi_skip_errors_across_batches():
+    # Failures in different batches are all skipped, the rest are stored
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo-errors")
+    entries = [
+        ("1", "ok one"),
+        ("2", "FAIL two"),
+        ("3", "ok three"),
+        ("4", "ok four"),
+        ("5", "FAIL five"),
+    ]
+    skipped = []
+    collection.embed_multi(
+        entries,
+        batch_size=2,
+        on_error=lambda entry, exception: skipped.append(entry[0]),
+    )
+    ids = sorted(row["id"] for row in db["embeddings"].rows)
+    assert ids == ["1", "3", "4"]
+    assert sorted(skipped) == ["2", "5"]
+
+
 def test_collection_delete(collection):
     db = collection.db
     assert db["embeddings"].count == 2
