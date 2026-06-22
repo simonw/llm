@@ -893,3 +893,28 @@ def test_default_exports():
     "Check key exports in the llm __all__ list"
     for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
         assert name in llm.__all__, f"{name} not in llm.__all__"
+
+def test_openai_models_not_registered_without_key(monkeypatch):
+    """
+    测试：当没有任何 OpenAI API Key 存在时，
+    不应该在系统中注册任何内置的 OpenAI 模型。
+    """
+    import llm
+    from llm.default_plugins import openai_models
+
+    # 1. 使用 monkeypatch 强制清除环境变量中的 OPENAI_API_KEY
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    # 2. 使用 monkeypatch 强制让 llm.get_key 函数返回 None（模拟 keys.json 里也没有 Key）
+    monkeypatch.setattr(llm, "get_key", lambda *args, **kwargs: None)
+
+    # 3. 创建一个临时的模拟注册列表
+    registered_models = []
+    def mock_register(model, aliases=None):
+        registered_models.append(model.model_id)
+
+    # 4. 手动触发模型的注册函数
+    openai_models.register_models(mock_register)
+
+    # 5. 断言：注册列表应该为空（证明程序提前 return 了，没有注册任何模型）
+    assert len(registered_models) == 0
