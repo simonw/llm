@@ -43,6 +43,8 @@ import yaml
 
 @hookimpl
 def register_models(register):
+    if not llm.get_key(alias="openai", env="OPENAI_API_KEY"):
+        return
     # GPT-4o
     register(
         Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
@@ -380,6 +382,8 @@ def register_models(register):
 
 @hookimpl
 def register_embedding_models(register):
+    if not llm.get_key(alias="openai", env="OPENAI_API_KEY"):
+        return
     register(
         OpenAIEmbeddingModel("text-embedding-ada-002", "text-embedding-ada-002"),
         aliases=(
