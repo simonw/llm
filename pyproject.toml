@@ -79,7 +79,7 @@ Changelog = "https://github.com/simonw/llm/releases"
 llm = "llm.cli:cli"
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
