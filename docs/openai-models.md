@@ -17,6 +17,8 @@ llm keys set openai
 ```
 Then paste in the API key.
 
+The bundled OpenAI models are only listed by `llm models` once an OpenAI key has been configured this way (or via the `OPENAI_API_KEY` environment variable). Without a key they are hidden, since they cannot be used. Models you add through {ref}`extra-openai-models.yaml <openai-extra-models>` are always listed regardless.
+
 (openai-models-language)=
 
 ## OpenAI language models

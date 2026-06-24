@@ -43,6 +43,11 @@ import yaml
 
 @hookimpl
 def register_models(register):
+    # Only register bundled models when an OpenAI key is set; extra models below
+    # always load via _register.
+    _register = register
+    if not llm.get_key(key_alias="openai", env_var="OPENAI_API_KEY"):
+        register = lambda *args, **kwargs: None  # noqa: E731
     # GPT-4o
     register(
         Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
@@ -371,7 +376,7 @@ def register_models(register):
             chat_model.needs_key = extra_model["api_key_name"]
             if async_model:
                 async_model.needs_key = extra_model["api_key_name"]
-        register(
+        _register(
             chat_model,
             async_model,
             aliases=aliases,

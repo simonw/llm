@@ -43,6 +43,41 @@ def test_openai_models(mocked_models):
     )
 
 
+@pytest.mark.parametrize("source", ("env", "keys_file", "none"))
+def test_bundled_openai_models_require_key(monkeypatch, tmpdir, source):
+    # Bundled models register only with an OpenAI key (env or keys.json).
+    user_dir = tmpdir / "user-dir"
+    user_dir.mkdir()
+    monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    if source == "env":
+        monkeypatch.setenv("OPENAI_API_KEY", "x")
+    elif source == "keys_file":
+        (user_dir / "keys.json").write_text(json.dumps({"openai": "x"}), "utf-8")
+
+    model_ids = {m.model.model_id for m in llm.get_models_with_aliases()}
+    if source == "none":
+        assert "gpt-4o" not in model_ids
+        assert "gpt-5" not in model_ids
+    else:
+        assert "gpt-4o" in model_ids
+        assert "gpt-5" in model_ids
+
+
+def test_extra_openai_models_load_without_key(monkeypatch, tmpdir):
+    # Extra models load without an OpenAI key.
+    user_dir = tmpdir / "user-dir"
+    user_dir.mkdir()
+    monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    (user_dir / "extra-openai-models.yaml").write_text(
+        "- model_id: my-local-model\n  model_name: my-local-model\n", "utf-8"
+    )
+    model_ids = {m.model.model_id for m in llm.get_models_with_aliases()}
+    assert "my-local-model" in model_ids
+    assert "gpt-4o" not in model_ids
+
+
 def test_openai_options_min_max():
     options = {
         "temperature": [0, 2],
