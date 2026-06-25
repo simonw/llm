@@ -1899,6 +1899,40 @@ class Response(_BaseResponse):
                     "No implementation available for tool: {}".format(tool_call.name)
                 )
 
+            # Call before_tool_execution hooks for trust/policy verification
+            try:
+                from .plugins import pm
+
+                hook_results = (
+                    pm.hook.before_tool_execution(
+                        tool_name=tool_call.name,
+                        parameters=tool_call.arguments,
+                        tool=tool,
+                    )
+                    or []
+                )
+                if any(r is False for r in hook_results if r is not None):
+                    raise Exception(
+                        "Tool execution blocked by before_tool_execution hook"
+                    )
+            except Exception as hook_ex:
+                if "blocked" in str(hook_ex).lower():
+                    attachments: List[Attachment] = []
+                    exception: Optional[Exception] = hook_ex
+                    result: str = f"Blocked: {hook_ex}"
+                    tool_result_obj = ToolResult(
+                        name=tool_call.name,
+                        output=result,
+                        attachments=attachments,
+                        tool_call_id=tool_call.tool_call_id,
+                        instance=_get_instance(tool.implementation),
+                        exception=exception,
+                    )
+                    tool_results.append(tool_result_obj)
+                    continue
+                else:
+                    raise
+
             attachments = []
             exception = None
 
@@ -1913,7 +1947,7 @@ class Response(_BaseResponse):
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
-                    result = result.output
+                    result = result.output  # type: ignore[assignment]
 
                 if not isinstance(result, str):
                     result = json.dumps(result, default=repr)
