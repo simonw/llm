@@ -3,7 +3,7 @@ import os
 import sys
 from unittest.mock import ANY
 import llm
-from llm import cli
+from llm import cli, utils
 import pytest
 
 TINY_PNG = (
@@ -17,6 +17,25 @@ TINY_PNG = (
 )
 
 TINY_WAV = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00"
+
+
+@pytest.mark.parametrize(
+    "puremagic_result", ["", utils.puremagic.PureError("no match")]
+)
+def test_mimetype_from_path_falls_back_to_file_extension(
+    monkeypatch, tmp_path, puremagic_result
+):
+    path = tmp_path / "video.mp4"
+    path.write_bytes(b"not enough data for magic detection")
+
+    def fake_from_file(path, mime=True):
+        if isinstance(puremagic_result, utils.puremagic.PureError):
+            raise puremagic_result
+        return puremagic_result
+
+    monkeypatch.setattr(utils.puremagic, "from_file", fake_from_file)
+
+    assert utils.mimetype_from_path(path) == "video/mp4"
 
 
 @pytest.mark.parametrize(
