@@ -470,6 +470,11 @@ def truncate_string(
         # Subtract 5 for the "... " separator
         cutoff = (max_length - 5) // 2
         return text[:cutoff] + "... " + text[-cutoff:]
+    elif max_length < 3:
+        # No room for the "..." marker, so hard-truncate to fit. Without this
+        # max_length - 3 goes negative and slices from the end, returning more
+        # than max_length characters.
+        return text[:max_length]
     else:
         # Fall back to simple truncation for very small max_length
         return text[: max_length - 3] + "..."
