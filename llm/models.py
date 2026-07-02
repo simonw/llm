@@ -932,6 +932,9 @@ class _BaseResponse:
     conversation: Optional["_BaseConversation"] = None
     _key: Optional[str] = None
     _tool_calls: List[ToolCall] = []
+    # Pre-assembled output Messages, set when a response is rehydrated
+    # from storage (from_dict / message_store) instead of executed
+    _loaded_messages: Optional[List[Any]] = None
 
     def __init__(
         self,
@@ -1613,6 +1616,12 @@ class _BaseResponse:
                         "order": index,
                     },
                 )
+
+        # Also persist the structured message chains (full Part fidelity,
+        # deduplicated by content hash) alongside the legacy columns above.
+        from .message_store import _write_response_nodes
+
+        _write_response_nodes(db, self)
 
 
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
@@ -2596,6 +2605,11 @@ class AsyncResponse(_BaseResponse):
         response._tool_calls = list(self._tool_calls)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
+        # Snapshot the assembled messages: the sync copy carries no
+        # stream events, so without this it would fall back to a lossy
+        # text+tool-calls reconstruction, dropping reasoning parts and
+        # provider_metadata from anything logged via the sync copy.
+        response._loaded_messages = self._messages_now()
         return response
 
     @classmethod

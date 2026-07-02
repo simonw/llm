@@ -720,6 +720,54 @@ print(followup.text())
 
 Individual `Message` and `Part` objects also support `to_dict()` / `from_dict()` if you need to manipulate turns directly — for example, to edit, filter, or splice messages before passing them back via `model.prompt(messages=[...])`.
 
+(python-api-message-store)=
+
+## Logging to SQLite: llm.message_store
+
+The `llm.message_store` module is the stable Python API for reading and writing the SQLite logs database. It is what the `llm` CLI itself uses, and plugins are encouraged to use it for their own logging. It persists conversations at full structural fidelity — every `Part`, including reasoning parts and `provider_metadata`, survives a round-trip — and stores messages content-addressed, so conversations that share a prefix (for example an OpenAI-compatible API client that re-sends the full history with every request) are stored without duplicating the shared messages. See {ref}`the structured message storage documentation <logging-message-store>` for the SQL schema and the exact hashing scheme.
+
+To log a response, use `log_response()`. This applies any pending schema migrations and then performs the same complete write as the CLI — the classic tables (`responses`, `tool_calls`, `tool_results`, attachments, fragments) plus the structured message store — so everything you log shows up in `llm logs`:
+
+```python
+import llm
+import sqlite_utils
+
+db = sqlite_utils.Database(llm.user_dir() / "logs.db")
+model = llm.get_model("gpt-5.4-mini")
+
+response = model.prompt("What's 2+2?")
+llm.message_store.log_response(db, response)
+```
+
+`load_response()` re-inflates a logged response at full fidelity, restoring the exact input message chain and output parts:
+
+```python
+rebuilt = llm.message_store.load_response(db, response.id)
+followup = rebuilt.reply("Add 3 to that")
+```
+
+Pass `async_=True` to get an `AsyncResponse` instead.
+
+The lower-level primitives work directly with `Message` lists, without needing a `Response` — useful for persisting a conversation supplied by a client before (or whether or not) a model call happens:
+
+```python
+messages = [
+    llm.system("Be brief"),
+    llm.user("What's 2+2?"),
+    llm.assistant("4"),
+    llm.user("Add 3 to that"),
+]
+node_id = llm.message_store.store_messages(db, messages)
+# node_id identifies this exact chain - storing the same chain again
+# returns the same id and inserts nothing new
+
+rebuilt_messages = llm.message_store.load_messages(db, node_id)
+```
+
+`store_messages()` accepts a `parent_node_id=` keyword to extend a previously stored chain, and returns the head node id for the chain it stored. `message_hash(message)`, `node_hash(parent_node_id, message_id)` and `canonical_json(value)` expose the content-addressing scheme itself so you can compute ids without writing anything.
+
+These functions all work against any SQLite database — they create the tables they need if those are missing — so plugins can use a dedicated database rather than the shared `logs.db` if they prefer.
+
 (python-api-async)=
 
 ## Async models

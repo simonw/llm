@@ -34,6 +34,7 @@ from .parts import (
     tool_message,
     user,
 )
+from . import message_store
 from .utils import schema_dsl, Fragment
 from .embeddings import Collection
 from .templates import Template
@@ -63,6 +64,7 @@ __all__ = [
     "hookimpl",
     "KeyModel",
     "Message",
+    "message_store",
     "Model",
     "ModelError",
     "NeedsKeyException",

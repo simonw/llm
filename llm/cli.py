@@ -43,6 +43,7 @@ from llm import (
 )
 from llm.models import _BaseConversation, ChainResponse
 
+from . import message_store
 from .migrations import migrate
 from .plugins import pm, load_plugins
 from .utils import (
@@ -1338,17 +1339,22 @@ def load_conversation(
         "conversation_id = ?", [conversation_id], order_by="id"
     ):
         response_obj = response_class.from_row(db, response)
-        if conversation.responses:
-            previous_response = conversation.responses[-1]
-            # SQLite rows store each response's legacy current-turn inputs
-            # (prompt text, attachments, tool_results), not the full
-            # prompt.messages chain. Rebuild that chain here so follow-up
-            # prompts via `llm -c` satisfy the Prompt.messages invariant.
-            response_obj.prompt._explicit_messages = (
-                list(previous_response.prompt.messages)
-                + list(previous_response._messages_now())
-                + list(response_obj.prompt.messages)
-            )
+        # Responses logged with the structured message store rehydrate
+        # at full fidelity - exact input chain plus output parts,
+        # including reasoning and provider_metadata.
+        if not message_store.hydrate_response_messages(db, response_obj):
+            if conversation.responses:
+                previous_response = conversation.responses[-1]
+                # Older SQLite rows store each response's legacy
+                # current-turn inputs (prompt text, attachments,
+                # tool_results), not the full prompt.messages chain.
+                # Rebuild that chain here so follow-up prompts via
+                # `llm -c` satisfy the Prompt.messages invariant.
+                response_obj.prompt._explicit_messages = (
+                    list(previous_response.prompt.messages)
+                    + list(previous_response._messages_now())
+                    + list(response_obj.prompt.messages)
+                )
         conversation.responses.append(response_obj)
     return conversation
 

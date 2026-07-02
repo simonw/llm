@@ -426,3 +426,15 @@ def m022_response_reasoning(db):
     # NULL/empty when no reasoning was emitted or when the provider
     # only reported an opaque token count (the redacted-marker case).
     db["responses"].add_column("reasoning", str)
+
+
+@migration
+def m023_message_trees(db):
+    # Content-addressed structured message storage, see llm/message_store.py
+    # for the table definitions and hashing scheme. The tables are
+    # created by ensure_tables() rather than inline here because
+    # message_store writes must also work against databases that have
+    # not been migrated, matching log_to_db()'s legacy behavior.
+    from .message_store import ensure_tables
+
+    ensure_tables(db)

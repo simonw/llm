@@ -276,6 +276,29 @@ llm logs backup /tmp/backup.db
 ```
 This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
+(logging-message-store)=
+
+## Structured message storage
+
+In addition to the classic tables described below, responses are also logged to a set of content-addressed tables that capture the full structured form of the conversation — every part of every message, including reasoning parts and provider metadata such as encrypted reasoning signatures. Responses logged this way can be re-inflated from the database with no loss of detail, using the {ref}`llm.message_store Python API <python-api-message-store>`.
+
+Three tables are involved:
+
+- `messages` stores one row per unique message. Its `id` is a SHA-256 hash of the message content, so the same message is stored exactly once no matter how many conversations include it. The `parts` column contains the JSON list of parts; attachments are referenced by their id in the `attachments` table rather than embedded.
+- `message_nodes` stores chain nodes. A node is a `(parent node, message)` pair and its `id` is a hash of both, which means a node id uniquely identifies an entire message chain — that message plus everything before it. Conversations that share a prefix share nodes: re-logging a conversation that grew by one turn only inserts the new tail. Chains that diverge after a common prefix form a tree.
+- `response_nodes` links a row in `responses` to the node ids for its input chain (`input_node_id`, exactly what was sent to the model) and output chain (`output_node_id`, the input plus the messages the model produced).
+
+Content hashes are calculated as follows. Canonical JSON means `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` encoded as UTF-8. A message is hashed as its `Message.to_dict()` dictionary with attachments replaced by references — an attachment part becomes `{"type": "attachment", "attachment_id": ...}` and a tool result part's `attachments` list becomes `attachment_ids`, where the attachment id is the existing SHA-256-based `Attachment.id()`. Then:
+
+    message id = sha256(canonical JSON of the stored message dictionary)
+    node id = sha256("{parent node id}:{message id}")
+
+with the empty string in place of the parent node id for the first message in a chain. Hex digests are lowercase. Anything writing to these tables must hash identically or deduplication will break — treat this scheme as part of the schema.
+
+The per-occurrence facts — when the response was generated, token usage, options, the model used — live on the `responses` row as before, so two identical message trees logged at different times still get their own response records.
+
+Responses logged by older versions of LLM do not have rows in these tables. `llm logs` and `llm -c` work transparently across both: responses with a `response_nodes` row are re-inflated at full fidelity, older rows fall back to the previous text-based reconstruction.
+
 (logging-sql-schema)=
 
 ## SQL schema
@@ -300,7 +323,8 @@ cog.out("```sql\n")
 for table in (
     "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
     "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
-    "tool_responses", "tool_calls", "tool_results", "tool_instances"
+    "tool_responses", "tool_calls", "tool_results", "tool_instances",
+    "messages", "message_nodes", "response_nodes"
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -419,6 +443,25 @@ CREATE TABLE [tool_instances] (
   [plugin] TEXT,
   [name] TEXT,
   [arguments] TEXT
+);
+CREATE TABLE [messages] (
+  [id] TEXT PRIMARY KEY,
+  [role] TEXT,
+  [parts] TEXT,
+  [provider_metadata] TEXT,
+  [first_seen_utc] TEXT
+);
+CREATE TABLE [message_nodes] (
+  [id] TEXT PRIMARY KEY,
+  [parent_id] TEXT REFERENCES [message_nodes]([id]),
+  [message_id] TEXT REFERENCES [messages]([id]),
+  [depth] INTEGER,
+  [first_seen_utc] TEXT
+);
+CREATE TABLE [response_nodes] (
+  [response_id] TEXT PRIMARY KEY REFERENCES [responses]([id]),
+  [input_node_id] TEXT REFERENCES [message_nodes]([id]),
+  [output_node_id] TEXT REFERENCES [message_nodes]([id])
 );
 ```
 <!-- [[[end]]] -->
