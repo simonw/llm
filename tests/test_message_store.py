@@ -3,13 +3,17 @@ storage in the logs database."""
 
 import hashlib
 import json
+import os
+import re
+import textwrap
 
 import pytest
 import sqlite_utils
+from click.testing import CliRunner
 
 import llm
 from llm import message_store
-from llm.cli import load_conversation
+from llm.cli import cli, load_conversation
 from llm.migrations import migrate
 from llm.parts import (
     AttachmentPart,
@@ -383,3 +387,126 @@ class TestAsyncFidelity:
         assert loaded.messages()[0].parts[0] == ReasoningPart(
             text="deep thought", provider_metadata={"signature": "async-sig"}
         )
+
+
+class TestLogFormats:
+    def tool_chain(self):
+        def multiply(a: int, b: int) -> int:
+            "Multiply two numbers."
+            return a * b
+
+        model = llm.get_model("echo")
+        chain = model.chain(
+            json.dumps(
+                {"tool_calls": [{"name": "multiply", "arguments": {"a": 3, "b": 4}}]}
+            ),
+            tools=[multiply],
+        )
+        chain.text()
+        return chain
+
+    def test_fresh_database_is_efficient(self, logs_db):
+        migrate(logs_db)
+        assert message_store.get_log_format(logs_db) == "efficient"
+
+    def test_database_with_history_gets_dual(self, logs_db, mock_model):
+        migrate(logs_db)
+        mock_model.enqueue(["hi"])
+        response = mock_model.prompt("x")
+        response.text()
+        response.log_to_db(logs_db)
+        # Simulate a database that predates the log_format migration
+        logs_db["logs_settings"].delete_where()
+        logs_db["_llm_migrations"].delete_where("name = ?", ["m024_log_format"])
+        migrate(logs_db)
+        assert message_store.get_log_format(logs_db) == "dual"
+
+    def test_set_log_format_validates(self, logs_db):
+        migrate(logs_db)
+        message_store.set_log_format(logs_db, "dual")
+        assert message_store.get_log_format(logs_db) == "dual"
+        with pytest.raises(ValueError):
+            message_store.set_log_format(logs_db, "nope")
+
+    def test_efficient_format_skips_duplicated_payloads(self, logs_db):
+        migrate(logs_db)
+        self.tool_chain().log_to_db(logs_db)
+        rows = list(logs_db["responses"].rows)
+        assert len(rows) == 2
+        assert all(row["prompt_json"] is None for row in rows)
+        tool_calls = list(logs_db["tool_calls"].rows)
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["name"] == "multiply"
+        assert tool_calls[0]["arguments"] is None
+        tool_results = list(logs_db["tool_results"].rows)
+        assert len(tool_results) == 1
+        assert tool_results[0]["output"] is None
+        assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+
+    def test_dual_format_still_writes_payloads(self, logs_db):
+        migrate(logs_db)
+        message_store.set_log_format(logs_db, "dual")
+        self.tool_chain().log_to_db(logs_db)
+        tool_calls = list(logs_db["tool_calls"].rows)
+        assert json.loads(tool_calls[0]["arguments"]) == {"a": 3, "b": 4}
+        tool_results = list(logs_db["tool_results"].rows)
+        assert tool_results[0]["output"] == "12"
+        # prompt_json is dropped in both formats
+        assert all(row["prompt_json"] is None for row in logs_db["responses"].rows)
+
+    def test_efficient_rows_hydrate_full_fidelity(self, logs_db):
+        migrate(logs_db)
+        self.tool_chain().log_to_db(logs_db)
+        conversation_id = next(logs_db["responses"].rows)["conversation_id"]
+        loaded = load_conversation(conversation_id)
+        first, second = loaded.responses
+        assert first.tool_calls()[0].arguments == {"a": 3, "b": 4}
+        assert second.prompt.tool_results[0].output == "12"
+
+    def _run_and_render_logs(self, user_path, format):
+        db_path = str(user_path / "logs.db")
+        if os.path.exists(db_path):
+            os.remove(db_path)
+        db = sqlite_utils.Database(db_path)
+        migrate(db)
+        message_store.set_log_format(db, format)
+        runner = CliRunner()
+        code = textwrap.dedent("""
+            def demo():
+                return "one\\ntwo\\nthree"
+            """)
+        result = runner.invoke(
+            cli,
+            [
+                "-m",
+                "echo",
+                "--functions",
+                code,
+                json.dumps({"tool_calls": [{"name": "demo"}]}),
+            ],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0
+        logs_result = runner.invoke(cli, ["logs", "-n", "0"], catch_exceptions=False)
+        assert logs_result.exit_code == 0
+        # Normalize ULIDs and timestamps, which differ between runs
+        output = re.sub(r"[0-9a-z]{26}", "ULID", logs_result.output)
+        return re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", "DATETIME", output)
+
+    def test_logs_render_identical_across_formats(self, user_path):
+        efficient = self._run_and_render_logs(user_path, "efficient")
+        dual = self._run_and_render_logs(user_path, "dual")
+        assert "### Tool results" in efficient
+        assert efficient == dual
+
+    def test_logs_format_command(self, user_path):
+        runner = CliRunner()
+        assert runner.invoke(cli, ["-m", "echo", "hi"]).exit_code == 0
+        result = runner.invoke(cli, ["logs", "format"])
+        assert result.output.strip() == "efficient"
+        result2 = runner.invoke(cli, ["logs", "format", "dual"])
+        assert result2.exit_code == 0
+        assert "dual" in result2.output
+        assert runner.invoke(cli, ["logs", "format"]).output.strip() == "dual"
+        status_output = runner.invoke(cli, ["logs", "status"]).output
+        assert "Log format: dual" in status_output

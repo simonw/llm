@@ -726,7 +726,7 @@ Individual `Message` and `Part` objects also support `to_dict()` / `from_dict()`
 
 The `llm.message_store` module is the stable Python API for reading and writing the SQLite logs database. It is what the `llm` CLI itself uses, and plugins are encouraged to use it for their own logging. It persists conversations at full structural fidelity — every `Part`, including reasoning parts and `provider_metadata`, survives a round-trip — and stores messages content-addressed, so conversations that share a prefix (for example an OpenAI-compatible API client that re-sends the full history with every request) are stored without duplicating the shared messages. See {ref}`the structured message storage documentation <logging-message-store>` for the SQL schema and the exact hashing scheme.
 
-To log a response, use `log_response()`. This applies any pending schema migrations and then performs the same complete write as the CLI — the classic tables (`responses`, `tool_calls`, `tool_results`, attachments, fragments) plus the structured message store — so everything you log shows up in `llm logs`:
+To log a response, use `log_response()`. This applies any pending schema migrations and then performs the same write as the CLI — the classic tables (`responses`, `tool_calls`, `tool_results`, attachments, fragments) plus the structured message store, respecting the database's {ref}`log format <logging-formats>` — so everything you log shows up in `llm logs`:
 
 ```python
 import llm

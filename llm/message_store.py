@@ -58,6 +58,8 @@ from .models import Attachment
 __all__ = (
     "canonical_json",
     "ensure_tables",
+    "get_log_format",
+    "set_log_format",
     "message_hash",
     "node_hash",
     "store_message",
@@ -67,6 +69,42 @@ __all__ = (
     "load_response",
     "hydrate_response_messages",
 )
+
+LOG_FORMATS = ("dual", "efficient")
+
+
+def get_log_format(db) -> str:
+    """The write format for a logs database: "dual" or "efficient".
+
+    "dual" writes the message store plus the complete legacy format.
+    "efficient" still writes every legacy row - so existing queries,
+    filters and full-text search keep working - but leaves the bulky
+    payloads that would duplicate the message store (prompt_json,
+    response_json, tool_calls.arguments, tool_results.output) null.
+
+    The format is decided when a database is migrated - existing
+    databases with logged responses get "dual", fresh databases get
+    "efficient" - and persisted in the logs_settings table. For an
+    unmigrated database this infers the same answer without persisting
+    it.
+    """
+    if db["logs_settings"].exists():
+        try:
+            return db["logs_settings"].get("log_format")["value"]
+        except NotFoundError:
+            pass
+    if db["responses"].exists() and db["responses"].count:
+        return "dual"
+    return "efficient"
+
+
+def set_log_format(db, format: str) -> None:
+    "Persist the write format for a logs database."
+    if format not in LOG_FORMATS:
+        raise ValueError("format must be one of {}".format(", ".join(LOG_FORMATS)))
+    if not db["logs_settings"].exists():
+        db["logs_settings"].create({"key": str, "value": str}, pk="key")
+    db["logs_settings"].insert({"key": "log_format", "value": format}, replace=True)
 
 
 def ensure_tables(db):
@@ -377,7 +415,14 @@ def hydrate_response_messages(db, response) -> bool:
     reasoning parts and provider_metadata intact. Returns False for
     responses logged before the message store existed, leaving the
     legacy from_row() reconstruction untouched.
+
+    Tool calls and tool result outputs are rebuilt from the message
+    parts, which restores the payloads that "efficient" format
+    databases leave null in the legacy tool_calls/tool_results tables.
     """
+    from .models import ToolCall
+    from .parts import ToolCallPart, ToolResultPart
+
     if not db["response_nodes"].exists():
         return False
     try:
@@ -393,7 +438,73 @@ def hydrate_response_messages(db, response) -> bool:
         output_messages = full_chain[len(input_messages) :]
     response.prompt._explicit_messages = input_messages
     response._loaded_messages = output_messages
+    # Rebuild tool calls from the output parts
+    tool_call_parts = [
+        part
+        for message in output_messages
+        for part in message.parts
+        if isinstance(part, ToolCallPart)
+    ]
+    if tool_call_parts:
+        response._tool_calls = [
+            ToolCall(
+                name=part.name,
+                arguments=part.arguments or {},
+                tool_call_id=part.tool_call_id,
+            )
+            for part in tool_call_parts
+        ]
+    # Fill in tool result outputs that efficient format left null
+    results_by_call_id = {
+        part.tool_call_id: part
+        for message in input_messages
+        for part in message.parts
+        if isinstance(part, ToolResultPart) and part.tool_call_id
+    }
+    for tool_result in response.prompt.tool_results:
+        if tool_result.output is None:
+            part = results_by_call_id.get(tool_result.tool_call_id)
+            if part is not None:
+                tool_result.output = part.output
     return True
+
+
+def _tool_payloads(db, response_id: str):
+    """Tool call arguments and tool result outputs recorded in the
+    message store for a response, each keyed by tool_call_id.
+
+    Used to fill in the values that "efficient" format databases leave
+    null in the legacy tool_calls/tool_results tables. Returns None if
+    the response has no message store rows.
+    """
+    from .parts import ToolCallPart, ToolResultPart
+
+    if not db["response_nodes"].exists():
+        return None
+    try:
+        node_row = db["response_nodes"].get(response_id)
+    except NotFoundError:
+        return None
+    input_messages: List[Any] = []
+    if node_row["input_node_id"]:
+        input_messages = load_messages(db, node_row["input_node_id"])
+    output_messages: List[Any] = []
+    if node_row["output_node_id"]:
+        full_chain = load_messages(db, node_row["output_node_id"])
+        output_messages = full_chain[len(input_messages) :]
+    arguments_by_id = {
+        part.tool_call_id: part.arguments
+        for message in output_messages
+        for part in message.parts
+        if isinstance(part, ToolCallPart) and part.tool_call_id
+    }
+    outputs_by_id = {
+        part.tool_call_id: part.output
+        for message in input_messages
+        for part in message.parts
+        if isinstance(part, ToolResultPart) and part.tool_call_id
+    }
+    return arguments_by_id, outputs_by_id
 
 
 def log_response(db, response) -> str:

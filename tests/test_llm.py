@@ -113,9 +113,14 @@ def test_llm_default_prompt(
     assert expected.items() <= row.items()
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
-    assert json.loads(row["prompt_json"]) == {
-        "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
-    }
+    # prompt_json is no longer written - the exact input chain lives in
+    # the message store instead
+    assert row["prompt_json"] is None
+    input_messages = llm.message_store.load_messages(
+        log_db, log_db["response_nodes"].get(row["id"])["input_node_id"]
+    )
+    assert [m.role for m in input_messages] == ["user"]
+    assert input_messages[0].parts[0].text == "three names \nfor a pet pelican"
     assert json.loads(row["response_json"]) == {
         "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
         "model": "gpt-4o-mini",
@@ -134,11 +139,7 @@ def test_llm_default_prompt(
             "model": "gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
-            "prompt_json": {
-                "messages": [
-                    {"role": "user", "content": "three names \nfor a pet pelican"}
-                ]
-            },
+            "prompt_json": None,
             "options_json": {},
             "response": "Bob, Alice, Eve",
             "response_json": {
@@ -273,7 +274,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
         "model": "gpt-3.5-turbo-instruct",
         "prompt": "Say this is a test",
         "system": None,
-        "prompt_json": '{"messages": ["Say this is a test"]}',
+        "prompt_json": None,
         "options_json": "{}",
         "response": "\n\nThis is indeed a test",
     }

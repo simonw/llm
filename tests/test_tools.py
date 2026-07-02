@@ -38,9 +38,13 @@ def test_tool_use_basic(vcr):
     assert second.prompt.tool_results[0].name == "multiply"
     assert second.prompt.tool_results[0].output == "2869461"
 
-    # Test writing to the database
+    # Test writing to the database - pinned to "dual" format, which
+    # duplicates tool call arguments and outputs into the legacy tables
+    # (fresh databases default to "efficient", covered by
+    # tests/test_message_store.py)
     db = sqlite_utils.Database(memory=True)
     migrate(db)
+    llm.message_store.set_log_format(db, "dual")
     chain_response.log_to_db(db)
     assert set(db.table_names()).issuperset(
         {"tools", "tool_responses", "tool_calls", "tool_results"}

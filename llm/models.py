@@ -1395,7 +1395,10 @@ class _BaseResponse:
         response._tool_calls = [
             ToolCall(
                 name=tool_row["name"],
-                arguments=json.loads(tool_row["arguments"]),
+                # Efficient format databases leave arguments null here;
+                # hydrate_response_messages() restores the real values
+                # from the message store
+                arguments=json.loads(tool_row["arguments"] or "{}"),
                 tool_call_id=tool_row["tool_call_id"],
             )
             for tool_row in db.query(
@@ -1416,6 +1419,16 @@ class _BaseResponse:
         )
 
     def log_to_db(self, db):
+        from .message_store import get_log_format
+
+        # In "efficient" format the message store is the canonical copy
+        # of the structured conversation, so the legacy columns that
+        # would duplicate it (tool_calls.arguments, tool_results.output)
+        # are left null. prompt_json is no longer written in either
+        # format - the message store records the exact input chain.
+        # response_json is kept in both formats: it carries provider
+        # data (logprobs, finish reasons) not captured anywhere else.
+        efficient = get_log_format(db) == "efficient"
         conversation = self.conversation
         if not conversation:
             conversation = Conversation(model=self.model)
@@ -1436,7 +1449,8 @@ class _BaseResponse:
 
         response_id = self.id
         replacements = {}
-        # Include replacements from previous responses
+        # Include replacements from previous responses, used to
+        # condense response_json below
         for previous_response in conversation.responses[:-1]:
             for fragment in (previous_response.prompt.fragments or []) + (
                 previous_response.prompt.system_fragments or []
@@ -1480,14 +1494,12 @@ class _BaseResponse:
             for p in m.parts
             if isinstance(p, ReasoningPart) and p.text
         )
-        json_data = self.json()
-
         response = {
             "id": response_id,
             "model": self.model.model_id,
             "prompt": self.prompt._prompt,
             "system": self.prompt._system,
-            "prompt_json": condense_json(self._prompt_json, replacements),
+            "prompt_json": None,
             "options_json": {
                 key: value
                 for key, value in dict(self.prompt.options).items()
@@ -1495,7 +1507,7 @@ class _BaseResponse:
             },
             "response": response_text,
             "reasoning": reasoning_text or None,
-            "response_json": condense_json(json_data, replacements),
+            "response_json": condense_json(self.json(), replacements),
             "conversation_id": conversation.id,
             "duration_ms": self.duration_ms(),
             "datetime_utc": self.datetime_utc(),
@@ -1547,7 +1559,9 @@ class _BaseResponse:
                     "response_id": response_id,
                     "tool_id": tool_ids_by_name.get(tool_call.name) or None,
                     "name": tool_call.name,
-                    "arguments": json.dumps(tool_call.arguments),
+                    "arguments": (
+                        None if efficient else json.dumps(tool_call.arguments)
+                    ),
                     "tool_call_id": tool_call.tool_call_id,
                 }
             )
@@ -1579,7 +1593,7 @@ class _BaseResponse:
                         "response_id": response_id,
                         "tool_id": tool_ids_by_name.get(tool_result.name) or None,
                         "name": tool_result.name,
-                        "output": tool_result.output,
+                        "output": None if efficient else tool_result.output,
                         "tool_call_id": tool_result.tool_call_id,
                         "instance_id": instance_id,
                         "exception": (

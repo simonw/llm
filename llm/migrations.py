@@ -438,3 +438,24 @@ def m023_message_trees(db):
     from .message_store import ensure_tables
 
     ensure_tables(db)
+
+
+@migration
+def m024_log_format(db):
+    # Decide once, at migration time, how this database is written to:
+    # - "dual": the message store plus the full legacy format,
+    #   including duplicated tool call arguments and tool result
+    #   outputs. Databases that already contain logged responses get
+    #   this, so everything that read them before keeps working.
+    # - "efficient": the message store is the canonical copy; legacy
+    #   tables get the same rows but with the duplicated bulky payloads
+    #   (response_json, tool_calls.arguments, tool_results.output) left
+    #   null. Fresh databases get this.
+    # Recorded in logs_settings so the choice is stable thereafter.
+    # `llm logs format` shows or changes it.
+    if not db["logs_settings"].exists():
+        db["logs_settings"].create({"key": str, "value": str}, pk="key")
+    format = (
+        "dual" if db["responses"].exists() and db["responses"].count else "efficient"
+    )
+    db["logs_settings"].insert({"key": "log_format", "value": format}, replace=True)

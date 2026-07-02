@@ -557,6 +557,13 @@ class ToolboxPlugin:
 
 
 def test_register_toolbox(tmpdir, logs_db):
+    # This test asserts on the duplicated tool payloads in the legacy
+    # tables, so pin the database to "dual" format (fresh databases
+    # default to "efficient", covered by tests/test_message_store.py)
+    from llm.migrations import migrate
+
+    migrate(logs_db)
+    llm.message_store.set_log_format(logs_db, "dual")
     # Test the Python API
     model = llm.get_model("echo")
     memory = Memory()
@@ -879,6 +886,11 @@ def test_register_toolbox_fails_on_bad_class():
 
 
 def test_toolbox_logging_async(logs_db, tmpdir):
+    # Pinned to "dual" format, see test_register_toolbox
+    from llm.migrations import migrate
+
+    migrate(logs_db)
+    llm.message_store.set_log_format(logs_db, "dual")
     path = pathlib.Path(tmpdir / "path")
     path.mkdir()
     runner = CliRunner()

@@ -1464,11 +1464,50 @@ def logs_status():
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo("Found log database at {}".format(path))
+    click.echo("Log format: {}".format(message_store.get_log_format(db)))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
     click.echo("Number of responses logged:\t{}".format(db["responses"].count))
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
+
+
+@logs.command(name="format")
+@click.argument("format", required=False, type=click.Choice(message_store.LOG_FORMATS))
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def logs_format(format, database):
+    """Show or set the write format for the logs database.
+
+    With no argument, prints the current format. Pass "dual" or
+    "efficient" to change it.
+
+    "dual" writes the complete legacy format alongside the structured
+    message store - including tool call arguments, tool result outputs
+    and response_json, which duplicate data held in the message store.
+    Databases that already contained logged responses when the message
+    store was introduced use this by default.
+
+    "efficient" leaves those duplicated payloads null and treats the
+    message store as the canonical copy. Fresh databases use this by
+    default. To switch an existing install to the efficient format,
+    rename your old logs database and let LLM create a fresh one - the
+    old logs remain searchable by passing the old path with -d.
+    """
+    path = pathlib.Path(database or logs_db_path())
+    if not path.exists():
+        raise click.ClickException("No log database found at {}".format(path))
+    db = sqlite_utils.Database(path)
+    migrate(db)
+    if format:
+        message_store.set_log_format(db, format)
+        click.echo("Log format set to {}".format(format))
+    else:
+        click.echo(message_store.get_log_format(db))
 
 
 @logs.command(name="backup")
@@ -2001,6 +2040,33 @@ def logs_list(
             TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
         )
     }
+
+    # "efficient" format databases leave tool call arguments and tool
+    # result outputs null in the legacy tables - restore them from the
+    # message store
+    for response_id, tool_info in tool_info_by_id.items():
+        missing_arguments = [
+            tool_call
+            for tool_call in tool_info["tool_calls"]
+            if tool_call["arguments"] is None
+        ]
+        missing_outputs = [
+            tool_result
+            for tool_result in tool_info["tool_results"]
+            if tool_result["output"] is None
+        ]
+        if not missing_arguments and not missing_outputs:
+            continue
+        payloads = message_store._tool_payloads(db, response_id)
+        if payloads is None:
+            continue
+        arguments_by_id, outputs_by_id = payloads
+        for tool_call in missing_arguments:
+            tool_call["arguments"] = (
+                arguments_by_id.get(tool_call["tool_call_id"]) or {}
+            )
+        for tool_result in missing_outputs:
+            tool_result["output"] = outputs_by_id.get(tool_result["tool_call_id"]) or ""
 
     for row in rows:
         if truncate:

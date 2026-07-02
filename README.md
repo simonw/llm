@@ -334,6 +334,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Browsing logs using Datasette](https://llm.datasette.io/en/stable/logging.html#browsing-logs-using-datasette)
   * [Backing up your database](https://llm.datasette.io/en/stable/logging.html#backing-up-your-database)
   * [Structured message storage](https://llm.datasette.io/en/stable/logging.html#structured-message-storage)
+  * [Log formats: dual and efficient](https://llm.datasette.io/en/stable/logging.html#log-formats-dual-and-efficient)
   * [SQL schema](https://llm.datasette.io/en/stable/logging.html#sql-schema)
 * [Related tools](https://llm.datasette.io/en/stable/related-tools.html)
   * [strip-tags](https://llm.datasette.io/en/stable/related-tools.html#strip-tags)

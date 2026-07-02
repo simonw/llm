@@ -273,6 +273,7 @@ Options:
 Commands:
   list*   Show logged prompts and their responses
   backup  Backup your logs database to this file
+  format  Show or set the write format for the logs database.
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
@@ -299,6 +300,33 @@ Usage: llm logs status [OPTIONS]
 
 Options:
   -h, --help  Show this message and exit.
+```
+
+(help-logs-format)=
+#### llm logs format --help
+```
+Usage: llm logs format [OPTIONS] [dual|efficient]
+
+  Show or set the write format for the logs database.
+
+  With no argument, prints the current format. Pass "dual" or "efficient" to
+  change it.
+
+  "dual" writes the complete legacy format alongside the structured message
+  store - including tool call arguments, tool result outputs and response_json,
+  which duplicate data held in the message store. Databases that already
+  contained logged responses when the message store was introduced use this by
+  default.
+
+  "efficient" leaves those duplicated payloads null and treats the message store
+  as the canonical copy. Fresh databases use this by default. To switch an
+  existing install to the efficient format, rename your old logs database and
+  let LLM create a fresh one - the old logs remain searchable by passing the old
+  path with -d.
+
+Options:
+  -d, --database FILE  Path to log database
+  -h, --help           Show this message and exit.
 ```
 
 (help-logs-backup)=

@@ -299,6 +299,26 @@ The per-occurrence facts — when the response was generated, token usage, optio
 
 Responses logged by older versions of LLM do not have rows in these tables. `llm logs` and `llm -c` work transparently across both: responses with a `response_nodes` row are re-inflated at full fidelity, older rows fall back to the previous text-based reconstruction.
 
+(logging-formats)=
+
+## Log formats: dual and efficient
+
+Each logs database has a write format, decided when it is first migrated and stored in the `logs_settings` table:
+
+- **dual** — every response is written in the complete legacy format alongside the message store, including the payloads that duplicate it: tool call arguments and tool result outputs. Databases that already contained logged responses when the message store was introduced get this format, so anything that queried them before keeps working unchanged.
+- **efficient** — the message store is the canonical copy of the structured conversation. The legacy tables still get all of their rows — so full-text search, `llm logs` filters like `-T` and `--schema`, and existing SQL queries keep working — but `tool_calls.arguments` and `tool_results.output` are left null instead of duplicating the message store, and `llm logs` reads those values from the message store when displaying results. Fresh databases get this format.
+
+In both formats the single-turn text columns (`prompt`, `system`, `response`, `reasoning`) are still written — they are small and they power search and display. The `prompt_json` column, which used to record the full provider request body including all previous turns, is no longer written in either format: the message store records the exact input chain instead, without duplication. `response_json` is still written in both formats because it can carry provider data (such as logprobs) that is not captured anywhere else.
+
+Check or change the format for a database with:
+
+```bash
+llm logs format             # prints "dual" or "efficient"
+llm logs format efficient   # switch this database to efficient writes
+```
+
+Changing the format only affects how future responses are written; existing rows are never modified. If you have a long-lived logs database and want the leaner format going forward, the simplest approach is to rename your old `logs.db` and let LLM create a fresh one, which will default to efficient — your old logs remain fully searchable by passing the old path with `llm logs -d /path/to/old.db`.
+
 (logging-sql-schema)=
 
 ## SQL schema
@@ -324,7 +344,7 @@ for table in (
     "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
     "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
     "tool_responses", "tool_calls", "tool_results", "tool_instances",
-    "messages", "message_nodes", "response_nodes"
+    "messages", "message_nodes", "response_nodes", "logs_settings"
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -462,6 +482,10 @@ CREATE TABLE [response_nodes] (
   [response_id] TEXT PRIMARY KEY REFERENCES [responses]([id]),
   [input_node_id] TEXT REFERENCES [message_nodes]([id]),
   [output_node_id] TEXT REFERENCES [message_nodes]([id])
+);
+CREATE TABLE [logs_settings] (
+  [key] TEXT PRIMARY KEY,
+  [value] TEXT
 );
 ```
 <!-- [[[end]]] -->
