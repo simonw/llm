@@ -610,6 +610,7 @@ def build_options_class(
     verbosity=False,
     image_detail_original=False,
     chat_completions=False,
+    responses_client_options=False,
 ):
     fields = {
         "json_object": (
@@ -630,6 +631,23 @@ def build_options_class(
                     "off; set to true to fall back to the Chat Completions code "
                     "path for compatibility."
                 ),
+                default=None,
+            ),
+        )
+    if responses_client_options:
+        fields["timeout"] = (
+            Optional[float],
+            Field(
+                description="Request timeout in seconds for the OpenAI client.",
+                gt=0,
+                default=None,
+            ),
+        )
+        fields["max_retries"] = (
+            Optional[int],
+            Field(
+                description="Maximum number of OpenAI client retries.",
+                ge=0,
                 default=None,
             ),
         )
@@ -876,7 +894,7 @@ class _Shared:
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
 
-    def get_client(self, key, *, async_=False):
+    def get_client(self, key, *, async_=False, timeout=None, max_retries=None):
         kwargs = {}
         if self.api_base:
             kwargs["base_url"] = self.api_base
@@ -894,6 +912,10 @@ class _Shared:
             kwargs["api_key"] = "DUMMY_KEY"
         if self.headers:
             kwargs["default_headers"] = self.headers
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client()
         if async_:
@@ -906,6 +928,8 @@ class _Shared:
         json_object = kwargs.pop("json_object", None)
         kwargs.pop("image_detail", None)
         kwargs.pop("chat_completions", None)
+        kwargs.pop("timeout", None)
+        kwargs.pop("max_retries", None)
         if "max_tokens" not in kwargs and self.default_max_tokens is not None:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
@@ -1330,6 +1354,8 @@ class _SharedResponses(_Shared):
         opts.pop("json_object", None)
         opts.pop("chat_completions", None)
         opts.pop("image_detail", None)
+        opts.pop("timeout", None)
+        opts.pop("max_retries", None)
         max_tokens = opts.pop("max_tokens", None)
         reasoning_effort = opts.pop("reasoning_effort", None)
         verbosity = opts.pop("verbosity", None)
@@ -1506,6 +1532,7 @@ class Responses(_SharedResponses, KeyModel):
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            responses_client_options=True,
         )
 
     def execute(
@@ -1537,7 +1564,11 @@ class Responses(_SharedResponses, KeyModel):
         if self._reasoning:
             kwargs["include"] = ["reasoning.encrypted_content"]
 
-        client = self.get_client(key)
+        client = self.get_client(
+            key,
+            timeout=getattr(prompt.options, "timeout", None),
+            max_retries=getattr(prompt.options, "max_retries", None),
+        )
         usage = None
         had_reasoning = False
         if stream:
@@ -1733,6 +1764,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            responses_client_options=True,
         )
 
     async def execute(
@@ -1767,7 +1799,12 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         if self._reasoning:
             kwargs["include"] = ["reasoning.encrypted_content"]
 
-        client = self.get_client(key, async_=True)
+        client = self.get_client(
+            key,
+            async_=True,
+            timeout=getattr(prompt.options, "timeout", None),
+            max_retries=getattr(prompt.options, "max_retries", None),
+        )
         usage = None
         had_reasoning = False
         if stream:

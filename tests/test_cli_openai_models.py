@@ -106,6 +106,12 @@ def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx_mock):
             "-o",
             "verbosity",
             "high",
+            "-o",
+            "timeout",
+            "7200",
+            "-o",
+            "max_retries",
+            "0",
             "--no-stream",
             "--key",
             "x",
@@ -117,6 +123,8 @@ def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx_mock):
     request_body = json.loads(httpx_mock.get_requests()[-1].content)
     assert request_body["verbosity"] == "high"
     assert "text" not in request_body
+    assert "timeout" not in request_body
+    assert "max_retries" not in request_body
 
 
 def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx_mock):
@@ -161,6 +169,12 @@ def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx_mock
             "-o",
             "verbosity",
             "high",
+            "-o",
+            "timeout",
+            "7200",
+            "-o",
+            "max_retries",
+            "0",
             "--no-stream",
             "--key",
             "x",
@@ -173,6 +187,8 @@ def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx_mock
     assert request_body["text"]["verbosity"] == "high"
     assert request_body["include"] == ["reasoning.encrypted_content"]
     assert "verbosity" not in request_body
+    assert "timeout" not in request_body
+    assert "max_retries" not in request_body
 
 
 def test_gpt5_verbosity_option_validates_allowed_values():
