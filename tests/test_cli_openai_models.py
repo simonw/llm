@@ -2,6 +2,8 @@ from click.testing import CliRunner
 import json
 import llm
 from llm.cli import cli
+from llm.default_plugins.openai_models import combine_chunks
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 import pytest
 import sqlite_utils
 
@@ -41,6 +43,52 @@ def test_openai_models(mocked_models):
         "ada:2020-05-03        openai      2020-05-03T20:26:40+00:00\n"
         "babbage:2020-05-03    openai      2020-05-03T20:26:40+00:00\n"
     )
+
+
+def test_combine_chunks_preserves_streaming_timings():
+    chunks = [
+        ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-llamacpp",
+                "object": "chat.completion.chunk",
+                "created": 1779911036,
+                "model": "qwen36",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": "Hi"},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+        ),
+        ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-llamacpp",
+                "object": "chat.completion.chunk",
+                "created": 1779911036,
+                "model": "qwen36",
+                "choices": [],
+                "usage": {
+                    "prompt_tokens": 22,
+                    "completion_tokens": 7,
+                    "total_tokens": 29,
+                },
+                "timings": {
+                    "prompt_per_second": 9.953251387913042,
+                    "predicted_per_second": 6.667936749857116,
+                },
+            }
+        ),
+    ]
+
+    combined = combine_chunks(chunks)
+
+    assert combined["content"] == "Hi"
+    assert combined["usage"]["prompt_tokens"] == 22
+    assert combined["usage"]["completion_tokens"] == 7
+    assert combined["timings"]["prompt_per_second"] == 9.953251387913042
+    assert combined["timings"]["predicted_per_second"] == 6.667936749857116
 
 
 def test_openai_options_min_max():
