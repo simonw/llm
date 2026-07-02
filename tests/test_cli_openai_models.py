@@ -501,6 +501,6 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     # Confirm it was correctly logged
     assert log_db.exists()
     db = sqlite_utils.Database(str(log_db))
-    assert db["responses"].count == 1
-    row = next(db["responses"].rows)
+    assert db["responses_v2"].count == 1
+    row = next(db["responses_v2"].rows)
     assert row["response"] == "Ho ho ho"

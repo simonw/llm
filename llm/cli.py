@@ -42,6 +42,7 @@ from llm import (
     remove_alias,
 )
 from llm.models import _BaseConversation, ChainResponse
+from llm.parts import ToolCallPart, ToolResultPart
 
 from . import message_store
 from .migrations import migrate
@@ -1335,27 +1336,12 @@ def load_conversation(
     conversation_class = AsyncConversation if async_ else Conversation
     response_class = AsyncResponse if async_ else Response
     conversation = conversation_class.from_row(row)
-    for response in db["responses"].rows_where(
+    for response in db["responses_v2"].rows_where(
         "conversation_id = ?", [conversation_id], order_by="id"
     ):
-        response_obj = response_class.from_row(db, response)
-        # Responses logged with the structured message store rehydrate
-        # at full fidelity - exact input chain plus output parts,
-        # including reasoning and provider_metadata.
-        if not message_store.hydrate_response_messages(db, response_obj):
-            if conversation.responses:
-                previous_response = conversation.responses[-1]
-                # Older SQLite rows store each response's legacy
-                # current-turn inputs (prompt text, attachments,
-                # tool_results), not the full prompt.messages chain.
-                # Rebuild that chain here so follow-up prompts via
-                # `llm -c` satisfy the Prompt.messages invariant.
-                response_obj.prompt._explicit_messages = (
-                    list(previous_response.prompt.messages)
-                    + list(previous_response._messages_now())
-                    + list(response_obj.prompt.messages)
-                )
-        conversation.responses.append(response_obj)
+        # from_row rehydrates at full fidelity - the exact input chain
+        # plus output parts, including reasoning and provider_metadata
+        conversation.responses.append(response_class.from_row(db, response))
     return conversation
 
 
@@ -1464,50 +1450,18 @@ def logs_status():
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo("Found log database at {}".format(path))
-    click.echo("Log format: {}".format(message_store.get_log_format(db)))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
-    click.echo("Number of responses logged:\t{}".format(db["responses"].count))
+    click.echo("Number of responses logged:\t{}".format(db["responses_v2"].count))
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
-
-
-@logs.command(name="format")
-@click.argument("format", required=False, type=click.Choice(message_store.LOG_FORMATS))
-@click.option(
-    "-d",
-    "--database",
-    type=click.Path(readable=True, exists=True, dir_okay=False),
-    help="Path to log database",
-)
-def logs_format(format, database):
-    """Show or set the write format for the logs database.
-
-    With no argument, prints the current format. Pass "dual" or
-    "efficient" to change it.
-
-    "dual" writes the complete legacy format alongside the structured
-    message store - including tool call arguments, tool result outputs
-    and response_json, which duplicate data held in the message store.
-    Databases that already contained logged responses when the message
-    store was introduced use this by default.
-
-    "efficient" leaves those duplicated payloads null and treats the
-    message store as the canonical copy. Fresh databases use this by
-    default. To switch an existing install to the efficient format,
-    rename your old logs database and let LLM create a fresh one - the
-    old logs remain searchable by passing the old path with -d.
-    """
-    path = pathlib.Path(database or logs_db_path())
-    if not path.exists():
-        raise click.ClickException("No log database found at {}".format(path))
-    db = sqlite_utils.Database(path)
-    migrate(db)
-    if format:
-        message_store.set_log_format(db, format)
-        click.echo("Log format set to {}".format(format))
-    else:
-        click.echo(message_store.get_log_format(db))
+    legacy_count = db["responses"].count if db["responses"].exists() else 0
+    if legacy_count:
+        click.echo(
+            "This database contains {} response{} logged by an older version of "
+            "LLM.\nInstall the llm-upgrade-logs plugin to bring them into the "
+            "current format.".format(legacy_count, "s" if legacy_count != 1 else "")
+        )
 
 
 @logs.command(name="backup")
@@ -1541,22 +1495,23 @@ def logs_turn_off():
     path.touch()
 
 
-LOGS_COLUMNS = """    responses.id,
-    responses.model,
-    responses.resolved_model,
-    responses.prompt,
-    responses.system,
-    responses.prompt_json,
-    responses.options_json,
-    responses.response,
-    responses.reasoning,
-    responses.response_json,
-    responses.conversation_id,
-    responses.duration_ms,
-    responses.datetime_utc,
-    responses.input_tokens,
-    responses.output_tokens,
-    responses.token_details,
+LOGS_COLUMNS = """    responses_v2.id,
+    responses_v2.model,
+    responses_v2.resolved_model,
+    responses_v2.prompt,
+    responses_v2.system,
+    responses_v2.options_json,
+    responses_v2.response,
+    responses_v2.reasoning,
+    responses_v2.response_json,
+    responses_v2.conversation_id,
+    responses_v2.duration_ms,
+    responses_v2.datetime_utc,
+    responses_v2.input_tokens,
+    responses_v2.output_tokens,
+    responses_v2.token_details,
+    responses_v2.input_node_id,
+    responses_v2.output_node_id,
     conversations.name as conversation_name,
     conversations.model as conversation_model,
     schemas.content as schema_json"""
@@ -1565,20 +1520,20 @@ LOGS_SQL = """
 select
 {columns}
 from
-    responses
-left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id{extra_where}
+    responses_v2
+left join schemas on responses_v2.schema_id = schemas.id
+left join conversations on responses_v2.conversation_id = conversations.id{extra_where}
 order by {order_by}{limit}
 """
 LOGS_SQL_SEARCH = """
 select
 {columns}
 from
-    responses
-left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id
-join responses_fts on responses_fts.rowid = responses.rowid
-where responses_fts match :query{extra_where}
+    responses_v2
+left join schemas on responses_v2.schema_id = schemas.id
+left join conversations on responses_v2.conversation_id = conversations.id
+join responses_v2_fts on responses_v2_fts.rowid = responses_v2.rowid
+where responses_v2_fts match :query{extra_where}
 order by {order_by}{limit}
 """
 
@@ -1591,10 +1546,10 @@ select
     attachments.url,
     length(attachments.content) as content_length
 from attachments
-join prompt_attachments
-    on attachments.id = prompt_attachments.attachment_id
-where prompt_attachments.response_id in ({})
-order by prompt_attachments."order"
+join response_attachments
+    on attachments.id = response_attachments.attachment_id
+where response_attachments.response_id in ({})
+order by response_attachments."order"
 """
 
 
@@ -1760,7 +1715,7 @@ def logs_list(
         try:
             conversation_id = next(
                 db.query(
-                    "select conversation_id from responses order by id desc limit 1"
+                    "select conversation_id from responses_v2 order by id desc limit 1"
                 )
             )["conversation_id"]
         except StopIteration:
@@ -1784,11 +1739,11 @@ def logs_list(
             model_id = model
 
     sql = LOGS_SQL
-    order_by = "responses.id desc"
+    order_by = "responses_v2.id desc"
     if query:
         sql = LOGS_SQL_SEARCH
         if not latest:
-            order_by = "responses_fts.rank desc"
+            order_by = "responses_v2_fts.rank desc"
 
     limit = ""
     if count is not None and count > 0:
@@ -1809,13 +1764,13 @@ def logs_list(
         "id_gte": id_gte,
     }
     if model_id:
-        where_bits.append("responses.model = :model")
+        where_bits.append("responses_v2.model = :model")
     if conversation_id:
-        where_bits.append("responses.conversation_id = :conversation_id")
+        where_bits.append("responses_v2.conversation_id = :conversation_id")
     if id_gt:
-        where_bits.append("responses.id > :id_gt")
+        where_bits.append("responses_v2.id > :id_gt")
     if id_gte:
-        where_bits.append("responses.id >= :id_gte")
+        where_bits.append("responses_v2.id >= :id_gte")
     if fragments:
         # Resolve the fragments to their hashes
         fragment_hashes = [
@@ -1826,16 +1781,9 @@ def logs_list(
         for i, fragment_hash in enumerate(fragment_hashes):
             exists_clause = f"""
             exists (
-                select 1 from prompt_fragments
-                where prompt_fragments.response_id = responses.id
-                and prompt_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
-                )
-                union
-                select 1 from system_fragments
-                where system_fragments.response_id = responses.id
-                and system_fragments.fragment_id in (
+                select 1 from response_fragments
+                where response_fragments.response_id = responses_v2.id
+                and response_fragments.fragment_id in (
                     select fragments.id from fragments
                     where hash = :f{i}
                 )
@@ -1851,9 +1799,9 @@ def logs_list(
         where_bits.append("""
             exists (
               select 1
-                from tool_results
+                from tool_uses
               where
-                tool_results.response_id = responses.id
+                tool_uses.response_id = responses_v2.id
             )
         """)
     if tools:
@@ -1869,9 +1817,9 @@ def logs_list(
             tool_clauses.append(f"""
             exists (
               select 1
-                from tool_results
-                join tools on tools.id = tool_results.tool_id
-               where tool_results.response_id = responses.id
+                from tool_uses
+                join tools on tools.id = tool_uses.tool_id
+               where tool_uses.response_id = responses_v2.id
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
@@ -1885,7 +1833,7 @@ def logs_list(
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
-        where_bits.append("responses.schema_id = :schema_id")
+        where_bits.append("responses_v2.schema_id = :schema_id")
         sql_params["schema_id"] = schema_id
 
     if where_bits:
@@ -1910,7 +1858,7 @@ def logs_list(
 
     FRAGMENTS_SQL = """
     select
-        {table}.response_id,
+        response_fragments.response_id,
         fragments.hash,
         fragments.id as fragment_id,
         fragments.content,
@@ -1919,22 +1867,27 @@ def logs_list(
             from fragment_aliases
             where fragment_aliases.fragment_id = fragments.id
         ) as aliases
-    from {table}
-    join fragments on {table}.fragment_id = fragments.id
-    where {table}.response_id in ({placeholders})
-    order by {table}."order"
+    from response_fragments
+    join fragments on response_fragments.fragment_id = fragments.id
+    where response_fragments.response_id in ({placeholders})
+    and response_fragments.fragment_type = :fragment_type
+    order by response_fragments."order"
     """
 
     # Fetch any prompt or system prompt fragments
     prompt_fragments_by_id = {}
     system_fragments_by_id = {}
-    for table, dictionary in (
-        ("prompt_fragments", prompt_fragments_by_id),
-        ("system_fragments", system_fragments_by_id),
+    fragment_params = {
+        "id{}".format(i): response_id for i, response_id in enumerate(ids)
+    }
+    fragment_placeholders = ",".join(":id{}".format(i) for i in range(len(ids)))
+    for fragment_type, dictionary in (
+        ("prompt", prompt_fragments_by_id),
+        ("system", system_fragments_by_id),
     ):
         for fragment in db.query(
-            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
-            ids,
+            FRAGMENTS_SQL.format(placeholders=fragment_placeholders),
+            dict(fragment_params, fragment_type=fragment_type),
         ):
             dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
@@ -1966,10 +1919,11 @@ def logs_list(
             click.echo(line)
         return
 
-    # Tool usage information
+    # Tool usage information. Tool definitions come from the
+    # response_tools link table; tool calls and results come from the
+    # structured message parts, which are their canonical record.
     TOOLS_SQL = """
-    SELECT responses.id,
-    -- Tools related to this response
+    SELECT responses_v2.id,
     COALESCE(
         (SELECT json_group_array(json_object(
             'id', t.id,
@@ -1979,94 +1933,83 @@ def logs_list(
             'input_schema', json(t.input_schema)
         ))
         FROM tools t
-        JOIN tool_responses tr ON t.id = tr.tool_id
-        WHERE tr.response_id = responses.id
+        JOIN response_tools rt ON t.id = rt.tool_id
+        WHERE rt.response_id = responses_v2.id
         ),
         '[]'
-    ) AS tools,
-    -- Tool calls for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tc.id,
-            'tool_id', tc.tool_id,
-            'name', tc.name,
-            'arguments', json(tc.arguments),
-            'tool_call_id', tc.tool_call_id
-        ))
-        FROM tool_calls tc
-        WHERE tc.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_calls,
-    -- Tool results for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tr.id,
-            'tool_id', tr.tool_id,
-            'name', tr.name,
-            'output', tr.output,
-            'tool_call_id', tr.tool_call_id,
-            'exception', tr.exception,
-            'attachments', COALESCE(
-                (SELECT json_group_array(json_object(
-                    'id', a.id,
-                    'type', a.type,
-                    'path', a.path,
-                    'url', a.url,
-                    'content', a.content
-                ))
-                FROM tool_results_attachments tra
-                JOIN attachments a ON tra.attachment_id = a.id
-                WHERE tra.tool_result_id = tr.id
-                ),
-                '[]'
-            )
-        ))
-        FROM tool_results tr
-        WHERE tr.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_results
-    FROM responses
+    ) AS tools
+    FROM responses_v2
     where id in ({placeholders})
     """
-    tool_info_by_id = {
-        row["id"]: {
-            "tools": json.loads(row["tools"]),
-            "tool_calls": json.loads(row["tool_calls"]),
-            "tool_results": json.loads(row["tool_results"]),
-        }
+    tools_by_response_id = {
+        row["id"]: json.loads(row["tools"])
         for row in db.query(
             TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
         )
     }
+    tool_uses_by_response_id = {}
+    for use_row in db.query(
+        "select * from tool_uses where response_id in ({}) order by id".format(
+            ",".join("?" * len(ids))
+        ),
+        ids,
+    ):
+        tool_uses_by_response_id.setdefault(use_row["response_id"], []).append(use_row)
 
-    # "efficient" format databases leave tool call arguments and tool
-    # result outputs null in the legacy tables - restore them from the
-    # message store
-    for response_id, tool_info in tool_info_by_id.items():
-        missing_arguments = [
-            tool_call
-            for tool_call in tool_info["tool_calls"]
-            if tool_call["arguments"] is None
-        ]
-        missing_outputs = [
-            tool_result
-            for tool_result in tool_info["tool_results"]
-            if tool_result["output"] is None
-        ]
-        if not missing_arguments and not missing_outputs:
-            continue
-        payloads = message_store._tool_payloads(db, response_id)
-        if payloads is None:
-            continue
-        arguments_by_id, outputs_by_id = payloads
-        for tool_call in missing_arguments:
-            tool_call["arguments"] = (
-                arguments_by_id.get(tool_call["tool_call_id"]) or {}
+    def _attachment_info(attachment):
+        return {
+            "id": attachment.id(),
+            "type": attachment.type,
+            "path": attachment.path,
+            "url": attachment.url,
+            "content_length": len(attachment.content) if attachment.content else None,
+        }
+
+    tool_info_by_id = {}
+    for row in rows:
+        tool_calls = []
+        tool_results = []
+        tool_uses = tool_uses_by_response_id.get(row["id"], [])
+        if tool_uses or row["output_node_id"] != row["input_node_id"]:
+            input_messages, output_messages = message_store.load_turn(
+                db, row["input_node_id"], row["output_node_id"]
             )
-        for tool_result in missing_outputs:
-            tool_result["output"] = outputs_by_id.get(tool_result["tool_call_id"]) or ""
+            tool_calls = [
+                {
+                    "name": part.name,
+                    "arguments": part.arguments,
+                    "tool_call_id": part.tool_call_id,
+                }
+                for message in output_messages
+                for part in message.parts
+                if isinstance(part, ToolCallPart)
+            ]
+            result_parts_by_call_id = {
+                part.tool_call_id: part
+                for message in input_messages
+                for part in message.parts
+                if isinstance(part, ToolResultPart) and part.tool_call_id
+            }
+            for use_row in tool_uses:
+                part = result_parts_by_call_id.get(use_row["tool_call_id"])
+                tool_results.append(
+                    {
+                        "name": use_row["name"],
+                        "output": part.output if part else "",
+                        "tool_call_id": use_row["tool_call_id"],
+                        "exception": part.exception if part else None,
+                        "attachments": (
+                            [_attachment_info(a) for a in part.attachments]
+                            if part
+                            else []
+                        ),
+                    }
+                )
+        tool_info_by_id[row["id"]] = {
+            "tools": tools_by_response_id.get(row["id"], []),
+            "tool_calls": tool_calls,
+            "tool_results": tool_results,
+        }
 
     for row in rows:
         if truncate:
@@ -2659,12 +2602,12 @@ def schemas_list(path, database, queries, full, json_, nl):
     select
       schemas.id,
       schemas.content,
-      max(responses.datetime_utc) as recently_used,
+      max(responses_v2.datetime_utc) as recently_used,
       count(*) as times_used
     from schemas
-    join responses
-      on responses.schema_id = schemas.id
-    {} group by responses.schema_id
+    join responses_v2
+      on responses_v2.schema_id = schemas.id
+    {} group by responses_v2.schema_id
     order by recently_used
     """.format(where_sql)
     rows = db.query(sql, params)

@@ -1131,11 +1131,10 @@ class TestSqliteRehydrateMessages:
         r1.log_to_db(db)
 
         # Rehydrate the response
-        row = next(db["responses"].rows)
+        row = next(db["responses_v2"].rows)
         rehydrated = llm.Response.from_row(db, row)
-        # _stream_events is empty (SQLite doesn't persist those), but
-        # _chunks carries the text. response.messages() must fall back
-        # to synthesizing a TextPart.
+        # _stream_events is empty (SQLite doesn't persist those); the
+        # assistant turn comes back from the message store instead.
         assert rehydrated._stream_events == []
         assert rehydrated.messages() == [
             llm.Message(

@@ -480,7 +480,6 @@ class Prompt:
             AttachmentPart,
             Message,
             TextPart,
-            ToolResultPart,
         )
 
         if self._explicit_messages is not None:
@@ -495,14 +494,7 @@ class Prompt:
             result.append(
                 Message(
                     role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in self.tool_results
-                    ],
+                    parts=[_tool_result_part(tr) for tr in self.tool_results],
                 )
             )
 
@@ -593,7 +585,6 @@ class _BaseConversation:
             AttachmentPart,
             Message,
             TextPart,
-            ToolResultPart,
         )
 
         if explicit_messages is not None:
@@ -620,14 +611,7 @@ class _BaseConversation:
             chain.append(
                 Message(
                     role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
+                    parts=[_tool_result_part(tr) for tr in tool_results],
                 )
             )
 
@@ -904,22 +888,34 @@ class AsyncConversation(_BaseConversation):
 
 FRAGMENT_SQL = """
 select
-    'prompt' as fragment_type,
+    response_fragments.fragment_type,
     fragments.content,
-    pf."order" as ord
-from prompt_fragments pf
-join fragments on pf.fragment_id = fragments.id
-where pf.response_id = :response_id
-union all
-select
-    'system' as fragment_type,
-    fragments.content,
-    sf."order" as ord
-from system_fragments sf
-join fragments on sf.fragment_id = fragments.id
-where sf.response_id = :response_id
+    response_fragments."order" as ord
+from response_fragments
+join fragments on response_fragments.fragment_id = fragments.id
+where response_fragments.response_id = :response_id
 order by fragment_type desc, ord asc;
 """
+
+
+def _tool_result_part(tool_result: "ToolResult"):
+    """The ToolResultPart for a ToolResult, carrying its attachments
+    and any exception so they survive in prompt.messages - the message
+    store is the canonical record of tool traffic."""
+    from .parts import ToolResultPart
+
+    exception = None
+    if tool_result.exception:
+        exception = "{}: {}".format(
+            type(tool_result.exception).__name__, tool_result.exception
+        )
+    return ToolResultPart(
+        name=tool_result.name,
+        output=tool_result.output,
+        tool_call_id=tool_result.tool_call_id,
+        attachments=list(tool_result.attachments or []),
+        exception=exception,
+    )
 
 
 class _BaseResponse:
@@ -1302,7 +1298,10 @@ class _BaseResponse:
 
     @classmethod
     def from_row(cls, db, row, _async=False):
+        "Load a response from a responses_v2 row at full fidelity."
         from llm import get_model, get_async_model
+        from .message_store import load_turn
+        from .parts import ToolCallPart, ToolResultPart
 
         if _async:
             model = get_async_model(row["model"])
@@ -1314,7 +1313,7 @@ class _BaseResponse:
         if row["schema_id"]:
             schema = json.loads(db["schemas"].get(row["schema_id"])["content"])
 
-        # Tool definitions and results for prompt
+        # Tool definitions that were available to this prompt
         tools = [
             Tool(
                 name=tool_row["name"],
@@ -1328,26 +1327,40 @@ class _BaseResponse:
             for tool_row in db.query(
                 """
                 select tools.* from tools
-                join tool_responses on tools.id = tool_responses.tool_id
-                where tool_responses.response_id = ?
+                join response_tools on tools.id = response_tools.tool_id
+                where response_tools.response_id = ?
             """,
                 [row["id"]],
             )
         ]
-        tool_results = [
-            ToolResult(
-                name=tool_results_row["name"],
-                output=tool_results_row["output"],
-                tool_call_id=tool_results_row["tool_call_id"],
+
+        # The exact structured message chains for this turn
+        input_messages, output_messages = load_turn(
+            db, row["input_node_id"], row["output_node_id"]
+        )
+
+        # This turn's tool results: index rows from tool_uses, payloads
+        # from the matching ToolResultParts in the input chain
+        result_parts_by_call_id = {
+            part.tool_call_id: part
+            for message in input_messages
+            for part in message.parts
+            if isinstance(part, ToolResultPart) and part.tool_call_id
+        }
+        tool_results = []
+        for use_row in db.query(
+            "select * from tool_uses where response_id = ? order by id",
+            [row["id"]],
+        ):
+            part = result_parts_by_call_id.get(use_row["tool_call_id"])
+            tool_results.append(
+                ToolResult(
+                    name=use_row["name"],
+                    output=part.output if part else "",
+                    tool_call_id=use_row["tool_call_id"],
+                    attachments=list(part.attachments) if part else [],
+                )
             )
-            for tool_results_row in db.query(
-                """
-                select * from tool_results
-                where response_id = ?
-            """,
-                [row["id"]],
-            )
-        ]
 
         all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
         fragments = [
@@ -1369,46 +1382,45 @@ class _BaseResponse:
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 options=model.Options(**json.loads(row["options_json"])),
+                messages=input_messages,
             ),
             stream=False,
         )
-        prompt_json = json.loads(row["prompt_json"] or "null")
         response.id = row["id"]
-        response._prompt_json = prompt_json
+        response.resolved_model = row["resolved_model"]
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
         response._chunks = [row["response"]]
-        # Attachments
+        response._loaded_messages = output_messages
+        response.input_tokens = row["input_tokens"]
+        response.output_tokens = row["output_tokens"]
+        response.token_details = (
+            json.loads(row["token_details"]) if row["token_details"] else None
+        )
+        # Attachments included with this turn's prompt
         response.attachments = [
             Attachment.from_row(attachment_row)
             for attachment_row in db.query(
                 """
                 select attachments.* from attachments
-                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
-                where prompt_attachments.response_id = ?
-                order by prompt_attachments."order"
+                join response_attachments
+                    on attachments.id = response_attachments.attachment_id
+                where response_attachments.response_id = ?
+                order by response_attachments."order"
             """,
                 [row["id"]],
             )
         ]
-        # Tool calls
+        # Tool calls made by this response, from the output parts
         response._tool_calls = [
             ToolCall(
-                name=tool_row["name"],
-                # Efficient format databases leave arguments null here;
-                # hydrate_response_messages() restores the real values
-                # from the message store
-                arguments=json.loads(tool_row["arguments"] or "{}"),
-                tool_call_id=tool_row["tool_call_id"],
+                name=part.name,
+                arguments=part.arguments or {},
+                tool_call_id=part.tool_call_id,
             )
-            for tool_row in db.query(
-                """
-                select * from tool_calls
-                where response_id = ?
-                order by tool_call_id
-            """,
-                [row["id"]],
-            )
+            for message in output_messages
+            for part in message.parts
+            if isinstance(part, ToolCallPart)
         ]
 
         return response
@@ -1419,16 +1431,11 @@ class _BaseResponse:
         )
 
     def log_to_db(self, db):
-        from .message_store import get_log_format
+        from .migrations import migrate
+        from .message_store import store_messages
+        from .parts import ReasoningPart
 
-        # In "efficient" format the message store is the canonical copy
-        # of the structured conversation, so the legacy columns that
-        # would duplicate it (tool_calls.arguments, tool_results.output)
-        # are left null. prompt_json is no longer written in either
-        # format - the message store records the exact input chain.
-        # response_json is kept in both formats: it carries provider
-        # data (logprobs, finish reasons) not captured anywhere else.
-        efficient = get_log_format(db) == "efficient"
+        migrate(db)
         conversation = self.conversation
         if not conversation:
             conversation = Conversation(model=self.model)
@@ -1449,8 +1456,8 @@ class _BaseResponse:
 
         response_id = self.id
         replacements = {}
-        # Include replacements from previous responses, used to
-        # condense response_json below
+        # Include replacements from previous responses, used to condense
+        # response_json below
         for previous_response in conversation.responses[:-1]:
             for fragment in (previous_response.prompt.fragments or []) + (
                 previous_response.prompt.system_fragments or []
@@ -1461,67 +1468,73 @@ class _BaseResponse:
                     previous_response.text_or_raise()
                 )
 
-        for i, fragment in enumerate(self.prompt.fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["prompt_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-        for i, fragment in enumerate(self.prompt.system_fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["system_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
+        # Fragment provenance for this turn
+        for fragment_type, fragment_list in (
+            ("prompt", self.prompt.fragments),
+            ("system", self.prompt.system_fragments),
+        ):
+            for i, fragment in enumerate(fragment_list):
+                fragment_id = ensure_fragment(db, fragment)
+                replacements[f"f{fragment_id}"] = fragment
+                db["response_fragments"].insert(
+                    {
+                        "response_id": response_id,
+                        "fragment_id": fragment_id,
+                        "fragment_type": fragment_type,
+                        "order": i,
+                    },
+                    ignore=True,
+                )
 
         response_text = self.text_or_raise()
         replacements[f"r:{response_id}"] = response_text
         # Concatenate visible reasoning text from the assembled
         # ReasoningPart entries; redacted markers contribute nothing.
-        from .parts import ReasoningPart
-
         reasoning_text = "".join(
             p.text
             for m in self._messages_now()
             for p in m.parts
             if isinstance(p, ReasoningPart) and p.text
         )
-        response = {
-            "id": response_id,
-            "model": self.model.model_id,
-            "prompt": self.prompt._prompt,
-            "system": self.prompt._system,
-            "prompt_json": None,
-            "options_json": {
-                key: value
-                for key, value in dict(self.prompt.options).items()
-                if value is not None
-            },
-            "response": response_text,
-            "reasoning": reasoning_text or None,
-            "response_json": condense_json(self.json(), replacements),
-            "conversation_id": conversation.id,
-            "duration_ms": self.duration_ms(),
-            "datetime_utc": self.datetime_utc(),
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "token_details": (
-                json.dumps(self.token_details) if self.token_details else None
-            ),
-            "schema_id": schema_id,
-            "resolved_model": self.resolved_model,
-        }
-        db["responses"].insert(response)
 
-        # Persist any attachments - loop through with index
+        # Store the structured message chains - the canonical record of
+        # this turn, with full Part fidelity, deduplicated by content
+        # hash so re-logged conversation prefixes are stored only once
+        input_node_id = store_messages(db, self.prompt.messages)
+        output_node_id = store_messages(
+            db, self._messages_now(), parent_node_id=input_node_id
+        )
+
+        db["responses_v2"].insert(
+            {
+                "id": response_id,
+                "model": self.model.model_id,
+                "resolved_model": self.resolved_model,
+                "prompt": self.prompt._prompt,
+                "system": self.prompt._system,
+                "options_json": {
+                    key: value
+                    for key, value in dict(self.prompt.options).items()
+                    if value is not None
+                },
+                "response": response_text,
+                "reasoning": reasoning_text or None,
+                "response_json": condense_json(self.json(), replacements),
+                "conversation_id": conversation.id,
+                "duration_ms": self.duration_ms(),
+                "datetime_utc": self.datetime_utc(),
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "token_details": (
+                    json.dumps(self.token_details) if self.token_details else None
+                ),
+                "schema_id": schema_id,
+                "input_node_id": input_node_id,
+                "output_node_id": output_node_id,
+            }
+        )
+
+        # Attachments included with this turn's prompt
         for index, attachment in enumerate(self.prompt.attachments):
             attachment_id = attachment.id()
             db["attachments"].insert(
@@ -1534,48 +1547,46 @@ class _BaseResponse:
                 },
                 replace=True,
             )
-            db["prompt_attachments"].insert(
+            db["response_attachments"].insert(
                 {
                     "response_id": response_id,
                     "attachment_id": attachment_id,
                     "order": index,
                 },
+                replace=True,
             )
 
-        # Persist any tools, tool calls and tool results
+        # Tool definitions that were available to this prompt
         tool_ids_by_name = {}
+        tools_by_name = {}
         for tool in self.prompt.tools:
             tool_id = ensure_tool(db, tool)
             tool_ids_by_name[tool.name] = tool_id
-            db["tool_responses"].insert(
+            tools_by_name[tool.name] = tool
+            db["response_tools"].insert(
                 {
+                    "response_id": response_id,
                     "tool_id": tool_id,
-                    "response_id": response_id,
-                }
+                },
+                ignore=True,
             )
-        for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
-            db["tool_calls"].insert(
-                {
-                    "response_id": response_id,
-                    "tool_id": tool_ids_by_name.get(tool_call.name) or None,
-                    "name": tool_call.name,
-                    "arguments": (
-                        None if efficient else json.dumps(tool_call.arguments)
-                    ),
-                    "tool_call_id": tool_call.tool_call_id,
-                }
-            )
+
+        # Index this turn's tool results, powering `llm logs -T` - the
+        # payloads live in the message parts stored above
         for tool_result in self.prompt.tool_results:
             instance_id = None
             if tool_result.instance:
                 try:
                     if not tool_result.instance.instance_id:
+                        matching_tool = tools_by_name.get(tool_result.name)
                         tool_result.instance.instance_id = (
-                            db["tool_instances"]
+                            db["toolbox_instances"]
                             .insert(
                                 {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
+                                    "plugin": (
+                                        matching_tool.plugin if matching_tool else None
+                                    ),
+                                    "name": tool_result.name.split("_")[0],
                                     "arguments": json.dumps(
                                         tool_result.instance._config
                                     ),
@@ -1586,56 +1597,15 @@ class _BaseResponse:
                     instance_id = tool_result.instance.instance_id
                 except AttributeError:
                     pass
-            tool_result_id = (
-                db["tool_results"]
-                .insert(
-                    {
-                        "response_id": response_id,
-                        "tool_id": tool_ids_by_name.get(tool_result.name) or None,
-                        "name": tool_result.name,
-                        "output": None if efficient else tool_result.output,
-                        "tool_call_id": tool_result.tool_call_id,
-                        "instance_id": instance_id,
-                        "exception": (
-                            (
-                                "{}: {}".format(
-                                    tool_result.exception.__class__.__name__,
-                                    str(tool_result.exception),
-                                )
-                            )
-                            if tool_result.exception
-                            else None
-                        ),
-                    }
-                )
-                .last_pk
+            db["tool_uses"].insert(
+                {
+                    "response_id": response_id,
+                    "tool_id": tool_ids_by_name.get(tool_result.name) or None,
+                    "name": tool_result.name,
+                    "tool_call_id": tool_result.tool_call_id,
+                    "instance_id": instance_id,
+                }
             )
-            # Persist attachments for tool results
-            for index, attachment in enumerate(tool_result.attachments):
-                attachment_id = attachment.id()
-                db["attachments"].insert(
-                    {
-                        "id": attachment_id,
-                        "type": attachment.resolve_type(),
-                        "path": attachment.path,
-                        "url": attachment.url,
-                        "content": attachment.content,
-                    },
-                    replace=True,
-                )
-                db["tool_results_attachments"].insert(
-                    {
-                        "tool_result_id": tool_result_id,
-                        "attachment_id": attachment_id,
-                        "order": index,
-                    },
-                )
-
-        # Also persist the structured message chains (full Part fidelity,
-        # deduplicated by content hash) alongside the legacy columns above.
-        from .message_store import _write_response_nodes
-
-        _write_response_nodes(db, self)
 
 
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
@@ -1765,7 +1735,7 @@ class Response(_BaseResponse):
         explicit ``tool_results=`` list (e.g. results you mutated, or
         synthetic ones for testing) to skip auto-execution.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         self._force()
         if tool_results is None and self._tool_calls:
@@ -1779,14 +1749,7 @@ class Response(_BaseResponse):
             chain.append(
                 Message(
                     role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
+                    parts=[_tool_result_part(tr) for tr in tool_results],
                 )
             )
         if prompt:
@@ -2116,7 +2079,7 @@ class AsyncResponse(_BaseResponse):
         self.execute_tool_calls()``. See ``Response.reply`` for the
         ``tool_results=`` semantics.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         if not self._done:
             raise ValueError(
@@ -2131,14 +2094,7 @@ class AsyncResponse(_BaseResponse):
             chain.append(
                 Message(
                     role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
+                    parts=[_tool_result_part(tr) for tr in tool_results],
                 )
             )
         if prompt:
@@ -2664,21 +2620,13 @@ def _append_tool_results_to_chain(chain, tool_results, attachments) -> List[Any]
     from .parts import (
         AttachmentPart,
         Message,
-        ToolResultPart,
     )
 
     if tool_results:
         chain.append(
             Message(
                 role="tool",
-                parts=[
-                    ToolResultPart(
-                        name=tr.name,
-                        output=tr.output,
-                        tool_call_id=tr.tool_call_id,
-                    )
-                    for tr in tool_results
-                ],
+                parts=[_tool_result_part(tr) for tr in tool_results],
             )
         )
     if attachments:

@@ -103,7 +103,7 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
     sync_r = await r.to_sync_response()
     sync_r.log_to_db(db)
 
-    row = next(db["responses"].rows)
+    row = next(db["responses_v2"].rows)
     rehydrated = llm.AsyncResponse.from_row(db, row)
 
     assert rehydrated._stream_events == []

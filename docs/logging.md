@@ -280,13 +280,16 @@ This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_a
 
 ## Structured message storage
 
-In addition to the classic tables described below, responses are also logged to a set of content-addressed tables that capture the full structured form of the conversation — every part of every message, including reasoning parts and provider metadata such as encrypted reasoning signatures. Responses logged this way can be re-inflated from the database with no loss of detail, using the {ref}`llm.message_store Python API <python-api-message-store>`.
+Responses are logged as a lean `responses_v2` row plus a set of content-addressed tables that capture the full structured form of the conversation — every part of every message, including reasoning parts and provider metadata such as encrypted reasoning signatures. Logged responses can be re-inflated from the database with no loss of detail, using the {ref}`llm.message_store Python API <python-api-message-store>`.
 
-Three tables are involved:
+The message content lives in two tables:
 
 - `messages` stores one row per unique message. Its `id` is a SHA-256 hash of the message content, so the same message is stored exactly once no matter how many conversations include it. The `parts` column contains the JSON list of parts; attachments are referenced by their id in the `attachments` table rather than embedded.
-- `message_nodes` stores chain nodes. A node is a `(parent node, message)` pair and its `id` is a hash of both, which means a node id uniquely identifies an entire message chain — that message plus everything before it. Conversations that share a prefix share nodes: re-logging a conversation that grew by one turn only inserts the new tail. Chains that diverge after a common prefix form a tree.
-- `response_nodes` links a row in `responses` to the node ids for its input chain (`input_node_id`, exactly what was sent to the model) and output chain (`output_node_id`, the input plus the messages the model produced).
+- `message_nodes` stores chain nodes. A node is a `(parent node, message)` pair and its `id` is a hash of both, which means a node id uniquely identifies an entire message chain — that message plus everything before it. Conversations that share a prefix share nodes: re-logging a conversation that grew by one turn only inserts the new tail. Chains that diverge after a common prefix form a tree. This means clients that re-send the full conversation history with every request — an OpenAI-compatible API endpoint, for example — can be logged without storing any message more than once.
+
+Each `responses_v2` row records the node heads for its input chain (`input_node_id`, exactly what was sent to the model) and its output chain (`output_node_id`, the input plus the messages the model produced), alongside the per-occurrence facts: when the response was generated, token usage, options, the model used, and small single-turn text columns (`prompt`, `system`, `response`, `reasoning`) that power full-text search and display. The `response_json` column preserves the raw provider response payload, which can carry data (such as logprobs) not captured anywhere else.
+
+A handful of small link and index tables complete the picture: `response_fragments` (fragment provenance for `-f` filtering), `response_tools` (which tool definitions were available), `response_attachments` (this turn's prompt attachments), `tool_uses` (one row per tool result, powering `llm logs -T` — the payloads live in the message parts) and `toolbox_instances` (configured Toolbox arguments).
 
 Content hashes are calculated as follows. Canonical JSON means `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` encoded as UTF-8. A message is hashed as its `Message.to_dict()` dictionary with attachments replaced by references — an attachment part becomes `{"type": "attachment", "attachment_id": ...}` and a tool result part's `attachments` list becomes `attachment_ids`, where the attachment id is the existing SHA-256-based `Attachment.id()`. Then:
 
@@ -295,29 +298,15 @@ Content hashes are calculated as follows. Canonical JSON means `json.dumps(value
 
 with the empty string in place of the parent node id for the first message in a chain. Hex digests are lowercase. Anything writing to these tables must hash identically or deduplication will break — treat this scheme as part of the schema.
 
-The per-occurrence facts — when the response was generated, token usage, options, the model used — live on the `responses` row as before, so two identical message trees logged at different times still get their own response records.
+(logging-upgrading)=
 
-Responses logged by older versions of LLM do not have rows in these tables. `llm logs` and `llm -c` work transparently across both: responses with a `response_nodes` row are re-inflated at full fidelity, older rows fall back to the previous text-based reconstruction.
+## Logs from older versions of LLM
 
-(logging-formats)=
+Earlier versions of LLM logged to a different set of tables: `responses`, `tool_calls`, `tool_results`, `prompt_attachments`, `prompt_fragments`, `system_fragments`, `tool_responses` and `tool_instances`. If your database contains rows in those tables they are left exactly as they were — LLM no longer writes to them, and `llm logs` no longer reads from them, but nothing ever modifies or deletes them.
 
-## Log formats: dual and efficient
+To carry that history forward into the current format, install the `llm-upgrade-logs` plugin and run `llm upgrade-logs`. The port is additive and repeatable: it reads the old tables, writes equivalent rows into the current tables, and preserves the original response and conversation IDs so `llm logs --cid` and `llm -c` work seamlessly across the upgrade boundary. `llm logs status` will remind you if a database contains old-format rows.
 
-Each logs database has a write format, decided when it is first migrated and stored in the `logs_settings` table:
-
-- **dual** — every response is written in the complete legacy format alongside the message store, including the payloads that duplicate it: tool call arguments and tool result outputs. Databases that already contained logged responses when the message store was introduced get this format, so anything that queried them before keeps working unchanged.
-- **efficient** — the message store is the canonical copy of the structured conversation. The legacy tables still get all of their rows — so full-text search, `llm logs` filters like `-T` and `--schema`, and existing SQL queries keep working — but `tool_calls.arguments` and `tool_results.output` are left null instead of duplicating the message store, and `llm logs` reads those values from the message store when displaying results. Fresh databases get this format.
-
-In both formats the single-turn text columns (`prompt`, `system`, `response`, `reasoning`) are still written — they are small and they power search and display. The `prompt_json` column, which used to record the full provider request body including all previous turns, is no longer written in either format: the message store records the exact input chain instead, without duplication. `response_json` is still written in both formats because it can carry provider data (such as logprobs) that is not captured anywhere else.
-
-Check or change the format for a database with:
-
-```bash
-llm logs format             # prints "dual" or "efficient"
-llm logs format efficient   # switch this database to efficient writes
-```
-
-Changing the format only affects how future responses are written; existing rows are never modified. If you have a long-lived logs database and want the leaner format going forward, the simplest approach is to rename your old `logs.db` and let LLM create a fresh one, which will default to efficient — your old logs remain fully searchable by passing the old path with `llm logs -d /path/to/old.db`.
+The shared catalog tables — `conversations`, `schemas`, `attachments`, `fragments`, `fragment_aliases` and `tools` — are used by both formats and continue to work unchanged.
 
 (logging-sql-schema)=
 
@@ -341,10 +330,10 @@ def cleanup_sql(sql):
 
 cog.out("```sql\n")
 for table in (
-    "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
-    "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
-    "tool_responses", "tool_calls", "tool_results", "tool_instances",
-    "messages", "message_nodes", "response_nodes", "logs_settings"
+    "conversations", "schemas", "attachments", "fragments", "fragment_aliases", "tools",
+    "messages", "message_nodes", "responses_v2", "responses_v2_fts",
+    "response_fragments", "response_tools", "response_attachments",
+    "tool_uses", "toolbox_instances",
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -361,43 +350,12 @@ CREATE TABLE [schemas] (
   [id] TEXT PRIMARY KEY,
   [content] TEXT
 );
-CREATE TABLE "responses" (
-  [id] TEXT PRIMARY KEY,
-  [model] TEXT,
-  [prompt] TEXT,
-  [system] TEXT,
-  [prompt_json] TEXT,
-  [options_json] TEXT,
-  [response] TEXT,
-  [response_json] TEXT,
-  [conversation_id] TEXT REFERENCES [conversations]([id]),
-  [duration_ms] INTEGER,
-  [datetime_utc] TEXT,
-  [input_tokens] INTEGER,
-  [output_tokens] INTEGER,
-  [token_details] TEXT,
-  [schema_id] TEXT REFERENCES [schemas]([id]),
-  [resolved_model] TEXT,
-  [reasoning] TEXT
-);
-CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
-  [prompt],
-  [response],
-  content=[responses]
-);
 CREATE TABLE [attachments] (
   [id] TEXT PRIMARY KEY,
   [type] TEXT,
   [path] TEXT,
   [url] TEXT,
   [content] BLOB
-);
-CREATE TABLE [prompt_attachments] (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [attachment_id] TEXT REFERENCES [attachments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [attachment_id])
 );
 CREATE TABLE [fragments] (
   [id] INTEGER PRIMARY KEY,
@@ -410,22 +368,6 @@ CREATE TABLE [fragment_aliases] (
   [alias] TEXT PRIMARY KEY,
   [fragment_id] INTEGER REFERENCES [fragments]([id])
 );
-CREATE TABLE "prompt_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
-);
-CREATE TABLE "system_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
-);
 CREATE TABLE [tools] (
   [id] INTEGER PRIMARY KEY,
   [hash] TEXT,
@@ -433,36 +375,6 @@ CREATE TABLE [tools] (
   [description] TEXT,
   [input_schema] TEXT,
   [plugin] TEXT
-);
-CREATE TABLE [tool_responses] (
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [response_id] TEXT REFERENCES [responses]([id]),
-  PRIMARY KEY ([tool_id],
-  [response_id])
-);
-CREATE TABLE [tool_calls] (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [arguments] TEXT,
-  [tool_call_id] TEXT
-);
-CREATE TABLE "tool_results" (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [output] TEXT,
-  [tool_call_id] TEXT,
-  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
-  [exception] TEXT
-);
-CREATE TABLE [tool_instances] (
-  [id] INTEGER PRIMARY KEY,
-  [plugin] TEXT,
-  [name] TEXT,
-  [arguments] TEXT
 );
 CREATE TABLE [messages] (
   [id] TEXT PRIMARY KEY,
@@ -478,14 +390,67 @@ CREATE TABLE [message_nodes] (
   [depth] INTEGER,
   [first_seen_utc] TEXT
 );
-CREATE TABLE [response_nodes] (
-  [response_id] TEXT PRIMARY KEY REFERENCES [responses]([id]),
+CREATE TABLE [responses_v2] (
+  [id] TEXT PRIMARY KEY,
+  [model] TEXT,
+  [resolved_model] TEXT,
+  [prompt] TEXT,
+  [system] TEXT,
+  [options_json] TEXT,
+  [response] TEXT,
+  [reasoning] TEXT,
+  [response_json] TEXT,
+  [conversation_id] TEXT REFERENCES [conversations]([id]),
+  [duration_ms] INTEGER,
+  [datetime_utc] TEXT,
+  [input_tokens] INTEGER,
+  [output_tokens] INTEGER,
+  [token_details] TEXT,
+  [schema_id] TEXT REFERENCES [schemas]([id]),
   [input_node_id] TEXT REFERENCES [message_nodes]([id]),
   [output_node_id] TEXT REFERENCES [message_nodes]([id])
 );
-CREATE TABLE [logs_settings] (
-  [key] TEXT PRIMARY KEY,
-  [value] TEXT
+CREATE VIRTUAL TABLE [responses_v2_fts] USING FTS5 (
+  [prompt],
+  [response],
+  content=[responses_v2]
+);
+CREATE TABLE [response_fragments] (
+  [response_id] TEXT REFERENCES [responses_v2]([id]),
+  [fragment_id] INTEGER REFERENCES [fragments]([id]),
+  [fragment_type] TEXT,
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [fragment_id],
+  [fragment_type],
+  [order])
+);
+CREATE TABLE [response_tools] (
+  [response_id] TEXT REFERENCES [responses_v2]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  PRIMARY KEY ([response_id],
+  [tool_id])
+);
+CREATE TABLE [response_attachments] (
+  [response_id] TEXT REFERENCES [responses_v2]([id]),
+  [attachment_id] TEXT REFERENCES [attachments]([id]),
+  [order] INTEGER,
+  PRIMARY KEY ([response_id],
+  [attachment_id])
+);
+CREATE TABLE [tool_uses] (
+  [id] INTEGER PRIMARY KEY,
+  [response_id] TEXT REFERENCES [responses_v2]([id]),
+  [tool_id] INTEGER REFERENCES [tools]([id]),
+  [name] TEXT,
+  [tool_call_id] TEXT,
+  [instance_id] INTEGER REFERENCES [toolbox_instances]([id])
+);
+CREATE TABLE [toolbox_instances] (
+  [id] INTEGER PRIMARY KEY,
+  [plugin] TEXT,
+  [name] TEXT,
+  [arguments] TEXT
 );
 ```
 <!-- [[[end]]] -->

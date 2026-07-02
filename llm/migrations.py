@@ -429,33 +429,119 @@ def m022_response_reasoning(db):
 
 
 @migration
-def m023_message_trees(db):
-    # Content-addressed structured message storage, see llm/message_store.py
-    # for the table definitions and hashing scheme. The tables are
-    # created by ensure_tables() rather than inline here because
-    # message_store writes must also work against databases that have
-    # not been migrated, matching log_to_db()'s legacy behavior.
+def m023_message_store(db):
+    # The current logging format: a content-addressed message store
+    # (see llm/message_store.py for the hashing scheme) plus a lean
+    # responses_v2 table for per-occurrence data. LLM core no longer
+    # writes to the per-response tables above this point (responses,
+    # tool_calls, tool_results, prompt_attachments, prompt_fragments,
+    # system_fragments, tool_responses, tool_instances) - they are
+    # frozen in place as an archive for databases that predate this
+    # migration; the llm-upgrade-logs plugin can port their contents
+    # forward. The content-addressed catalog tables (conversations,
+    # schemas, attachments, fragments, fragment_aliases, tools) are
+    # format-neutral and shared.
     from .message_store import ensure_tables
 
-    ensure_tables(db)
-
-
-@migration
-def m024_log_format(db):
-    # Decide once, at migration time, how this database is written to:
-    # - "dual": the message store plus the full legacy format,
-    #   including duplicated tool call arguments and tool result
-    #   outputs. Databases that already contain logged responses get
-    #   this, so everything that read them before keeps working.
-    # - "efficient": the message store is the canonical copy; legacy
-    #   tables get the same rows but with the duplicated bulky payloads
-    #   (response_json, tool_calls.arguments, tool_results.output) left
-    #   null. Fresh databases get this.
-    # Recorded in logs_settings so the choice is stable thereafter.
-    # `llm logs format` shows or changes it.
-    if not db["logs_settings"].exists():
-        db["logs_settings"].create({"key": str, "value": str}, pk="key")
-    format = (
-        "dual" if db["responses"].exists() and db["responses"].count else "efficient"
+    ensure_tables(db)  # attachments, messages, message_nodes
+    db["responses_v2"].create(
+        {
+            "id": str,
+            "model": str,
+            "resolved_model": str,
+            "prompt": str,  # this turn's prompt text (without fragments)
+            "system": str,  # this turn's system text (without fragments)
+            "options_json": str,
+            "response": str,  # concatenated response text
+            "reasoning": str,  # concatenated visible reasoning text
+            "response_json": str,
+            "conversation_id": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+            "input_tokens": int,
+            "output_tokens": int,
+            "token_details": str,
+            "schema_id": str,
+            "input_node_id": str,  # head of the chain sent to the model
+            "output_node_id": str,  # head after appending output messages
+        },
+        pk="id",
+        foreign_keys=(
+            ("conversation_id", "conversations", "id"),
+            ("schema_id", "schemas", "id"),
+            ("input_node_id", "message_nodes", "id"),
+            ("output_node_id", "message_nodes", "id"),
+        ),
     )
-    db["logs_settings"].insert({"key": "log_format", "value": format}, replace=True)
+    db["responses_v2"].enable_fts(["prompt", "response"], create_triggers=True)
+    # Fragment provenance for this turn's prompt and system, replacing
+    # the prompt_fragments and system_fragments pair
+    db["response_fragments"].create(
+        {
+            "response_id": str,
+            "fragment_id": int,
+            "fragment_type": str,  # 'prompt' or 'system'
+            "order": int,
+        },
+        pk=("response_id", "fragment_id", "fragment_type", "order"),
+        foreign_keys=(
+            ("response_id", "responses_v2", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+    )
+    # Tools that were available to this response, replacing tool_responses
+    db["response_tools"].create(
+        {
+            "response_id": str,
+            "tool_id": int,
+        },
+        pk=("response_id", "tool_id"),
+        foreign_keys=(
+            ("response_id", "responses_v2", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+    # Attachments included with this turn's prompt, replacing
+    # prompt_attachments
+    db["response_attachments"].create(
+        {
+            "response_id": str,
+            "attachment_id": str,
+            "order": int,
+        },
+        pk=("response_id", "attachment_id"),
+        foreign_keys=(
+            ("response_id", "responses_v2", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+    )
+    # Configured Toolbox instances, replacing tool_instances
+    db["toolbox_instances"].create(
+        {
+            "id": int,
+            "plugin": str,
+            "name": str,
+            "arguments": str,
+        },
+        pk="id",
+    )
+    # One row per tool result in this response's prompt - a metadata
+    # index powering `llm logs -T`; the payloads live in the message
+    # parts. Replaces the tool_calls and tool_results tables.
+    db["tool_uses"].create(
+        {
+            "id": int,
+            "response_id": str,
+            "tool_id": int,
+            "name": str,
+            "tool_call_id": str,
+            "instance_id": int,
+        },
+        pk="id",
+        foreign_keys=(
+            ("response_id", "responses_v2", "id"),
+            ("tool_id", "tools", "id"),
+            ("instance_id", "toolbox_instances", "id"),
+        ),
+    )
+    db["tool_uses"].create_index(["response_id"])

@@ -38,19 +38,13 @@ def test_tool_use_basic(vcr):
     assert second.prompt.tool_results[0].name == "multiply"
     assert second.prompt.tool_results[0].output == "2869461"
 
-    # Test writing to the database - pinned to "dual" format, which
-    # duplicates tool call arguments and outputs into the legacy tables
-    # (fresh databases default to "efficient", covered by
-    # tests/test_message_store.py)
+    # Test writing to the database
     db = sqlite_utils.Database(memory=True)
     migrate(db)
-    llm.message_store.set_log_format(db, "dual")
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset(
-        {"tools", "tool_responses", "tool_calls", "tool_results"}
-    )
+    assert set(db.table_names()).issuperset({"tools", "response_tools", "tool_uses"})
 
-    responses = list(db["responses"].rows)
+    responses = list(db["responses_v2"].rows)
     assert len(responses) == 2
     first_response, second_response = responses
 
@@ -60,18 +54,19 @@ def test_tool_use_basic(vcr):
     assert tools[0]["description"] == "Multiply two numbers."
     assert tools[0]["plugin"] is None
 
-    tool_results = list(db["tool_results"].rows)
-    tool_calls = list(db["tool_calls"].rows)
+    # The tool_uses index records this turn's results; the payloads
+    # live in the message store
+    tool_uses = list(db["tool_uses"].rows)
+    assert len(tool_uses) == 1
+    assert tool_uses[0]["response_id"] == second_response["id"]
+    assert tool_uses[0]["name"] == "multiply"
 
-    assert len(tool_calls) == 1
-    assert tool_calls[0]["response_id"] == first_response["id"]
-    assert tool_calls[0]["name"] == "multiply"
-    assert tool_calls[0]["arguments"] == '{"a": 1231, "b": 2331}'
+    loaded_first = llm.message_store.load_response(db, first_response["id"])
+    assert loaded_first.tool_calls()[0].arguments == {"a": 1231, "b": 2331}
+    assert tool_uses[0]["tool_call_id"] == loaded_first.tool_calls()[0].tool_call_id
 
-    assert len(tool_results) == 1
-    assert tool_results[0]["response_id"] == second_response["id"]
-    assert tool_results[0]["output"] == "2869461"
-    assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+    loaded_second = llm.message_store.load_response(db, second_response["id"])
+    assert loaded_second.prompt.tool_results[0].output == "2869461"
 
 
 @pytest.mark.vcr

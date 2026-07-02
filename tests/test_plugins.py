@@ -464,12 +464,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -477,7 +477,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -557,13 +557,6 @@ class ToolboxPlugin:
 
 
 def test_register_toolbox(tmpdir, logs_db):
-    # This test asserts on the duplicated tool payloads in the legacy
-    # tables, so pin the database to "dual" format (fresh databases
-    # default to "efficient", covered by tests/test_message_store.py)
-    from llm.migrations import migrate
-
-    migrate(logs_db)
-    llm.message_store.set_log_format(logs_db, "dual")
     # Test the Python API
     model = llm.get_model("echo")
     memory = Memory()
@@ -797,11 +790,7 @@ def test_register_toolbox(tmpdir, logs_db):
         )
 
         # Test the logging worked
-        rows = list(logs_db.query(TOOL_RESULTS_SQL))
-        # JSON decode things in rows
-        for row in rows:
-            row["tool_calls"] = json.loads(row["tool_calls"])
-            row["tool_results"] = json.loads(row["tool_results"])
+        rows = tool_activity_rows(logs_db)
         assert rows == [
             {
                 "model": "echo",
@@ -886,11 +875,6 @@ def test_register_toolbox_fails_on_bad_class():
 
 
 def test_toolbox_logging_async(logs_db, tmpdir):
-    # Pinned to "dual" format, see test_register_toolbox
-    from llm.migrations import migrate
-
-    migrate(logs_db)
-    llm.message_store.set_log_format(logs_db, "dual")
     path = pathlib.Path(tmpdir / "path")
     path.mkdir()
     runner = CliRunner()
@@ -936,11 +920,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
         plugins.pm.unregister(name="ToolboxPlugin")
 
     # Check the database
-    rows = list(logs_db.query(TOOL_RESULTS_SQL))
-    # JSON decode things in rows
-    for row in rows:
-        row["tool_calls"] = json.loads(row["tool_calls"])
-        row["tool_results"] = json.loads(row["tool_results"])
+    rows = tool_activity_rows(logs_db)
     assert rows == [
         {
             "model": "echo",
@@ -959,7 +939,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_set",
                     "output": "null",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -968,7 +948,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_get",
                     "output": "two",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -1012,57 +992,43 @@ def test_plugins_command():
     ]
 
 
-TOOL_RESULTS_SQL = """
--- First, create ordered subqueries for tool_calls and tool_results
-with ordered_tool_calls as (
-    select
-        tc.response_id,
-        json_group_array(
-            json_object(
-                'name', tc.name,
-                'arguments', tc.arguments
-            )
-        ) as tool_calls_json
-    from (
-        select * from tool_calls order by id
-    ) tc
-    where tc.id is not null
-    group by tc.response_id
-),
-ordered_tool_results as (
-    select
-        tr.response_id,
-        json_group_array(
-            json_object(
-                'name', tr.name,
-                'output', tr.output,
-                'instance', case
-                    when ti.id is not null then json_object(
-                        'name', ti.name,
-                        'plugin', ti.plugin,
-                        'arguments', ti.arguments
-                    )
-                    else null
-                end
-            )
-        ) as tool_results_json
-    from (
-        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
-               ti.plugin, ti.arguments as ti_arguments
-        from tool_results tr
-        left join tool_instances ti on tr.instance_id = ti.id
-        order by tr.id
-    ) tr
-    left join tool_instances ti on tr.instance_id = ti.id
-    where tr.id is not null
-    group by tr.response_id
-)
-select
-    r.model,
-    coalesce(otc.tool_calls_json, '[]') as tool_calls,
-    coalesce(otr.tool_results_json, '[]') as tool_results
-from responses r
-left join ordered_tool_calls otc on r.id = otc.response_id
-left join ordered_tool_results otr on r.id = otr.response_id
-group by r.id, r.model
-order by r.id"""
+def tool_activity_rows(logs_db):
+    """One dict per logged response with its tool calls and results,
+    rebuilt from the message store and the tool_uses index."""
+    rows = []
+    for response_row in logs_db["responses_v2"].rows_where(order_by="id"):
+        response = llm.message_store.load_response(logs_db, response_row["id"])
+        instance_by_call_id = {}
+        for use in logs_db["tool_uses"].rows_where(
+            "response_id = ?", [response_row["id"]], order_by="id"
+        ):
+            instance = None
+            if use["instance_id"]:
+                instance_row = logs_db["toolbox_instances"].get(use["instance_id"])
+                instance = {
+                    "name": instance_row["name"],
+                    "plugin": instance_row["plugin"],
+                    "arguments": instance_row["arguments"],
+                }
+            instance_by_call_id[use["tool_call_id"]] = instance
+        rows.append(
+            {
+                "model": response_row["model"],
+                "tool_calls": [
+                    {
+                        "name": tool_call.name,
+                        "arguments": json.dumps(tool_call.arguments),
+                    }
+                    for tool_call in response.tool_calls()
+                ],
+                "tool_results": [
+                    {
+                        "name": tool_result.name,
+                        "output": tool_result.output,
+                        "instance": instance_by_call_id.get(tool_result.tool_call_id),
+                    }
+                    for tool_result in response.prompt.tool_results
+                ],
+            }
+        )
+    return rows

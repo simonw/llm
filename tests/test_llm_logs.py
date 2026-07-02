@@ -25,7 +25,7 @@ def log_path(user_path):
     db = sqlite_utils.Database(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
-    db["responses"].insert_all(
+    db["responses_v2"].insert_all(
         {
             "id": str(monotonic_ulid()).lower(),
             "system": "system",
@@ -51,7 +51,7 @@ def schema_log_path(user_path):
     db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
     db["schemas"].insert({"id": MULTI_ID, "content": '{"name": "array"}'})
     for i in range(2):
-        db["responses"].insert(
+        db["responses_v2"].insert(
             {
                 "id": str(ULID.from_timestamp(time.time() + i)).lower(),
                 "system": "system",
@@ -66,7 +66,7 @@ def schema_log_path(user_path):
             }
         )
     for j in range(4):
-        db["responses"].insert(
+        db["responses_v2"].insert(
             {
                 "id": str(ULID.from_timestamp(time.time() + j)).lower(),
                 "system": "system",
@@ -143,7 +143,7 @@ def test_logs_text_with_options(user_path):
     start = datetime.datetime.now(datetime.timezone.utc)
 
     # Create response with options
-    db["responses"].insert(
+    db["responses_v2"].insert(
         {
             "id": str(monotonic_ulid()).lower(),
             "system": "system",
@@ -303,7 +303,7 @@ def test_logs_filtered(user_path, model, path_option):
         log_path = str(user_path / "logs_alternative.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
-    db["responses"].insert_all(
+    db["responses_v2"].insert_all(
         {
             "id": str(monotonic_ulid()).lower(),
             "system": "system",
@@ -347,7 +347,7 @@ def test_logs_search(user_path, query, extra_args, expected):
     migrate(db)
 
     def _insert(id, text):
-        db["responses"].insert(
+        db["responses_v2"].insert(
             {
                 "id": id,
                 "system": "system",
@@ -418,7 +418,7 @@ def test_logs_schema(schema_log_path, args, expected):
 def test_logs_schema_data_ids(schema_log_path):
     db = sqlite_utils.Database(schema_log_path)
     ulid = ULID.from_timestamp(time.time() + 100)
-    db["responses"].insert(
+    db["responses_v2"].insert(
         {
             "id": str(ulid).lower(),
             "system": "system",
@@ -549,7 +549,7 @@ def fragments_fixture(user_path):
     def make_response(name, prompt_fragment_ids=None, system_fragment_ids=None):
         time.sleep(0.05)  # To ensure ULIDs order predictably
         response_id = str(ULID.from_timestamp(time.time())).lower()
-        db["responses"].insert(
+        db["responses_v2"].insert(
             {
                 "id": response_id,
                 "system": f"system: {name}",
@@ -563,14 +563,19 @@ def fragments_fixture(user_path):
             }
         )
         # Link fragments to this response
-        for fragment_id in prompt_fragment_ids or []:
-            db["prompt_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
-            )
-        for fragment_id in system_fragment_ids or []:
-            db["system_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
-            )
+        for fragment_type, fragment_ids in (
+            ("prompt", prompt_fragment_ids or []),
+            ("system", system_fragment_ids or []),
+        ):
+            for order, fragment_id in enumerate(fragment_ids):
+                db["response_fragments"].insert(
+                    {
+                        "response_id": response_id,
+                        "fragment_id": fragment_id,
+                        "fragment_type": fragment_type,
+                        "order": order,
+                    }
+                )
         return {name: response_id}
 
     collected = {}
@@ -994,8 +999,8 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     )
     assert result.exit_code == 0
     # Should have logged the resolved model name
-    assert logs_db["responses"].count
-    response = list(logs_db["responses"].rows)[0]
+    assert logs_db["responses_v2"].count
+    response = list(logs_db["responses_v2"].rows)[0]
     assert response["model"] == "mock"
     assert response["resolved_model"] == "resolved-mock"
 
@@ -1031,7 +1036,7 @@ def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
     response.text()
     response.log_to_db(logs_db)
 
-    row = next(logs_db["responses"].rows)
+    row = next(logs_db["responses_v2"].rows)
     assert row["response"] == "hello"
     assert row["reasoning"] == "thinking hard"
 
@@ -1042,7 +1047,7 @@ def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
     response = mock_model.prompt("hi")
     response.text()
     response.log_to_db(logs_db)
-    row = next(logs_db["responses"].rows)
+    row = next(logs_db["responses_v2"].rows)
     assert not row.get("reasoning")
 
 
@@ -1052,7 +1057,7 @@ def test_logs_markdown_renders_reasoning_heading(user_path):
     log_path = str(user_path / "logs_with_reasoning.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
-    db["responses"].insert(
+    db["responses_v2"].insert(
         {
             "id": str(monotonic_ulid()).lower(),
             "system": None,

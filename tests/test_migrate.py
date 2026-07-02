@@ -49,6 +49,9 @@ def test_migrate_blank():
         "responses_ai",
         "responses_ad",
         "responses_au",
+        "responses_v2_ai",
+        "responses_v2_ad",
+        "responses_v2_au",
     }
 
 
@@ -89,6 +92,9 @@ def test_migrate_from_original_schema(has_record):
         "responses_ai",
         "responses_ad",
         "responses_au",
+        "responses_v2_ai",
+        "responses_v2_ad",
+        "responses_v2_au",
     }
 
 
