@@ -280,16 +280,16 @@ This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_a
 
 ## Structured message storage
 
-Responses are logged as a lean `responses_v2` row plus a set of content-addressed tables that capture the full structured form of the conversation — every part of every message, including reasoning parts and provider metadata such as encrypted reasoning signatures. Logged responses can be re-inflated from the database with no loss of detail, using the {ref}`llm.message_store Python API <python-api-message-store>`.
+Responses are logged as a lean `turns` row plus a set of content-addressed tables that capture the full structured form of the conversation — every part of every message, including reasoning parts and provider metadata such as encrypted reasoning signatures. Logged responses can be re-inflated from the database with no loss of detail, using the {ref}`llm.message_store Python API <python-api-message-store>`.
 
 The message content lives in two tables:
 
 - `messages` stores one row per unique message. Its `id` is a SHA-256 hash of the message content, so the same message is stored exactly once no matter how many conversations include it. The `parts` column contains the JSON list of parts; attachments are referenced by their id in the `attachments` table rather than embedded.
 - `message_nodes` stores chain nodes. A node is a `(parent node, message)` pair and its `id` is a hash of both, which means a node id uniquely identifies an entire message chain — that message plus everything before it. Conversations that share a prefix share nodes: re-logging a conversation that grew by one turn only inserts the new tail. Chains that diverge after a common prefix form a tree. This means clients that re-send the full conversation history with every request — an OpenAI-compatible API endpoint, for example — can be logged without storing any message more than once.
 
-Each `responses_v2` row records the node heads for its input chain (`input_node_id`, exactly what was sent to the model) and its output chain (`output_node_id`, the input plus the messages the model produced), alongside the per-occurrence facts: when the response was generated, token usage, options, the model used, and small single-turn text columns (`prompt`, `system`, `response`, `reasoning`) that power full-text search and display. The `response_json` column preserves the raw provider response payload, which can carry data (such as logprobs) not captured anywhere else.
+Each `turns` row records the node heads for its input chain (`input_node_id`, exactly what was sent to the model) and its output chain (`output_node_id`, the input plus the messages the model produced), alongside the per-occurrence facts: when the response was generated, token usage, options, the model used, and small single-turn text columns (`prompt`, `system`, `response`, `reasoning`) that power full-text search and display. The `response_json` column preserves the raw provider response payload, which can carry data (such as logprobs) not captured anywhere else.
 
-A handful of small link and index tables complete the picture: `response_fragments` (fragment provenance for `-f` filtering), `response_tools` (which tool definitions were available), `response_attachments` (this turn's prompt attachments), `tool_uses` (one row per tool result, powering `llm logs -T` — the payloads live in the message parts) and `toolbox_instances` (configured Toolbox arguments).
+A handful of small link and index tables complete the picture: `turn_fragments` (fragment provenance for `-f` filtering), `turn_tools` (which tool definitions were available), `turn_attachments` (this turn's prompt attachments), `tool_uses` (one row per tool result, powering `llm logs -T` — the payloads live in the message parts) and `toolbox_instances` (configured Toolbox arguments).
 
 Content hashes are calculated as follows. Canonical JSON means `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` encoded as UTF-8. A message is hashed as its `Message.to_dict()` dictionary with attachments replaced by references — an attachment part becomes `{"type": "attachment", "attachment_id": ...}` and a tool result part's `attachments` list becomes `attachment_ids`, where the attachment id is the existing SHA-256-based `Attachment.id()`. Then:
 
@@ -331,8 +331,8 @@ def cleanup_sql(sql):
 cog.out("```sql\n")
 for table in (
     "conversations", "schemas", "attachments", "fragments", "fragment_aliases", "tools",
-    "messages", "message_nodes", "responses_v2", "responses_v2_fts",
-    "response_fragments", "response_tools", "response_attachments",
+    "messages", "message_nodes", "turns", "turns_fts",
+    "turn_fragments", "turn_tools", "turn_attachments",
     "tool_uses", "toolbox_instances",
 ):
     schema = db[table].schema
@@ -390,7 +390,7 @@ CREATE TABLE [message_nodes] (
   [depth] INTEGER,
   [first_seen_utc] TEXT
 );
-CREATE TABLE [responses_v2] (
+CREATE TABLE [turns] (
   [id] TEXT PRIMARY KEY,
   [model] TEXT,
   [resolved_model] TEXT,
@@ -410,37 +410,37 @@ CREATE TABLE [responses_v2] (
   [input_node_id] TEXT REFERENCES [message_nodes]([id]),
   [output_node_id] TEXT REFERENCES [message_nodes]([id])
 );
-CREATE VIRTUAL TABLE [responses_v2_fts] USING FTS5 (
+CREATE VIRTUAL TABLE [turns_fts] USING FTS5 (
   [prompt],
   [response],
-  content=[responses_v2]
+  content=[turns]
 );
-CREATE TABLE [response_fragments] (
-  [response_id] TEXT REFERENCES [responses_v2]([id]),
+CREATE TABLE [turn_fragments] (
+  [turn_id] TEXT REFERENCES [turns]([id]),
   [fragment_id] INTEGER REFERENCES [fragments]([id]),
   [fragment_type] TEXT,
   [order] INTEGER,
-  PRIMARY KEY ([response_id],
+  PRIMARY KEY ([turn_id],
   [fragment_id],
   [fragment_type],
   [order])
 );
-CREATE TABLE [response_tools] (
-  [response_id] TEXT REFERENCES [responses_v2]([id]),
+CREATE TABLE [turn_tools] (
+  [turn_id] TEXT REFERENCES [turns]([id]),
   [tool_id] INTEGER REFERENCES [tools]([id]),
-  PRIMARY KEY ([response_id],
+  PRIMARY KEY ([turn_id],
   [tool_id])
 );
-CREATE TABLE [response_attachments] (
-  [response_id] TEXT REFERENCES [responses_v2]([id]),
+CREATE TABLE [turn_attachments] (
+  [turn_id] TEXT REFERENCES [turns]([id]),
   [attachment_id] TEXT REFERENCES [attachments]([id]),
   [order] INTEGER,
-  PRIMARY KEY ([response_id],
+  PRIMARY KEY ([turn_id],
   [attachment_id])
 );
 CREATE TABLE [tool_uses] (
   [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses_v2]([id]),
+  [turn_id] TEXT REFERENCES [turns]([id]),
   [tool_id] INTEGER REFERENCES [tools]([id]),
   [name] TEXT,
   [tool_call_id] TEXT,

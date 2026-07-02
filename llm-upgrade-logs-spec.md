@@ -3,7 +3,7 @@
 Specification for a separate plugin, **`llm-upgrade-logs`**, that ports
 logs recorded by older versions of LLM (the frozen `responses` /
 `tool_calls` / `tool_results` family) into the current structured
-message store (`messages`, `message_nodes`, `responses_v2` and its link
+message store (`messages`, `message_nodes`, `turns` and its link
 tables). This document is the contract the plugin should be built and
 tested against.
 
@@ -27,9 +27,9 @@ concessions are the hint in `llm logs status` (it counts rows in
    of truth; if a future version of the converter is smarter, the port
    can be re-run from the originals.
 2. **Idempotent and resumable.** A response whose id already exists in
-   `responses_v2` is skipped. Interrupting and re-running the command
+   `turns` is skipped. Interrupting and re-running the command
    is always safe. Content-addressing makes re-inserted messages free.
-3. **IDs are preserved.** `responses_v2.id` is the legacy
+3. **IDs are preserved.** `turns.id` is the legacy
    `responses.id`; conversation ids are reused. Ordering (ULIDs),
    `llm logs --cid`, and `llm -c` continuation across the upgrade
    boundary all work because of this. Condensed `{"$": "r:<id>"}`
@@ -78,7 +78,7 @@ cannot recover.
 ### `llm upgrade-logs drop-legacy [PATH]` (phase two, optional)
 
 Deletes the frozen legacy tables after verifying every legacy response
-id exists in `responses_v2`. Requires an interactive `yes I am sure`
+id exists in `turns`. Requires an interactive `yes I am sure`
 confirmation and prints a suggestion to run `llm logs backup` first.
 Ship this only once the converter has been stable for a while.
 
@@ -133,7 +133,7 @@ output_node_id = llm.message_store.store_messages(
 Because consecutive turns extend the same chain, shared prefixes
 deduplicate exactly as they do for natively logged conversations.
 
-### responses_v2 row
+### turns row
 
 Copy directly: `id`, `model`, `resolved_model` (when the column
 exists), `prompt`, `system`, `options_json`, `response`, `reasoning`
@@ -141,15 +141,15 @@ exists), `prompt`, `system`, `options_json`, `response`, `reasoning`
 `datetime_utc`, `input_tokens`, `output_tokens`, `token_details`,
 `schema_id`. Set `input_node_id` / `output_node_id` from the stored
 chains. Do not port `prompt_json`. The insert populates
-`responses_v2_fts` automatically via its triggers.
+`turns_fts` automatically via its triggers.
 
 ### Link and index tables
 
-- `prompt_fragments` / `system_fragments` rows → `response_fragments`
+- `prompt_fragments` / `system_fragments` rows → `turn_fragments`
   rows with `fragment_type` `'prompt'` / `'system'`, preserving
   `"order"`.
-- `tool_responses` rows → `response_tools` rows.
-- `prompt_attachments` rows → `response_attachments` rows, preserving
+- `tool_responses` rows → `turn_tools` rows.
+- `prompt_attachments` rows → `turn_attachments` rows, preserving
   `"order"`.
 - `tool_results` rows → `tool_uses` rows (`name`, `tool_id`,
   `tool_call_id`). When a legacy row has `instance_id`, copy the
@@ -168,7 +168,7 @@ chains. Do not port `prompt_json`. The insert populates
   as empty — a pre-`m017` database simply has no tool traffic to port.
 - **Null columns**: `prompt`, `system`, `response`, `reasoning` may all
   be NULL/empty; synthesize only the parts that have content. A
-  response with no content at all still gets a `responses_v2` row with
+  response with no content at all still gets a `turns` row with
   `output_node_id == input_node_id`.
 - **Legacy `tool_calls.tool_call_id` may be NULL** (pre-0.32a3
   providers that supplied none). Port the NULL as-is; do not synthesize
@@ -204,7 +204,7 @@ chains. Do not port `prompt_json`. The insert populates
 
 - Plugin name `llm-upgrade-logs`, module `llm_upgrade_logs.py`,
   registered via the `llm` entry point group like other plugins.
-- Depends on `llm>=` the first release containing `responses_v2` and
+- Depends on `llm>=` the first release containing `turns` and
   the `llm.message_store` API, and on `sqlite-utils`.
 - The legacy-schema knowledge (table DDL expectations at each migration
   level) should live in one documented module so future formats can

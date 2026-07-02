@@ -47,7 +47,7 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     conversation = conversations[0]
     assert conversation["model"] == "mock"
     assert conversation["name"] == "describe file"
-    response = list(logs_db["responses_v2"].rows)[0]
+    response = list(logs_db["turns"].rows)[0]
     attachment = list(logs_db["attachments"].rows)[0]
     assert attachment == {
         "id": ANY,
@@ -56,9 +56,9 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
         "url": None,
         "content": attachment_content,
     }
-    prompt_attachment = list(logs_db["response_attachments"].rows)[0]
+    prompt_attachment = list(logs_db["turn_attachments"].rows)[0]
     assert prompt_attachment["attachment_id"] == attachment["id"]
-    assert prompt_attachment["response_id"] == response["id"]
+    assert prompt_attachment["turn_id"] == response["id"]
 
 
 def _count_open_fds():

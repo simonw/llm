@@ -432,7 +432,7 @@ def m022_response_reasoning(db):
 def m023_message_store(db):
     # The current logging format: a content-addressed message store
     # (see llm/message_store.py for the hashing scheme) plus a lean
-    # responses_v2 table for per-occurrence data. LLM core no longer
+    # turns table for per-occurrence data. LLM core no longer
     # writes to the per-response tables above this point (responses,
     # tool_calls, tool_results, prompt_attachments, prompt_fragments,
     # system_fragments, tool_responses, tool_instances) - they are
@@ -444,7 +444,7 @@ def m023_message_store(db):
     from .message_store import ensure_tables
 
     ensure_tables(db)  # attachments, messages, message_nodes
-    db["responses_v2"].create(
+    db["turns"].create(
         {
             "id": str,
             "model": str,
@@ -473,45 +473,45 @@ def m023_message_store(db):
             ("output_node_id", "message_nodes", "id"),
         ),
     )
-    db["responses_v2"].enable_fts(["prompt", "response"], create_triggers=True)
+    db["turns"].enable_fts(["prompt", "response"], create_triggers=True)
     # Fragment provenance for this turn's prompt and system, replacing
     # the prompt_fragments and system_fragments pair
-    db["response_fragments"].create(
+    db["turn_fragments"].create(
         {
-            "response_id": str,
+            "turn_id": str,
             "fragment_id": int,
             "fragment_type": str,  # 'prompt' or 'system'
             "order": int,
         },
-        pk=("response_id", "fragment_id", "fragment_type", "order"),
+        pk=("turn_id", "fragment_id", "fragment_type", "order"),
         foreign_keys=(
-            ("response_id", "responses_v2", "id"),
+            ("turn_id", "turns", "id"),
             ("fragment_id", "fragments", "id"),
         ),
     )
     # Tools that were available to this response, replacing tool_responses
-    db["response_tools"].create(
+    db["turn_tools"].create(
         {
-            "response_id": str,
+            "turn_id": str,
             "tool_id": int,
         },
-        pk=("response_id", "tool_id"),
+        pk=("turn_id", "tool_id"),
         foreign_keys=(
-            ("response_id", "responses_v2", "id"),
+            ("turn_id", "turns", "id"),
             ("tool_id", "tools", "id"),
         ),
     )
     # Attachments included with this turn's prompt, replacing
     # prompt_attachments
-    db["response_attachments"].create(
+    db["turn_attachments"].create(
         {
-            "response_id": str,
+            "turn_id": str,
             "attachment_id": str,
             "order": int,
         },
-        pk=("response_id", "attachment_id"),
+        pk=("turn_id", "attachment_id"),
         foreign_keys=(
-            ("response_id", "responses_v2", "id"),
+            ("turn_id", "turns", "id"),
             ("attachment_id", "attachments", "id"),
         ),
     )
@@ -531,7 +531,7 @@ def m023_message_store(db):
     db["tool_uses"].create(
         {
             "id": int,
-            "response_id": str,
+            "turn_id": str,
             "tool_id": int,
             "name": str,
             "tool_call_id": str,
@@ -539,9 +539,9 @@ def m023_message_store(db):
         },
         pk="id",
         foreign_keys=(
-            ("response_id", "responses_v2", "id"),
+            ("turn_id", "turns", "id"),
             ("tool_id", "tools", "id"),
             ("instance_id", "toolbox_instances", "id"),
         ),
     )
-    db["tool_uses"].create_index(["response_id"])
+    db["tool_uses"].create_index(["turn_id"])

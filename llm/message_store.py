@@ -17,7 +17,7 @@ Two tables (created on demand by ``ensure_tables()`` and by the
   the same chain twice inserts nothing new, and storing a chain that
   extends an existing one inserts only the new tail.
 
-Each responses_v2 row records the node heads for its input chain
+Each turns row records the node heads for its input chain
 (``input_node_id``, exactly what was sent to the model) and its output
 chain (``output_node_id``, the input plus the messages the model
 produced).
@@ -340,7 +340,7 @@ def load_turn(db, input_node_id: Optional[str], output_node_id: Optional[str]):
 
     ``input_node_id`` identifies the exact chain sent to the model and
     ``output_node_id`` the chain after the model's output messages were
-    appended - the two columns stored on each responses_v2 row.
+    appended - the two columns stored on each turns row.
     """
     input_messages: List[Any] = []
     if input_node_id:
@@ -380,6 +380,6 @@ def load_response(db, response_id: str, *, async_: bool = False):
     """
     from .models import AsyncResponse, Response
 
-    row = db["responses_v2"].get(response_id)
+    row = db["turns"].get(response_id)
     cls = AsyncResponse if async_ else Response
     return cls.from_row(db, row)

@@ -205,7 +205,7 @@ class TestResponseLogging:
         response = mock_model.prompt("hi")
         response.text()
         response.log_to_db(logs_db)
-        row = logs_db["responses_v2"].get(response.id)
+        row = logs_db["turns"].get(response.id)
         input_messages, output_messages = message_store.load_turn(
             logs_db, row["input_node_id"], row["output_node_id"]
         )
@@ -244,8 +244,8 @@ class TestResponseLogging:
         # turn's nodes rather than duplicating them.
         assert logs_db["messages"].count == 4
         assert logs_db["message_nodes"].count == 4
-        node1 = logs_db["responses_v2"].get(response1.id)
-        node2 = logs_db["responses_v2"].get(response2.id)
+        node1 = logs_db["turns"].get(response1.id)
+        node2 = logs_db["turns"].get(response2.id)
         chain2 = message_store.load_messages(logs_db, node2["input_node_id"])
         assert len(chain2) == 3
         # response2's input chain passes through response1's output node
@@ -323,7 +323,7 @@ class TestResponseLogging:
         response = mock_model.prompt("hi")
         response.text()
         response.log_to_db(logs_db)
-        row = logs_db["responses_v2"].get(response.id)
+        row = logs_db["turns"].get(response.id)
         assert row["output_node_id"] == row["input_node_id"]
         loaded = message_store.load_response(logs_db, response.id)
         assert loaded.messages() == []
@@ -335,7 +335,7 @@ class TestResponseLogging:
         response.text()
         response_id = message_store.log_response(db, response)
         assert response_id == response.id
-        assert db["responses_v2"].get(response.id)["response"] == "hello"
+        assert db["turns"].get(response.id)["response"] == "hello"
         loaded = message_store.load_response(db, response.id)
         assert loaded.messages() == response.messages()
 
@@ -379,7 +379,7 @@ class TestAsyncFidelity:
         sync_response = await response.to_sync_response()
         sync_response.log_to_db(logs_db)
         # The reasoning column captures async reasoning too
-        row = logs_db["responses_v2"].get(sync_response.id)
+        row = logs_db["turns"].get(sync_response.id)
         assert row["reasoning"] == "deep thought"
         loaded = message_store.load_response(logs_db, sync_response.id)
         assert loaded.messages()[0].parts[0] == ReasoningPart(
@@ -406,7 +406,7 @@ class TestV2Writes:
     def test_no_legacy_writes(self, logs_db):
         migrate(logs_db)
         self.tool_chain().log_to_db(logs_db)
-        assert logs_db["responses_v2"].count == 2
+        assert logs_db["turns"].count == 2
         # The frozen legacy tables receive nothing
         for legacy_table in (
             "responses",
@@ -423,7 +423,7 @@ class TestV2Writes:
         tools = list(logs_db["tools"].rows)
         assert len(tools) == 1
         assert tools[0]["name"] == "multiply"
-        assert logs_db["response_tools"].count == 2
+        assert logs_db["turn_tools"].count == 2
         tool_uses = list(logs_db["tool_uses"].rows)
         assert len(tool_uses) == 1
         assert tool_uses[0]["name"] == "multiply"
@@ -432,7 +432,7 @@ class TestV2Writes:
     def test_tool_chain_round_trips(self, logs_db):
         migrate(logs_db)
         self.tool_chain().log_to_db(logs_db)
-        conversation_id = next(logs_db["responses_v2"].rows)["conversation_id"]
+        conversation_id = next(logs_db["turns"].rows)["conversation_id"]
         loaded = load_conversation(conversation_id)
         first, second = loaded.responses
         assert first.tool_calls()[0].arguments == {"a": 3, "b": 4}

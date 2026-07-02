@@ -996,11 +996,11 @@ def tool_activity_rows(logs_db):
     """One dict per logged response with its tool calls and results,
     rebuilt from the message store and the tool_uses index."""
     rows = []
-    for response_row in logs_db["responses_v2"].rows_where(order_by="id"):
+    for response_row in logs_db["turns"].rows_where(order_by="id"):
         response = llm.message_store.load_response(logs_db, response_row["id"])
         instance_by_call_id = {}
         for use in logs_db["tool_uses"].rows_where(
-            "response_id = ?", [response_row["id"]], order_by="id"
+            "turn_id = ?", [response_row["id"]], order_by="id"
         ):
             instance = None
             if use["instance_id"]:

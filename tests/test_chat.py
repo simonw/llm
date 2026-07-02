@@ -42,7 +42,7 @@ def test_chat_basic(mock_model, logs_db):
         "model": "mock",
     }
     conversation_id = conversations[0]["id"]
-    responses = list(logs_db["responses_v2"].rows)
+    responses = list(logs_db["turns"].rows)
     assert responses == [
         {
             "id": ANY,
@@ -107,7 +107,7 @@ def test_chat_basic(mock_model, logs_db):
     )
     new_responses = list(
         logs_db.query(
-            "select * from responses_v2 where id not in ({})".format(
+            "select * from turns where id not in ({})".format(
                 ", ".join("?" for _ in responses)
             ),
             [r["id"] for r in responses],
@@ -158,7 +158,7 @@ def test_chat_system(mock_model, logs_db):
         "\n> quit"
         "\n"
     )
-    responses = list(logs_db["responses_v2"].rows)
+    responses = list(logs_db["turns"].rows)
     assert responses == [
         {
             "id": ANY,
@@ -203,7 +203,7 @@ def test_chat_options(mock_model, logs_db, user_path):
         input="Hi with override\nquit\n",
     )
     assert result.exit_code == 0
-    responses = list(logs_db["responses_v2"].rows)
+    responses = list(logs_db["turns"].rows)
     assert responses == [
         {
             "id": ANY,
@@ -288,7 +288,7 @@ def test_chat_multi(mock_model, logs_db, input, expected):
         llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input
     )
     assert result.exit_code == 0
-    rows = list(logs_db["responses_v2"].rows_where(select="prompt, response"))
+    rows = list(logs_db["turns"].rows_where(select="prompt, response"))
     assert rows == expected
 
 
@@ -315,7 +315,7 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["responses_v2"].count == 2
+    assert sqlite_utils.Database(db_path)["turns"].count == 2
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

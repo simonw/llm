@@ -24,7 +24,7 @@ def test_chat_template_system_only_no_duplicate_prompt(
     assert result.exit_code == 0
 
     # Ensure the logged prompt is not duplicated (no "hi\nhi")
-    rows = list(logs_db["responses_v2"].rows)
+    rows = list(logs_db["turns"].rows)
     assert len(rows) == 1
     assert rows[0]["prompt"] == "hi"
     assert rows[0]["system"] == "Speak in French"
@@ -50,18 +50,16 @@ def test_chat_system_fragments_only_first_turn(tmpdir, mock_model, logs_db):
     assert result.exit_code == 0
 
     # Verify only the first response has the system fragment
-    responses = list(logs_db["responses_v2"].rows)
+    responses = list(logs_db["turns"].rows)
     assert len(responses) == 2
     first_id = responses[0]["id"]
     second_id = responses[1]["id"]
 
-    sys_frags = list(
-        logs_db["response_fragments"].rows_where("fragment_type = 'system'")
-    )
+    sys_frags = list(logs_db["turn_fragments"].rows_where("fragment_type = 'system'"))
     # Exactly one system fragment row, attached to the first response only
     assert len(sys_frags) == 1
-    assert sys_frags[0]["response_id"] == first_id
-    assert sys_frags[0]["response_id"] != second_id
+    assert sys_frags[0]["turn_id"] == first_id
+    assert sys_frags[0]["turn_id"] != second_id
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -82,7 +80,7 @@ def test_chat_template_loads_tools_into_logs(logs_db, templates_path):
     assert result.exit_code == 0
 
     # Verify a single response was logged for the conversation
-    responses = list(logs_db["responses_v2"].rows)
+    responses = list(logs_db["turns"].rows)
     assert len(responses) == 1
     assert responses[0]["prompt"] == "hi"
     response_id = responses[0]["id"]
@@ -92,8 +90,8 @@ def test_chat_template_loads_tools_into_logs(logs_db, templates_path):
         logs_db.query(
             """
             select tools.name from tools
-            join response_tools rt on rt.tool_id = tools.id
-            where rt.response_id = ?
+            join turn_tools rt on rt.tool_id = tools.id
+            where rt.turn_id = ?
             order by tools.name
             """,
             [response_id],

@@ -42,9 +42,9 @@ def test_tool_use_basic(vcr):
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset({"tools", "response_tools", "tool_uses"})
+    assert set(db.table_names()).issuperset({"tools", "turn_tools", "tool_uses"})
 
-    responses = list(db["responses_v2"].rows)
+    responses = list(db["turns"].rows)
     assert len(responses) == 2
     first_response, second_response = responses
 
@@ -58,7 +58,7 @@ def test_tool_use_basic(vcr):
     # live in the message store
     tool_uses = list(db["tool_uses"].rows)
     assert len(tool_uses) == 1
-    assert tool_uses[0]["response_id"] == second_response["id"]
+    assert tool_uses[0]["turn_id"] == second_response["id"]
     assert tool_uses[0]["name"] == "multiply"
 
     loaded_first = llm.message_store.load_response(db, first_response["id"])

@@ -764,7 +764,7 @@ node_id = llm.message_store.store_messages(db, messages)
 rebuilt_messages = llm.message_store.load_messages(db, node_id)
 ```
 
-`store_messages()` accepts a `parent_node_id=` keyword to extend a previously stored chain, and returns the head node id for the chain it stored. `load_turn(db, input_node_id, output_node_id)` returns the `(input_messages, output_messages)` pair identified by the two node id columns on a `responses_v2` row. `message_hash(message)`, `node_hash(parent_node_id, message_id)` and `canonical_json(value)` expose the content-addressing scheme itself so you can compute ids without writing anything.
+`store_messages()` accepts a `parent_node_id=` keyword to extend a previously stored chain, and returns the head node id for the chain it stored. `load_turn(db, input_node_id, output_node_id)` returns the `(input_messages, output_messages)` pair identified by the two node id columns on a `turns` row. `message_hash(message)`, `node_hash(parent_node_id, message_id)` and `canonical_json(value)` expose the content-addressing scheme itself so you can compute ids without writing anything.
 
 These functions all work against any SQLite database — they create the tables they need if those are missing — so plugins can use a dedicated database rather than the shared `logs.db` if they prefer.
 

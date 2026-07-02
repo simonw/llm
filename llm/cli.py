@@ -1336,7 +1336,7 @@ def load_conversation(
     conversation_class = AsyncConversation if async_ else Conversation
     response_class = AsyncResponse if async_ else Response
     conversation = conversation_class.from_row(row)
-    for response in db["responses_v2"].rows_where(
+    for response in db["turns"].rows_where(
         "conversation_id = ?", [conversation_id], order_by="id"
     ):
         # from_row rehydrates at full fidelity - the exact input chain
@@ -1451,7 +1451,7 @@ def logs_status():
     migrate(db)
     click.echo("Found log database at {}".format(path))
     click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
-    click.echo("Number of responses logged:\t{}".format(db["responses_v2"].count))
+    click.echo("Number of responses logged:\t{}".format(db["turns"].count))
     click.echo(
         "Database file size: \t\t{}".format(_human_readable_size(path.stat().st_size))
     )
@@ -1495,23 +1495,23 @@ def logs_turn_off():
     path.touch()
 
 
-LOGS_COLUMNS = """    responses_v2.id,
-    responses_v2.model,
-    responses_v2.resolved_model,
-    responses_v2.prompt,
-    responses_v2.system,
-    responses_v2.options_json,
-    responses_v2.response,
-    responses_v2.reasoning,
-    responses_v2.response_json,
-    responses_v2.conversation_id,
-    responses_v2.duration_ms,
-    responses_v2.datetime_utc,
-    responses_v2.input_tokens,
-    responses_v2.output_tokens,
-    responses_v2.token_details,
-    responses_v2.input_node_id,
-    responses_v2.output_node_id,
+LOGS_COLUMNS = """    turns.id,
+    turns.model,
+    turns.resolved_model,
+    turns.prompt,
+    turns.system,
+    turns.options_json,
+    turns.response,
+    turns.reasoning,
+    turns.response_json,
+    turns.conversation_id,
+    turns.duration_ms,
+    turns.datetime_utc,
+    turns.input_tokens,
+    turns.output_tokens,
+    turns.token_details,
+    turns.input_node_id,
+    turns.output_node_id,
     conversations.name as conversation_name,
     conversations.model as conversation_model,
     schemas.content as schema_json"""
@@ -1520,36 +1520,36 @@ LOGS_SQL = """
 select
 {columns}
 from
-    responses_v2
-left join schemas on responses_v2.schema_id = schemas.id
-left join conversations on responses_v2.conversation_id = conversations.id{extra_where}
+    turns
+left join schemas on turns.schema_id = schemas.id
+left join conversations on turns.conversation_id = conversations.id{extra_where}
 order by {order_by}{limit}
 """
 LOGS_SQL_SEARCH = """
 select
 {columns}
 from
-    responses_v2
-left join schemas on responses_v2.schema_id = schemas.id
-left join conversations on responses_v2.conversation_id = conversations.id
-join responses_v2_fts on responses_v2_fts.rowid = responses_v2.rowid
-where responses_v2_fts match :query{extra_where}
+    turns
+left join schemas on turns.schema_id = schemas.id
+left join conversations on turns.conversation_id = conversations.id
+join turns_fts on turns_fts.rowid = turns.rowid
+where turns_fts match :query{extra_where}
 order by {order_by}{limit}
 """
 
 ATTACHMENTS_SQL = """
 select
-    response_id,
+    turn_id,
     attachments.id,
     attachments.type,
     attachments.path,
     attachments.url,
     length(attachments.content) as content_length
 from attachments
-join response_attachments
-    on attachments.id = response_attachments.attachment_id
-where response_attachments.response_id in ({})
-order by response_attachments."order"
+join turn_attachments
+    on attachments.id = turn_attachments.attachment_id
+where turn_attachments.turn_id in ({})
+order by turn_attachments."order"
 """
 
 
@@ -1714,9 +1714,7 @@ def logs_list(
     if current_conversation:
         try:
             conversation_id = next(
-                db.query(
-                    "select conversation_id from responses_v2 order by id desc limit 1"
-                )
+                db.query("select conversation_id from turns order by id desc limit 1")
             )["conversation_id"]
         except StopIteration:
             # No conversations yet
@@ -1739,11 +1737,11 @@ def logs_list(
             model_id = model
 
     sql = LOGS_SQL
-    order_by = "responses_v2.id desc"
+    order_by = "turns.id desc"
     if query:
         sql = LOGS_SQL_SEARCH
         if not latest:
-            order_by = "responses_v2_fts.rank desc"
+            order_by = "turns_fts.rank desc"
 
     limit = ""
     if count is not None and count > 0:
@@ -1764,13 +1762,13 @@ def logs_list(
         "id_gte": id_gte,
     }
     if model_id:
-        where_bits.append("responses_v2.model = :model")
+        where_bits.append("turns.model = :model")
     if conversation_id:
-        where_bits.append("responses_v2.conversation_id = :conversation_id")
+        where_bits.append("turns.conversation_id = :conversation_id")
     if id_gt:
-        where_bits.append("responses_v2.id > :id_gt")
+        where_bits.append("turns.id > :id_gt")
     if id_gte:
-        where_bits.append("responses_v2.id >= :id_gte")
+        where_bits.append("turns.id >= :id_gte")
     if fragments:
         # Resolve the fragments to their hashes
         fragment_hashes = [
@@ -1781,9 +1779,9 @@ def logs_list(
         for i, fragment_hash in enumerate(fragment_hashes):
             exists_clause = f"""
             exists (
-                select 1 from response_fragments
-                where response_fragments.response_id = responses_v2.id
-                and response_fragments.fragment_id in (
+                select 1 from turn_fragments
+                where turn_fragments.turn_id = turns.id
+                and turn_fragments.fragment_id in (
                     select fragments.id from fragments
                     where hash = :f{i}
                 )
@@ -1801,7 +1799,7 @@ def logs_list(
               select 1
                 from tool_uses
               where
-                tool_uses.response_id = responses_v2.id
+                tool_uses.turn_id = turns.id
             )
         """)
     if tools:
@@ -1819,7 +1817,7 @@ def logs_list(
               select 1
                 from tool_uses
                 join tools on tools.id = tool_uses.tool_id
-               where tool_uses.response_id = responses_v2.id
+               where tool_uses.turn_id = turns.id
                  and tools.name = :tool{i}
                  and tools.plugin = :plugin{i}
             )
@@ -1833,7 +1831,7 @@ def logs_list(
     schema_id = None
     if schema:
         schema_id = make_schema_id(schema)[0]
-        where_bits.append("responses_v2.schema_id = :schema_id")
+        where_bits.append("turns.schema_id = :schema_id")
         sql_params["schema_id"] = schema_id
 
     if where_bits:
@@ -1854,11 +1852,11 @@ def logs_list(
     attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
     attachments_by_id = {}
     for attachment in attachments:
-        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+        attachments_by_id.setdefault(attachment["turn_id"], []).append(attachment)
 
     FRAGMENTS_SQL = """
     select
-        response_fragments.response_id,
+        turn_fragments.turn_id,
         fragments.hash,
         fragments.id as fragment_id,
         fragments.content,
@@ -1867,11 +1865,11 @@ def logs_list(
             from fragment_aliases
             where fragment_aliases.fragment_id = fragments.id
         ) as aliases
-    from response_fragments
-    join fragments on response_fragments.fragment_id = fragments.id
-    where response_fragments.response_id in ({placeholders})
-    and response_fragments.fragment_type = :fragment_type
-    order by response_fragments."order"
+    from turn_fragments
+    join fragments on turn_fragments.fragment_id = fragments.id
+    where turn_fragments.turn_id in ({placeholders})
+    and turn_fragments.fragment_type = :fragment_type
+    order by turn_fragments."order"
     """
 
     # Fetch any prompt or system prompt fragments
@@ -1889,7 +1887,7 @@ def logs_list(
             FRAGMENTS_SQL.format(placeholders=fragment_placeholders),
             dict(fragment_params, fragment_type=fragment_type),
         ):
-            dictionary.setdefault(fragment["response_id"], []).append(fragment)
+            dictionary.setdefault(fragment["turn_id"], []).append(fragment)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1920,10 +1918,10 @@ def logs_list(
         return
 
     # Tool usage information. Tool definitions come from the
-    # response_tools link table; tool calls and results come from the
+    # turn_tools link table; tool calls and results come from the
     # structured message parts, which are their canonical record.
     TOOLS_SQL = """
-    SELECT responses_v2.id,
+    SELECT turns.id,
     COALESCE(
         (SELECT json_group_array(json_object(
             'id', t.id,
@@ -1933,12 +1931,12 @@ def logs_list(
             'input_schema', json(t.input_schema)
         ))
         FROM tools t
-        JOIN response_tools rt ON t.id = rt.tool_id
-        WHERE rt.response_id = responses_v2.id
+        JOIN turn_tools rt ON t.id = rt.tool_id
+        WHERE rt.turn_id = turns.id
         ),
         '[]'
     ) AS tools
-    FROM responses_v2
+    FROM turns
     where id in ({placeholders})
     """
     tools_by_response_id = {
@@ -1949,12 +1947,12 @@ def logs_list(
     }
     tool_uses_by_response_id = {}
     for use_row in db.query(
-        "select * from tool_uses where response_id in ({}) order by id".format(
+        "select * from tool_uses where turn_id in ({}) order by id".format(
             ",".join("?" * len(ids))
         ),
         ids,
     ):
-        tool_uses_by_response_id.setdefault(use_row["response_id"], []).append(use_row)
+        tool_uses_by_response_id.setdefault(use_row["turn_id"], []).append(use_row)
 
     def _attachment_info(attachment):
         return {
@@ -2048,7 +2046,7 @@ def logs_list(
         # Output as JSON if requested
         for row in rows:
             row["attachments"] = [
-                {k: v for k, v in attachment.items() if k != "response_id"}
+                {k: v for k, v in attachment.items() if k != "turn_id"}
                 for attachment in attachments_by_id.get(row["id"], [])
             ]
         output = json.dumps(list(rows), indent=2)
@@ -2602,12 +2600,12 @@ def schemas_list(path, database, queries, full, json_, nl):
     select
       schemas.id,
       schemas.content,
-      max(responses_v2.datetime_utc) as recently_used,
+      max(turns.datetime_utc) as recently_used,
       count(*) as times_used
     from schemas
-    join responses_v2
-      on responses_v2.schema_id = schemas.id
-    {} group by responses_v2.schema_id
+    join turns
+      on turns.schema_id = schemas.id
+    {} group by turns.schema_id
     order by recently_used
     """.format(where_sql)
     rows = db.query(sql, params)

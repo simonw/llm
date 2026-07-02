@@ -888,12 +888,12 @@ class AsyncConversation(_BaseConversation):
 
 FRAGMENT_SQL = """
 select
-    response_fragments.fragment_type,
+    turn_fragments.fragment_type,
     fragments.content,
-    response_fragments."order" as ord
-from response_fragments
-join fragments on response_fragments.fragment_id = fragments.id
-where response_fragments.response_id = :response_id
+    turn_fragments."order" as ord
+from turn_fragments
+join fragments on turn_fragments.fragment_id = fragments.id
+where turn_fragments.turn_id = :turn_id
 order by fragment_type desc, ord asc;
 """
 
@@ -1298,7 +1298,7 @@ class _BaseResponse:
 
     @classmethod
     def from_row(cls, db, row, _async=False):
-        "Load a response from a responses_v2 row at full fidelity."
+        "Load a response from a turns row at full fidelity."
         from llm import get_model, get_async_model
         from .message_store import load_turn
         from .parts import ToolCallPart, ToolResultPart
@@ -1327,8 +1327,8 @@ class _BaseResponse:
             for tool_row in db.query(
                 """
                 select tools.* from tools
-                join response_tools on tools.id = response_tools.tool_id
-                where response_tools.response_id = ?
+                join turn_tools on tools.id = turn_tools.tool_id
+                where turn_tools.turn_id = ?
             """,
                 [row["id"]],
             )
@@ -1349,7 +1349,7 @@ class _BaseResponse:
         }
         tool_results = []
         for use_row in db.query(
-            "select * from tool_uses where response_id = ? order by id",
+            "select * from tool_uses where turn_id = ? order by id",
             [row["id"]],
         ):
             part = result_parts_by_call_id.get(use_row["tool_call_id"])
@@ -1362,7 +1362,7 @@ class _BaseResponse:
                 )
             )
 
-        all_fragments = list(db.query(FRAGMENT_SQL, {"response_id": row["id"]}))
+        all_fragments = list(db.query(FRAGMENT_SQL, {"turn_id": row["id"]}))
         fragments = [
             row["content"] for row in all_fragments if row["fragment_type"] == "prompt"
         ]
@@ -1403,10 +1403,10 @@ class _BaseResponse:
             for attachment_row in db.query(
                 """
                 select attachments.* from attachments
-                join response_attachments
-                    on attachments.id = response_attachments.attachment_id
-                where response_attachments.response_id = ?
-                order by response_attachments."order"
+                join turn_attachments
+                    on attachments.id = turn_attachments.attachment_id
+                where turn_attachments.turn_id = ?
+                order by turn_attachments."order"
             """,
                 [row["id"]],
             )
@@ -1476,9 +1476,9 @@ class _BaseResponse:
             for i, fragment in enumerate(fragment_list):
                 fragment_id = ensure_fragment(db, fragment)
                 replacements[f"f{fragment_id}"] = fragment
-                db["response_fragments"].insert(
+                db["turn_fragments"].insert(
                     {
-                        "response_id": response_id,
+                        "turn_id": response_id,
                         "fragment_id": fragment_id,
                         "fragment_type": fragment_type,
                         "order": i,
@@ -1505,7 +1505,7 @@ class _BaseResponse:
             db, self._messages_now(), parent_node_id=input_node_id
         )
 
-        db["responses_v2"].insert(
+        db["turns"].insert(
             {
                 "id": response_id,
                 "model": self.model.model_id,
@@ -1547,9 +1547,9 @@ class _BaseResponse:
                 },
                 replace=True,
             )
-            db["response_attachments"].insert(
+            db["turn_attachments"].insert(
                 {
-                    "response_id": response_id,
+                    "turn_id": response_id,
                     "attachment_id": attachment_id,
                     "order": index,
                 },
@@ -1563,9 +1563,9 @@ class _BaseResponse:
             tool_id = ensure_tool(db, tool)
             tool_ids_by_name[tool.name] = tool_id
             tools_by_name[tool.name] = tool
-            db["response_tools"].insert(
+            db["turn_tools"].insert(
                 {
-                    "response_id": response_id,
+                    "turn_id": response_id,
                     "tool_id": tool_id,
                 },
                 ignore=True,
@@ -1599,7 +1599,7 @@ class _BaseResponse:
                     pass
             db["tool_uses"].insert(
                 {
-                    "response_id": response_id,
+                    "turn_id": response_id,
                     "tool_id": tool_ids_by_name.get(tool_result.name) or None,
                     "name": tool_result.name,
                     "tool_call_id": tool_result.tool_call_id,
