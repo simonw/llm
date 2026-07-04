@@ -1780,19 +1780,22 @@ def logs_list(
 
         for i, fragment_hash in enumerate(fragment_hashes):
             exists_clause = f"""
-            exists (
-                select 1 from prompt_fragments
-                where prompt_fragments.response_id = responses.id
-                and prompt_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
+            (
+                exists (
+                    select 1 from prompt_fragments
+                    where prompt_fragments.response_id = responses.id
+                    and prompt_fragments.fragment_id in (
+                        select fragments.id from fragments
+                        where hash = :f{i}
+                    )
                 )
-                union
-                select 1 from system_fragments
-                where system_fragments.response_id = responses.id
-                and system_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
+                or exists (
+                    select 1 from system_fragments
+                    where system_fragments.response_id = responses.id
+                    and system_fragments.fragment_id in (
+                        select fragments.id from fragments
+                        where hash = :f{i}
+                    )
                 )
             )
             """
