@@ -32,7 +32,7 @@ def m003_add_updated(db):
     # Pretty-print the schema
     db["embeddings"].transform()
     # Assume anything existing was last updated right now
-    db.query(
+    db.execute(
         "update embeddings set updated = ? where updated is null", [int(time.time())]
     )
 
