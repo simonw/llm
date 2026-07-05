@@ -1005,6 +1005,32 @@ def test_logs_tools(logs_db):
     assert "three" in logs_tools_output
 
 
+def test_logs_repeated_tools_use_short_hash(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def demo():
+        return "ok"
+    """)
+    args = [
+        "-m",
+        "echo",
+        "--functions",
+        code,
+        json.dumps({"tool_calls": [{"name": "demo"}]}),
+    ]
+    result1 = runner.invoke(cli, args)
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, args)
+    assert result2.exit_code == 0
+
+    result3 = runner.invoke(cli, ["logs", "-n", "2"])
+    assert result3.exit_code == 0
+    tool_hashes = re.findall(r"- \*\*demo\*\*: `([0-9a-f]+)`", result3.output)
+    assert len(tool_hashes) == 2
+    assert len(tool_hashes[0]) == 64
+    assert tool_hashes[1] == tool_hashes[0][:7]
+
+
 def test_logs_tool_call_argument_formatting(logs_db):
     runner = CliRunner()
     code = textwrap.dedent("""

@@ -2226,7 +2226,9 @@ def logs_list(
                 click.echo("\n### Tools\n")
                 for tool in row["tools"]:
                     if tool["hash"] in seen_tool_hashes:
-                        click.echo("- **{}**: `{}`".format(tool["name"], tool["hash"]))
+                        click.echo(
+                            "- **{}**: `{}`".format(tool["name"], tool["hash"][:7])
+                        )
                     else:
                         seen_tool_hashes.add(tool["hash"])
                         click.echo(
