@@ -171,6 +171,41 @@ def test_logs_text_with_options(user_path):
     assert "- media_resolution: low" in output
 
 
+def test_logs_token_usage_details_are_markdown_code(user_path):
+    log_path = str(user_path / "logs_token_details.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": None,
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "token_details": json.dumps(
+                {
+                    "output_tokens_details": {
+                        "reasoning_tokens": 1,
+                        "label": "`reasoning`",
+                    }
+                }
+            ),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path, "-u"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert (
+        '## Token usage\n\n2 input, 5 output, ``{"output_tokens_details": '
+        '{"reasoning_tokens": 1, "label": "`reasoning`"}}``\n'
+    ) in result.output
+
+
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs_json(n, log_path):
     "Test that logs command correctly returns requested -n records"
@@ -955,9 +990,11 @@ def test_logs_tools(logs_db):
         "### Tool results\n"
         "\n"
         "- **demo**: `tc_TCID`<br>\n"
+        "    ```\n"
         "    one\n"
         "    two\n"
         "    three\n"
+        "    ```\n"
         "\n"
     ) in normalized_output
     # Log one that did NOT use tools, check that `llm logs --tools` ignores it
@@ -966,6 +1003,46 @@ def test_logs_tools(logs_db):
     logs_tools_output = runner.invoke(cli, ["logs", "--tools"]).output
     assert "badger" not in logs_tools_output
     assert "three" in logs_tools_output
+
+
+def test_logs_tool_call_argument_formatting(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def demo(timeout: int, options: list):
+        return "ok"
+    """)
+    result1 = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            code,
+            json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "demo",
+                            "arguments": {
+                                "timeout": 120,
+                                "options": ["`tick`"],
+                            },
+                        }
+                    ]
+                }
+            ),
+        ],
+    )
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, ["logs", "-c"])
+    normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
+    assert (
+        "### Tool calls\n"
+        "\n"
+        "- **demo**: `tc_TCID`<br>\n"
+        "    timeout: `120`\n"
+        '    options: ``["`tick`"]``\n'
+    ) in normalized_output
 
 
 def test_logs_backup(logs_db):

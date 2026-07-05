@@ -2052,6 +2052,46 @@ def logs_list(
         click.echo(output)
     else:
         # Output neatly formatted human-readable logs
+        def _fenced_block(value):
+            # Fenced code block, indented to nest inside a list item
+            num_backticks = 3
+            while "`" * num_backticks in value:
+                num_backticks += 1
+            fence = "`" * num_backticks
+            return textwrap.indent("{}\n{}\n{}".format(fence, value, fence), "    ")
+
+        def _inline_code(value):
+            num_backticks = 1
+            while "`" * num_backticks in value:
+                num_backticks += 1
+            delimiter = "`" * num_backticks
+            if value.startswith("`") or value.endswith("`"):
+                return "{} {} {}".format(delimiter, value, delimiter)
+            return "{}{}{}".format(delimiter, value, delimiter)
+
+        def _format_tool_call_arguments(arguments):
+            if not isinstance(arguments, dict) or not arguments:
+                return "    Arguments: {}".format(_inline_code(json.dumps(arguments)))
+            lines = []
+            for key, value in arguments.items():
+                if isinstance(value, str):
+                    lines.append("    {}:".format(key))
+                    lines.append(_fenced_block(value))
+                else:
+                    lines.append(
+                        "    {}: {}".format(key, _inline_code(json.dumps(value)))
+                    )
+            return "\n".join(lines)
+
+        def _token_usage_markdown(input_tokens, output_tokens, token_details):
+            usage = token_usage_string(input_tokens, output_tokens, None)
+            if token_details:
+                details = _inline_code(json.dumps(token_details))
+                if usage:
+                    return "{}, {}".format(usage, details)
+                return details
+            return usage
+
         def _display_fragments(fragments, title):
             if not fragments:
                 return
@@ -2073,6 +2113,7 @@ def logs_list(
 
         current_system = None
         should_show_conversation = True
+        seen_tool_hashes = set()
         for row in rows:
             if short:
                 system = truncate_string(
@@ -2184,14 +2225,20 @@ def logs_list(
             if row["tools"]:
                 click.echo("\n### Tools\n")
                 for tool in row["tools"]:
-                    click.echo(
-                        "- **{}**: `{}`<br>\n    {}<br>\n    Arguments: {}".format(
-                            tool["name"],
-                            tool["hash"],
-                            tool["description"],
-                            json.dumps(tool["input_schema"]["properties"]),
+                    if tool["hash"] in seen_tool_hashes:
+                        click.echo("- **{}**: `{}`".format(tool["name"], tool["hash"]))
+                    else:
+                        seen_tool_hashes.add(tool["hash"])
+                        click.echo(
+                            "- **{}**: `{}`<br>\n{}<br>\n    Arguments: `{}`".format(
+                                tool["name"],
+                                tool["hash"],
+                                textwrap.indent(
+                                    (tool["description"] or "").rstrip(), "    "
+                                ),
+                                json.dumps(tool["input_schema"]["properties"]),
+                            )
                         )
-                    )
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
@@ -2211,7 +2258,7 @@ def logs_list(
                         "- **{}**: `{}`<br>\n{}{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
-                            textwrap.indent(tool_result["output"], "    "),
+                            _fenced_block(tool_result["output"]),
                             (
                                 "<br>\n    **Error**: {}\n".format(
                                     tool_result["exception"]
@@ -2261,17 +2308,17 @@ def logs_list(
                 click.echo("### Tool calls\n")
                 for tool_call in row["tool_calls"]:
                     click.echo(
-                        "- **{}**: `{}`<br>\n    Arguments: {}".format(
+                        "- **{}**: `{}`<br>\n{}".format(
                             tool_call["name"],
                             tool_call["tool_call_id"],
-                            json.dumps(tool_call["arguments"]),
+                            _format_tool_call_arguments(tool_call["arguments"]),
                         )
                     )
                 click.echo("")
             if response:
                 click.echo("{}\n".format(response))
             if usage:
-                token_usage = token_usage_string(
+                token_usage = _token_usage_markdown(
                     row["input_tokens"],
                     row["output_tokens"],
                     json.loads(row["token_details"]) if row["token_details"] else None,
