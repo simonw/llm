@@ -11,7 +11,7 @@
   echo "  Black"
   uv run black . --check
   echo "  cog"
-  uv run cog --check \
+  uv run --with sqlite-utils==4.0rc2 cog --check \
     -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
     README.md docs/*.md
   echo "  mypy"
@@ -25,7 +25,7 @@
 
 # Rebuild docs with cog
 @cog:
-  uv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
+  uv run --with sqlite-utils==4.0rc2 cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
 
 # Serve live docs on localhost:8000
 @docs: cog

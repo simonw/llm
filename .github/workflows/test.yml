@@ -36,7 +36,7 @@ jobs:
       run: |
         python -m pytest -vv
     - name: Check if cog needs to be run
-      if: matrix.os != 'windows-latest'
+      if: matrix.sqlite-utils-version == '4.0rc2'
       run: |
         cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \

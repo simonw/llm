@@ -308,117 +308,117 @@ for table in (
 cog.out("```\n")
 ]]] -->
 ```sql
-CREATE TABLE [conversations] (
-  [id] TEXT PRIMARY KEY,
-  [name] TEXT,
-  [model] TEXT
+CREATE TABLE "conversations" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT,
+  "model" TEXT
 );
-CREATE TABLE [schemas] (
-  [id] TEXT PRIMARY KEY,
-  [content] TEXT
+CREATE TABLE "schemas" (
+  "id" TEXT PRIMARY KEY,
+  "content" TEXT
 );
 CREATE TABLE "responses" (
-  [id] TEXT PRIMARY KEY,
-  [model] TEXT,
-  [prompt] TEXT,
-  [system] TEXT,
-  [prompt_json] TEXT,
-  [options_json] TEXT,
-  [response] TEXT,
-  [response_json] TEXT,
-  [conversation_id] TEXT REFERENCES [conversations]([id]),
-  [duration_ms] INTEGER,
-  [datetime_utc] TEXT,
-  [input_tokens] INTEGER,
-  [output_tokens] INTEGER,
-  [token_details] TEXT,
-  [schema_id] TEXT REFERENCES [schemas]([id]),
-  [resolved_model] TEXT,
-  [reasoning] TEXT
+  "id" TEXT PRIMARY KEY,
+  "model" TEXT,
+  "prompt" TEXT,
+  "system" TEXT,
+  "prompt_json" TEXT,
+  "options_json" TEXT,
+  "response" TEXT,
+  "response_json" TEXT,
+  "conversation_id" TEXT REFERENCES "conversations"("id"),
+  "duration_ms" INTEGER,
+  "datetime_utc" TEXT,
+  "input_tokens" INTEGER,
+  "output_tokens" INTEGER,
+  "token_details" TEXT,
+  "schema_id" TEXT REFERENCES "schemas"("id"),
+  "resolved_model" TEXT,
+  "reasoning" TEXT
 );
-CREATE VIRTUAL TABLE [responses_fts] USING FTS5 (
-  [prompt],
-  [response],
-  content=[responses]
+CREATE VIRTUAL TABLE "responses_fts" USING FTS5 (
+  "prompt",
+  "response",
+  content="responses"
 );
-CREATE TABLE [attachments] (
-  [id] TEXT PRIMARY KEY,
-  [type] TEXT,
-  [path] TEXT,
-  [url] TEXT,
-  [content] BLOB
+CREATE TABLE "attachments" (
+  "id" TEXT PRIMARY KEY,
+  "type" TEXT,
+  "path" TEXT,
+  "url" TEXT,
+  "content" BLOB
 );
-CREATE TABLE [prompt_attachments] (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [attachment_id] TEXT REFERENCES [attachments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [attachment_id])
+CREATE TABLE "prompt_attachments" (
+  "response_id" TEXT REFERENCES "responses"("id"),
+  "attachment_id" TEXT REFERENCES "attachments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("response_id",
+  "attachment_id")
 );
-CREATE TABLE [fragments] (
-  [id] INTEGER PRIMARY KEY,
-  [hash] TEXT,
-  [content] TEXT,
-  [datetime_utc] TEXT,
-  [source] TEXT
+CREATE TABLE "fragments" (
+  "id" INTEGER PRIMARY KEY,
+  "hash" TEXT,
+  "content" TEXT,
+  "datetime_utc" TEXT,
+  "source" TEXT
 );
-CREATE TABLE [fragment_aliases] (
-  [alias] TEXT PRIMARY KEY,
-  [fragment_id] INTEGER REFERENCES [fragments]([id])
+CREATE TABLE "fragment_aliases" (
+  "alias" TEXT PRIMARY KEY,
+  "fragment_id" INTEGER REFERENCES "fragments"("id")
 );
 CREATE TABLE "prompt_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
+  "response_id" TEXT REFERENCES "responses"("id"),
+  "fragment_id" INTEGER REFERENCES "fragments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("response_id",
+  "fragment_id",
+  "order")
 );
 CREATE TABLE "system_fragments" (
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [fragment_id] INTEGER REFERENCES [fragments]([id]),
-  [order] INTEGER,
-  PRIMARY KEY ([response_id],
-  [fragment_id],
-  [order])
+  "response_id" TEXT REFERENCES "responses"("id"),
+  "fragment_id" INTEGER REFERENCES "fragments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("response_id",
+  "fragment_id",
+  "order")
 );
-CREATE TABLE [tools] (
-  [id] INTEGER PRIMARY KEY,
-  [hash] TEXT,
-  [name] TEXT,
-  [description] TEXT,
-  [input_schema] TEXT,
-  [plugin] TEXT
+CREATE TABLE "tools" (
+  "id" INTEGER PRIMARY KEY,
+  "hash" TEXT,
+  "name" TEXT,
+  "description" TEXT,
+  "input_schema" TEXT,
+  "plugin" TEXT
 );
-CREATE TABLE [tool_responses] (
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [response_id] TEXT REFERENCES [responses]([id]),
-  PRIMARY KEY ([tool_id],
-  [response_id])
+CREATE TABLE "tool_responses" (
+  "tool_id" INTEGER REFERENCES "tools"("id"),
+  "response_id" TEXT REFERENCES "responses"("id"),
+  PRIMARY KEY ("tool_id",
+  "response_id")
 );
-CREATE TABLE [tool_calls] (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [arguments] TEXT,
-  [tool_call_id] TEXT
+CREATE TABLE "tool_calls" (
+  "id" INTEGER PRIMARY KEY,
+  "response_id" TEXT REFERENCES "responses"("id"),
+  "tool_id" INTEGER REFERENCES "tools"("id"),
+  "name" TEXT,
+  "arguments" TEXT,
+  "tool_call_id" TEXT
 );
 CREATE TABLE "tool_results" (
-  [id] INTEGER PRIMARY KEY,
-  [response_id] TEXT REFERENCES [responses]([id]),
-  [tool_id] INTEGER REFERENCES [tools]([id]),
-  [name] TEXT,
-  [output] TEXT,
-  [tool_call_id] TEXT,
-  [instance_id] INTEGER REFERENCES [tool_instances]([id]),
-  [exception] TEXT
+  "id" INTEGER PRIMARY KEY,
+  "response_id" TEXT REFERENCES "responses"("id"),
+  "tool_id" INTEGER REFERENCES "tools"("id"),
+  "name" TEXT,
+  "output" TEXT,
+  "tool_call_id" TEXT,
+  "instance_id" INTEGER REFERENCES "tool_instances"("id"),
+  "exception" TEXT
 );
-CREATE TABLE [tool_instances] (
-  [id] INTEGER PRIMARY KEY,
-  [plugin] TEXT,
-  [name] TEXT,
-  [arguments] TEXT
+CREATE TABLE "tool_instances" (
+  "id" INTEGER PRIMARY KEY,
+  "plugin" TEXT,
+  "name" TEXT,
+  "arguments" TEXT
 );
 ```
 <!-- [[[end]]] -->

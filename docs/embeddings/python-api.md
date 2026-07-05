@@ -191,21 +191,21 @@ for table in ("collections", "embeddings"):
 cog.out("```\n")
 ]]] -->
 ```sql
-CREATE TABLE [collections] (
-   [id] INTEGER PRIMARY KEY,
-   [name] TEXT,
-   [model] TEXT
+CREATE TABLE "collections" (
+   "id" INTEGER PRIMARY KEY,
+   "name" TEXT,
+   "model" TEXT
 )
 CREATE TABLE "embeddings" (
-   [collection_id] INTEGER REFERENCES [collections]([id]),
-   [id] TEXT,
-   [embedding] BLOB,
-   [content] TEXT,
-   [content_blob] BLOB,
-   [content_hash] BLOB,
-   [metadata] TEXT,
-   [updated] INTEGER,
-   PRIMARY KEY ([collection_id], [id])
+   "collection_id" INTEGER REFERENCES "collections"("id"),
+   "id" TEXT,
+   "embedding" BLOB,
+   "content" TEXT,
+   "content_blob" BLOB,
+   "content_hash" BLOB,
+   "metadata" TEXT,
+   "updated" INTEGER,
+   PRIMARY KEY ("collection_id", "id")
 )
 ```
 <!-- [[[end]]] -->
