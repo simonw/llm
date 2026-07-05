@@ -16,7 +16,7 @@ jobs:
         include:
         - os: ubuntu-latest
           python-version: "3.14"
-          sqlite-utils-version: "4.0rc1"
+          sqlite-utils-version: "4.0rc2"
     steps:
     - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
