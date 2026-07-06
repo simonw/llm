@@ -134,6 +134,14 @@ class Collection:
         if self.db["embeddings"].count_where(
             "content_hash = ? and collection_id = ?", [content_hash, self.id]
         ):
+            if store:
+                content_col = "content" if isinstance(value, str) else "content_blob"
+                self.db.execute(
+                    "UPDATE embeddings SET {} = ? WHERE collection_id = ? AND id = ? AND {} IS NULL".format(
+                        content_col, content_col
+                    ),
+                    [value, self.id, id],
+                )
             return
         embedding = self.model().embed(value)
         cast(Table, self.db["embeddings"]).insert(
@@ -207,11 +215,23 @@ class Collection:
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
             ]
-            filtered_batch = [item for item in batch if item[0] not in existing_ids]
+            existing_ids_set = set(existing_ids)
+            filtered_batch = [item for item in batch if item[0] not in existing_ids_set]
             embeddings = list(
                 self.model().embed_multi(item[1] for item in filtered_batch)
             )
             with self.db.conn:
+                if store and existing_ids_set:
+                    for item in batch:
+                        if item[0] in existing_ids_set:
+                            item_id, value, _ = item
+                            content_col = "content" if isinstance(value, str) else "content_blob"
+                            self.db.execute(
+                                "UPDATE embeddings SET {} = ? WHERE collection_id = ? AND id = ? AND {} IS NULL".format(
+                                    content_col, content_col
+                                ),
+                                [value, collection_id, item_id],
+                            )
                 cast(Table, self.db["embeddings"]).insert_all(
                     (
                         {

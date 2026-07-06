@@ -185,3 +185,30 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+def test_embed_store_updates_null_content():
+    # Embedding without --store then re-embedding with --store should populate content.
+    db = sqlite_utils.Database(memory=True)
+    c = llm.Collection("test", db, model_id="embed-demo")
+    c.embed("1", "hello world")
+    row = next(db["embeddings"].rows_where("id = '1'"))
+    assert row["content"] is None
+
+    c.embed("1", "hello world", store=True)
+    row = next(db["embeddings"].rows_where("id = '1'"))
+    assert row["content"] == "hello world"
+
+
+def test_embed_multi_store_updates_null_content():
+    # embed_multi without store then with store should populate the content column.
+    db = sqlite_utils.Database(memory=True)
+    c = llm.Collection("test", db, model_id="embed-demo")
+    c.embed_multi([("1", "hello"), ("2", "world")])
+    for row in db["embeddings"].rows:
+        assert row["content"] is None
+
+    c.embed_multi([("1", "hello"), ("2", "world")], store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert rows["1"]["content"] == "hello"
+    assert rows["2"]["content"] == "world"
