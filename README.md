@@ -69,7 +69,7 @@ Or with [uv](https://docs.astral.sh/uv/guides/tools/)
 uv tool install llm
 ```
 
-If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
+If you have an [OpenAI API key](https://platform.openai.com/api-keys) you can run this:
 
 ```bash
 # Paste your OpenAI API key into this
