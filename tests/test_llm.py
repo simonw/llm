@@ -889,6 +889,44 @@ def test_llm_prompt_continue_with_database(
     assert sqlite_utils.Database(db_path)["responses"].count == 2
 
 
+def test_continue_uses_most_recently_used_conversation(mock_model, user_path):
+    # Regression test for: --continue should resume the most recently *used*
+    # conversation, not the most recently *created* one.
+    mock_model.enqueue(["resp-A1"])
+    mock_model.enqueue(["resp-B1"])
+    mock_model.enqueue(["resp-A2"])
+    mock_model.enqueue(["resp-A3"])
+
+    runner = CliRunner()
+    log_db = sqlite_utils.Database(str(user_path / "logs.db"))
+
+    # Start conversation A
+    r = runner.invoke(cli, ["prompt-A", "-m", "mock", "--no-stream"], catch_exceptions=False)
+    assert r.exit_code == 0, r.output
+    conv_a_id = list(log_db["responses"].rows)[0]["conversation_id"]
+
+    # Start a NEW conversation B (this gets a higher conversations.id)
+    r = runner.invoke(cli, ["prompt-B", "-m", "mock", "--no-stream"], catch_exceptions=False)
+    assert r.exit_code == 0, r.output
+
+    # Explicitly continue conversation A (making it the most recently *used*)
+    r = runner.invoke(
+        cli,
+        ["prompt-A2", "-m", "mock", "--no-stream", "--continue", "--conversation", conv_a_id],
+        catch_exceptions=False,
+    )
+    assert r.exit_code == 0, r.output
+
+    # --continue with no id should pick up conversation A, not conversation B
+    r = runner.invoke(cli, ["prompt-A3", "-m", "mock", "--no-stream", "--continue"], catch_exceptions=False)
+    assert r.exit_code == 0, r.output
+
+    rows = list(log_db["responses"].rows)
+    assert len(rows) == 4
+    # The last response should belong to conversation A, not B
+    assert rows[-1]["conversation_id"] == conv_a_id
+
+
 def test_default_exports():
     "Check key exports in the llm __all__ list"
     for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
