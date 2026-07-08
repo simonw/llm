@@ -160,3 +160,18 @@ def test_backfill_content_hash():
     assert row1["content_hash"] is not None
     # This should be a hash of 'goodbye world'
     assert row2["content_hash"] == llm.Collection.content_hash("goodbye world")
+
+
+def test_migrate_recovers_from_interrupted_m013():
+    # https://github.com/simonw/llm/issues/1036
+    # Simulates a first run that was interrupted after m013_usage added its
+    # columns but before the migration was recorded in _llm_migrations.
+    # Re-running migrate() used to fail with:
+    #   sqlite3.OperationalError: duplicate column name: input_tokens
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    db["_llm_migrations"].delete_where("name = ?", ["m013_usage"])
+    migrate(db)
+    assert db["responses"].columns_dict == EXPECTED
+    applied = {row["name"] for row in db["_llm_migrations"].rows}
+    assert "m013_usage" in applied
