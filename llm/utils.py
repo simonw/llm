@@ -168,7 +168,11 @@ def simplify_usage_dict(d):
     return remove_empty_and_zero(d) or {}
 
 
-def token_usage_string(input_tokens, output_tokens, token_details) -> str:
+def token_usage_string(
+    input_tokens: Optional[int],
+    output_tokens: Optional[int],
+    token_details: Optional[Dict[str, Any]],
+) -> str:
     bits = []
     if input_tokens is not None:
         bits.append(f"{format(input_tokens, ',')} input")
