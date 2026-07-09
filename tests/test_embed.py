@@ -185,3 +185,26 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+def test_embed_multi_dedup_same_content_different_ids():
+    """
+    Regression test for https://github.com/simonw/llm/issues/1397
+
+    embed_multi_with_metadata should deduplicate by content_hash, not by id.
+    When the same content is embedded under a different ID, the second call
+    should skip re-embedding because the content already exists.
+    """
+    collection = llm.Collection("dedup-test", model_id="embed-demo")
+    # First embed with id "a"
+    collection.embed_multi_with_metadata(
+        [("a", "hello world", None)], store=True
+    )
+    assert collection.db["embeddings"].count == 1
+
+    # Now embed the same content with a different id "b"
+    collection.embed_multi_with_metadata(
+        [("b", "hello world", None)], store=True
+    )
+    # Should still be 1 row because content_hash is identical
+    assert collection.db["embeddings"].count == 1
