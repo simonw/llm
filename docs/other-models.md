@@ -75,3 +75,37 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+### Example: Kelly Intelligence
+
+[Kelly Intelligence](https://api.thedailylesson.com) is a free OpenAI-compatible API with a built-in vocabulary RAG layer (162,000 words across 47 languages) and an AI tutor persona, built on Claude. It's operated by [Lesson of the Day, PBC](https://lotdpbc.com), a public benefit corporation, and the free tier (500 calls/month) requires no credit card.
+
+Add it to `extra-openai-models.yaml`:
+
+```yaml
+- model_id: kelly-haiku
+  model_name: kelly-haiku
+  api_base: "https://api.thedailylesson.com/v1"
+  api_key_name: kelly
+- model_id: kelly-sonnet
+  model_name: kelly-sonnet
+  api_base: "https://api.thedailylesson.com/v1"
+  api_key_name: kelly
+```
+
+Then store your key and try it:
+
+```bash
+llm keys set kelly
+# paste your KELLY_API_KEY
+
+llm -m kelly-haiku "Teach me the word 'serendipity'."
+```
+
+You can try the API with no signup at all using its public `/v1/demo` endpoint:
+
+```bash
+curl -X POST https://api.thedailylesson.com/v1/demo \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What does ephemeral mean?"}]}'
+```
