@@ -1,11 +1,19 @@
 import json
 import pytest
 from llm.utils import (
+    dicts_to_table_string,
     extract_fenced_code_block,
+    find_unused_key,
+    has_plugin_prefix,
     instantiate_from_spec,
+    make_schema_id,
     maybe_fenced_code,
+    output_rows_as_json,
+    remove_dict_none_values,
     schema_dsl,
+    schema_summary,
     simplify_usage_dict,
+    token_usage_string,
     truncate_string,
     monotonic_ulid,
 )
@@ -516,3 +524,150 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+@pytest.mark.parametrize(
+    "schema, expected",
+    [
+        ({}, ""),
+        (None, ""),
+        ({"type": "string"}, ""),
+        (
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            "{name, tags: []}",
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer"},
+                        },
+                    }
+                },
+            },
+            "{user: {name, age}}",
+        ),
+        (
+            {"type": "array", "items": {"type": "integer"}},
+            "",
+        ),
+    ],
+)
+def test_schema_summary(schema, expected):
+    assert schema_summary(schema) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("plugin:fragment", True),
+        ("my-plugin:path/to/file", True),
+        ("abc123:foo", True),
+        ("no-prefix-here", False),
+        (":starts-with-colon", False),
+        ("", False),
+        ("relative/path.txt", False),
+    ],
+)
+def test_has_plugin_prefix(value, expected):
+    assert has_plugin_prefix(value) == expected
+
+
+@pytest.mark.parametrize(
+    "item, key, expected",
+    [
+        ({"id": "1"}, "id", "id_"),
+        ({"id": "1", "id_": "2"}, "id", "id__"),
+        ({"name": "test"}, "name", "name_"),
+        ({}, "key", "key"),
+    ],
+)
+def test_find_unused_key(item, key, expected):
+    assert find_unused_key(item, key) == expected
+
+
+@pytest.mark.parametrize(
+    "input_data, expected",
+    [
+        ({"a": 1, "b": None}, {"a": 1}),
+        ({"a": {"b": None, "c": 1}}, {"a": {"c": 1}}),
+        ({"a": [{"b": None, "c": 2}]}, {"a": [{"c": 2}]}),
+        ({"a": None, "b": {"c": None}}, {}),
+        ("not a dict", "not a dict"),
+    ],
+)
+def test_remove_dict_none_values(input_data, expected):
+    assert remove_dict_none_values(input_data) == expected
+
+
+@pytest.mark.parametrize(
+    "input_tokens, output_tokens, token_details, expected",
+    [
+        (100, 50, None, "100 input, 50 output"),
+        (1000, None, None, "1,000 input"),
+        (None, 2500, None, "2,500 output"),
+        (None, None, None, ""),
+        (10, 20, {"reasoning": 5}, '10 input, 20 output, {"reasoning": 5}'),
+    ],
+)
+def test_token_usage_string(input_tokens, output_tokens, token_details, expected):
+    assert token_usage_string(input_tokens, output_tokens, token_details) == expected
+
+
+def test_make_schema_id():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    schema_id, schema_json = make_schema_id(schema)
+    assert len(schema_id) == 32
+    assert schema_json == '{"type":"object","properties":{"name":{"type":"string"}}}'
+    # Same schema should produce the same id
+    schema_id2, _ = make_schema_id(schema)
+    assert schema_id == schema_id2
+
+
+def test_dicts_to_table_string():
+    headings = ["name", "age"]
+    dicts = [{"name": "Alice", "age": "30"}, {"name": "Bob", "age": "25"}]
+    result = dicts_to_table_string(headings, dicts)
+    assert result == [
+        "name     age",
+        "Alice    30 ",
+        "Bob      25 ",
+    ]
+
+
+@pytest.mark.parametrize(
+    "rows, nl, compact, json_cols, expected",
+    [
+        ([{"a": 1}, {"b": 2}], True, False, (), ['{"a": 1}', '{"b": 2}']),
+        ([], False, False, (), ["[]"]),
+        (
+            [{"a": 1}, {"b": 2}],
+            False,
+            True,
+            (),
+            ['[{"a": 1},', ' {"b": 2}]'],
+        ),
+        (
+            [{"data": '{"x": 1}'}],
+            True,
+            False,
+            ("data",),
+            ['{"data": {"x": 1}}'],
+        ),
+    ],
+)
+def test_output_rows_as_json(rows, nl, compact, json_cols, expected):
+    assert (
+        list(output_rows_as_json(rows, nl=nl, compact=compact, json_cols=json_cols))
+        == expected
+    )
