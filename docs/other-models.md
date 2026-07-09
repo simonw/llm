@@ -75,3 +75,37 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+### AGIone
+
+[AGIone](https://agione.pro) is a unified inference API providing OpenAI-compatible access to frontier models from OpenAI, Anthropic, Google, DeepSeek, Qwen, Moonshot, and ByteDance through a single endpoint. The `model_name` must be the full vendor-prefixed model identifier as listed in the AGIone dashboard.
+
+Store an AGIone Auth Token / API key using `llm keys set agione`, then add entries to your `extra-openai-models.yaml`:
+
+```yaml
+- model_id: agione-gpt-5
+  model_name: openai/GPT-5.5/c6fbe
+  api_base: "https://agione.pro/hyperone/xapi/api/v1"
+  api_key_name: agione
+  vision: true
+  supports_tools: true
+
+- model_id: agione-opus
+  model_name: anthropic/Claude-opus-4.7/a4d5d
+  api_base: "https://agione.pro/hyperone/xapi/api/v1"
+  api_key_name: agione
+  vision: true
+  supports_tools: true
+
+- model_id: agione-qwen
+  model_name: qwen/qwen3.5-plus/cec84
+  api_base: "https://agione.pro/hyperone/xapi/api/v1"
+  api_key_name: agione
+  supports_tools: true
+```
+
+Run prompts against any configured model:
+
+```bash
+llm -m agione-gpt-5 'Explain git rebase in 2 sentences'
+```
