@@ -75,3 +75,23 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+
+### Cloud LLM API gateways
+
+API gateway services such as [OfoxAI](https://ofox.ai) provide access to 100+ models (GPT, Claude, Gemini, DeepSeek, etc.) through a single OpenAI-compatible endpoint:
+
+```yaml
+- model_id: ofoxai-gpt-4o
+  model_name: gpt-4o
+  api_base: "https://api.ofox.ai/v1"
+  api_key_name: ofoxai
+```
+
+Store your OfoxAI API key with:
+
+```bash
+llm keys set ofoxai
+```
+
+You can then swap `model_name` to any of the [100+ models](https://ofox.ai) OfoxAI supports without changing your API key.
