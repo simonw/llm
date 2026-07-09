@@ -288,6 +288,12 @@ def test_schema_dsl_multi():
             "12345...",
         ),  # Too small for keep_end, use regular
         ("1234567890", 9, False, True, "12... 90"),  # Just enough for keep_end
+        # max_length too small to fit the "..." marker: the result must still
+        # honor the limit rather than returning more than max_length characters.
+        ("Hello, world!", 2, False, False, "He"),
+        ("Hello, world!", 1, False, False, "H"),
+        ("Hello, world!", 0, False, False, ""),
+        ("Hello, world!", 2, False, True, "He"),  # keep_end with no room either
     ],
 )
 def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expected):
