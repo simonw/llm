@@ -225,6 +225,21 @@ def test_schema_dsl(schema, expected):
     assert result == expected
 
 
+@pytest.mark.parametrize(
+    "schema",
+    [
+        # https://github.com/simonw/llm/issues/1466
+        ":just a description",
+        "name, :description",
+        ":",
+        " :desc",
+    ],
+)
+def test_schema_dsl_missing_field_name(schema):
+    with pytest.raises(ValueError, match="Field name is required"):
+        schema_dsl(schema)
+
+
 def test_schema_dsl_multi():
     result = schema_dsl("name, age int: The age", multi=True)
     assert result == {
