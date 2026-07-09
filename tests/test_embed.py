@@ -11,6 +11,15 @@ def test_demo_plugin():
     assert model.embed("hello world") == [5, 5] + [0] * 14
 
 
+def test_cosine_similarity_zero_vector():
+    # A zero-magnitude vector has no direction; cosine_similarity should return
+    # 0.0 rather than raising ZeroDivisionError (it's used by similar_by_vector).
+    assert llm.cosine_similarity([0.0, 0.0], [1.0, 2.0]) == 0.0
+    assert llm.cosine_similarity([1.0, 2.0], [0.0, 0.0]) == 0.0
+    # non-zero vectors still work
+    assert llm.cosine_similarity([1.0, 0.0], [2.0, 0.0]) == pytest.approx(1.0)
+
+
 @pytest.mark.parametrize(
     "batch_size,expected_batches",
     (
