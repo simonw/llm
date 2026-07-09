@@ -234,9 +234,16 @@ def m012_attachments_tables(db):
 
 @migration
 def m013_usage(db):
-    db["responses"].add_column("input_tokens", int)
-    db["responses"].add_column("output_tokens", int)
-    db["responses"].add_column("token_details", str)
+    # Idempotent, in case a previous run was interrupted after some of
+    # these columns were added but before the migration was recorded:
+    # https://github.com/simonw/llm/issues/1036
+    existing = db["responses"].columns_dict
+    if "input_tokens" not in existing:
+        db["responses"].add_column("input_tokens", int)
+    if "output_tokens" not in existing:
+        db["responses"].add_column("output_tokens", int)
+    if "token_details" not in existing:
+        db["responses"].add_column("token_details", str)
 
 
 @migration
