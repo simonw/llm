@@ -1986,8 +1986,12 @@ def combine_chunks(chunks: List) -> dict:
     # those later on
     logprobs = []
     usage = {}
+    provider_extras = {}
 
     for item in chunks:
+        item_dump = item.model_dump()
+        if item_dump.get("timings") is not None:
+            provider_extras["timings"] = item_dump["timings"]
         if item.usage:
             usage = item.usage.model_dump()
         for choice in item.choices:
@@ -2017,6 +2021,7 @@ def combine_chunks(chunks: List) -> dict:
     }
     if logprobs:
         combined["logprobs"] = logprobs
+    combined.update(provider_extras)
     if chunks:
         for key in ("id", "object", "model", "created", "index"):
             value = getattr(chunks[0], key, None)
