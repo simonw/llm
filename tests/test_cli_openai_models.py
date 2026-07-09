@@ -6,6 +6,12 @@ import pytest
 import sqlite_utils
 
 
+@pytest.fixture(autouse=True)
+def openai_api_key(monkeypatch):
+    """Set a fake OpenAI API key so models are registered in all tests in this file."""
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+
+
 @pytest.fixture
 def mocked_models(httpx_mock):
     httpx_mock.add_response(
@@ -504,3 +510,23 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     assert db["responses"].count == 1
     row = next(db["responses"].rows)
     assert row["response"] == "Ho ho ho"
+
+
+def test_openai_models_not_registered_without_key(monkeypatch):
+    """OpenAI models should not appear in the model list when no API key is configured."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "OpenAI Chat" not in result.output
+    assert "OpenAI Completion" not in result.output
+
+
+def test_openai_models_registered_with_key(monkeypatch):
+    """OpenAI models should appear in the model list when an API key is configured."""
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "OpenAI Chat: gpt-4o" in result.output
+    assert "OpenAI Chat: gpt-4o-mini" in result.output
