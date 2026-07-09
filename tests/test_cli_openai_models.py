@@ -504,3 +504,9 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     assert db["responses"].count == 1
     row = next(db["responses"].rows)
     assert row["response"] == "Ho ho ho"
+
+
+def test_openai_models_not_registered_without_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    model_ids = [m.model_id for m in llm.get_models()]
+    assert not any(m.startswith("gpt-") for m in model_ids)
