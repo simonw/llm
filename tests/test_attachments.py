@@ -61,6 +61,40 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert prompt_attachment["response_id"] == response["id"]
 
 
+def test_duplicate_attachment_does_not_error(mock_model, logs_db, tmp_path):
+    """Passing the same file twice via --attachment should not raise an IntegrityError.
+
+    Regression test for https://github.com/simonw/llm/issues/1354
+    """
+    runner = CliRunner()
+    png_file = tmp_path / "image.png"
+    png_file.write_bytes(TINY_PNG)
+
+    mock_model.enqueue(["ok"])
+    result = runner.invoke(
+        cli.cli,
+        [
+            "prompt", "-m", "mock", "describe",
+            "-a", str(png_file),
+            "-a", str(png_file),  # same file, passed twice
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # The attachment should be recorded exactly once in the database even
+    # though it was supplied twice on the command line.
+    attachments = list(logs_db["attachments"].rows)
+    assert len(attachments) == 1, "duplicate attachment should be de-duplicated"
+
+    prompt_attachments = list(logs_db["prompt_attachments"].rows)
+    assert len(prompt_attachments) == 1, "prompt_attachments should have one row"
+
+    # The model should also have received only one attachment.
+    prompt_obj = mock_model.history[0][0]
+    assert len(prompt_obj.attachments) == 1
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":
