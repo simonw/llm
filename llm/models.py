@@ -1538,7 +1538,7 @@ class _BaseResponse:
                     "response_id": response_id,
                 }
             )
-        for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
+        for tool_call in self.tool_calls():
             db["tool_calls"].insert(
                 {
                     "response_id": response_id,
@@ -1550,6 +1550,7 @@ class _BaseResponse:
             )
         for tool_result in self.prompt.tool_results:
             instance_id = None
+            tool_def = tool_ids_by_name.get(tool_result.name)
             if tool_result.instance:
                 try:
                     if not tool_result.instance.instance_id:
@@ -1557,8 +1558,8 @@ class _BaseResponse:
                             db["tool_instances"]
                             .insert(
                                 {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
+                                    "plugin": (tool_def.plugin if tool_def else None),
+                                    "name": (tool_def.name.split("_")[0] if tool_def else None),
                                     "arguments": json.dumps(
                                         tool_result.instance._config
                                     ),
