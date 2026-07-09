@@ -119,6 +119,9 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 
 Options:
   -s, --system TEXT               System prompt to use
+  --messages TEXT                 JSON array, path to JSON file, or - for stdin
+  -M, --message ROLE TEXT         Append a text message with role system, user
+                                  or assistant
   -m, --model TEXT                Model to use
   -d, --database FILE             Path to log database
   -q, --query TEXT                Use first model matching these strings

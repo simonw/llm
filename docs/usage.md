@@ -120,6 +120,241 @@ cat llm/utils.py | llm -t pytest
 ```
 See {ref}`prompt templates <prompt-templates>` for more.
 
+(usage-message-history)=
+### Message histories
+
+The `--messages` option can be used to start a prompt with an explicit list of messages, instead of a single user prompt. This is useful when you already have a transcript from another system, when you want to test how a model responds after a specific conversation history, or when you want to replay a saved structured prompt.
+
+The messages are sent to the model in the order provided. Each message has a `role` and a list of `parts`:
+
+```json
+[
+  {
+    "role": "system",
+    "parts": [
+      {
+        "type": "text",
+        "text": "You are a helpful pirate."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "type": "text",
+        "text": "What is the capital of France?"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "parts": [
+      {
+        "type": "text",
+        "text": "Paris, matey."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "type": "text",
+        "text": "And Germany?"
+      }
+    ]
+  }
+]
+```
+
+You can pass this JSON directly to `--messages`:
+
+```bash
+llm --messages '[
+  {
+    "role": "system",
+    "parts": [{"type": "text", "text": "You are a helpful pirate."}]
+  },
+  {
+    "role": "user",
+    "parts": [{"type": "text", "text": "What is the capital of France?"}]
+  },
+  {
+    "role": "assistant",
+    "parts": [{"type": "text", "text": "Paris, matey."}]
+  },
+  {
+    "role": "user",
+    "parts": [{"type": "text", "text": "And Germany?"}]
+  }
+]'
+```
+
+If the argument to `--messages` is the path to an existing file, LLM will read the messages from that file instead:
+
+```bash
+llm --messages messages.json
+```
+
+Use `--messages -` to read the JSON from standard input:
+
+```bash
+cat messages.json | llm --messages -
+```
+
+The parsing rules are:
+
+- `--messages -` reads JSON from standard input.
+- `--messages path/to/file.json` reads JSON from that file, if the path exists.
+- Otherwise, the argument is parsed as a JSON string.
+
+The `--messages` JSON should be an array of messages using LLM's serialized `Message` format. This is the same format produced by the Python API's `Message.to_dict()` method and accepted by `Message.from_dict()`.
+
+Each message has:
+
+- `role`: usually `system`, `user`, `assistant` or `tool`.
+- `parts`: a list of structured parts, most commonly text parts such as `{"type": "text", "text": "Hello"}`.
+
+For text-only conversations the `parts` list will usually contain a single text part. More advanced transcripts can include other part types such as `attachment`, `tool_call`, `tool_result` and `reasoning`.
+
+Here is a user message with an image attachment:
+
+```json
+[
+  {
+    "role": "user",
+    "parts": [
+      {
+        "type": "text",
+        "text": "Describe this image"
+      },
+      {
+        "type": "attachment",
+        "attachment": {
+          "path": "photo.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    ]
+  }
+]
+```
+
+Attachments in messages can use `path`, `url` or base64-encoded `content`:
+
+```json
+{
+  "type": "attachment",
+  "attachment": {
+    "url": "https://static.simonwillison.net/static/2024/pelicans.jpg",
+    "type": "image/jpeg"
+  }
+}
+```
+
+For shorter text-only transcripts you can use `-M/--message`. This option takes two arguments: a role and the message text. It can be used more than once:
+
+```bash
+llm \
+  -M system "You are a helpful pirate." \
+  -M user "What is the capital of France?" \
+  -M assistant "Paris, matey." \
+  -M user "And Germany?"
+```
+
+This is equivalent to passing the JSON message list shown above. The `-M/--message` option is intended for text messages, so it supports the `system`, `user` and `assistant` roles. Use `--messages` for attachments, tool calls, tool results, reasoning parts or provider-specific metadata.
+
+You can combine `--messages` with `-M/--message` to load an existing transcript and then append one or more text messages:
+
+```bash
+llm --messages transcript.json -M user "Summarize the conversation so far"
+```
+
+You can also provide a regular prompt argument. When `--messages` or `-M/--message` is used, any prompt argument is appended as a final `user` message:
+
+```bash
+llm --messages transcript.json "Now suggest three follow-up questions"
+```
+
+If standard input is used for the prompt, that input is also appended as a final `user` message:
+
+```bash
+cat notes.txt | llm --messages transcript.json "Use these notes to answer the last question"
+```
+
+This appends one final user message containing the piped content followed by the prompt argument, matching the normal `llm` prompt behavior.
+
+The exception is `--messages -`, which uses standard input for the message JSON. In that case standard input is not also available as a prompt:
+
+```bash
+cat transcript.json | llm --messages - "Now continue"
+```
+
+When using explicit messages, options that would otherwise construct parts of the same prompt cannot be combined with `--messages` or `-M/--message`. Use messages for those inputs instead.
+
+These options are not used with explicit messages:
+
+- `-s/--system`: use a `system` message.
+- `-a/--attachment` and `--attachment-type`: use an `attachment` part.
+- `-f/--fragment` and `--system-fragment`: expand the fragment yourself and include it as a `text` part.
+
+Other prompt options still apply as usual, including `-m/--model`, `-o/--option`, `--schema`, `--no-stream`, `-x/--extract`, `--log`, `--no-log`, `--key`, `--async`, `--usage` and `-R/--hide-reasoning`.
+
+Explicit message histories are different from {ref}`continuing a conversation <usage-conversation>` using `-c/--continue` or `--cid/--conversation`. The conversation options load a previous conversation from LLM's log database and continue it, automatically using the same model if you do not specify one. The `--messages` option uses the message list you provide and starts a new logged conversation unless you disable logging with `--no-log`.
+
+If a message history contains tool calls or tool results, use the same serialized part format:
+
+```json
+[
+  {
+    "role": "user",
+    "parts": [
+      {
+        "type": "text",
+        "text": "What is 12345 * 67890?"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "parts": [
+      {
+        "type": "tool_call",
+        "name": "multiply",
+        "arguments": {
+          "x": 12345,
+          "y": 67890
+        },
+        "tool_call_id": "tc_01example"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "parts": [
+      {
+        "type": "tool_result",
+        "name": "multiply",
+        "output": "838102050",
+        "tool_call_id": "tc_01example"
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "type": "text",
+        "text": "Now add 1"
+      }
+    ]
+  }
+]
+```
+
+If you provide tools using `-T/--tool` or `--functions`, LLM can use those tools when continuing from a message history. For advanced tool resume workflows, include any previous assistant `tool_call` parts and matching `tool_result` parts in the message history so the model sees the same chain of events.
+
 (usage-tools)=
 ### Tools
 
