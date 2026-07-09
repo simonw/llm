@@ -711,8 +711,11 @@ def monotonic_ulid() -> ULID:
         # Decode timestamp from the last ULID we handed out
         last_ms = int.from_bytes(_last[:TIMESTAMP_LEN], "big")
 
-        # If the millisecond is the same, increment the randomness
-        if now_ms == last_ms:
+        # If the clock has not advanced past the last ULID - either the same
+        # millisecond or a backwards clock jump (e.g. an NTP correction) -
+        # keep the previous timestamp and increment the randomness so the
+        # result stays strictly larger than the previous one.
+        if now_ms <= last_ms:
             rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
             if rand_int >= 1 << (RANDOMNESS_LEN * 8):
                 raise OverflowError(
@@ -723,7 +726,7 @@ def monotonic_ulid() -> ULID:
             _last = _last[:TIMESTAMP_LEN] + randomness
             return ULID(_last)
 
-        # New millisecond, start fresh
+        # Clock moved forward, start fresh
         _last = _fresh(now_ms)
         return ULID(_last)
 
