@@ -1231,7 +1231,11 @@ def chat(
     accumulated_attachments = []
     end_token = "!end"
     while True:
-        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        try:
+            prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        except click.exceptions.Abort:
+            # Ctrl+D (EOF) should exit the chat cleanly
+            break
         fragments = []
         attachments = []
         if argument_fragments:
