@@ -1318,11 +1318,14 @@ def load_conversation(
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
-        # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
-        if matches:
-            conversation_id = matches[0]["id"]
-        else:
+        # Return the most recently *used* conversation (by last response), or None
+        try:
+            conversation_id = next(
+                db.query(
+                    "select conversation_id from responses order by id desc limit 1"
+                )
+            )["conversation_id"]
+        except StopIteration:
             return None
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
