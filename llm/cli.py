@@ -2718,7 +2718,10 @@ def schemas_dsl_debug(input, multi):
     \b
         llm schema dsl 'name, age int, bio: their bio'
     """
-    schema = schema_dsl(input, multi)
+    try:
+        schema = schema_dsl(input, multi)
+    except ValueError as ex:
+        raise click.ClickException(str(ex))
     click.echo(json.dumps(schema, indent=2))
 
 
