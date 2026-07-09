@@ -375,7 +375,10 @@ def cli():
     """
 
 
-@cli.command(name="prompt")
+@cli.command(
+    name="prompt",
+    context_settings={"ignore_unknown_options": True},
+)
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
