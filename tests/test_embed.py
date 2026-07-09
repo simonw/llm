@@ -55,6 +55,62 @@ def test_embed_metadata(collection):
     assert entry.content == "hello yet again"
 
 
+def test_embed_updates_store_and_metadata_for_existing_hash(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+
+    collection.embed("1", "hello world")
+    row = next(db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] is None
+    assert row["metadata"] is None
+    assert embed_demo.embedded_content == ["hello world"]
+
+    collection.embed("1", "hello world", metadata={"foo": "bar"}, store=True)
+    row = next(db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] == "hello world"
+    assert json.loads(row["metadata"]) == {"foo": "bar"}
+    assert embed_demo.embedded_content == ["hello world"]
+
+    collection.embed("1", "hello world")
+    row = next(db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] is None
+    assert row["metadata"] is None
+    assert embed_demo.embedded_content == ["hello world"]
+
+
+def test_embed_updates_content_blob_for_existing_hash(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    content = b"hello world"
+
+    collection.embed("1", content)
+    row = next(db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] is None
+    assert row["content_blob"] is None
+    assert embed_demo.embedded_content == [content]
+
+    collection.embed("1", content, store=True)
+    row = next(db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] is None
+    assert row["content_blob"] == content
+    assert embed_demo.embedded_content == [content]
+
+
+def test_embed_inserts_new_id_for_existing_hash(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+
+    collection.embed("1", "same text")
+    assert embed_demo.embedded_content == ["same text"]
+
+    collection.embed("2", "same text", store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert set(rows) == {"1", "2"}
+    assert rows["1"]["content"] is None
+    assert rows["2"]["content"] == "same text"
+    assert embed_demo.embedded_content == ["same text", "same text"]
+
+
 def test_collection(collection):
     assert collection.id == 1
     assert collection.count() == 2
@@ -144,6 +200,95 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert all(row["content_hash"] is not None for row in rows)
     # Check batch count
     assert collection.model().batch_count == expected_batches
+
+
+def test_embed_multi_updates_store_and_metadata_for_existing_hash(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    entries = (("1", "hello world"), ("2", "goodbye world"))
+
+    collection.embed_multi(entries)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert rows["1"]["content"] is None
+    assert rows["2"]["content"] is None
+    assert embed_demo.embedded_content == ["hello world", "goodbye world"]
+
+    collection.embed_multi(entries, store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert rows["1"]["content"] == "hello world"
+    assert rows["2"]["content"] == "goodbye world"
+    assert embed_demo.embedded_content == ["hello world", "goodbye world"]
+
+    collection.embed_multi_with_metadata(
+        (
+            ("1", "hello world", {"label": "first"}),
+            ("2", "goodbye world", {"label": "second"}),
+        ),
+        store=True,
+    )
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert json.loads(rows["1"]["metadata"]) == {"label": "first"}
+    assert json.loads(rows["2"]["metadata"]) == {"label": "second"}
+    assert embed_demo.embedded_content == ["hello world", "goodbye world"]
+
+
+def test_existing_hash_refresh_only_updates_matching_id(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    duplicate_entries = (("1", "same text"), ("2", "same text"))
+
+    collection.embed_multi(duplicate_entries, store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert len(rows) == 2
+    assert rows["1"]["metadata"] is None
+    assert rows["2"]["metadata"] is None
+    assert embed_demo.embedded_content == ["same text", "same text"]
+
+    collection.embed("1", "same text", metadata={"owner": "one"}, store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert json.loads(rows["1"]["metadata"]) == {"owner": "one"}
+    assert rows["2"]["metadata"] is None
+    assert embed_demo.embedded_content == ["same text", "same text"]
+
+    collection.embed_multi_with_metadata(
+        (("2", "same text", {"owner": "two"}),),
+        store=True,
+    )
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert json.loads(rows["1"]["metadata"]) == {"owner": "one"}
+    assert json.loads(rows["2"]["metadata"]) == {"owner": "two"}
+    assert embed_demo.embedded_content == ["same text", "same text"]
+
+
+def test_embed_multi_inserts_new_id_for_existing_hash(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+
+    collection.embed("1", "same text")
+    assert embed_demo.embedded_content == ["same text"]
+
+    collection.embed_multi((("2", "same text"),), store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert set(rows) == {"1", "2"}
+    assert rows["1"]["content"] is None
+    assert rows["2"]["content"] == "same text"
+    assert embed_demo.embedded_content == ["same text", "same text"]
+
+
+def test_embed_multi_updates_changed_id_when_old_hash_is_in_batch(embed_demo):
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+
+    collection.embed("1", "old text", store=True)
+    assert embed_demo.embedded_content == ["old text"]
+
+    collection.embed_multi((("1", "new text"), ("2", "old text")), store=True)
+    rows = {row["id"]: row for row in db["embeddings"].rows}
+    assert rows["1"]["content"] == "new text"
+    assert rows["1"]["content_hash"] == collection.content_hash("new text")
+    assert rows["2"]["content"] == "old text"
+    assert rows["2"]["content_hash"] == collection.content_hash("old text")
+    assert embed_demo.embedded_content == ["old text", "new text", "old text"]
 
 
 def test_collection_delete(collection):
