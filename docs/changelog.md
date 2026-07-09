@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_31_1)=
+## 0.31.1 (2026-07-09)
+
+- Fix for a bug with OpenAI Chat Completion endpoints where a tool call with empty arguments could result in a JSON error from some providers. [#1521](https://github.com/simonw/llm/issues/1521)
+
 (v0_31)=
 ## 0.31 (2026-04-24)
 
