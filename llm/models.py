@@ -73,7 +73,7 @@ class Attachment:
     def id(self):
         # Hash of the binary content, or of '{"url": "https://..."}' for URL attachments
         if self._id is None:
-            if self.content:
+            if self.content is not None:
                 self._id = hashlib.sha256(self.content).hexdigest()
             elif self.path:
                 self._id = hashlib.sha256(Path(self.path).read_bytes()).hexdigest()
@@ -101,7 +101,7 @@ class Attachment:
     def content_bytes(self):
         "Return the binary content, reading from path or URL if needed."
         content = self.content
-        if not content:
+        if content is None:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
@@ -122,7 +122,7 @@ class Attachment:
             info.append(f'path="{self.path}"')
         if self.url:
             info.append(f'url="{self.url}"')
-        if self.content:
+        if self.content is not None:
             info.append(f"content={len(self.content)} bytes")
         return " ".join(info) + ">"
 

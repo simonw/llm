@@ -123,6 +123,12 @@ class TestAttachmentPart:
         restored = llm.parts.Part.from_dict(json.loads(json.dumps(part.to_dict())))
         assert restored.attachment.content == b"\x00\x01\x02"
 
+    def test_roundtrip_with_empty_bytes(self):
+        att = llm.Attachment(type="application/octet-stream", content=b"")
+        part = llm.parts.AttachmentPart(attachment=att)
+        restored = llm.parts.Part.from_dict(json.loads(json.dumps(part.to_dict())))
+        assert restored.attachment.content == b""
+
 
 class TestUnknownPart:
     def test_from_dict_unknown_type_raises(self):
