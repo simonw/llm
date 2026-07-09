@@ -1000,6 +1000,77 @@ def test_plugins_command():
     ]
 
 
+class FakeEntryPoint:
+    group = "llm"
+
+    def __init__(self, name, plugin=None, error=None):
+        self.name = name
+        self._plugin = plugin
+        self._error = error
+
+    def load(self):
+        if self._error:
+            raise self._error
+        return self._plugin
+
+
+class FakeDistribution:
+    metadata = {"name": "fake-plugin-package"}
+
+    def __init__(self, entry_points):
+        self.entry_points = entry_points
+
+
+def test_load_setuptools_entrypoints_skips_failing_plugins(monkeypatch, capsys):
+    class WorkingPlugin:
+        __name__ = "WorkingPlugin"
+
+    working_plugin = WorkingPlugin()
+    monkeypatch.setattr(
+        plugins.metadata,
+        "distributions",
+        lambda: [
+            FakeDistribution(
+                [
+                    FakeEntryPoint("broken", error=RuntimeError("boom")),
+                    FakeEntryPoint("working", plugin=working_plugin),
+                ]
+            )
+        ],
+    )
+
+    try:
+        assert plugins._load_setuptools_entrypoints("llm") == 1
+        assert plugins.pm.get_plugin("broken") is None
+        assert plugins.pm.get_plugin("working") is working_plugin
+        assert (
+            "Plugin broken could not be loaded: RuntimeError: boom\n"
+            in capsys.readouterr().err
+        )
+    finally:
+        plugin = plugins.pm.unregister(name="working")
+        if plugin is not None:
+            plugins.pm._plugin_distinfo = [  # type: ignore
+                (registered_plugin, distribution)
+                for registered_plugin, distribution in plugins.pm._plugin_distinfo
+                if registered_plugin is not plugin
+            ]
+
+
+def test_load_setuptools_entrypoints_can_raise_plugin_errors(monkeypatch):
+    monkeypatch.setenv("LLM_RAISE_PLUGIN_ERRORS", "1")
+    monkeypatch.setattr(
+        plugins.metadata,
+        "distributions",
+        lambda: [
+            FakeDistribution([FakeEntryPoint("broken", error=RuntimeError("boom"))])
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        plugins._load_setuptools_entrypoints("llm")
+
+
 TOOL_RESULTS_SQL = """
 -- First, create ordered subqueries for tool_calls and tool_results
 with ordered_tool_calls as (
