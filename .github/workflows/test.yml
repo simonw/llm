@@ -18,7 +18,7 @@ jobs:
           python-version: "3.14"
           sqlite-utils-version: "4.0rc4"
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
