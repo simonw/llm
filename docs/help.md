@@ -929,6 +929,8 @@ Options:
   --attach <TEXT FILE>...      Additional databases to attach - specify alias
                                and file path
   --batch-size INTEGER         Batch size to use when running embeddings
+  --skip-errors                Skip items that fail to embed (e.g. too long) and
+                               warn, instead of aborting
   --prefix TEXT                Prefix to add to the IDs
   -m, --model TEXT             Embedding model to use
   --prepend TEXT               Prepend this string to all content before

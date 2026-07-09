@@ -3341,6 +3341,11 @@ def embed(
 @click.option(
     "--batch-size", type=int, help="Batch size to use when running embeddings"
 )
+@click.option(
+    "--skip-errors",
+    is_flag=True,
+    help="Skip items that fail to embed (e.g. too long) and warn, instead of aborting",
+)
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
@@ -3366,6 +3371,7 @@ def embed_multi(
     sql,
     attach,
     batch_size,
+    skip_errors,
     prefix,
     model,
     prepend,
@@ -3506,6 +3512,8 @@ def embed_multi(
         except json.JSONDecodeError as ex:
             raise click.ClickException(str(ex))
 
+    skipped: List[Tuple[str, Exception]] = []
+
     with click.progressbar(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
@@ -3526,7 +3534,23 @@ def embed_multi(
         embed_kwargs = {"store": store}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
+        if skip_errors:
+
+            def on_error(entry, exception):
+                skipped.append((entry[0], exception))
+
+            embed_kwargs["on_error"] = on_error
         collection_obj.embed_multi(tuples(), **embed_kwargs)
+
+    if skipped:
+        click.echo(
+            "Skipped {} item{} that could not be embedded:".format(
+                len(skipped), "" if len(skipped) == 1 else "s"
+            ),
+            err=True,
+        )
+        for skipped_id, exception in skipped:
+            click.echo("  {}: {}".format(skipped_id, exception), err=True)
 
 
 @cli.command()
