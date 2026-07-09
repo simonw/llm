@@ -274,7 +274,7 @@ Or use LLM's custom {ref}`concise schema syntax <schemas-dsl>` like this:
 ```bash
 llm --schema 'name,bio' 'invent a dog'
 ```
-Two use the same concise schema for multiple items use `--schema-multi`:
+To use the same concise schema for multiple items use `--schema-multi`:
 ```bash
 llm --schema-multi 'name,bio' 'invent two dogs'
 ```
