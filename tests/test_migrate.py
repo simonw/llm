@@ -1,4 +1,5 @@
 import llm
+import sqlite3
 from llm.migrations import migrate
 from llm.embeddings_migrations import embeddings_migrations
 import pytest
@@ -97,6 +98,25 @@ def test_migrations_with_legacy_alter_table():
     db = sqlite_utils.Database(memory=True)
     db.execute("pragma legacy_alter_table=on")
     migrate(db)
+
+
+def test_migrate_retries_locked_database(monkeypatch):
+    db = sqlite_utils.Database(memory=True)
+    original = llm.migrations.ensure_migrations_table
+    calls = {"count": 0}
+
+    def flaky(database):
+        if calls["count"] == 0:
+            calls["count"] += 1
+            raise sqlite3.OperationalError("database is locked")
+        return original(database)
+
+    monkeypatch.setattr(llm.migrations, "ensure_migrations_table", flaky)
+
+    migrate(db)
+
+    assert calls["count"] == 1
+    assert "_llm_migrations" in db.table_names()
 
 
 def test_migrations_for_embeddings():
