@@ -1007,7 +1007,7 @@ class Chat(_Shared, KeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments),
+                            arguments=json.loads(value.function.arguments or "{}"),
                         )
                     )
         else:
@@ -1024,7 +1024,7 @@ class Chat(_Shared, KeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments),
+                        arguments=json.loads(tool_call.function.arguments or "{}"),
                     )
                 )
                 yield StreamEvent(
@@ -1122,7 +1122,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments),
+                            arguments=json.loads(value.function.arguments or "{}"),
                         )
                     )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
@@ -1140,7 +1140,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments),
+                        arguments=json.loads(tool_call.function.arguments or "{}"),
                     )
                 )
                 yield StreamEvent(
