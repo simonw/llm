@@ -1,6 +1,6 @@
 import asyncio
 import click
-from click_default_group import DefaultGroup
+from click_default_group import DefaultGroup as _DefaultGroup
 from dataclasses import asdict
 from importlib.metadata import version
 import io
@@ -339,6 +339,17 @@ def schema_option(fn):
         help="JSON schema, filepath or ID",
     )(fn)
     return fn
+
+
+class DefaultGroup(_DefaultGroup):
+    def parse_args(self, ctx, args):
+        # Route a leading "--" to the default command so that
+        # `llm -- "--dashed prompt"` behaves like `llm prompt -- "..."`.
+        # Otherwise the group consumes the "--" and the default command sees
+        # the text as an unknown option (issue #245).
+        if args and args[0] == "--" and self.default_cmd_name:
+            args.insert(0, self.default_cmd_name)
+        return super().parse_args(ctx, args)
 
 
 @click.group(

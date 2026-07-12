@@ -19,6 +19,16 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
+def test_prompt_with_dashes_via_double_dash():
+    # A prompt that looks like an option must reach the prompt command through
+    # "--", even when the default command is used implicitly (issue #245).
+    runner = CliRunner()
+    assert runner.invoke(cli, ["models", "default", "echo"]).exit_code == 0
+    result = runner.invoke(cli, ["--", "--find me"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert '"prompt": "--find me"' in result.output
+
+
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
     mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
