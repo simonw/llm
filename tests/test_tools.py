@@ -898,3 +898,42 @@ async def test_async_tool_without_implementation_produces_error_result():
     assert [(r.name, r.output) for r in second.prompt.tool_results] == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]
+
+
+def test_after_call_fires_for_missing_tool():
+    after_calls = []
+
+    def after(tool, tool_call, tool_result):
+        after_calls.append((tool, tool_call.name, tool_result.output))
+
+    model = llm.get_model("echo")
+    response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}]}),
+        tools=[llm_time],
+        after_call=after,
+    )
+    response.text()
+    assert len(after_calls) == 1
+    assert after_calls[0][0] is None
+    assert after_calls[0][1] == "missing_tool"
+    assert after_calls[0][2] == 'Error: tool "missing_tool" does not exist'
+
+
+@pytest.mark.asyncio
+async def test_async_after_call_fires_for_missing_tool():
+    after_calls = []
+
+    async def after(tool, tool_call, tool_result):
+        after_calls.append((tool, tool_call.name, tool_result.output))
+
+    model = llm.get_async_model("echo")
+    response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}]}),
+        tools=[llm_time],
+        after_call=after,
+    )
+    await response.text()
+    assert len(after_calls) == 1
+    assert after_calls[0][0] is None
+    assert after_calls[0][1] == "missing_tool"
+    assert after_calls[0][2] == 'Error: tool "missing_tool" does not exist'

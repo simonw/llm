@@ -1884,14 +1884,20 @@ class Response(_BaseResponse):
 
             if tool is None:
                 msg = 'tool "{}" does not exist'.format(tool_call.name)
-                tool_results.append(
-                    ToolResult(
-                        name=tool_call.name,
-                        output="Error: " + msg,
-                        tool_call_id=tool_call.tool_call_id,
-                        exception=KeyError(msg),
-                    )
+                tool_result_obj = ToolResult(
+                    name=tool_call.name,
+                    output="Error: " + msg,
+                    tool_call_id=tool_call.tool_call_id,
+                    exception=KeyError(msg),
                 )
+                if after_call:
+                    cb_result = after_call(tool, tool_call, tool_result_obj)
+                    if inspect.isawaitable(cb_result):
+                        raise TypeError(
+                            "Asynchronous 'after_call' callback provided to a synchronous tool execution context. "
+                            "Please use an async chain/response or a synchronous callback."
+                        )
+                tool_results.append(tool_result_obj)
                 continue
 
             if not tool.implementation:
@@ -2242,17 +2248,17 @@ class AsyncResponse(_BaseResponse):
                         break
                 reason = "does not exist" if tool is None else "has no implementation"
                 msg = 'tool "{}" {}'.format(tc.name, reason)
-                indexed_results.append(
-                    (
-                        idx,
-                        ToolResult(
-                            name=tc.name,
-                            output="Error: " + msg,
-                            tool_call_id=tc.tool_call_id,
-                            exception=KeyError(msg),
-                        ),
-                    )
+                tr_obj = ToolResult(
+                    name=tc.name,
+                    output="Error: " + msg,
+                    tool_call_id=tc.tool_call_id,
+                    exception=KeyError(msg),
                 )
+                if after_call:
+                    cb2 = after_call(tool, tc, tr_obj)
+                    if inspect.isawaitable(cb2):
+                        await cb2
+                indexed_results.append((idx, tr_obj))
                 continue
 
             if inspect.iscoroutinefunction(tool.implementation):
