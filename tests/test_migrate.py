@@ -117,6 +117,18 @@ def test_migrations_for_embeddings():
     assert db["embeddings"].foreign_keys[0].other_table == "collections"
 
 
+@pytest.mark.skipif(
+    not hasattr(sqlite_utils.Database, "atomic"),
+    reason="sqlite-utils 4 and higher run each migration inside a transaction",
+)
+def test_embeddings_migrations_do_not_commit():
+    # https://github.com/simonw/llm/issues/1523
+    db = sqlite_utils.Database(memory=True)
+    for migration in embeddings_migrations.pending(db):
+        with db.atomic():
+            migration.fn(db)
+
+
 def test_backfill_content_hash():
     db = sqlite_utils.Database(memory=True)
     # Run migrations up to but not including m004_store_content_hash
