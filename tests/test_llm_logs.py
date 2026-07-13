@@ -276,6 +276,36 @@ def test_logs_extract_last_code(args, log_path):
     assert result.output == 'print("hello word")\n\n'
 
 
+def test_logs_extract_with_response_uses_latest(user_path):
+    "Test that --xl -r extracts from the same response that -r shows, not an older one"
+    log_path = str(user_path / "logs_extract_r.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    start = datetime.datetime.now(datetime.timezone.utc)
+    for i, code in enumerate(["old_cmd", "new_cmd"]):
+        db["responses"].insert(
+            {
+                "id": str(monotonic_ulid()).lower(),
+                "system": "sys",
+                "prompt": f"prompt {i}",
+                "response": f"turn {i}\n```bash\n{code}\n```",
+                "model": "gpt4",
+                "datetime_utc": (start + datetime.timedelta(seconds=i)).isoformat(),
+                "conversation_id": "conv1",
+                "input_tokens": 1,
+                "output_tokens": 1,
+            }
+        )
+    runner = CliRunner()
+    # -r alone shows the most recent response
+    r = runner.invoke(cli, ["logs", "-r", "-p", log_path], catch_exceptions=False)
+    assert "new_cmd" in r.output
+    # --xl -r must extract from that same most-recent response
+    result = runner.invoke(cli, ["logs", "--xl", "-r", "-p", log_path], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "new_cmd\n\n"
+
+
 @pytest.mark.parametrize("arg", ("-s", "--short"))
 @pytest.mark.parametrize("usage", (None, "-u", "--usage"))
 def test_logs_short(log_path, arg, usage):
