@@ -75,3 +75,30 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+### Example: DaoXE multi-model gateway
+
+[DaoXE](https://daoxe.com) is a multi-model multi-protocol API gateway with an OpenAI-compatible Chat Completions path (it also exposes OpenAI Responses and Anthropic Messages for other clients). Model IDs are account-scoped — copy an exact ID from your DaoXE catalog or from authenticated `GET /v1/models`. DaoXE is not available in mainland China.
+
+Store a key once:
+
+```bash
+llm keys set daoxe
+# Paste your DaoXE API key when prompted
+```
+
+Then add one or more entries to `extra-openai-models.yaml`, replacing `YOUR_DAOXE_MODEL_ID` with a live model ID from your account:
+
+```yaml
+- model_id: daoxe
+  model_name: YOUR_DAOXE_MODEL_ID
+  api_base: "https://daoxe.com/v1"
+  api_key_name: daoxe
+  supports_tools: true
+```
+
+```bash
+llm -m daoxe 'What is the capital of France?'
+```
+
+Disclosure: the DaoXE example above was contributed by someone affiliated with DaoXE.
