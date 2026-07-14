@@ -378,6 +378,28 @@ def test_default_tool_llm_time():
     }
 
 
+def test_llm_time_timezone_offset_format(monkeypatch):
+    from unittest.mock import MagicMock
+
+    mock_tm = MagicMock()
+    mock_tm.tm_isdst = 0
+
+    # Simulate UTC-5 (EST): time.timezone = 18000 (seconds west of UTC)
+    monkeypatch.setattr(time, "timezone", 18000)
+    monkeypatch.setattr(time, "altzone", 14400)
+    monkeypatch.setattr(time, "localtime", lambda: mock_tm)
+    monkeypatch.setattr(time, "tzname", ("EST", "EDT"))
+    info = llm_time()
+    assert info["timezone_offset"] == "UTC-05:00"
+
+    # Simulate UTC+5:30 (IST): time.timezone = -19800
+    monkeypatch.setattr(time, "timezone", -19800)
+    monkeypatch.setattr(time, "altzone", -19800)
+    monkeypatch.setattr(time, "tzname", ("IST", "IST"))
+    info = llm_time()
+    assert info["timezone_offset"] == "UTC+05:30"
+
+
 def test_incorrect_tool_usage():
     model = llm.get_model("echo")
 
