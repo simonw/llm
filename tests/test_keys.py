@@ -64,6 +64,26 @@ def test_keys_list(monkeypatch, tmpdir, args):
     assert result2.output.strip() == "openai"
 
 
+@pytest.mark.parametrize("bad_content", ("", "   ", "{not json", "[1, 2, 3]"))
+def test_keys_list_and_get_survive_malformed_keys_json(
+    monkeypatch, tmpdir, bad_content
+):
+    user_path = tmpdir / "user/keys"
+    pathlib.Path(user_path).mkdir(parents=True)
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    keys_path.write_text(bad_content, "utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["keys", "list"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "No keys found"
+
+    result2 = runner.invoke(cli, ["keys", "get", "openai"])
+    assert result2.exit_code == 1
+    assert "No keys found" in result2.output
+
+
 @pytest.mark.httpx_mock(
     assert_all_requests_were_expected=False, can_send_already_matched_responses=True
 )

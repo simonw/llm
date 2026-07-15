@@ -35,6 +35,7 @@ from llm import (
     get_model,
     get_model_aliases,
     get_models_with_aliases,
+    load_keys,
     user_dir,
     set_alias,
     set_default_model,
@@ -1365,11 +1366,10 @@ def keys():
 @keys.command(name="list")
 def keys_list():
     "List names of all stored keys"
-    path = user_dir() / "keys.json"
-    if not path.exists():
+    keys = load_keys()
+    if not keys:
         click.echo("No keys found")
         return
-    keys = json.loads(path.read_text())
     for key in sorted(keys.keys()):
         if key != "// Note":
             click.echo(key)
@@ -1392,10 +1392,9 @@ def keys_get(name):
     \b
         export OPENAI_API_KEY=$(llm keys get openai)
     """
-    path = user_dir() / "keys.json"
-    if not path.exists():
+    keys = load_keys()
+    if not keys:
         raise click.ClickException("No keys found")
-    keys = json.loads(path.read_text())
     try:
         click.echo(keys[name])
     except KeyError:
