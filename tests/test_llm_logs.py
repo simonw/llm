@@ -1182,3 +1182,42 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+
+
+def test_log_to_db_deduplicates_previous_turn_without_fragments(logs_db, mock_model):
+    """Prior-turn response text must be condensed even when that turn had no
+    fragments. Bug: replacements[r:{id}] was set inside the for-fragment loop
+    so turns with no fragments were never registered and the full text was
+    stored verbatim in the next turn's prompt_json (issue #1530)."""
+    r1_text = "A long unique response from turn one that should be condensed"
+
+    mock_model.enqueue([r1_text])
+    mock_model.enqueue(["turn two answer"])
+
+    conv = mock_model.conversation()
+
+    r1 = conv.prompt("Turn one question")
+    r1.text()
+    r1._prompt_json = {"messages": [{"role": "user", "content": "Turn one question"}]}
+    r1.log_to_db(logs_db)
+
+    r2 = conv.prompt("Turn two question")
+    r2.text()
+    # Simulate what a real model sets: the full conversation history including
+    # turn 1's response text verbatim in the assistant message.
+    r2._prompt_json = {
+        "messages": [
+            {"role": "user", "content": "Turn one question"},
+            {"role": "assistant", "content": r1_text},
+            {"role": "user", "content": "Turn two question"},
+        ]
+    }
+    r2.log_to_db(logs_db)
+
+    rows = list(logs_db["responses"].rows)
+    assert len(rows) == 2
+    stored = json.loads(rows[1]["prompt_json"])
+    messages = stored["messages"]
+    assistant_msg = next(m for m in messages if m["role"] == "assistant")
+    # The prior-turn response must be replaced by a condensed marker, not stored verbatim.
+    assert assistant_msg["content"] == {"$": f"r:{r1.id}"}

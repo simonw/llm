@@ -1435,18 +1435,18 @@ class _BaseResponse:
         replacements = {}
         # Include replacements from previous responses
         for previous_response in conversation.responses[:-1]:
+            replacements[f"r:{previous_response.id}"] = (
+                previous_response.text_or_raise()
+            )
             for fragment in (previous_response.prompt.fragments or []) + (
                 previous_response.prompt.system_fragments or []
             ):
                 fragment_id = ensure_fragment(db, fragment)
                 replacements[f"f:{fragment_id}"] = fragment
-                replacements[f"r:{previous_response.id}"] = (
-                    previous_response.text_or_raise()
-                )
 
         for i, fragment in enumerate(self.prompt.fragments):
             fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
+            replacements[f"f:{fragment_id}"] = fragment
             db["prompt_fragments"].insert(
                 {
                     "response_id": response_id,
@@ -1456,7 +1456,7 @@ class _BaseResponse:
             )
         for i, fragment in enumerate(self.prompt.system_fragments):
             fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
+            replacements[f"f:{fragment_id}"] = fragment
             db["system_fragments"].insert(
                 {
                     "response_id": response_id,
