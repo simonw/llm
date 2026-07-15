@@ -402,10 +402,19 @@ def get_key(
 
 def load_keys():
     path = user_dir() / "keys.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    else:
+    if not path.exists():
         return {}
+    try:
+        keys = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        # An empty or hand-corrupted keys.json should not crash every command
+        # that needs a key; treat it as having no usable keys.
+        return {}
+    # keys.json is expected to be a JSON object; anything else (e.g. an array)
+    # is not usable and would break callers that index it by name.
+    if not isinstance(keys, dict):
+        return {}
+    return keys
 
 
 def user_dir():
