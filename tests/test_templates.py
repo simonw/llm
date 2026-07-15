@@ -31,6 +31,30 @@ import yaml
             None,
             None,
         ),
+        # Braced ${var} syntax must be treated the same as $var.
+        ("${greeting} world", None, None, {"greeting": "hi"}, "hi world", None, None),
+        ("${count}x", None, None, {"count": 5}, "5x", None, None),
+        ("$one and ${two}", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
+        # A missing braced variable must raise the friendly MissingVariables
+        # error, not a raw KeyError from string.Template.substitute.
+        (
+            "${one} and ${two}",
+            None,
+            None,
+            {},
+            None,
+            None,
+            "Missing variables: one, two",
+        ),
+        (
+            "$one and ${two}",
+            None,
+            None,
+            {"one": 1},
+            None,
+            None,
+            "Missing variables: two",
+        ),
     ),
 )
 def test_template_evaluate(
@@ -45,6 +69,15 @@ def test_template_evaluate(
         prompt, system = t.evaluate("input", params)
         assert prompt == expected_prompt
         assert system == expected_system
+
+
+def test_template_vars_includes_braced():
+    # vars() must report both $var and ${var} references; previously the
+    # braced form was silently dropped, which also broke the
+    # `"input" in template.vars()` checks in the CLI.
+    t = Template(name="t", prompt="$a and ${b}", system="${c} then $d")
+    assert t.vars() == {"a", "b", "c", "d"}
+    assert "input" in Template(name="t2", prompt="reply to ${input}").vars()
 
 
 def test_templates_list_no_templates_found():

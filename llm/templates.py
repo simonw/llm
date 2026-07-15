@@ -85,8 +85,13 @@ class Template(BaseModel):
     @staticmethod
     def extract_vars(string_template: string.Template) -> List[str]:
         """Extract and return the list of named variable identifiers from a string.Template."""
+        # Both `$name` (the "named" group) and `${name}` (the "braced" group)
+        # are valid string.Template references and are handled by substitute().
+        # Collecting only "named" misses braced variables, so vars() would
+        # under-report them and interpolate() would raise a raw KeyError from
+        # substitute() instead of the friendly MissingVariables error.
         return [
-            match.group("named")
+            match.group("named") or match.group("braced")
             for match in string_template.pattern.finditer(string_template.template)
-            if match.group("named")
+            if match.group("named") or match.group("braced")
         ]
