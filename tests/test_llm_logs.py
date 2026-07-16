@@ -1071,6 +1071,40 @@ def test_logs_tool_call_argument_formatting(logs_db):
     ) in normalized_output
 
 
+def test_logs_tool_schema_without_properties(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def ping():
+        return "pong"
+    """)
+    result1 = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            code,
+            json.dumps({"tool_calls": [{"name": "ping"}]}),
+        ],
+    )
+    assert result1.exit_code == 0
+
+    # Simulate a plugin-defined tool whose input_schema omits the "properties" key.
+    # In practice this can happen when a plugin creates Tool(name=...) directly with
+    # input_schema={} instead of going through Tool.function(), which always adds
+    # "properties" via Pydantic. Rewrite the stored schema to reproduce the crash.
+    from llm.cli import logs_db_path
+    import pathlib
+
+    db = sqlite_utils.Database(pathlib.Path(logs_db_path()))
+    db.execute("UPDATE tools SET input_schema = '{}' WHERE name = 'ping'")
+
+    # Should not raise KeyError: 'properties'
+    result2 = runner.invoke(cli, ["logs", "-c"])
+    assert result2.exit_code == 0
+    assert "Arguments" in result2.output
+
+
 def test_logs_backup(logs_db):
     assert not logs_db.tables
     runner = CliRunner()
