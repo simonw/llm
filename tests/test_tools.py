@@ -392,6 +392,51 @@ def test_incorrect_tool_usage():
     assert 'Error: tool \\"bad_tool\\" does not exist' in output
 
 
+def test_after_call_invoked_for_unknown_tool():
+    # Regression test for https://github.com/simonw/llm/issues/1151
+    # after_call must fire even when the model names a tool that doesn't exist.
+    model = llm.get_model("echo")
+    after_collected = []
+
+    def after(*args):
+        after_collected.append(args)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "bad_tool"}]}),
+        tools=[llm_time],
+        after_call=after,
+    )
+    chain_response.text()
+    assert len(after_collected) == 1
+    tool_arg, tool_call_arg, result_arg = after_collected[0]
+    assert tool_arg is None
+    assert tool_call_arg.name == "bad_tool"
+    assert "does not exist" in result_arg.output
+
+
+@pytest.mark.asyncio
+async def test_after_call_invoked_for_unknown_tool_async():
+    # Regression test for https://github.com/simonw/llm/issues/1151
+    # after_call must fire even when the model names a tool that doesn't exist (async path).
+    model = llm.get_async_model("echo")
+    after_collected = []
+
+    async def after(*args):
+        after_collected.append(args)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "bad_tool"}]}),
+        tools=[llm_time],
+        after_call=after,
+    )
+    await chain_response.text()
+    assert len(after_collected) == 1
+    tool_arg, tool_call_arg, result_arg = after_collected[0]
+    assert tool_arg is None
+    assert tool_call_arg.name == "bad_tool"
+    assert "does not exist" in result_arg.output
+
+
 def test_tool_returning_attachment():
     model = llm.get_model("echo")
 
