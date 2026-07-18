@@ -6,6 +6,7 @@ migration = MIGRATIONS.append
 
 
 def migrate(db):
+    db.conn.execute("PRAGMA busy_timeout=5000")
     ensure_migrations_table(db)
     already_applied = {r["name"] for r in db["_llm_migrations"].rows}
     for fn in MIGRATIONS:
