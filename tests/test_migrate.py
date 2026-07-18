@@ -25,6 +25,13 @@ EXPECTED = {
 }
 
 
+def test_migrate_sets_busy_timeout():
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    timeout = db.conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert timeout == 5000
+
+
 def test_migrate_blank():
     db = sqlite_utils.Database(memory=True)
     migrate(db)
