@@ -12,7 +12,7 @@ from click.testing import CliRunner
 import llm
 from llm import CancelToolCall, cli
 from llm.migrations import migrate
-from llm.tools import llm_time
+from llm.tools import llm_random_choice, llm_time
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
@@ -378,6 +378,33 @@ def test_default_tool_llm_time():
         "utc_time",
         "is_dst",
     }
+
+
+def test_default_tool_llm_random_choice(monkeypatch):
+    monkeypatch.setattr("llm.tools.random.choice", lambda choices: choices[-1])
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_random_choice",
+            json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "llm_random_choice",
+                            "arguments": {"choices": ["red", "green", "blue"]},
+                        }
+                    ]
+                }
+            ),
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"output": "blue"' in result.output
+    assert llm_random_choice(["one", "two"]) == "two"
 
 
 def test_incorrect_tool_usage():
