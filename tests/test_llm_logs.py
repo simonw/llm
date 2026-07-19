@@ -225,6 +225,39 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
+def test_logs_limit_long_option(log_path):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["logs", "--limit", "2", "-p", str(log_path), "--json"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert len(json.loads(result.output)) == 2
+
+
+@pytest.mark.parametrize(
+    "args, expected",
+    (
+        ([], 100),
+        (["--model", "davinci"], 100),
+        (["--model", "missing"], 0),
+        (["--query", "prompt"], 100),
+        (["--query", "missing"], 0),
+        (["--limit", "2"], 100),
+    ),
+)
+def test_logs_count(args, expected, log_path):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["logs", "--count", "-p", str(log_path)] + args,
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output == f"{expected}\n"
+
+
 @pytest.mark.parametrize(
     "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
 )
@@ -1003,6 +1036,7 @@ def test_logs_tools(logs_db):
     logs_tools_output = runner.invoke(cli, ["logs", "--tools"]).output
     assert "badger" not in logs_tools_output
     assert "three" in logs_tools_output
+    assert runner.invoke(cli, ["logs", "--tools", "--count"]).output == "1\n"
 
 
 def test_logs_repeated_tools_use_short_hash(logs_db):

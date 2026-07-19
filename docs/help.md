@@ -342,8 +342,9 @@ Usage: llm logs list [OPTIONS]
   Show logged prompts and their responses
 
 Options:
-  -n, --count INTEGER         Number of entries to show - defaults to 3, use 0
+  -n, --limit INTEGER         Number of entries to show - defaults to 3, use 0
                               for all
+  --count                     Output the number of matching log entries
   -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
