@@ -520,6 +520,14 @@ def test_llm_models_options(user_path):
     assert "AsyncMockModel (async): mock" not in result.output
 
 
+def test_llm_models_help_mentions_api_keys():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "list", "--help"])
+    assert result.exit_code == 0
+    assert "Some plugins only register their models after an API key" in result.output
+    assert "llm keys set" in result.output
+
+
 def test_prompt_options_shows_selected_model_options(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "gpt-5.5", "--options"], catch_exceptions=False)

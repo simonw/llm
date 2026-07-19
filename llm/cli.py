@@ -2448,7 +2448,11 @@ def render_model_with_options(model_id, *, async_=False):
 )
 @click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
 def models_list(options, async_, schemas, tools, query, model_ids):
-    "List available models"
+    """List available models.
+
+    Some plugins only register their models after an API key is configured.
+    Run 'llm keys set' to store API keys for installed model providers.
+    """
     models_that_have_shown_options = set()
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
