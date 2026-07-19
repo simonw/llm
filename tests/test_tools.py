@@ -6,7 +6,7 @@ import json
 import llm
 from llm import cli, CancelToolCall
 from llm.migrations import migrate
-from llm.tools import llm_time
+from llm.tools import llm_random_choice, llm_time
 import os
 import pytest
 import sqlite_utils
@@ -376,6 +376,33 @@ def test_default_tool_llm_time():
         "utc_time",
         "is_dst",
     }
+
+
+def test_default_tool_llm_random_choice(monkeypatch):
+    monkeypatch.setattr("llm.tools.random.choice", lambda choices: choices[-1])
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_random_choice",
+            json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "llm_random_choice",
+                            "arguments": {"choices": ["red", "green", "blue"]},
+                        }
+                    ]
+                }
+            ),
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"output": "blue"' in result.output
+    assert llm_random_choice(["one", "two"]) == "two"
 
 
 def test_incorrect_tool_usage():

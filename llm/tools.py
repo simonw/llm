@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from importlib.metadata import version
+import random
 import time
+from typing import List
 
 
 def llm_version() -> str:
@@ -35,3 +37,8 @@ def llm_time() -> dict:
         "timezone_offset": timezone_offset,
         "is_dst": is_dst,
     }
+
+
+def llm_random_choice(choices: List[str]) -> str:
+    "Return a random choice from a list of strings"
+    return random.choice(choices)
