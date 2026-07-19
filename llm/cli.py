@@ -1556,10 +1556,16 @@ order by prompt_attachments."order"
 @logs.command(name="list")
 @click.option(
     "-n",
-    "--count",
+    "--limit",
     type=int,
     default=None,
     help="Number of entries to show - defaults to 3, use 0 for all",
+)
+@click.option(
+    "count_only",
+    "--count",
+    is_flag=True,
+    help="Output the number of matching log entries",
 )
 @click.option(
     "-p",
@@ -1655,7 +1661,8 @@ order by prompt_attachments."order"
     help="Expand fragments to show their content",
 )
 def logs_list(
-    count,
+    limit,
+    count_only,
     path,
     database,
     model,
@@ -1723,11 +1730,11 @@ def logs_list(
             raise click.ClickException("No conversations found")
 
     # For --conversation set limit 0, if not explicitly set
-    if count is None:
+    if limit is None:
         if conversation_id:
-            count = 0
+            limit = 0
         else:
-            count = 3
+            limit = 3
 
     model_id = None
     if model:
@@ -1745,12 +1752,13 @@ def logs_list(
         if not latest:
             order_by = "responses_fts.rank desc"
 
-    limit = ""
-    if count is not None and count > 0:
-        limit = " limit {}".format(count)
+    if limit is not None and limit > 0:
+        limit_sql = " limit {}".format(limit)
+    else:
+        limit_sql = ""
 
     sql_format = {
-        "limit": limit,
+        "limit": limit_sql,
         "columns": LOGS_COLUMNS,
         "extra_where": "",
         "order_by": order_by,
@@ -1846,6 +1854,18 @@ def logs_list(
     if where_bits:
         where_ = " and " if query else " where "
         sql_format["extra_where"] = where_ + " and ".join(where_bits)
+
+    if count_only:
+        count_sql = sql.format(
+            **{
+                **sql_format,
+                "columns": "count(*) as count",
+                "order_by": "1",
+                "limit": "",
+            }
+        )
+        click.echo(next(db.query(count_sql, sql_params))["count"])
+        return
 
     final_sql = sql.format(**sql_format)
     rows = list(db.query(final_sql, sql_params))
