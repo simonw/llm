@@ -8,6 +8,7 @@ from llm import cli, CancelToolCall
 from llm.migrations import migrate
 from llm.tools import llm_time
 import os
+from pydantic import ValidationError
 import pytest
 import sqlite_utils
 import time
@@ -629,6 +630,90 @@ def test_tool_function_receives_llm_tool_call():
     assert tool_call.arguments == {"name": "simon"}
     second = chain_response._responses[1]
     assert second.prompt.tool_results[0].output == "result for simon"
+
+
+def test_tool_function_coerces_arguments_using_annotations():
+    captured = {}
+
+    def calculate(quantity: int, price: float, llm_tool_call) -> float:
+        captured.update(quantity=quantity, price=price, llm_tool_call=llm_tool_call)
+        return quantity * price
+
+    supplied_arguments = {"quantity": "34234", "price": "1.25"}
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "calculate", "arguments": supplied_arguments}]}
+        ),
+        tools=[calculate],
+    )
+    chain_response.text()
+
+    assert captured["quantity"] == 34234
+    assert isinstance(captured["quantity"], int)
+    assert captured["price"] == 1.25
+    assert isinstance(captured["price"], float)
+    assert captured["llm_tool_call"].arguments == supplied_arguments
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_tool", (False, True))
+async def test_async_model_coerces_tool_arguments(async_tool):
+    captured = {}
+
+    def calculate(quantity: int, price: float) -> float:
+        captured.update(quantity=quantity, price=price)
+        return quantity * price
+
+    async def async_calculate(quantity: int, price: float) -> float:
+        captured.update(quantity=quantity, price=price)
+        return quantity * price
+
+    function = async_calculate if async_tool else calculate
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {
+                        "name": function.__name__,
+                        "arguments": {"quantity": "34234", "price": "1.25"},
+                    }
+                ]
+            }
+        ),
+        tools=[function],
+    )
+    await chain_response.text()
+
+    assert captured == {"quantity": 34234, "price": 1.25}
+
+
+def test_invalid_coerced_argument_produces_tool_error():
+    called = False
+
+    def calculate(quantity: int) -> int:
+        nonlocal called
+        called = True
+        return quantity * 2
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "calculate", "arguments": {"quantity": "not-a-number"}}
+                ]
+            }
+        ),
+        tools=[calculate],
+    )
+    chain_response.text()
+
+    result = chain_response._responses[1].prompt.tool_results[0]
+    assert called is False
+    assert isinstance(result.exception, ValidationError)
+    assert "Input should be a valid integer" in result.output
 
 
 def test_async_tool_function_receives_llm_tool_call_with_sync_model():

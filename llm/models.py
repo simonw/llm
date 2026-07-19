@@ -146,8 +146,15 @@ class Tool:
     input_schema: Dict = field(default_factory=dict)
     implementation: Optional[Callable] = None
     plugin: Optional[str] = None  # plugin tool came from, e.g. 'llm_tools_sqlite'
+    _input_model: Optional[type[BaseModel]] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self):
+        if inspect.isclass(self.input_schema) and issubclass(
+            self.input_schema, BaseModel
+        ):
+            self._input_model = self.input_schema
         # Convert Pydantic model to JSON schema if needed
         self.input_schema = _ensure_dict_schema(self.input_schema)
 
@@ -220,6 +227,11 @@ def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
     the ToolCall object itself - a ``**kwargs`` catch-all does not count.
     """
     arguments = dict(tool_call.arguments)
+    if tool._input_model is not None:
+        validated = tool._input_model.model_validate(arguments)
+        arguments.update(
+            {name: getattr(validated, name) for name in tool._input_model.model_fields}
+        )
     if _accepts_llm_tool_call(tool.implementation):
         arguments["llm_tool_call"] = tool_call
     return arguments
