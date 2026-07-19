@@ -9,7 +9,6 @@ import pathlib
 import pytest
 import re
 import sqlite_utils
-import sys
 import textwrap
 import time
 from ulid import ULID
@@ -315,7 +314,6 @@ def test_logs_short(log_path, arg, usage):
     assert output == expected
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("env", ({}, {"LLM_USER_PATH": "/tmp/llm-user-path"}))
 def test_logs_path(monkeypatch, env, user_path):
     for key, value in env.items():
@@ -324,9 +322,10 @@ def test_logs_path(monkeypatch, env, user_path):
     result = runner.invoke(cli, ["logs", "path"])
     assert result.exit_code == 0
     if env:
-        expected = env["LLM_USER_PATH"] + "/logs.db"
+        base = env["LLM_USER_PATH"]
     else:
-        expected = str(user_path) + "/logs.db"
+        base = str(user_path)
+    expected = str(pathlib.Path(base) / "logs.db")
     assert result.output.strip() == expected
 
 

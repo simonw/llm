@@ -4,7 +4,6 @@ import llm.cli
 import pytest
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_template_system_only_no_duplicate_prompt(
     mock_model, logs_db, templates_path
 ):
@@ -30,7 +29,10 @@ def test_chat_template_system_only_no_duplicate_prompt(
     assert rows[0]["system"] == "Speak in French"
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.xfail(
+    sys.platform == "win32",
+    reason="Windows drive-letter paths (C:\\...) are misread as fragment prefixes",
+)
 def test_chat_system_fragments_only_first_turn(tmpdir, mock_model, logs_db):
     # Create a system fragment file
     sys_frag_path = str(tmpdir / "sys.txt")
@@ -62,7 +64,6 @@ def test_chat_system_fragments_only_first_turn(tmpdir, mock_model, logs_db):
     assert sys_frags[0]["response_id"] != second_id
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_template_loads_tools_into_logs(logs_db, templates_path):
     # Template that specifies tools; ensure chat picks them up
     (templates_path / "mytools.yaml").write_text(
