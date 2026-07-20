@@ -247,6 +247,18 @@ def test_schema_dsl_multi():
 
 
 @pytest.mark.parametrize(
+    "bad_dsl",
+    [
+        ":just a description",
+        "name, :no name before colon",
+    ],
+)
+def test_schema_dsl_no_field_name_raises(bad_dsl):
+    with pytest.raises(ValueError, match="has no field name"):
+        schema_dsl(bad_dsl)
+
+
+@pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [
         # Basic truncation tests
