@@ -392,6 +392,10 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
 
         # Process field name and type
         field_parts = field_info.strip().split()
+        if not field_parts:
+            raise ValueError(
+                f"Field definition {field!r} has no field name before the colon"
+            )
         field_name = field_parts[0].strip()
 
         # Default type is string
