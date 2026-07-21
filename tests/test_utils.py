@@ -218,6 +218,17 @@ def test_extract_fenced_code_block(input, last, expected):
                 "required": ["name", "age"],
             },
         ),
+        # Test case 9: Field with no name before the colon is silently skipped
+        (":just a description", {"type": "object", "properties": {}, "required": []}),
+        # Test case 10: Mix of named and unnamed fields; unnamed field is skipped
+        (
+            "name, :description",
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        ),
     ],
 )
 def test_schema_dsl(schema, expected):
