@@ -19,6 +19,17 @@ def test_version():
         assert result.output.startswith("cli, version ")
 
 
+def test_prompt_with_option_like_text():
+    # llm "--find me" should not fail with a parse error ("No such option").
+    # The value gets dispatched to the prompt subcommand as a positional arg.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--find me"])
+    # Exit code 2 means a Click UsageError (parse failure). Any other code is fine —
+    # the parse succeeded; it may still fail for other reasons (no API key, etc.).
+    assert result.exit_code != 2, result.output
+    assert "No such option" not in result.output
+
+
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
     mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
