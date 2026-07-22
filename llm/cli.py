@@ -1,6 +1,22 @@
 import asyncio
 import click
 from click_default_group import DefaultGroup
+
+
+class _LLMDefaultGroup(DefaultGroup):
+    """DefaultGroup that treats arg0 values containing a space as positional arguments.
+
+    When the user runs `llm "--find me"`, click-default-group dispatches "--find me"
+    to the default subcommand as arg0.  If arg0 contains a space it cannot be a valid
+    option name, so we insert '--' before it so the subcommand parser treats it as a
+    positional argument rather than an unknown option.
+    """
+
+    def resolve_command(self, ctx, args):
+        cmd_name, cmd, remaining = super().resolve_command(ctx, args)
+        if hasattr(ctx, "arg0") and ctx.arg0 and " " in ctx.arg0:
+            remaining.insert(0, "--")
+        return cmd_name, cmd, remaining
 from dataclasses import asdict
 from importlib.metadata import version
 import io
@@ -342,7 +358,7 @@ def schema_option(fn):
 
 
 @click.group(
-    cls=DefaultGroup,
+    cls=_LLMDefaultGroup,
     default="prompt",
     default_if_no_args=True,
     context_settings={"help_option_names": ["-h", "--help"]},
