@@ -1,14 +1,15 @@
 import importlib.metadata
-import pytest
-import sqlite_utils
 import json
 import sqlite3
-import llm
+
 import llm_echo
-from llm.plugins import pm
+import pytest
+import sqlite_utils
 from pydantic import Field
 from pytest_httpx import IteratorStream
-from typing import Optional
+
+import llm
+from llm.plugins import pm
 
 
 def pytest_configure(config):
@@ -23,8 +24,8 @@ def pytest_report_header(config):
     conn.close()
     sqlite_utils_version = importlib.metadata.version("sqlite-utils")
     return [
-        "SQLite: {}".format(version),
-        "sqlite-utils: {}".format(sqlite_utils_version),
+        f"SQLite: {version}",
+        f"sqlite-utils: {sqlite_utils_version}",
     ]
 
 
@@ -63,13 +64,13 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
-    attachment_types = {"image/png", "audio/wav"}
+    attachment_types = frozenset({"image/png", "audio/wav"})
     can_stream = True
     supports_schema = True
     supports_tools = True
 
     class Options(llm.Options):
-        max_tokens: Optional[int] = Field(
+        max_tokens: int | None = Field(
             description="Maximum number of tokens to generate.", default=None
         )
 
@@ -302,7 +303,7 @@ def stream_events():
                 }
             )
         ).encode("utf-8")
-    yield "data: [DONE]\n\n".encode("utf-8")
+    yield b"data: [DONE]\n\n"
 
 
 @pytest.fixture
@@ -408,7 +409,7 @@ def stream_completion_events():
                 }
             )
         ).encode("utf-8")
-    yield "data: [DONE]\n\n".encode("utf-8")
+    yield b"data: [DONE]\n\n"
 
 
 @pytest.fixture

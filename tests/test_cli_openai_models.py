@@ -1,9 +1,11 @@
-from click.testing import CliRunner
 import json
-import llm
-from llm.cli import cli
+
 import pytest
 import sqlite_utils
+from click.testing import CliRunner
+
+import llm
+from llm.cli import cli
 
 
 @pytest.fixture

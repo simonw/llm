@@ -1,8 +1,9 @@
-import llm
 import random
 import time
-from typing import Optional
-from pydantic import field_validator, Field
+
+from pydantic import Field, field_validator
+
+import llm
 
 
 @llm.hookimpl
@@ -35,10 +36,10 @@ class Markov(llm.Model):
     can_stream = True
 
     class Options(llm.Options):
-        length: Optional[int] = Field(
+        length: int | None = Field(
             description="Number of words to generate", default=None
         )
-        delay: Optional[float] = Field(
+        delay: float | None = Field(
             description="Seconds to delay between each token", default=None
         )
 

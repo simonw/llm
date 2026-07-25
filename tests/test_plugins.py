@@ -1,15 +1,16 @@
-from click.testing import CliRunner
-import click
 import importlib
 import json
-import llm
-from llm.tools import llm_version, llm_time
-from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import re
 from unittest.mock import ANY
+
+import click
 import pytest
-import textwrap
+from click.testing import CliRunner
+
+import llm
+from llm import cli, get_fragment_loaders, get_template_loaders, hookimpl, plugins
+from llm.tools import llm_time, llm_version
 
 
 def test_register_commands():
@@ -176,16 +177,20 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
-        result3.output.strip == textwrap.dedent("""\
-            system:
-
-
-            prompt:
-            one:x
-
-            attachments:
-            - https://example.com/attachment.png
-            """).strip()
+        assert json.loads(result3.output) == {
+            "prompt": "one:x",
+            "system": "",
+            "attachments": [
+                {
+                    "type": None,
+                    "path": None,
+                    "url": "https://example.com/attachment.png",
+                    "id": ANY,
+                }
+            ],
+            "stream": True,
+            "previous": [],
+        }
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")
@@ -383,7 +388,7 @@ def test_register_tools(tmpdir, logs_db):
         assert '"output": "HI"' in result4.output
 
         # Now check in the database
-        tool_row = [row for row in logs_db["tools"].rows][0]
+        tool_row = next(iter(logs_db["tools"].rows))
         assert tool_row["name"] == "upper"
         assert tool_row["plugin"] == "ToolsPlugin"
 
@@ -760,7 +765,7 @@ def test_register_toolbox(tmpdir, logs_db):
             [
                 "prompt",
                 "-T",
-                "Filesystem({})".format(json.dumps(str(my_dir2))),
+                f"Filesystem({json.dumps(str(my_dir2))})",
                 json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
                 "-m",
                 "echo",
@@ -894,7 +899,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                 "-T",
                 "Memory",
                 "--tool",
-                "Filesystem({})".format(json.dumps(str(path))),
+                f"Filesystem({json.dumps(str(path))})",
                 json.dumps(
                     {
                         "tool_calls": [

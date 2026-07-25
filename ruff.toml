@@ -1,4 +1,2 @@
 line-length = 160
-
-[lint]
-select = ["E4", "E7", "E9", "F"]
+target-version = "py310"

@@ -1,12 +1,14 @@
-from click.testing import CliRunner
+import os
+import textwrap
 from importlib.metadata import version
+from unittest import mock
+
+import sqlite_utils
+import yaml
+from click.testing import CliRunner
+
 from llm.cli import cli
 from llm.migrations import migrate
-from unittest import mock
-import os
-import yaml
-import sqlite_utils
-import textwrap
 
 
 def test_fragments_set_show_remove(user_path):
@@ -138,7 +140,7 @@ def test_fragment_url_user_agent(mocked_openai_chat, user_path):
 
     # Verify the User-Agent header was sent for the fragment URL request
     requests = mocked_openai_chat.get_requests()
-    fragment_request = [r for r in requests if "example.com" in str(r.url)][0]
+    fragment_request = next(r for r in requests if "example.com" in str(r.url))
     llm_version = version("llm")
     expected_user_agent = f"llm/{llm_version} (https://llm.datasette.io/)"
     assert fragment_request.headers["User-Agent"] == expected_user_agent

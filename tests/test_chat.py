@@ -1,12 +1,14 @@
-from click.testing import CliRunner
-import re
-from unittest.mock import ANY
 import json
-import llm.cli
-import pytest
-import sqlite_utils
+import re
 import sys
 import textwrap
+from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+import llm.cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -390,7 +392,7 @@ def test_chat_fragments(tmpdir):
     output = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "echo", "-f", path1],
-        input=("hi\n!fragment {}\nquit\n".format(path2)),
+        input=(f"hi\n!fragment {path2}\nquit\n"),
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output

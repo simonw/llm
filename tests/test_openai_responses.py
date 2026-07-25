@@ -3,16 +3,17 @@
 import json
 import os
 
-import llm
 import pytest
 from pytest_httpx import IteratorStream
+
+import llm
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 
 def _responses_sse(event_type, data):
     data = {"type": event_type, **data}
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n".encode("utf-8")
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n".encode()
 
 
 def _responses_reasoning_summary_stream():
@@ -239,7 +240,7 @@ def test_responses_input_translation():
     model = llm.get_model("gpt-5.5")
 
     class FakePrompt:
-        messages = [
+        messages = (
             Message(role="system", parts=[TextPart(text="be brief")]),
             Message(role="user", parts=[TextPart(text="2 + 2?")]),
             Message(
@@ -256,7 +257,7 @@ def test_responses_input_translation():
                 role="tool",
                 parts=[ToolResultPart(name="add", output="4", tool_call_id="call_abc")],
             ),
-        ]
+        )
 
     items, instructions = model._build_responses_input(FakePrompt())
     assert instructions == "be brief"
@@ -282,11 +283,11 @@ def test_responses_input_translation_assistant_text_uses_easy_input_message():
     model = llm.get_model("gpt-5.5")
 
     class FakePrompt:
-        messages = [
+        messages = (
             Message(role="user", parts=[TextPart(text="hello")]),
             Message(role="assistant", parts=[TextPart(text="first-ok")]),
             Message(role="user", parts=[TextPart(text="what next?")]),
-        ]
+        )
 
     items, instructions = model._build_responses_input(FakePrompt())
 
@@ -526,7 +527,7 @@ def test_responses_tool_use_streaming(vcr):
     )
     output = "".join(chain)
     assert "2869461" in output.replace(",", "")
-    first, second = chain._responses
+    first, _second = chain._responses
     assert first.tool_calls()[0].arguments == {"a": 1231, "b": 2331}
 
 

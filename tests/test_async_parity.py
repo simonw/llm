@@ -7,8 +7,9 @@ paths exercise real registered models with identical behaviour.
 
 import json
 
-import llm
 import pytest
+
+import llm
 
 # ---- basic sanity: both variants are registered --------------------
 
@@ -91,6 +92,7 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
     response.messages from _chunks+_tool_calls so follow-up chains
     don't silently drop the assistant turn."""
     import sqlite_utils
+
     from llm.migrations import migrate
 
     model = llm.get_async_model("echo")
@@ -123,6 +125,7 @@ async def test_async_load_conversation_follow_up_preserves_chain(tmp_path):
     load_conversation, a follow-up turn's prompt.messages is the full
     [user, assistant, user] chain — not missing the assistant."""
     import sqlite_utils
+
     from llm.cli import load_conversation
     from llm.migrations import migrate
 
