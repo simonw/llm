@@ -1,16 +1,18 @@
 import asyncio
-import re
-from click.testing import CliRunner
-from importlib.metadata import version
 import json
-import llm
-from llm import cli, CancelToolCall
-from llm.migrations import migrate
-from llm.tools import llm_time
 import os
+import re
+import time
+from importlib.metadata import version
+
 import pytest
 import sqlite_utils
-import time
+from click.testing import CliRunner
+
+import llm
+from llm import CancelToolCall, cli
+from llm.migrations import migrate
+from llm.tools import llm_time
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
@@ -544,7 +546,6 @@ def test_chain_sync_cancel_only_first_of_two():
         if tool.name == "t1":
             raise CancelToolCall("skip1")
         # allow t2
-        return None
 
     calls = [
         {"name": "t1"},
@@ -583,7 +584,6 @@ async def test_chain_async_cancel_only_first_of_two():
     async def before(tool, tool_call):
         if tool.name == "t1":
             raise CancelToolCall("skip1")
-        return None
 
     calls = [
         {"name": "t1"},

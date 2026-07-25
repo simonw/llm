@@ -1,21 +1,24 @@
-from .models import EmbeddingModel
-from .embeddings_migrations import embeddings_migrations
-from dataclasses import dataclass
 import hashlib
-from itertools import islice
 import json
+import time
+from collections.abc import Iterable
+from dataclasses import dataclass
+from itertools import islice
+from typing import Any, cast
+
 from sqlite_utils import Database
 from sqlite_utils.db import Table
-import time
-from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
+
+from .embeddings_migrations import embeddings_migrations
+from .models import EmbeddingModel
 
 
 @dataclass
 class Entry:
     id: str
-    score: Optional[float]
-    content: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    score: float | None
+    content: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class Collection:
@@ -25,10 +28,10 @@ class Collection:
     def __init__(
         self,
         name: str,
-        db: Optional[Database] = None,
+        db: Database | None = None,
         *,
-        model: Optional[EmbeddingModel] = None,
-        model_id: Optional[str] = None,
+        model: EmbeddingModel | None = None,
+        model_id: str | None = None,
         create: bool = True,
     ) -> None:
         """
@@ -115,8 +118,8 @@ class Collection:
     def embed(
         self,
         id: str,
-        value: Union[str, bytes],
-        metadata: Optional[Dict[str, Any]] = None,
+        value: str | bytes,
+        metadata: dict[str, Any] | None = None,
         store: bool = False,
     ) -> None:
         """
@@ -152,7 +155,7 @@ class Collection:
 
     def embed_multi(
         self,
-        entries: Iterable[Tuple[str, Union[str, bytes]]],
+        entries: Iterable[tuple[str, str | bytes]],
         store: bool = False,
         batch_size: int = 100,
     ) -> None:
@@ -172,7 +175,7 @@ class Collection:
 
     def embed_multi_with_metadata(
         self,
-        entries: Iterable[Tuple[str, Union[str, bytes], Optional[Dict[str, Any]]]],
+        entries: Iterable[tuple[str, str | bytes, dict[str, Any] | None]],
         store: bool = False,
         batch_size: int = 100,
     ) -> None:
@@ -237,11 +240,11 @@ class Collection:
 
     def similar_by_vector(
         self,
-        vector: List[float],
+        vector: list[float],
         number: int = 10,
-        skip_id: Optional[str] = None,
-        prefix: Optional[str] = None,
-    ) -> List[Entry]:
+        skip_id: str | None = None,
+        prefix: str | None = None,
+    ) -> list[Entry]:
         """
         Find similar items in the collection by a given vector.
 
@@ -295,8 +298,8 @@ class Collection:
         ]
 
     def similar_by_id(
-        self, id: str, number: int = 10, prefix: Optional[str] = None
-    ) -> List[Entry]:
+        self, id: str, number: int = 10, prefix: str | None = None
+    ) -> list[Entry]:
         """
         Find similar items in the collection by a given ID.
 
@@ -324,8 +327,8 @@ class Collection:
         )
 
     def similar(
-        self, value: Union[str, bytes], number: int = 10, prefix: Optional[str] = None
-    ) -> List[Entry]:
+        self, value: str | bytes, number: int = 10, prefix: str | None = None
+    ) -> list[Entry]:
         """
         Find similar items in the collection by a given value.
 
@@ -360,7 +363,7 @@ class Collection:
             self.db.execute("delete from collections where id = ?", [self.id])
 
     @staticmethod
-    def content_hash(input: Union[str, bytes]) -> bytes:
+    def content_hash(input: str | bytes) -> bytes:
         "Hash content for deduplication. Override to change hashing behavior."
         if isinstance(input, str):
             input = input.encode("utf8")

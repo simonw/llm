@@ -1,15 +1,17 @@
-from click.testing import CliRunner
-from importlib.metadata import version
 import json
+import os
+import pathlib
+import textwrap
+from importlib.metadata import version
+from unittest import mock
+
+import pytest
+import yaml
+from click.testing import CliRunner
+
 from llm import Template, Toolbox, hookimpl, user_dir
 from llm.cli import cli
 from llm.plugins import pm
-import os
-from unittest import mock
-import pathlib
-import pytest
-import textwrap
-import yaml
 
 
 @pytest.mark.parametrize(

@@ -1,19 +1,18 @@
-import click
 import hashlib
-import httpx
 import itertools
 import json
-import pathlib
-import puremagic
-import re
-import sqlite_utils
-import textwrap
-from typing import Any, List, Dict, Optional, Tuple, Type
 import os
+import pathlib
+import re
+import textwrap
 import threading
 import time
-from typing import Final
+from typing import Any, Final
 
+import click
+import httpx
+import puremagic
+import sqlite_utils
 from ulid import ULID
 
 MIME_TYPE_FIXES = {
@@ -34,7 +33,7 @@ class Fragment(str):
         return hashlib.sha256(self.encode("utf-8")).hexdigest()
 
 
-def mimetype_from_string(content) -> Optional[str]:
+def mimetype_from_string(content) -> str | None:
     try:
         type_ = puremagic.from_string(content, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
@@ -42,7 +41,7 @@ def mimetype_from_string(content) -> Optional[str]:
         return None
 
 
-def mimetype_from_path(path) -> Optional[str]:
+def mimetype_from_path(path) -> str | None:
     try:
         type_ = puremagic.from_file(path, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
@@ -51,8 +50,8 @@ def mimetype_from_path(path) -> Optional[str]:
 
 
 def dicts_to_table_string(
-    headings: List[str], dicts: List[Dict[str, str]]
-) -> List[str]:
+    headings: list[str], dicts: list[dict[str, str]]
+) -> list[str]:
     max_lengths = [len(h) for h in headings]
 
     # Compute maximum length for each column
@@ -179,7 +178,7 @@ def token_usage_string(input_tokens, output_tokens, token_details) -> str:
     return ", ".join(bits)
 
 
-def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
+def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
     """
     Extracts and returns Markdown fenced code block found in the given text.
 
@@ -217,7 +216,7 @@ def extract_fenced_code_block(text: str, last: bool = False) -> Optional[str]:
     return None
 
 
-def make_schema_id(schema: dict) -> Tuple[str, str]:
+def make_schema_id(schema: dict) -> tuple[str, str]:
     schema_json = json.dumps(schema, separators=(",", ":"))
     schema_id = hashlib.blake2b(schema_json.encode(), digest_size=16).hexdigest()
     return schema_id, schema_json
@@ -282,9 +281,9 @@ def resolve_schema_input(db, schema_input, load_template):
             template = load_template(name)
             schema_object = template.schema_object
         except ValueError:
-            raise click.ClickException("Invalid template: {}".format(name))
+            raise click.ClickException(f"Invalid template: {name}")
         if not schema_object:
-            raise click.ClickException("Template '{}' has no schema".format(name))
+            raise click.ClickException(f"Template '{name}' has no schema")
         return template.schema_object
     if schema_input.strip().startswith("{"):
         try:
@@ -351,7 +350,7 @@ def schema_summary(schema: dict) -> str:
     return ""
 
 
-def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
+def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
     """
     Build a JSON schema from a concise schema string.
 
@@ -372,7 +371,7 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> Dict[str, Any]:
     }
 
     # Initialize the schema dictionary with required elements
-    json_schema: Dict[str, Any] = {"type": "object", "properties": {}, "required": []}
+    json_schema: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
     # Check if the schema is newline-separated or comma-separated
     if "\n" in schema_dsl:
@@ -487,9 +486,13 @@ def ensure_fragment(db, content):
         source = content.source
     with db.conn:
         db.execute(sql, {"hash": hash_id, "content": content, "source": source})
-        return list(
-            db.query("select id from fragments where hash = :hash", {"hash": hash_id})
-        )[0]["id"]
+        return next(
+            iter(
+                db.query(
+                    "select id from fragments where hash = :hash", {"hash": hash_id}
+                )
+            )
+        )["id"]
 
 
 def ensure_tool(db, tool):
@@ -509,9 +512,13 @@ def ensure_tool(db, tool):
                 "plugin": tool.plugin,
             },
         )
-        return list(
-            db.query("select id from tools where hash = :hash", {"hash": tool.hash()})
-        )[0]["id"]
+        return next(
+            iter(
+                db.query(
+                    "select id from tools where hash = :hash", {"hash": tool.hash()}
+                )
+            )
+        )["id"]
 
 
 def maybe_fenced_code(content: str) -> str:
@@ -551,7 +558,7 @@ def has_plugin_prefix(value: str) -> bool:
     return bool(_plugin_prefix_re.match(value))
 
 
-def _parse_kwargs(arg_str: str) -> Dict[str, Any]:
+def _parse_kwargs(arg_str: str) -> dict[str, Any]:
     """Parse key=value pairs where each value is valid JSON."""
     tokens = []
     buf = []
@@ -588,7 +595,7 @@ def _parse_kwargs(arg_str: str) -> Dict[str, Any]:
     if buf:
         tokens.append("".join(buf).strip())
 
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     for token in tokens:
         if not token:
             continue
@@ -605,7 +612,7 @@ def _parse_kwargs(arg_str: str) -> Dict[str, Any]:
     return kwargs
 
 
-def instantiate_from_spec(class_map: Dict[str, Type], spec: str):
+def instantiate_from_spec(class_map: dict[str, type], spec: str):
     """
     Instantiate a class from a specification string with flexible argument formats.
 
@@ -665,7 +672,7 @@ def instantiate_from_spec(class_map: Dict[str, Type], spec: str):
         return cls(**kw)
 
     # Starts with quote / number / [ / t f n for single positional JSON value
-    if re.match(r'\s*(["\[\d\-]|true|false|null)', arg_body, re.I):
+    if re.match(r'\s*(["\[\d\-]|true|false|null)', arg_body, re.IGNORECASE):
         try:
             positional_value = json.loads(arg_body)
         except json.JSONDecodeError as e:
@@ -682,7 +689,7 @@ TIMESTAMP_LEN = 6
 RANDOMNESS_LEN = 10
 
 _lock: Final = threading.Lock()
-_last: Optional[bytes] = None  # 16-byte last produced ULID
+_last: bytes | None = None  # 16-byte last produced ULID
 
 
 def monotonic_ulid() -> ULID:

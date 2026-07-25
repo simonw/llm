@@ -7,6 +7,7 @@ dependency.
 """
 
 import json
+
 import pytest
 from pydantic import TypeAdapter
 
@@ -15,8 +16,8 @@ from llm.serialization import (
     AttachmentPartDict,
     MessageDict,
     PartDict,
-    ResponseDict,
     ReasoningPartDict,
+    ResponseDict,
     TextPartDict,
     ToolCallPartDict,
     ToolResultPartDict,

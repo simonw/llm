@@ -1,3 +1,21 @@
+import datetime
+import json
+import os
+from collections.abc import AsyncGenerator, Iterable, Iterator
+from enum import Enum
+from typing import (
+    Any,
+    Optional,
+    cast,
+)
+
+import click
+import httpx
+import openai
+import yaml
+from pydantic import Field, create_model, field_validator
+
+import llm
 from llm import (
     AsyncConversation,
     AsyncKeyModel,
@@ -9,36 +27,13 @@ from llm import (
     Response,
     hookimpl,
 )
-import llm
 from llm.parts import StreamEvent
 from llm.utils import (
     dicts_to_table_string,
-    remove_dict_none_values,
     logging_client,
+    remove_dict_none_values,
     simplify_usage_dict,
 )
-import click
-import datetime
-from enum import Enum
-import httpx
-import openai
-import os
-
-from pydantic import create_model, field_validator, Field
-
-from typing import (
-    Any,
-    AsyncGenerator,
-    cast,
-    Dict,
-    List,
-    Iterable,
-    Iterator,
-    Optional,
-    Union,
-)
-import json
-import yaml
 
 
 @hookimpl
@@ -396,7 +391,7 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.openai_model_id = openai_model_id
         self.dimensions = dimensions
 
-    def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
+    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
@@ -447,12 +442,12 @@ def register_commands(cli):
                         "created": created_str,
                     }
                 )
-            done = dicts_to_table_string("id owned_by created".split(), to_print)
+            done = dicts_to_table_string(["id", "owned_by", "created"], to_print)
             print("\n".join(done))
 
 
 class SharedOptions(llm.Options):
-    temperature: Optional[float] = Field(
+    temperature: float | None = Field(
         description=(
             "What sampling temperature to use, between 0 and 2. Higher values like "
             "0.8 will make the output more random, while lower values like 0.2 will "
@@ -462,10 +457,10 @@ class SharedOptions(llm.Options):
         le=2,
         default=None,
     )
-    max_tokens: Optional[int] = Field(
+    max_tokens: int | None = Field(
         description="Maximum number of tokens to generate.", default=None
     )
-    top_p: Optional[float] = Field(
+    top_p: float | None = Field(
         description=(
             "An alternative to sampling with temperature, called nucleus sampling, "
             "where the model considers the results of the tokens with top_p "
@@ -477,7 +472,7 @@ class SharedOptions(llm.Options):
         le=1,
         default=None,
     )
-    frequency_penalty: Optional[float] = Field(
+    frequency_penalty: float | None = Field(
         description=(
             "Number between -2.0 and 2.0. Positive values penalize new tokens based "
             "on their existing frequency in the text so far, decreasing the model's "
@@ -487,7 +482,7 @@ class SharedOptions(llm.Options):
         le=2,
         default=None,
     )
-    presence_penalty: Optional[float] = Field(
+    presence_penalty: float | None = Field(
         description=(
             "Number between -2.0 and 2.0. Positive values penalize new tokens based "
             "on whether they appear in the text so far, increasing the model's "
@@ -497,18 +492,18 @@ class SharedOptions(llm.Options):
         le=2,
         default=None,
     )
-    stop: Optional[str] = Field(
+    stop: str | None = Field(
         description=("A string where the API will stop generating further tokens."),
         default=None,
     )
-    logit_bias: Optional[Union[dict, str]] = Field(
+    logit_bias: dict | str | None = Field(
         description=(
             "Modify the likelihood of specified tokens appearing in the completion. "
             'Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
         ),
         default=None,
     )
-    seed: Optional[int] = Field(
+    seed: int | None = Field(
         description="Integer seed to attempt to sample deterministically",
         default=None,
     )
@@ -741,7 +736,7 @@ class _Shared:
             )
 
     def __str__(self) -> str:
-        return "OpenAI Chat: {}".format(self.model_id)
+        return f"OpenAI Chat: {self.model_id}"
 
     def _append_llm_message(self, out, message, current_system, image_detail=None):
         """Translate one llm.Message into one (or more) OpenAI message
@@ -827,10 +822,10 @@ class _Shared:
 
     def build_messages(self, prompt, conversation, image_detail=None):
         """Translate prompt.messages into OpenAI's wire format."""
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         if image_detail is not None:
             image_detail = image_detail.value
-        current_system: Optional[str] = None
+        current_system: str | None = None
         for msg in prompt.messages:
             current_system = self._append_llm_message(
                 messages, msg, current_system, image_detail=image_detail
@@ -915,9 +910,9 @@ class Chat(_Shared, KeyModel):
         prompt: Prompt,
         stream: bool,
         response: Response,
-        conversation: Optional[Conversation] = None,
-        key: Optional[str] = None,
-    ) -> Iterator[Union[str, StreamEvent]]:
+        conversation: Conversation | None = None,
+        key: str | None = None,
+    ) -> Iterator[str | StreamEvent]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(
@@ -1033,9 +1028,9 @@ class AsyncChat(_Shared, AsyncKeyModel):
         prompt: Prompt,
         stream: bool,
         response: AsyncResponse,
-        conversation: Optional[AsyncConversation] = None,
-        key: Optional[str] = None,
-    ) -> AsyncGenerator[Union[str, StreamEvent], None]:
+        conversation: AsyncConversation | None = None,
+        key: str | None = None,
+    ) -> AsyncGenerator[str | StreamEvent, None]:
         if prompt.system and not self.allows_system_prompt:
             raise NotImplementedError("Model does not support system prompts")
         messages = self.build_messages(
@@ -1166,30 +1161,30 @@ class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
 
     def __str__(self) -> str:
-        return "OpenAI Responses: {}".format(self.model_id)
+        return f"OpenAI Responses: {self.model_id}"
 
     def _delegate_chat_kwargs(self):
         """Return constructor kwargs that mirror this Responses model so we
         can build a sibling Chat / AsyncChat instance for the
         ``-o chat_completions 1`` opt-out path."""
-        return dict(
-            model_id=self.model_id,
-            key=self.key,
-            model_name=self.model_name,
-            api_base=self.api_base,
-            api_type=self.api_type,
-            api_version=self.api_version,
-            api_engine=self.api_engine,
-            headers=self.headers,
-            can_stream=self.can_stream,
-            vision=self.vision,
-            reasoning=self._reasoning,
-            verbosity=self._verbosity,
-            image_detail_original=self._image_detail_original,
-            supports_schema=self.supports_schema,
-            supports_tools=self.supports_tools,
-            allows_system_prompt=self.allows_system_prompt,
-        )
+        return {
+            "model_id": self.model_id,
+            "key": self.key,
+            "model_name": self.model_name,
+            "api_base": self.api_base,
+            "api_type": self.api_type,
+            "api_version": self.api_version,
+            "api_engine": self.api_engine,
+            "headers": self.headers,
+            "can_stream": self.can_stream,
+            "vision": self.vision,
+            "reasoning": self._reasoning,
+            "verbosity": self._verbosity,
+            "image_detail_original": self._image_detail_original,
+            "supports_schema": self.supports_schema,
+            "supports_tools": self.supports_tools,
+            "allows_system_prompt": self.allows_system_prompt,
+        }
 
     def _build_responses_input(self, prompt, image_detail=None):
         """Translate prompt.messages into a (input_items, instructions) tuple
@@ -1207,8 +1202,8 @@ class _SharedResponses(_Shared):
             ToolResultPart,
         )
 
-        items: List[Dict[str, Any]] = []
-        instructions: Optional[str] = None
+        items: list[dict[str, Any]] = []
+        instructions: str | None = None
 
         for msg in prompt.messages:
             if msg.role == "system":
@@ -1217,11 +1212,11 @@ class _SharedResponses(_Shared):
                     instructions = text
                 continue
 
-            text_bits: List[str] = []
-            attachment_items: List[Dict[str, Any]] = []
-            tool_call_items: List[Dict[str, Any]] = []
-            tool_result_items: List[Dict[str, Any]] = []
-            reasoning_items: List[Dict[str, Any]] = []
+            text_bits: list[str] = []
+            attachment_items: list[dict[str, Any]] = []
+            tool_call_items: list[dict[str, Any]] = []
+            tool_result_items: list[dict[str, Any]] = []
+            reasoning_items: list[dict[str, Any]] = []
 
             for part in msg.parts:
                 if isinstance(part, TextPart):
@@ -1256,7 +1251,7 @@ class _SharedResponses(_Shared):
                     if enc or rid:
                         # Round-trip a previous reasoning item so the model
                         # can pick up where it left off mid-tool-call.
-                        item: Dict[str, Any] = {"type": "reasoning"}
+                        item: dict[str, Any] = {"type": "reasoning"}
                         if rid:
                             item["id"] = rid
                         if enc:
@@ -1277,7 +1272,7 @@ class _SharedResponses(_Shared):
 
             if msg.role == "user":
                 if attachment_items:
-                    content: List[Dict[str, Any]] = []
+                    content: list[dict[str, Any]] = []
                     if text_bits:
                         content.append(
                             {"type": "input_text", "text": "".join(text_bits)}
@@ -1308,7 +1303,7 @@ class _SharedResponses(_Shared):
         top_p = opts.pop("top_p", None)
         seed = opts.pop("seed", None)
 
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if max_tokens is None and self.default_max_tokens is not None:
             max_tokens = self.default_max_tokens
         if max_tokens is not None:
@@ -1328,7 +1323,7 @@ class _SharedResponses(_Shared):
             if reasoning:
                 kwargs["reasoning"] = reasoning
 
-        text: Dict[str, Any] = {}
+        text: dict[str, Any] = {}
         if verbosity:
             text["verbosity"] = verbosity
         if prompt.options.json_object:
@@ -1400,7 +1395,7 @@ class _SharedResponses(_Shared):
         enc = getattr(item, "encrypted_content", None)
         summary = getattr(item, "summary", None)
         text = self._reasoning_text_from_item(item) if include_text else ""
-        meta: Dict[str, Any] = {}
+        meta: dict[str, Any] = {}
         if rid:
             meta["id"] = rid
         if enc:
@@ -1484,9 +1479,9 @@ class Responses(_SharedResponses, KeyModel):
         prompt: Prompt,
         stream: bool,
         response: Response,
-        conversation: Optional[Conversation] = None,
-        key: Optional[str] = None,
-    ) -> Iterator[Union[str, StreamEvent]]:
+        conversation: Conversation | None = None,
+        key: str | None = None,
+    ) -> Iterator[str | StreamEvent]:
         if getattr(prompt.options, "chat_completions", None):
             chat = Chat(**self._delegate_chat_kwargs())
             yield from chat.execute(prompt, stream, response, conversation, key)
@@ -1518,8 +1513,8 @@ class Responses(_SharedResponses, KeyModel):
                 stream=True,
                 **kwargs,
             )
-            tool_call_meta: Dict[str, Dict[str, str]] = {}
-            final_response_dict: Optional[Dict[str, Any]] = None
+            tool_call_meta: dict[str, dict[str, str]] = {}
+            final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             for event in stream_obj:
                 etype = getattr(event, "type", None)
@@ -1711,9 +1706,9 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         prompt: Prompt,
         stream: bool,
         response: AsyncResponse,
-        conversation: Optional[AsyncConversation] = None,
-        key: Optional[str] = None,
-    ) -> AsyncGenerator[Union[str, StreamEvent], None]:
+        conversation: AsyncConversation | None = None,
+        key: str | None = None,
+    ) -> AsyncGenerator[str | StreamEvent, None]:
         if getattr(prompt.options, "chat_completions", None):
             chat = AsyncChat(**self._delegate_chat_kwargs())
             async for event in chat.execute(
@@ -1748,8 +1743,8 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                 stream=True,
                 **kwargs,
             )
-            tool_call_meta: Dict[str, Dict[str, str]] = {}
-            final_response_dict: Optional[Dict[str, Any]] = None
+            tool_call_meta: dict[str, dict[str, str]] = {}
+            final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             async for event in stream_obj:
                 etype = getattr(event, "type", None)
@@ -1881,7 +1876,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
 
 class Completion(Chat):
     class Options(SharedOptions):
-        logprobs: Optional[int] = Field(
+        logprobs: int | None = Field(
             description="Include the log probabilities of most likely N per token",
             default=None,
             le=5,
@@ -1892,16 +1887,16 @@ class Completion(Chat):
         self.default_max_tokens = default_max_tokens
 
     def __str__(self) -> str:
-        return "OpenAI Completion: {}".format(self.model_id)
+        return f"OpenAI Completion: {self.model_id}"
 
     def execute(
         self,
         prompt: Prompt,
         stream: bool,
         response: Response,
-        conversation: Optional[Conversation] = None,
-        key: Optional[str] = None,
-    ) -> Iterator[Union[str, StreamEvent]]:
+        conversation: Conversation | None = None,
+        key: str | None = None,
+    ) -> Iterator[str | StreamEvent]:
         if prompt.system:
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
@@ -1949,7 +1944,7 @@ def not_nulls(data) -> dict:
     return {key: value for key, value in data if value is not None}
 
 
-def combine_chunks(chunks: List) -> dict:
+def combine_chunks(chunks: list) -> dict:
     content = ""
     role = None
     finish_reason = None

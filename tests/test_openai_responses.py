@@ -3,16 +3,17 @@
 import json
 import os
 
-import llm
 import pytest
 from pytest_httpx import IteratorStream
+
+import llm
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 
 def _responses_sse(event_type, data):
     data = {"type": event_type, **data}
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n".encode("utf-8")
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n".encode()
 
 
 def _responses_reasoning_summary_stream():
@@ -526,7 +527,7 @@ def test_responses_tool_use_streaming(vcr):
     )
     output = "".join(chain)
     assert "2869461" in output.replace(",", "")
-    first, second = chain._responses
+    first, _second = chain._responses
     assert first.tool_calls()[0].arguments == {"a": 1231, "b": 2331}
 
 

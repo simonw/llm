@@ -1,9 +1,11 @@
-from click.testing import CliRunner
 import json
-from llm.cli import cli
 import pathlib
-import pytest
 import sys
+
+import pytest
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -81,7 +83,7 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
 
     def assert_key(key):
         request = mocked_openai_chat.get_requests()[-1]
-        assert request.headers["Authorization"] == "Bearer {}".format(key)
+        assert request.headers["Authorization"] == f"Bearer {key}"
 
     runner = CliRunner()
 

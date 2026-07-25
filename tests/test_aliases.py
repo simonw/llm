@@ -1,9 +1,11 @@
-from click.testing import CliRunner
-from llm.cli import cli
-import llm
 import json
-import pytest
 import re
+
+import pytest
+from click.testing import CliRunner
+
+import llm
+from llm.cli import cli
 
 
 @pytest.mark.parametrize("model_id_or_alias", ("gpt-3.5-turbo", "chatgpt"))
@@ -30,16 +32,17 @@ def test_cli_aliases_list(args):
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
-    for line in (
-        "3.5         : gpt-3.5-turbo\n"
-        "chatgpt     : gpt-3.5-turbo\n"
-        "chatgpt-16k : gpt-3.5-turbo-16k\n"
-        "3.5-16k     : gpt-3.5-turbo-16k\n"
-        "4           : gpt-4\n"
-        "gpt4        : gpt-4\n"
-        "e-demo      : embed-demo (embedding)\n"
-        "ada         : text-embedding-ada-002 (embedding)\n"
-    ).split("\n"):
+    for line in [
+        "3.5         : gpt-3.5-turbo",
+        "chatgpt     : gpt-3.5-turbo",
+        "chatgpt-16k : gpt-3.5-turbo-16k",
+        "3.5-16k     : gpt-3.5-turbo-16k",
+        "4           : gpt-4",
+        "gpt4        : gpt-4",
+        "e-demo      : embed-demo (embedding)",
+        "ada         : text-embedding-ada-002 (embedding)",
+        "",
+    ]:
         line = line.strip()
         if not line:
             continue

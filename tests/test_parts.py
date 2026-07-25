@@ -1,5 +1,7 @@
 import json
+
 import pytest
+
 import llm
 
 
@@ -446,7 +448,7 @@ class TestStreamEventsFromStreamEventPlugin:
         response = mock_model.prompt("hi")
         response.text()
         with pytest.raises(ValueError, match="part_index"):
-            response.messages()  # noqa: B018
+            response.messages()
 
     def test_provider_metadata_merges_last_wins(self, mock_model):
         events = [
@@ -909,8 +911,8 @@ class TestPromptMessagesSynthesis:
         ]
 
     def test_tool_results_become_tool_role_message(self, mock_model):
-        from llm.models import Prompt
         from llm import ToolResult
+        from llm.models import Prompt
 
         tr = ToolResult(name="t", output="ok", tool_call_id="c1")
         p = Prompt(None, model=mock_model, tool_results=[tr])
@@ -1120,6 +1122,7 @@ class TestSqliteRehydrateMessages:
         self, mock_model, tmp_path
     ):
         import sqlite_utils
+
         from llm.migrations import migrate
 
         mock_model.enqueue(["answer text"])
@@ -1149,8 +1152,9 @@ class TestSqliteRehydrateMessages:
         """End-to-end: a follow-up turn via load_conversation must send
         [user(q1), assistant(a1), user(q2)] — not drop the assistant."""
         import sqlite_utils
-        from llm.migrations import migrate
+
         from llm.cli import load_conversation
+        from llm.migrations import migrate
 
         mock_model.enqueue(["first answer"])
         mock_model.enqueue(["second answer"])
@@ -1179,6 +1183,7 @@ class TestSqliteRehydrateMessages:
         assistant tool_use. Otherwise Anthropic sees an orphan
         tool_result at the start of the continued request."""
         import sqlite_utils
+
         from llm.cli import load_conversation
         from llm.migrations import migrate
 
@@ -1704,8 +1709,7 @@ class TestChainPropagatesSystem:
                     yield "done"
                     return
                 msgs = self._queue.pop(0)
-                for m in msgs:
-                    yield m
+                yield from msgs
                 if not response._tool_calls:
                     response.add_tool_call(tool_call)
 
@@ -1731,8 +1735,7 @@ class TestChainPropagatesSystem:
                     yield "done"
                     return
                 msgs = self._queue.pop(0)
-                for m in msgs:
-                    yield m
+                yield from msgs
                 if not response._tool_calls:
                     response.add_tool_call(tool_call)
 

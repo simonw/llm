@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 import string
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 
 class AttachmentType(BaseModel):
@@ -12,20 +13,20 @@ class Template(BaseModel):
     """A reusable prompt template."""
 
     name: str
-    prompt: Optional[str] = None
-    system: Optional[str] = None
-    attachments: Optional[List[str]] = None
-    attachment_types: Optional[List[AttachmentType]] = None
-    model: Optional[str] = None
-    defaults: Optional[Dict[str, Any]] = None
-    options: Optional[Dict[str, Any]] = None
-    extract: Optional[bool] = None  # For extracting fenced code blocks
-    extract_last: Optional[bool] = None
-    schema_object: Optional[dict] = None
-    fragments: Optional[List[str]] = None
-    system_fragments: Optional[List[str]] = None
-    tools: Optional[List[str]] = None
-    functions: Optional[str] = None
+    prompt: str | None = None
+    system: str | None = None
+    attachments: list[str] | None = None
+    attachment_types: list[AttachmentType] | None = None
+    model: str | None = None
+    defaults: dict[str, Any] | None = None
+    options: dict[str, Any] | None = None
+    extract: bool | None = None  # For extracting fenced code blocks
+    extract_last: bool | None = None
+    schema_object: dict | None = None
+    fragments: list[str] | None = None
+    system_fragments: list[str] | None = None
+    tools: list[str] | None = None
+    functions: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -39,8 +40,8 @@ class Template(BaseModel):
         self._functions_is_trusted = False
 
     def evaluate(
-        self, input: str, params: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Optional[str], Optional[str]]:
+        self, input: str, params: dict[str, Any] | None = None
+    ) -> tuple[str | None, str | None]:
         """Evaluate the template with the given input and parameters, returning (prompt, system)."""
         params = params or {}
         params["input"] = input
@@ -48,8 +49,8 @@ class Template(BaseModel):
             for k, v in self.defaults.items():
                 if k not in params:
                     params[k] = v
-        prompt: Optional[str] = None
-        system: Optional[str] = None
+        prompt: str | None = None
+        system: str | None = None
         if not self.prompt:
             system = self.interpolate(self.system, params)
             prompt = input
@@ -68,7 +69,7 @@ class Template(BaseModel):
         return all_vars
 
     @classmethod
-    def interpolate(cls, text: Optional[str], params: Dict[str, Any]) -> Optional[str]:
+    def interpolate(cls, text: str | None, params: dict[str, Any]) -> str | None:
         """Substitute template variables in text with values from params, raising MissingVariables if any are absent."""
         if not text:
             return text
@@ -83,7 +84,7 @@ class Template(BaseModel):
         return string_template.substitute(**params)
 
     @staticmethod
-    def extract_vars(string_template: string.Template) -> List[str]:
+    def extract_vars(string_template: string.Template) -> list[str]:
         """Extract and return the list of named variable identifiers from a string.Template."""
         return [
             match.group("named")

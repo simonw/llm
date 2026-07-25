@@ -1,7 +1,9 @@
-from click.testing import CliRunner
 import sys
-import llm.cli
+
 import pytest
+from click.testing import CliRunner
+
+import llm.cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

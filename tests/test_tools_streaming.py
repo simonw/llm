@@ -1,7 +1,9 @@
+import os
+
+import pytest
+
 import llm
 from llm.tools import llm_version
-import os
-import pytest
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
