@@ -77,10 +77,36 @@ def test_gpt5_models_support_verbosity_option(model_id):
     assert "verbosity" in llm.get_async_model(model_id).Options.model_fields
 
 
-@pytest.mark.parametrize("model_id", ("gpt-4o", "gpt-4.5-preview", "o3", "o4-mini"))
+@pytest.mark.parametrize("model_id", ("gpt-4o", "o3", "o4-mini"))
 def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
     assert "verbosity" not in llm.get_model(model_id).Options.model_fields
     assert "verbosity" not in llm.get_async_model(model_id).Options.model_fields
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    (
+        "chatgpt-4o-latest",
+        "gpt-4o-audio-preview",
+        "gpt-4o-audio-preview-2024-12-17",
+        "gpt-4o-audio-preview-2024-10-01",
+        "gpt-4o-mini-audio-preview",
+        "gpt-4o-mini-audio-preview-2024-12-17",
+        "gpt-4-32k",
+        "gpt-4-1106-preview",
+        "gpt-4-0125-preview",
+        "gpt-4.5-preview-2025-02-27",
+        "gpt-4.5-preview",
+        "o1-preview",
+        "o1-mini",
+        "gpt-5.1-chat-latest",
+    ),
+)
+def test_deprecated_models_are_not_registered(model_id):
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_model(model_id)
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_async_model(model_id)
 
 
 def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx_mock):
@@ -362,93 +388,6 @@ def test_openai_image_detail_original_is_rejected_for_other_models():
     )
     assert result.exit_code == 1
     assert "Input should be 'low', 'high' or 'auto'" in result.output
-
-
-@pytest.mark.parametrize("model", ("gpt-4o-mini", "gpt-4o-audio-preview"))
-@pytest.mark.parametrize("filetype", ("mp3", "wav"))
-def test_only_gpt4_audio_preview_allows_mp3_or_wav(httpx_mock, model, filetype):
-    httpx_mock.add_response(
-        method="HEAD",
-        url=f"https://www.example.com/example.{filetype}",
-        content=b"binary-data",
-        headers={"Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wav"},
-    )
-    if model == "gpt-4o-audio-preview":
-        httpx_mock.add_response(
-            method="POST",
-            # chat completion request
-            url="https://api.openai.com/v1/chat/completions",
-            json={
-                "id": "chatcmpl-AQT9a30kxEaM1bqxRPepQsPlCyGJh",
-                "object": "chat.completion",
-                "created": 1730871958,
-                "model": "gpt-4o-audio-preview-2024-10-01",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": "Why did the pelican get kicked out of the restaurant?\n\nBecause he had a big bill and no way to pay it!",
-                            "refusal": None,
-                        },
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {
-                    "prompt_tokens": 55,
-                    "completion_tokens": 25,
-                    "total_tokens": 80,
-                    "prompt_tokens_details": {
-                        "cached_tokens": 0,
-                        "audio_tokens": 44,
-                        "text_tokens": 11,
-                        "image_tokens": 0,
-                    },
-                    "completion_tokens_details": {
-                        "reasoning_tokens": 0,
-                        "audio_tokens": 0,
-                        "text_tokens": 25,
-                        "accepted_prediction_tokens": 0,
-                        "rejected_prediction_tokens": 0,
-                    },
-                },
-                "system_fingerprint": "fp_49254d0e9b",
-            },
-            headers={"Content-Type": "application/json"},
-        )
-        httpx_mock.add_response(
-            method="GET",
-            url=f"https://www.example.com/example.{filetype}",
-            content=b"binary-data",
-            headers={
-                "Content-Type": "audio/mpeg" if filetype == "mp3" else "audio/wav"
-            },
-        )
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            "-m",
-            model,
-            "-a",
-            f"https://www.example.com/example.{filetype}",
-            "--no-stream",
-            "--key",
-            "x",
-        ],
-    )
-    if model == "gpt-4o-audio-preview":
-        assert result.exit_code == 0
-        assert result.output == (
-            "Why did the pelican get kicked out of the restaurant?\n\n"
-            "Because he had a big bill and no way to pay it!\n"
-        )
-    else:
-        assert result.exit_code == 1
-        long = "audio/mpeg" if filetype == "mp3" else "audio/wav"
-        assert (
-            f"This model does not support attachments of type '{long}'" in result.output
-        )
 
 
 @pytest.mark.parametrize("async_", (False, True))

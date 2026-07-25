@@ -37,7 +37,6 @@ def test_cli_aliases_list(args):
         "3.5-16k     : gpt-3.5-turbo-16k\n"
         "4           : gpt-4\n"
         "gpt4        : gpt-4\n"
-        "4-32k       : gpt-4-32k\n"
         "e-demo      : embed-demo (embedding)\n"
         "ada         : text-embedding-ada-002 (embedding)\n"
     ).split("\n"):
@@ -64,7 +63,6 @@ def test_cli_aliases_list_json(args):
             "3.5-16k": "gpt-3.5-turbo-16k",
             "4": "gpt-4",
             "gpt4": "gpt-4",
-            "4-32k": "gpt-4-32k",
             "ada": "text-embedding-ada-002",
             "e-demo": "embed-demo",
         }.items()

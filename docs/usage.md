@@ -490,8 +490,8 @@ Example output:
 ```
 OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-OpenAI Chat: o1-preview
-OpenAI Chat: o1-mini
+OpenAI Responses: o1
+OpenAI Responses: o3-mini
 GeminiPro: gemini-1.5-pro-002
 GeminiPro: gemini-1.5-flash-002
 ...
@@ -562,26 +562,6 @@ OpenAI Chat: gpt-4o (aliases: 4o)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   Options:
     temperature: float
@@ -600,106 +580,6 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
   - streaming
   - schemas
   - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview-2024-12-17
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview-2024-10-01
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-mini-audio-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
   - async
   Keys:
     key: openai
@@ -824,60 +704,6 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-1106-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-0125-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
 OpenAI Chat: gpt-4-turbo-2024-04-09
   Options:
     temperature: float
@@ -910,50 +736,6 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     image_detail: str
   Features:
   - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.5-preview-2025-02-27
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
   - async
   Keys:
     key: openai
@@ -1029,42 +811,6 @@ OpenAI Responses: o1-2024-12-17
   Features:
   - schemas
   - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: o1-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: o1-mini
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
   - async
   Keys:
     key: openai
@@ -1290,31 +1036,6 @@ OpenAI Responses: gpt-5-nano-2025-08-07
     key: openai
     env_var: OPENAI_API_KEY
 OpenAI Responses: gpt-5.1
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    verbosity: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5.1-chat-latest
   Options:
     temperature: float
     max_tokens: int
@@ -1565,6 +1286,81 @@ OpenAI Responses: gpt-5.5
     key: openai
     env_var: OPENAI_API_KEY
 OpenAI Responses: gpt-5.5-2026-04-23
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-sol
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-terra
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-luna
   Options:
     temperature: float
     max_tokens: int

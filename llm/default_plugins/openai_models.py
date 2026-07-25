@@ -50,28 +50,12 @@ def register_models(register):
         aliases=("4o",),
     )
     register(
-        Chat("chatgpt-4o-latest", vision=True),
-        AsyncChat("chatgpt-4o-latest", vision=True),
-        aliases=("chatgpt-4o",),
-    )
-    register(
         Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
         AsyncChat(
             "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
         ),
         aliases=("4o-mini",),
     )
-    for audio_model_id in (
-        "gpt-4o-audio-preview",
-        "gpt-4o-audio-preview-2024-12-17",
-        "gpt-4o-audio-preview-2024-10-01",
-        "gpt-4o-mini-audio-preview",
-        "gpt-4o-mini-audio-preview-2024-12-17",
-    ):
-        register(
-            Chat(audio_model_id, audio=True),
-            AsyncChat(audio_model_id, audio=True),
-        )
     # GPT-4.1
     for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
         register(
@@ -89,37 +73,12 @@ def register_models(register):
         aliases=("chatgpt-16k", "3.5-16k"),
     )
     register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
-    register(Chat("gpt-4-32k"), AsyncChat("gpt-4-32k"), aliases=("4-32k",))
     # GPT-4 Turbo models
-    register(Chat("gpt-4-1106-preview"), AsyncChat("gpt-4-1106-preview"))
-    register(Chat("gpt-4-0125-preview"), AsyncChat("gpt-4-0125-preview"))
     register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
     register(
         Chat("gpt-4-turbo"),
         AsyncChat("gpt-4-turbo"),
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
-    )
-    # GPT-4.5
-    register(
-        Chat(
-            "gpt-4.5-preview-2025-02-27",
-            vision=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncChat(
-            "gpt-4.5-preview-2025-02-27",
-            vision=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
-    register(
-        Chat("gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat(
-            "gpt-4.5-preview", vision=True, supports_schema=True, supports_tools=True
-        ),
-        aliases=("gpt-4.5",),
     )
     # o1
     for model_id in ("o1", "o1-2024-12-17"):
@@ -142,14 +101,6 @@ def register_models(register):
             ),
         )
 
-    register(
-        Chat("o1-preview", allows_system_prompt=False),
-        AsyncChat("o1-preview", allows_system_prompt=False),
-    )
-    register(
-        Chat("o1-mini", allows_system_prompt=False),
-        AsyncChat("o1-mini", allows_system_prompt=False),
-    )
     register(
         Responses("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
         AsyncResponses(
@@ -208,28 +159,24 @@ def register_models(register):
             ),
         )
     # GPT-5.1
-    for model_id in (
-        "gpt-5.1",
-        "gpt-5.1-chat-latest",
-    ):
-        register(
-            Responses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-            AsyncResponses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-        )
+    register(
+        Responses(
+            "gpt-5.1",
+            vision=True,
+            reasoning=True,
+            verbosity=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncResponses(
+            "gpt-5.1",
+            vision=True,
+            reasoning=True,
+            verbosity=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+    )
     # GPT-5.2
     for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
         register(
