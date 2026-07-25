@@ -1139,7 +1139,7 @@ Usage: llm openai extra-models add [OPTIONS] MODEL_ID
 Options:
   --model-name TEXT               Model identifier to send to the API; defaults
                                   to MODEL_ID
-  --alias TEXT                    Alias; repeatable
+  -a, --alias TEXT                Alias; repeatable
   --mode [chat|responses|completion]
                                   API mode used by the model  [default: chat]
   --api-base TEXT                 Base URL for an OpenAI-compatible API

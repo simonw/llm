@@ -64,7 +64,7 @@ def test_openai_extra_models_add_and_list(user_path):
             "gpt-future",
             "--alias",
             "future",
-            "--alias",
+            "-a",
             "f",
             "--mode",
             "responses",

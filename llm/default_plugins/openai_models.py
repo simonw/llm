@@ -805,7 +805,7 @@ def register_commands(cli):
         "--model-name",
         help="Model identifier to send to the API; defaults to MODEL_ID",
     )
-    @click.option("--alias", "aliases", multiple=True, help="Alias; repeatable")
+    @click.option("-a", "--alias", "aliases", multiple=True, help="Alias; repeatable")
     @click.option(
         "--mode",
         type=click.Choice(("chat", "responses", "completion")),

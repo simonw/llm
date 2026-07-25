@@ -151,7 +151,7 @@ llm openai extra-models path
 Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
 
 ```bash
-llm openai extra-models add gpt-3.5-turbo-0613 --alias 0613
+llm openai extra-models add gpt-3.5-turbo-0613 -a 0613
 ```
 
 This creates the following YAML:
