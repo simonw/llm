@@ -9,7 +9,7 @@ dependency.
 import json
 
 import pytest
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 import llm
 from llm.serialization import (
@@ -148,7 +148,7 @@ class TestPartDiscriminatedUnion:
         TypeAdapter(PartDict).validate_python(d)
 
     def test_unknown_type_rejected(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             TypeAdapter(PartDict).validate_python({"type": "nonsense", "text": "x"})
 
 

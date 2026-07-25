@@ -373,7 +373,6 @@ def test_logs_filtered(user_path, model, path_option):
         ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
         ("llama", ["-m", "davinci2"], []),
         # Adding -l/--latest should return latest first (order by id desc)
-        ("llama", [], ["doc1", "doc3"]),
         ("llama", ["-l"], ["doc3", "doc1"]),
         ("llama", ["--latest"], ["doc3", "doc1"]),
     ),

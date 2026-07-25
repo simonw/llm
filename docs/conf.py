@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from subprocess import PIPE, Popen
 
 # This file is execfile()d with the current directory set to its

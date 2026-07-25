@@ -3,11 +3,7 @@ import json
 import os
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import (
-    Any,
-    Optional,
-    cast,
-)
+from typing import Any, cast
 
 import click
 import httpx
@@ -579,7 +575,7 @@ def build_options_class(
 ):
     fields = {
         "json_object": (
-            Optional[bool],
+            bool | None,
             Field(
                 description="Output a valid JSON object {...}. Prompt must mention JSON.",
                 default=None,
@@ -588,7 +584,7 @@ def build_options_class(
     }
     if chat_completions:
         fields["chat_completions"] = (
-            Optional[bool],
+            bool | None,
             Field(
                 description=(
                     "Force the use of the older /v1/chat/completions endpoint "
@@ -604,7 +600,7 @@ def build_options_class(
     )
     image_detail_values = enum_values_sentence(image_detail_enum)
     fields["image_detail"] = (
-        Optional[image_detail_enum],
+        image_detail_enum | None,
         Field(
             description=(
                 "Controls the detail level for image attachments. Supported values are "
@@ -615,7 +611,7 @@ def build_options_class(
     )
     if reasoning:
         fields["reasoning_effort"] = (
-            Optional[ReasoningEffortEnum],
+            ReasoningEffortEnum | None,
             Field(
                 description=(
                     "Constraints effort on reasoning for reasoning models. Currently "
@@ -628,7 +624,7 @@ def build_options_class(
         )
     if verbosity:
         fields["verbosity"] = (
-            Optional[VerbosityEnum],
+            VerbosityEnum | None,
             Field(
                 description=(
                     "Controls how verbose the model's response should be. Supported "
@@ -1408,7 +1404,7 @@ class _SharedResponses(_Shared):
                     s.model_dump() if hasattr(s, "model_dump") else dict(s)
                     for s in summary
                 ]
-            except Exception:
+            except Exception:  # noqa: BLE001
                 meta["summary"] = list(summary)
         return StreamEvent(
             type="reasoning",

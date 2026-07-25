@@ -4,7 +4,7 @@ import os
 import pathlib
 import struct
 from collections.abc import Callable
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any
 
 import click
 

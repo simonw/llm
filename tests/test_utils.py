@@ -276,8 +276,6 @@ def test_schema_dsl_multi():
         ("Hello \n\t world!", 12, True, True, "Hello world!"),
         # Edge cases
         ("12345", 5, False, False, "12345"),
-        ("123456", 5, False, False, "12..."),
-        ("12345", 5, False, True, "12345"),  # Unchanged for exact fit
         ("123456", 5, False, False, "12..."),  # Regular truncation for small max_length
         # Very long string
         ("A" * 200, 10, False, False, "AAAAAAA..."),
@@ -295,7 +293,6 @@ def test_schema_dsl_multi():
             True,
             "12345...",
         ),  # Too small for keep_end, use regular
-        ("1234567890", 9, False, True, "12... 90"),  # Just enough for keep_end
     ],
 )
 def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expected):

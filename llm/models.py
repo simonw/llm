@@ -20,6 +20,7 @@ from types import MethodType
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Optional,
     Union,
     cast,
@@ -239,8 +240,8 @@ class Toolbox:
         "prepare",
         "prepare_async",
     )
-    _extra_tools: list[Tool] = []
-    _config: dict[str, Any] = {}
+    _extra_tools: ClassVar[list[Tool]] = []
+    _config: ClassVar[dict[str, Any]] = {}
     _prepared: bool = False
     _async_prepared: bool = False
 
@@ -312,7 +313,7 @@ class Toolbox:
         elif callable(tool_or_function):
             self._extra_tools.append(Tool.function(_upgrade(tool_or_function)))
         else:
-            raise ValueError("Tool must be an instance of Tool or a callable function")
+            raise TypeError("Tool must be an instance of Tool or a callable function")
 
     def prepare(self):
         """
@@ -355,7 +356,7 @@ class ToolOutput:
     attachments: list[Attachment] = field(default_factory=list)
 
 
-ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
+ToolDef = Tool | Toolbox | Callable[..., Any]
 BeforeCallSync = Callable[[Tool | None, ToolCall], None]
 AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
 BeforeCallAsync = Callable[[Tool | None, ToolCall], None | Awaitable[None]]
@@ -528,7 +529,7 @@ def _wrap_tools(tools: list[ToolDef]) -> list[Tool]:
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:
-            raise ValueError(f"Invalid tool: {tool}")
+            raise TypeError(f"Invalid tool: {tool}")
     return wrapped_tools
 
 
@@ -932,8 +933,6 @@ class _BaseResponse:
     resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
     _key: str | None = None
-    _tool_calls: list[ToolCall] = []
-
     def __init__(
         self,
         prompt: Prompt,
@@ -1921,7 +1920,7 @@ class Response(_BaseResponse):
                 ex.tool_call = tool_call
                 ex.tool_results = list(tool_results)
                 raise
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 result = f"Error: {ex}"
                 exception = ex
 
@@ -1994,7 +1993,7 @@ class Response(_BaseResponse):
                 key=self.model.get_key(self._key),
             )
         else:
-            raise Exception("self.model must be a Model or KeyModel")
+            raise TypeError("self.model must be a Model or KeyModel")
 
         for chunk in generator:
             assert chunk is not None
@@ -2234,7 +2233,7 @@ class AsyncResponse(_BaseResponse):
                             )
                         )
                         continue
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         failures.append((idx, ex))
                         break
                 reason = "does not exist" if tool is None else "has no implementation"
@@ -2289,7 +2288,7 @@ class AsyncResponse(_BaseResponse):
                         # the gather so siblings finish first.
                         ex.tool_call = tc
                         raise
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         output = f"Error: {ex}"
                         exception = ex
 
@@ -2333,7 +2332,7 @@ class AsyncResponse(_BaseResponse):
                             )
                         )
                         continue
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         failures.append((idx, ex))
                         break
 
@@ -2357,7 +2356,7 @@ class AsyncResponse(_BaseResponse):
                     ex.tool_call = tc
                     paused.append((idx, ex))
                     break
-                except Exception as ex:
+                except Exception as ex:  # noqa: BLE001
                     output = f"Error: {ex}"
                     exception = ex
 
@@ -2375,7 +2374,7 @@ class AsyncResponse(_BaseResponse):
                         cb2 = after_call(tool, tc, tr)
                         if inspect.isawaitable(cb2):
                             await cb2
-                except Exception as ex:
+                except Exception as ex:  # noqa: BLE001
                     failures.append((idx, ex))
                     break
 
@@ -3049,7 +3048,7 @@ class _get_key_mixin:
 class _BaseModel(ABC, _get_key_mixin):
     model_id: str
     can_stream: bool = False
-    attachment_types: set = set()
+    attachment_types: set[str] | frozenset[str] = frozenset()
 
     supports_schema = False
     supports_tools = False

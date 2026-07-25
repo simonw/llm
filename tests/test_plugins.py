@@ -2,7 +2,6 @@ import importlib
 import json
 import pathlib
 import re
-import textwrap
 from unittest.mock import ANY
 
 import click
@@ -178,16 +177,20 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
-        result3.output.strip == textwrap.dedent("""\
-            system:
-
-
-            prompt:
-            one:x
-
-            attachments:
-            - https://example.com/attachment.png
-            """).strip()
+        assert json.loads(result3.output) == {
+            "prompt": "one:x",
+            "system": "",
+            "attachments": [
+                {
+                    "type": None,
+                    "path": None,
+                    "url": "https://example.com/attachment.png",
+                    "id": ANY,
+                }
+            ],
+            "stream": True,
+            "previous": [],
+        }
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")

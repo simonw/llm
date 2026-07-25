@@ -32,7 +32,7 @@ keys may be absent from a serialized payload; required keys must
 always be present.
 """
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 # NotRequired moved to typing in 3.11; use typing_extensions for 3.10
 # support. typing_extensions is a transitive dep via pydantic.
@@ -117,13 +117,13 @@ class AttachmentPartDict(TypedDict):
     provider_metadata: NotRequired[dict[str, Any]]
 
 
-PartDict = Union[
-    TextPartDict,
-    ReasoningPartDict,
-    ToolCallPartDict,
-    ToolResultPartDict,
-    AttachmentPartDict,
-]
+PartDict = (
+    TextPartDict
+    | ReasoningPartDict
+    | ToolCallPartDict
+    | ToolResultPartDict
+    | AttachmentPartDict
+)
 """Discriminated union of Part dict shapes. Use with
 ``pydantic.TypeAdapter(PartDict)`` to validate / dispatch by ``type``.
 """

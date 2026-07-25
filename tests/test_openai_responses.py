@@ -240,7 +240,7 @@ def test_responses_input_translation():
     model = llm.get_model("gpt-5.5")
 
     class FakePrompt:
-        messages = [
+        messages = (
             Message(role="system", parts=[TextPart(text="be brief")]),
             Message(role="user", parts=[TextPart(text="2 + 2?")]),
             Message(
@@ -257,7 +257,7 @@ def test_responses_input_translation():
                 role="tool",
                 parts=[ToolResultPart(name="add", output="4", tool_call_id="call_abc")],
             ),
-        ]
+        )
 
     items, instructions = model._build_responses_input(FakePrompt())
     assert instructions == "be brief"
@@ -283,11 +283,11 @@ def test_responses_input_translation_assistant_text_uses_easy_input_message():
     model = llm.get_model("gpt-5.5")
 
     class FakePrompt:
-        messages = [
+        messages = (
             Message(role="user", parts=[TextPart(text="hello")]),
             Message(role="assistant", parts=[TextPart(text="first-ok")]),
             Message(role="user", parts=[TextPart(text="what next?")]),
-        ]
+        )
 
     items, instructions = model._build_responses_input(FakePrompt())
 

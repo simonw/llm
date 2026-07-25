@@ -185,7 +185,7 @@ def resolve_fragments(
                         f"Fragment loader {prefix} returned a disallowed attachment"
                     )
                 resolved.extend(result)
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 raise FragmentNotFound(f"Could not load fragment {fragment}: {ex}")
         else:
             # Try from the DB
@@ -1467,7 +1467,7 @@ def backup(path):
     db = sqlite_utils.Database(logs_path)
     try:
         db.execute("vacuum into ?", [str(path)])
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001
         raise click.ClickException(str(ex))
     click.echo(f"Backed up {_human_readable_size(path.stat().st_size)} to {path}")
 
@@ -1891,16 +1891,14 @@ def logs_list(
             response = row["response"] or ""
             try:
                 decoded = json.loads(response)
-                new_items = []
                 if (
                     isinstance(decoded, dict)
                     and (data_key in decoded)
                     and all(isinstance(item, dict) for item in decoded[data_key])
                 ):
-                    for item in decoded[data_key]:
-                        new_items.append(item)
+                    new_items = list(decoded[data_key])
                 else:
-                    new_items.append(decoded)
+                    new_items = [decoded]
                 if data_ids:
                     for item in new_items:
                         item[find_unused_key(item, "response_id")] = row["id"]
@@ -2442,10 +2440,9 @@ def models_list(options, async_, schemas, tools, query, model_ids):
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
             continue
-        if query:
-            # Only show models where every provided query string matches
-            if not all(model_with_aliases.matches(q) for q in query):
-                continue
+        # Only show models where every provided query string matches
+        if query and not all(model_with_aliases.matches(q) for q in query):
+            continue
         if model_ids and not model_matches_id_or_alias(model_with_aliases, model_ids):
             continue
         if schemas and not model_with_aliases.model.supports_schema:
@@ -2957,12 +2954,10 @@ def fragments_list(queries, aliases, json_):
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
     params = {}
-    param_count = 0
     where_bits = []
     if aliases:
         where_bits.append("fragment_aliases.alias is not null")
-    for q in queries:
-        param_count += 1
+    for param_count, q in enumerate(queries, start=1):
         p = f"p{param_count}"
         params[p] = q
         where_bits.append(f"""
@@ -3478,11 +3473,15 @@ def embed_multi(
                     for _ in load_rows(fp):
                         expected_length += 1
 
-            rows = load_rows(
-                open(input_path, "rb")
-                if input_path != "-"
-                else io.BufferedReader(sys.stdin.buffer)
-            )
+            if input_path != "-":
+
+                def rows_from_input():
+                    with open(input_path, "rb") as fp:
+                        yield from load_rows(fp)
+
+                rows = rows_from_input()
+            else:
+                rows = load_rows(io.BufferedReader(sys.stdin.buffer))
         except json.JSONDecodeError as ex:
             raise click.ClickException(str(ex))
 
@@ -4059,7 +4058,7 @@ def load_template(name: str) -> Template:
         loader = loaders[prefix]
         try:
             return loader(rest)
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
 
     # Try local file
@@ -4089,7 +4088,7 @@ def _tools_from_code(code_or_path: str) -> list[Tool]:
     namespace: dict[str, Any] = {}
     tools = []
     try:
-        exec(code_or_path, namespace)
+        exec(code_or_path, namespace)  # noqa: S102
     except SyntaxError as ex:
         raise click.ClickException(f"Error in --functions definition: {ex}")
     # Register all callables in the locals dict:
