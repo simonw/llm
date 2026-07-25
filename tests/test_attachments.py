@@ -72,6 +72,21 @@ def _count_open_fds():
     return len(os.listdir(fd_dir))
 
 
+def test_duplicate_attachment_logs_once(mock_model, logs_db, tmp_path):
+    """Passing the same file twice must not crash with UNIQUE constraint failed."""
+    runner = CliRunner()
+    mock_model.enqueue(["ok"])
+    png_file = tmp_path / "img.png"
+    png_file.write_bytes(TINY_PNG)
+    result = runner.invoke(
+        cli.cli,
+        ["prompt", "-m", "mock", "describe", "-a", str(png_file), "-a", str(png_file)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert len(list(logs_db["prompt_attachments"].rows)) == 1
+
+
 @pytest.mark.skipif(
     sys.platform not in ("darwin", "linux"),
     reason="File descriptor counting only supported on macOS and Linux",
