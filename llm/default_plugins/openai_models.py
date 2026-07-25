@@ -159,25 +159,24 @@ def register_models(register):
             ),
         )
     # GPT-5.1
-    for model_id in ("gpt-5.1",):
-        register(
-            Responses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-            AsyncResponses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-        )
+    register(
+        Responses(
+            "gpt-5.1",
+            vision=True,
+            reasoning=True,
+            verbosity=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncResponses(
+            "gpt-5.1",
+            vision=True,
+            reasoning=True,
+            verbosity=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+    )
     # GPT-5.2
     for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
         register(
