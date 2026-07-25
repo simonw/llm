@@ -308,6 +308,29 @@ def register_models(register):
             ),
         )
 
+    # GPT-5.6
+    for model_id in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
+        register(
+            Responses(
+                model_id,
+                vision=True,
+                reasoning=True,
+                verbosity=True,
+                image_detail_original=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncResponses(
+                model_id,
+                vision=True,
+                reasoning=True,
+                verbosity=True,
+                image_detail_original=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
+
     # The -instruct completion model
     register(
         Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
@@ -576,6 +599,7 @@ class ReasoningEffortEnum(str, Enum):
     medium = "medium"
     high = "high"
     xhigh = "xhigh"
+    max = "max"
 
 
 class VerbosityEnum(str, Enum):
