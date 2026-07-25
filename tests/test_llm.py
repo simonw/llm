@@ -554,8 +554,8 @@ def test_llm_models_async(user_path):
             ["OpenAI Chat: gpt-4o "],
         ),
         (
-            ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
-            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
+            ["-m", "gpt-4o-mini", "-m", "4.1"],
+            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.1"],
             ["OpenAI Chat: gpt-4o "],
         ),
     ),
