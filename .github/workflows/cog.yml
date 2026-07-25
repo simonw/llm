@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install . --group dev
+          pip install . --group dev "sqlite-migrate==0.1a2"
 
       - name: Run cog
         run: |
