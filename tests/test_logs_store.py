@@ -1,0 +1,543 @@
+"""Tests for llm.logs — the content-addressed message store.
+
+The store keeps conversations as a parent-linked tree of messages, each
+identified by a hash over its own content plus its parent's hash. Shared
+prefixes are stored once, so forking a conversation and re-sending a
+history from a stateless client both write only what is new.
+"""
+
+import pytest
+import sqlite_utils
+
+import llm
+from llm.logs import LogStore, canonical_json, message_hash
+from llm.models import Attachment
+from llm.parts import (
+    AttachmentPart,
+    Message,
+    ReasoningPart,
+    TextPart,
+    ToolCallPart,
+    ToolResultPart,
+)
+from llm.utils import ensure_fragment
+
+NEW_TABLES = {
+    "messages",
+    "parts",
+    "part_attachments",
+    "turns",
+    "turn_tools",
+    "threads",
+}
+
+# Tables the pre-existing logging path writes to. The new store must
+# leave every one of them alone, so old logs stay readable without a
+# backfill.
+LEGACY_TABLES = {
+    "conversations",
+    "responses",
+    "attachments",
+    "prompt_attachments",
+    "fragments",
+    "tools",
+    "tool_calls",
+    "tool_results",
+}
+
+
+@pytest.fixture
+def store():
+    return LogStore(sqlite_utils.Database(memory=True))
+
+
+# ---- canonical form + hashing ----------------------------------------
+
+
+class TestCanonicalJson:
+    def test_key_order_does_not_matter(self):
+        assert canonical_json({"b": 1, "a": 2}) == canonical_json({"a": 2, "b": 1})
+
+    def test_is_compact(self):
+        assert canonical_json({"a": 1, "b": 2}) == '{"a":1,"b":2}'
+
+    def test_non_ascii_is_not_escaped(self):
+        assert canonical_json({"a": "é"}) == '{"a":"é"}'
+
+    def test_nested_keys_are_sorted(self):
+        assert canonical_json({"a": {"z": 1, "y": 2}}) == '{"a":{"y":2,"z":1}}'
+
+
+class TestMessageHash:
+    def test_is_deterministic(self):
+        message = llm.user("Hello")
+        assert message_hash(message, None) == message_hash(message, None)
+
+    def test_carries_algorithm_prefix(self):
+        assert message_hash(llm.user("Hello"), None).startswith("b2:")
+
+    def test_equal_content_hashes_equal(self):
+        assert message_hash(llm.user("Hello"), None) == message_hash(
+            llm.user("Hello"), None
+        )
+
+    def test_different_text_hashes_differently(self):
+        assert message_hash(llm.user("Hello"), None) != message_hash(
+            llm.user("Goodbye"), None
+        )
+
+    def test_role_participates(self):
+        assert message_hash(llm.user("Hello"), None) != message_hash(
+            llm.assistant("Hello"), None
+        )
+
+    def test_parent_participates(self):
+        message = llm.user("Hello")
+        root = message_hash(message, None)
+        assert message_hash(message, root) != root
+
+    def test_part_order_participates(self):
+        one = Message(role="user", parts=[TextPart(text="a"), TextPart(text="b")])
+        two = Message(role="user", parts=[TextPart(text="b"), TextPart(text="a")])
+        assert message_hash(one, None) != message_hash(two, None)
+
+    def test_provider_metadata_participates(self):
+        plain = Message(role="assistant", parts=[TextPart(text="Hi")])
+        with_meta = Message(
+            role="assistant",
+            parts=[TextPart(text="Hi", provider_metadata={"openai": {"id": "rs_1"}})],
+        )
+        assert message_hash(plain, None) != message_hash(with_meta, None)
+
+    def test_provider_metadata_key_order_does_not_matter(self):
+        one = Message(
+            role="assistant",
+            parts=[TextPart(text="Hi", provider_metadata={"a": 1, "b": 2})],
+        )
+        two = Message(
+            role="assistant",
+            parts=[TextPart(text="Hi", provider_metadata={"b": 2, "a": 1})],
+        )
+        assert message_hash(one, None) == message_hash(two, None)
+
+    def test_redacted_reasoning_differs_from_empty_reasoning(self):
+        redacted = Message(role="assistant", parts=[ReasoningPart(redacted=True)])
+        empty = Message(role="assistant", parts=[ReasoningPart()])
+        assert message_hash(redacted, None) != message_hash(empty, None)
+
+
+# ---- schema ----------------------------------------------------------
+
+
+class TestSchema:
+    def test_creates_new_tables(self, store):
+        assert NEW_TABLES <= set(store.db.table_names())
+
+    def test_leaves_legacy_tables_in_place(self, store):
+        assert LEGACY_TABLES <= set(store.db.table_names())
+
+    def test_migrating_twice_is_a_noop(self, store):
+        before = store.db.schema
+        LogStore(store.db)
+        assert store.db.schema == before
+
+    def test_messages_are_keyed_by_hash(self, store):
+        assert store.db["messages"].pks == ["hash"]
+
+    def test_parts_are_ordered_within_a_message(self, store):
+        indexes = {tuple(index.columns) for index in store.db["parts"].indexes}
+        assert ("message_hash", "position") in indexes
+
+
+# ---- chain round-trip ------------------------------------------------
+
+
+def round_trip(store, messages):
+    "Write a chain, read it straight back."
+    return store.load_chain(store.ensure_chain(messages))
+
+
+class TestChainRoundTrip:
+    def test_empty_chain_has_no_tip(self, store):
+        assert store.ensure_chain([]) is None
+
+    def test_load_chain_of_none_is_empty(self, store):
+        assert store.load_chain(None) == []
+
+    def test_tip_is_the_hash_of_the_last_message(self, store):
+        messages = [llm.user("Hi"), llm.assistant("Hello")]
+        tip = store.ensure_chain(messages)
+        root = message_hash(messages[0], None)
+        assert tip == message_hash(messages[1], root)
+
+    def test_single_message(self, store):
+        messages = [llm.user("Hi")]
+        assert round_trip(store, messages) == messages
+
+    def test_multiple_turns(self, store):
+        messages = [
+            llm.system("Be brief"),
+            llm.user("Hi"),
+            llm.assistant("Hello"),
+            llm.user("Again"),
+            llm.assistant("Hello again"),
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_reasoning_including_redacted(self, store):
+        messages = [
+            llm.user("Think"),
+            llm.assistant(
+                ReasoningPart(redacted=True),
+                ReasoningPart(text="Considering it"),
+                TextPart(text="Done"),
+            ),
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_interleaved_parts_keep_their_order(self, store):
+        # The ordering the old schema could not express: reasoning, a
+        # tool call, more reasoning, then text, all in one message.
+        messages = [
+            llm.user("Search"),
+            llm.assistant(
+                ReasoningPart(text="first"),
+                ToolCallPart(name="search", arguments={"q": "a"}, tool_call_id="tc1"),
+                ReasoningPart(text="second"),
+                TextPart(text="answer"),
+                ToolCallPart(name="search", arguments={"q": "b"}, tool_call_id="tc2"),
+            ),
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_tool_call_with_server_executed(self, store):
+        messages = [
+            llm.assistant(
+                ToolCallPart(
+                    name="web_search",
+                    arguments={"query": "pelicans"},
+                    tool_call_id="tc1",
+                    server_executed=True,
+                )
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_tool_result_with_exception(self, store):
+        messages = [
+            llm.tool_message(
+                ToolResultPart(
+                    name="lookup",
+                    output="",
+                    tool_call_id="tc1",
+                    exception="ValueError: nope",
+                )
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_provider_metadata_survives(self, store):
+        messages = [
+            Message(
+                role="assistant",
+                parts=[
+                    ReasoningPart(
+                        redacted=True,
+                        provider_metadata={
+                            "openai": {"id": "rs_1", "encrypted_content": "xyz"}
+                        },
+                    )
+                ],
+                provider_metadata={"openai": {"response_id": "resp_1"}},
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_attachment_part(self, store):
+        messages = [
+            llm.user(
+                "Describe",
+                Attachment(type="image/png", content=b"fake-png-bytes"),
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_attachment_part_with_provider_metadata(self, store):
+        messages = [
+            llm.user(
+                AttachmentPart(
+                    attachment=Attachment(type="image/png", content=b"bytes"),
+                    provider_metadata={"openai": {"file_id": "file_1"}},
+                )
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_attachment_part_without_an_attachment(self, store):
+        messages = [llm.user(AttachmentPart())]
+        assert round_trip(store, messages) == messages
+
+    def test_tool_result_attachments_keep_their_order(self, store):
+        messages = [
+            llm.tool_message(
+                ToolResultPart(
+                    name="render",
+                    output="two images",
+                    tool_call_id="tc1",
+                    attachments=[
+                        Attachment(type="image/png", content=b"first"),
+                        Attachment(type="image/png", content=b"second"),
+                    ],
+                )
+            )
+        ]
+        assert round_trip(store, messages) == messages
+
+    def test_attachment_content_is_shared_with_legacy_table(self, store):
+        store.ensure_chain(
+            [llm.user("Describe", Attachment(type="image/png", content=b"bytes"))]
+        )
+        assert store.db["attachments"].count == 1
+
+    def test_unknown_tip_raises(self, store):
+        with pytest.raises(KeyError):
+            store.load_chain("b2:does-not-exist")
+
+
+# ---- storage by reference --------------------------------------------
+
+
+class TestStorageByReference:
+    def test_text_matching_a_fragment_is_stored_by_reference(self, store):
+        content = "a large reusable fragment"
+        ensure_fragment(store.db, content)
+        store.ensure_chain([llm.user(content)])
+        row = next(iter(store.db["parts"].rows))
+        assert row["text"] is None
+        assert row["fragment_id"] is not None
+
+    def test_fragment_backed_text_still_round_trips(self, store):
+        content = "a large reusable fragment"
+        ensure_fragment(store.db, content)
+        messages = [llm.user(content)]
+        assert round_trip(store, messages) == messages
+
+    def test_fragment_backed_text_hashes_the_same_as_inline(self, store):
+        content = "a large reusable fragment"
+        inline_tip = store.ensure_chain([llm.user(content)])
+        ensure_fragment(store.db, content)
+        by_reference_tip = store.ensure_chain([llm.user(content)])
+        # Identity is the resolved text, so where the bytes live makes
+        # no difference to the hash - and the second write is a no-op.
+        assert inline_tip == by_reference_tip
+        assert store.db["messages"].count == 1
+
+
+# ---- dedup -----------------------------------------------------------
+
+
+class TestDedup:
+    def test_writing_the_same_chain_twice_adds_nothing(self, store):
+        messages = [llm.user("Hi"), llm.assistant("Hello")]
+        first = store.ensure_chain(messages)
+        second = store.ensure_chain(messages)
+        assert first == second
+        assert store.db["messages"].count == 2
+        assert store.db["parts"].count == 2
+
+    def test_extending_a_chain_only_writes_the_new_message(self, store):
+        messages = [llm.user("Hi"), llm.assistant("Hello")]
+        store.ensure_chain(messages)
+        store.ensure_chain(messages + [llm.user("More")])
+        assert store.db["messages"].count == 3
+
+    def test_stateless_client_resending_history_writes_only_the_tail(self, store):
+        # What an OpenAI Chat Completions style server sees: the client
+        # holds the conversation and posts the whole thing every turn.
+        history = []
+        for turn in range(5):
+            history.append(llm.user(f"question {turn}"))
+            history.append(llm.assistant(f"answer {turn}"))
+            store.ensure_chain(history)
+        assert store.db["messages"].count == 10
+
+    def test_diverging_chains_share_their_prefix(self, store):
+        prefix = [llm.user("Hi"), llm.assistant("Hello")]
+        store.ensure_chain(prefix + [llm.user("left")])
+        store.ensure_chain(prefix + [llm.user("right")])
+        # Two shared messages plus one for each branch.
+        assert store.db["messages"].count == 4
+
+    def test_appending_to_a_known_tip_skips_the_prefix_entirely(self, store):
+        tip = store.ensure_chain([llm.user("Hi"), llm.assistant("Hello")])
+        new_tip = store.ensure_chain([llm.user("More")], parent=tip)
+        assert store.db["messages"].count == 3
+        assert [message.parts[0].text for message in store.load_chain(new_tip)] == [
+            "Hi",
+            "Hello",
+            "More",
+        ]
+
+    def test_same_content_under_a_different_parent_is_a_different_message(self, store):
+        store.ensure_chain([llm.user("Hi"), llm.assistant("Same")])
+        store.ensure_chain([llm.user("Different"), llm.assistant("Same")])
+        assert store.db["messages"].count == 4
+
+
+# ---- threads and forking ---------------------------------------------
+
+
+class TestThreads:
+    def test_new_thread_has_no_tip(self, store):
+        thread_id = store.create_thread(name="Empty")
+        assert store.thread_messages(thread_id) == []
+
+    def test_appending_advances_the_tip(self, store):
+        thread_id = store.create_thread(name="Chat")
+        store.append(thread_id, [llm.user("Hi")])
+        store.append(thread_id, [llm.assistant("Hello")])
+        assert [message.role for message in store.thread_messages(thread_id)] == [
+            "user",
+            "assistant",
+        ]
+
+    def test_thread_records_its_name(self, store):
+        thread_id = store.create_thread(name="Named")
+        assert store.db["threads"].get(thread_id)["name"] == "Named"
+
+    def test_unknown_thread_raises(self, store):
+        with pytest.raises(KeyError):
+            store.append("nope", [llm.user("Hi")])
+
+
+class TestForking:
+    def test_fork_shares_history_up_to_the_fork_point(self, store):
+        thread_id = store.create_thread(name="Original")
+        store.append(thread_id, [llm.user("Hi"), llm.assistant("Hello")])
+        fork_point = store.append(thread_id, [llm.user("Original branch")])
+
+        forked = store.fork(fork_point, name="What if")
+        assert [message.parts[0].text for message in store.thread_messages(forked)] == [
+            "Hi",
+            "Hello",
+            "Original branch",
+        ]
+
+    def test_forking_writes_no_new_messages(self, store):
+        thread_id = store.create_thread()
+        tip = store.append(thread_id, [llm.user("Hi"), llm.assistant("Hello")])
+        before = store.db["messages"].count
+        store.fork(tip, name="Copy")
+        assert store.db["messages"].count == before
+
+    def test_forked_branches_diverge_without_copying_the_prefix(self, store):
+        original = store.create_thread(name="Original")
+        fork_point = store.append(original, [llm.user("Hi"), llm.assistant("Hello")])
+        forked = store.fork(fork_point, name="Alternative")
+
+        store.append(original, [llm.user("down one path")])
+        store.append(forked, [llm.user("down another")])
+
+        # Two shared messages, plus one new message per branch.
+        assert store.db["messages"].count == 4
+        assert len(store.thread_messages(original)) == 3
+        assert len(store.thread_messages(forked)) == 3
+
+    def test_fork_records_where_it_came_from(self, store):
+        original = store.create_thread(name="Original")
+        tip = store.append(original, [llm.user("Hi")])
+        forked = store.fork(tip, name="Copy", forked_from=original)
+        assert store.db["threads"].get(forked)["forked_from"] == original
+
+    def test_fork_of_an_interior_message_drops_the_later_history(self, store):
+        thread_id = store.create_thread()
+        fork_point = store.append(thread_id, [llm.user("Hi")])
+        store.append(thread_id, [llm.assistant("Hello"), llm.user("More")])
+        forked = store.fork(fork_point)
+        assert len(store.thread_messages(forked)) == 1
+
+
+# ---- pending tool calls ----------------------------------------------
+
+
+class TestPendingToolCalls:
+    def test_trailing_tool_calls_are_pending(self, store):
+        tip = store.ensure_chain(
+            [
+                llm.user("Search"),
+                llm.assistant(
+                    ToolCallPart(name="search", arguments={}, tool_call_id="tc1")
+                ),
+            ]
+        )
+        assert [call.tool_call_id for call in store.pending_tool_calls(tip)] == ["tc1"]
+
+    def test_tool_calls_followed_by_results_are_not_pending(self, store):
+        tip = store.ensure_chain(
+            [
+                llm.user("Search"),
+                llm.assistant(
+                    ToolCallPart(name="search", arguments={}, tool_call_id="tc1")
+                ),
+                llm.tool_message(
+                    ToolResultPart(name="search", output="done", tool_call_id="tc1")
+                ),
+            ]
+        )
+        assert store.pending_tool_calls(tip) == []
+
+    def test_a_plain_reply_has_nothing_pending(self, store):
+        tip = store.ensure_chain([llm.user("Hi"), llm.assistant("Hello")])
+        assert store.pending_tool_calls(tip) == []
+
+
+# ---- logging a response ----------------------------------------------
+
+
+class TestLogResponse:
+    def test_writes_a_turn(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        turn_id = store.log(response)
+        assert store.db["turns"].get(turn_id)["model"] == "mock"
+
+    def test_turn_records_usage(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi there")
+        response.text()
+        turn = store.db["turns"].get(store.log(response))
+        assert turn["input_tokens"] == 2
+        assert turn["output_tokens"] == 1
+
+    def test_turn_spans_from_its_parent_to_its_tip(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        turn = store.db["turns"].get(store.log(response))
+        chain = store.load_chain(turn["tip_message_hash"])
+        assert [message.role for message in chain] == ["user", "assistant"]
+        assert chain[-1].parts[0].text == "Hello"
+
+    def test_logging_advances_the_thread(self, store, mock_model):
+        thread_id = store.create_thread(name="Chat")
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        store.log(response, thread_id=thread_id)
+        assert [
+            message.parts[0].text for message in store.thread_messages(thread_id)
+        ] == [
+            "Hi",
+            "Hello",
+        ]
+
+    def test_logging_the_same_response_twice_is_idempotent(self, store, mock_model):
+        # A turn is identified by the response it records, so re-logging
+        # one updates it in place rather than duplicating the event.
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        assert store.log(response) == store.log(response)
+        assert store.db["messages"].count == 2
+        assert store.db["turns"].count == 1

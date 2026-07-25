@@ -300,7 +300,9 @@ cog.out("```sql\n")
 for table in (
     "conversations", "schemas", "responses", "responses_fts", "attachments", "prompt_attachments",
     "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
-    "tool_responses", "tool_calls", "tool_results", "tool_instances"
+    "tool_responses", "tool_calls", "tool_results", "tool_instances",
+    "tool_results_attachments",
+    "messages", "parts", "part_attachments", "turns", "turn_tools", "threads",
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -419,6 +421,74 @@ CREATE TABLE "tool_instances" (
   "plugin" TEXT,
   "name" TEXT,
   "arguments" TEXT
+);
+CREATE TABLE "tool_results_attachments" (
+  "tool_result_id" INTEGER REFERENCES "tool_results"("id"),
+  "attachment_id" TEXT REFERENCES "attachments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("tool_result_id",
+  "attachment_id")
+);
+CREATE TABLE "messages" (
+  "hash" TEXT PRIMARY KEY,
+  "parent_hash" TEXT REFERENCES "messages"("hash"),
+  "role" TEXT,
+  "provider_metadata" TEXT
+);
+CREATE TABLE "parts" (
+  "id" INTEGER PRIMARY KEY,
+  "message_hash" TEXT REFERENCES "messages"("hash"),
+  "position" INTEGER,
+  "type" TEXT,
+  "text" TEXT,
+  "fragment_id" INTEGER REFERENCES "fragments"("id"),
+  "redacted" INTEGER,
+  "name" TEXT,
+  "arguments" TEXT,
+  "output" TEXT,
+  "tool_call_id" TEXT,
+  "server_executed" INTEGER,
+  "exception" TEXT,
+  "tool_id" INTEGER REFERENCES "tools"("id"),
+  "instance_id" INTEGER REFERENCES "tool_instances"("id"),
+  "provider_metadata" TEXT
+);
+CREATE TABLE "part_attachments" (
+  "part_id" INTEGER REFERENCES "parts"("id"),
+  "attachment_id" TEXT REFERENCES "attachments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("part_id",
+  "attachment_id")
+);
+CREATE TABLE "turns" (
+  "id" TEXT PRIMARY KEY,
+  "thread_id" TEXT,
+  "parent_message_hash" TEXT REFERENCES "messages"("hash"),
+  "tip_message_hash" TEXT REFERENCES "messages"("hash"),
+  "model" TEXT,
+  "resolved_model" TEXT,
+  "options_json" TEXT,
+  "schema_id" TEXT REFERENCES "schemas"("id"),
+  "input_tokens" INTEGER,
+  "output_tokens" INTEGER,
+  "token_details" TEXT,
+  "duration_ms" INTEGER,
+  "datetime_utc" TEXT,
+  "response_json" TEXT,
+  "error" TEXT
+);
+CREATE TABLE "turn_tools" (
+  "turn_id" TEXT REFERENCES "turns"("id"),
+  "tool_id" INTEGER REFERENCES "tools"("id"),
+  PRIMARY KEY ("turn_id",
+  "tool_id")
+);
+CREATE TABLE "threads" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT,
+  "tip_message_hash" TEXT REFERENCES "messages"("hash"),
+  "forked_from" TEXT REFERENCES "threads"("id"),
+  "datetime_utc" TEXT
 );
 ```
 <!-- [[[end]]] -->

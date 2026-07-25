@@ -426,3 +426,130 @@ def m022_response_reasoning(db):
     # NULL/empty when no reasoning was emitted or when the provider
     # only reported an opaque token count (the redacted-marker case).
     db["responses"].add_column("reasoning", str)
+
+
+@migration
+def m023_content_addressed_messages(db):
+    # The content-addressed message tree. A message's hash covers its own
+    # content *and* its parent's hash, so conversations sharing a prefix
+    # share the rows storing it. Nothing here replaces the older tables -
+    # they stay exactly as they are so existing logs need no backfill.
+    db["messages"].create(
+        {
+            "hash": str,
+            "parent_hash": str,
+            "role": str,
+            "provider_metadata": str,
+        },
+        pk="hash",
+        foreign_keys=(("parent_hash", "messages", "hash"),),
+    )
+    db["messages"].create_index(["parent_hash"])
+
+    # Parts are plain child rows rather than content-addressed in their
+    # own right: prefix sharing already dedupes at the message level, and
+    # the genuinely large payloads (attachments, fragments) live in
+    # tables that are content-addressed already.
+    db["parts"].create(
+        {
+            "id": int,
+            "message_hash": str,
+            "position": int,
+            "type": str,
+            # text / reasoning
+            "text": str,
+            "fragment_id": int,
+            "redacted": int,
+            # tool_call / tool_result
+            "name": str,
+            "arguments": str,
+            "output": str,
+            "tool_call_id": str,
+            "server_executed": int,
+            "exception": str,
+            "tool_id": int,
+            "instance_id": int,
+            "provider_metadata": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("message_hash", "messages", "hash"),
+            ("fragment_id", "fragments", "id"),
+            ("tool_id", "tools", "id"),
+            ("instance_id", "tool_instances", "id"),
+        ),
+    )
+    db["parts"].create_index(["message_hash", "position"], unique=True)
+
+    # Covers both AttachmentPart and the attachments a tool result can
+    # carry, so there is one mechanism instead of two.
+    db["part_attachments"].create(
+        {
+            "part_id": int,
+            "attachment_id": str,
+            "order": int,
+        },
+        pk=("part_id", "attachment_id"),
+        foreign_keys=(
+            ("part_id", "parts", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+    )
+
+    # A turn is one call to a model. Provenance lives here rather than on
+    # the message rows, which are shared and so cannot carry it.
+    db["turns"].create(
+        {
+            "id": str,
+            "thread_id": str,
+            "parent_message_hash": str,
+            "tip_message_hash": str,
+            "model": str,
+            "resolved_model": str,
+            "options_json": str,
+            "schema_id": str,
+            "input_tokens": int,
+            "output_tokens": int,
+            "token_details": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+            "response_json": str,
+            "error": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("parent_message_hash", "messages", "hash"),
+            ("tip_message_hash", "messages", "hash"),
+            ("schema_id", "schemas", "id"),
+        ),
+    )
+
+    db["turn_tools"].create(
+        {
+            "turn_id": str,
+            "tool_id": int,
+        },
+        pk=("turn_id", "tool_id"),
+        foreign_keys=(
+            ("turn_id", "turns", "id"),
+            ("tool_id", "tools", "id"),
+        ),
+    )
+
+    # A thread is a named, mutable pointer at a message - the only
+    # mutable thing in the new schema. Forking is a second pointer at an
+    # interior message.
+    db["threads"].create(
+        {
+            "id": str,
+            "name": str,
+            "tip_message_hash": str,
+            "forked_from": str,
+            "datetime_utc": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("tip_message_hash", "messages", "hash"),
+            ("forked_from", "threads", "id"),
+        ),
+    )
