@@ -18,11 +18,14 @@ from llm.utils import (
     simplify_usage_dict,
 )
 import click
+from click_default_group import DefaultGroup
 import datetime
 from enum import Enum
 import httpx
 import openai
 import os
+import re
+import tempfile
 
 from pydantic import create_model, field_validator, Field
 
@@ -39,6 +42,262 @@ from typing import (
 )
 import json
 import yaml
+
+EXTRA_OPENAI_MODELS_FILENAME = "extra-openai-models.yaml"
+EXTRA_OPENAI_MODEL_KEYS = {
+    "model_id",
+    "model_name",
+    "aliases",
+    "api_base",
+    "api_type",
+    "api_version",
+    "api_engine",
+    "api_key_name",
+    "headers",
+    "reasoning",
+    "can_stream",
+    "supports_schema",
+    "supports_tools",
+    "vision",
+    "audio",
+    "completion",
+    "responses",
+}
+EXTRA_OPENAI_MODEL_STRING_KEYS = {
+    "api_base",
+    "api_type",
+    "api_version",
+    "api_engine",
+    "api_key_name",
+}
+EXTRA_OPENAI_MODEL_BOOLEAN_KEYS = {
+    "reasoning",
+    "can_stream",
+    "supports_schema",
+    "supports_tools",
+    "vision",
+    "audio",
+    "completion",
+    "responses",
+}
+
+
+class ExtraOpenAIModelsError(ValueError):
+    pass
+
+
+def extra_openai_models_path():
+    return llm.user_dir() / EXTRA_OPENAI_MODELS_FILENAME
+
+
+def _validate_extra_openai_models(data):
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ExtraOpenAIModelsError("Expected a top-level YAML list")
+
+    model_ids = set()
+    validated = []
+    for index, model in enumerate(data, start=1):
+        if not isinstance(model, dict):
+            raise ExtraOpenAIModelsError(f"Record {index} must be a mapping")
+        unknown_keys = set(model) - EXTRA_OPENAI_MODEL_KEYS
+        if unknown_keys:
+            key = sorted(unknown_keys)[0]
+            raise ExtraOpenAIModelsError(f"Unknown key '{key}' in record {index}")
+        for required_key in ("model_id", "model_name"):
+            value = model.get(required_key)
+            if not isinstance(value, str) or not value.strip():
+                raise ExtraOpenAIModelsError(
+                    f"'{required_key}' in record {index} must be a non-empty string"
+                )
+        model_id = model["model_id"]
+        if model_id in model_ids:
+            raise ExtraOpenAIModelsError(f"Duplicate model ID '{model_id}'")
+        model_ids.add(model_id)
+
+        aliases = model.get("aliases", [])
+        if not isinstance(aliases, list) or not all(
+            isinstance(alias, str) and alias for alias in aliases
+        ):
+            raise ExtraOpenAIModelsError(
+                f"'aliases' in record {index} must be a list of non-empty strings"
+            )
+        for key in EXTRA_OPENAI_MODEL_STRING_KEYS:
+            value = model.get(key)
+            if value is not None and not isinstance(value, str):
+                raise ExtraOpenAIModelsError(
+                    f"'{key}' in record {index} must be a string"
+                )
+        for key in EXTRA_OPENAI_MODEL_BOOLEAN_KEYS:
+            value = model.get(key)
+            # 0 and 1 were historically accepted for these YAML options.
+            if value is not None and not (
+                isinstance(value, bool)
+                or isinstance(value, int)
+                and not isinstance(value, bool)
+                and value in (0, 1)
+            ):
+                raise ExtraOpenAIModelsError(
+                    f"'{key}' in record {index} must be true or false"
+                )
+        headers = model.get("headers")
+        if headers is not None and (
+            not isinstance(headers, dict)
+            or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in headers.items()
+            )
+        ):
+            raise ExtraOpenAIModelsError(
+                f"'headers' in record {index} must be a mapping of strings"
+            )
+        if model.get("completion") and model.get("responses"):
+            raise ExtraOpenAIModelsError(
+                f"Record {index} cannot enable both completion and responses"
+            )
+        validated.append(model)
+
+    identifiers = set(model_ids)
+    for index, model in enumerate(validated, start=1):
+        for alias in model.get("aliases", []):
+            if alias in identifiers:
+                raise ExtraOpenAIModelsError(
+                    f"Duplicate model ID or alias '{alias}' in record {index}"
+                )
+            identifiers.add(alias)
+    return validated
+
+
+def _parse_extra_openai_models(text):
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as ex:
+        raise ExtraOpenAIModelsError(f"Invalid YAML: {ex}")
+    return _validate_extra_openai_models(data)
+
+
+def load_extra_openai_models(path=None):
+    path = path or extra_openai_models_path()
+    if not path.exists():
+        return []
+    return _parse_extra_openai_models(path.read_text("utf-8"))
+
+
+def _atomic_write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = path.stat().st_mode if path.exists() else None
+    fd, temporary_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", text=True
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary_file:
+            temporary_file.write(text)
+        if mode is not None:
+            os.chmod(temporary_name, mode)
+        os.replace(temporary_name, path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+
+
+def _extra_model_as_yaml(model):
+    return yaml.safe_dump(
+        [model],
+        allow_unicode=True,
+        sort_keys=False,
+        width=1000,
+    )
+
+
+def _append_extra_model_text(text, before, model):
+    model_yaml = _extra_model_as_yaml(model)
+    if not text or yaml.safe_load(text) is None:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        candidate = text + model_yaml
+    elif not before:
+        # Replace an explicit empty sequence such as [] while retaining text
+        # outside of the YAML node, including comments.
+        node = yaml.compose(text)
+        if not isinstance(node, yaml.SequenceNode) or node.value:
+            raise ExtraOpenAIModelsError(
+                "Could not safely append to the existing empty YAML file"
+            )
+        candidate = (
+            text[: node.start_mark.index] + model_yaml + text[node.end_mark.index :]
+        )
+    else:
+        candidate = text
+        if not candidate.endswith("\n"):
+            candidate += "\n"
+        candidate += model_yaml
+
+    expected = before + [model]
+    try:
+        after = _parse_extra_openai_models(candidate)
+    except ExtraOpenAIModelsError as ex:
+        raise ExtraOpenAIModelsError(f"Could not safely append the model: {ex}") from ex
+    if after != expected:
+        raise ExtraOpenAIModelsError(
+            "Could not safely append the model without changing existing records"
+        )
+    return candidate
+
+
+def _remove_extra_model_text(text, before, model_id):
+    matching_indexes = [
+        index for index, model in enumerate(before) if model["model_id"] == model_id
+    ]
+    if not matching_indexes:
+        raise ExtraOpenAIModelsError(f"No extra OpenAI model with ID '{model_id}'")
+    if len(matching_indexes) != 1:
+        raise ExtraOpenAIModelsError(f"Model ID '{model_id}' is ambiguous")
+    expected = before[: matching_indexes[0]] + before[matching_indexes[0] + 1 :]
+
+    starts = list(re.finditer(r"(?m)^-\s+model_id\s*:", text))
+    candidates = []
+    for position, match in enumerate(starts):
+        block_end = (
+            starts[position + 1].start() if position + 1 < len(starts) else len(text)
+        )
+        block_lines = text[match.start() : block_end].splitlines(keepends=True)
+        # Keep blank lines and top-level comments that separate this record
+        # from the next one.
+        while block_lines and (
+            not block_lines[-1].strip() or block_lines[-1].startswith("#")
+        ):
+            block_lines.pop()
+        removable_text = "".join(block_lines)
+        try:
+            parsed_block = yaml.safe_load(removable_text)
+        except yaml.YAMLError:
+            continue
+        if (
+            isinstance(parsed_block, list)
+            and len(parsed_block) == 1
+            and isinstance(parsed_block[0], dict)
+            and parsed_block[0].get("model_id") == model_id
+        ):
+            candidates.append((match.start(), match.start() + len(removable_text)))
+
+    if len(candidates) != 1:
+        raise ExtraOpenAIModelsError(
+            f"Could not safely locate one conventional YAML record for '{model_id}'"
+        )
+    start, end = candidates[0]
+    candidate = text[:start] + text[end:]
+    try:
+        after = _parse_extra_openai_models(candidate)
+    except ExtraOpenAIModelsError as ex:
+        raise ExtraOpenAIModelsError(
+            f"Refusing to remove '{model_id}': the result is invalid: {ex}"
+        ) from ex
+    if after != expected:
+        raise ExtraOpenAIModelsError(
+            f"Refusing to remove '{model_id}': parsed records changed unexpectedly"
+        )
+    return candidate
 
 
 @hookimpl
@@ -338,11 +597,7 @@ def register_models(register):
     )
 
     # Load extra models
-    extra_path = llm.user_dir() / "extra-openai-models.yaml"
-    if not extra_path.exists():
-        return
-    with open(extra_path) as f:
-        extra_models = yaml.safe_load(f)
+    extra_models = load_extra_openai_models()
     for extra_model in extra_models:
         model_id = extra_model["model_id"]
         aliases = extra_model.get("aliases", [])
@@ -465,7 +720,216 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 def register_commands(cli):
     @cli.group(name="openai")
     def openai_():
-        "Commands for working directly with the OpenAI API"
+        "Commands for working with OpenAI and OpenAI-compatible APIs"
+
+    @openai_.group(
+        name="extra-models",
+        cls=DefaultGroup,
+        default="list",
+        default_if_no_args=True,
+    )
+    def extra_models():
+        "Manage extra-openai-models.yaml"
+
+    def load_for_command():
+        try:
+            return load_extra_openai_models()
+        except ExtraOpenAIModelsError as ex:
+            raise click.ClickException(str(ex))
+
+    @extra_models.command(name="list")
+    @click.option("json_", "--json", is_flag=True, help="Output as JSON")
+    def extra_models_list(json_):
+        "List configured extra OpenAI models"
+        configured_models = load_for_command()
+        if json_:
+            click.echo(json.dumps(configured_models, indent=2))
+            return
+        if not configured_models:
+            click.echo("No extra OpenAI models configured")
+            return
+        rows = []
+        for model in configured_models:
+            if model.get("completion"):
+                mode = "completion"
+            elif model.get("responses"):
+                mode = "responses"
+            else:
+                mode = "chat"
+            rows.append(
+                {
+                    "model_id": model["model_id"],
+                    "model_name": model["model_name"],
+                    "mode": mode,
+                    "api_base": model.get("api_base") or "-",
+                    "aliases": ", ".join(model.get("aliases", [])) or "-",
+                }
+            )
+        done = dicts_to_table_string(
+            "model_id model_name mode api_base aliases".split(), rows
+        )
+        click.echo("\n".join(done))
+
+    @extra_models.command(name="path")
+    def extra_models_path_command():
+        "Output the path to extra-openai-models.yaml"
+        click.echo(extra_openai_models_path())
+
+    @extra_models.command(name="show")
+    @click.argument("model_id")
+    @click.option("json_", "--json", is_flag=True, help="Output as JSON")
+    def extra_models_show(model_id, json_):
+        "Show one configured extra OpenAI model"
+        configured_models = load_for_command()
+        try:
+            model = next(
+                model for model in configured_models if model["model_id"] == model_id
+            )
+        except StopIteration:
+            raise click.ClickException(f"No extra OpenAI model with ID '{model_id}'")
+        if json_:
+            click.echo(json.dumps(model, indent=2))
+        else:
+            click.echo(
+                yaml.safe_dump(
+                    model,
+                    allow_unicode=True,
+                    sort_keys=False,
+                    width=1000,
+                ).rstrip()
+            )
+
+    @extra_models.command(name="add")
+    @click.argument("model_id")
+    @click.option(
+        "--model-name",
+        help="Model identifier to send to the API; defaults to MODEL_ID",
+    )
+    @click.option("--alias", "aliases", multiple=True, help="Alias; repeatable")
+    @click.option(
+        "--mode",
+        type=click.Choice(("chat", "responses", "completion")),
+        default="chat",
+        show_default=True,
+        help="API mode used by the model",
+    )
+    @click.option("--api-base", help="Base URL for an OpenAI-compatible API")
+    @click.option("--api-key-name", help="Name of a key stored by llm keys")
+    @click.option("--api-type", help="OpenAI client API type")
+    @click.option("--api-version", help="OpenAI client API version")
+    @click.option("--api-engine", help="OpenAI client engine")
+    @click.option("--reasoning", is_flag=True, help="Enable reasoning options")
+    @click.option("--supports-tools", is_flag=True, help="Enable tool calling")
+    @click.option(
+        "--supports-schema", is_flag=True, help="Enable structured schema output"
+    )
+    @click.option("--vision", is_flag=True, help="Accept image attachments")
+    @click.option("--audio", is_flag=True, help="Accept audio attachments")
+    @click.option("--no-stream", is_flag=True, help="Disable streaming")
+    @click.option(
+        "--header",
+        "headers",
+        nargs=2,
+        multiple=True,
+        metavar="NAME VALUE",
+        help="Additional HTTP header; repeatable",
+    )
+    def extra_models_add(
+        model_id,
+        model_name,
+        aliases,
+        mode,
+        api_base,
+        api_key_name,
+        api_type,
+        api_version,
+        api_engine,
+        reasoning,
+        supports_tools,
+        supports_schema,
+        vision,
+        audio,
+        no_stream,
+        headers,
+    ):
+        "Add a record to extra-openai-models.yaml"
+        path = extra_openai_models_path()
+        before = load_for_command()
+        if any(model["model_id"] == model_id for model in before):
+            raise click.ClickException(f"Model ID '{model_id}' is already configured")
+        if len(dict(headers)) != len(headers):
+            raise click.ClickException("Header names must not be repeated")
+
+        model = {
+            "model_id": model_id,
+            "model_name": model_name or model_id,
+        }
+        optional_values = (
+            ("aliases", list(aliases) if aliases else None),
+            ("api_base", api_base),
+            ("api_key_name", api_key_name),
+            ("api_type", api_type),
+            ("api_version", api_version),
+            ("api_engine", api_engine),
+            ("responses", True if mode == "responses" else None),
+            ("completion", True if mode == "completion" else None),
+            ("reasoning", True if reasoning else None),
+            ("supports_tools", True if supports_tools else None),
+            ("supports_schema", True if supports_schema else None),
+            ("vision", True if vision else None),
+            ("audio", True if audio else None),
+            ("can_stream", False if no_stream else None),
+            ("headers", dict(headers) if headers else None),
+        )
+        for key, value in optional_values:
+            if value is not None:
+                model[key] = value
+        try:
+            _validate_extra_openai_models(before + [model])
+            original = path.read_text("utf-8") if path.exists() else ""
+            updated = _append_extra_model_text(original, before, model)
+            _atomic_write(path, updated)
+        except ExtraOpenAIModelsError as ex:
+            raise click.ClickException(str(ex))
+        click.echo(f"Added '{model_id}' to {path}", err=True)
+
+    @extra_models.command(name="remove")
+    @click.argument("model_id")
+    def extra_models_remove(model_id):
+        "Remove a conventional YAML record by model ID"
+        path = extra_openai_models_path()
+        before = load_for_command()
+        if not path.exists():
+            raise click.ClickException(f"No extra OpenAI model with ID '{model_id}'")
+        original = path.read_text("utf-8")
+        try:
+            updated = _remove_extra_model_text(original, before, model_id)
+            _atomic_write(path, updated)
+        except ExtraOpenAIModelsError as ex:
+            raise click.ClickException(str(ex))
+        click.echo(f"Removed '{model_id}' from {path}", err=True)
+
+    @extra_models.command(name="edit")
+    def extra_models_edit():
+        "Edit extra-openai-models.yaml using the default $EDITOR"
+        path = extra_openai_models_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text(
+                "# Extra OpenAI and OpenAI-compatible models\n",
+                "utf-8",
+            )
+        click.edit(filename=str(path))
+        configured_models = load_for_command()
+        noun = "model" if len(configured_models) == 1 else "models"
+        click.echo(f"Valid: {len(configured_models)} extra OpenAI {noun}")
+
+    @extra_models.command(name="validate")
+    def extra_models_validate():
+        "Validate extra-openai-models.yaml"
+        configured_models = load_for_command()
+        noun = "model" if len(configured_models) == 1 else "models"
+        click.echo(f"Valid: {len(configured_models)} extra OpenAI {noun}")
 
     @openai_.command()
     @click.option("json_", "--json", is_flag=True, help="Output as JSON")

@@ -80,7 +80,7 @@ Commands:
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
   models        Manage available models
-  openai        Commands for working directly with the OpenAI API
+  openai        Commands for working with OpenAI and OpenAI-compatible APIs
   plugins       List installed plugins
   schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
@@ -1064,13 +1064,130 @@ Options:
 ```
 Usage: llm openai [OPTIONS] COMMAND [ARGS]...
 
-  Commands for working directly with the OpenAI API
+  Commands for working with OpenAI and OpenAI-compatible APIs
 
 Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  models  List models available to you from the OpenAI API
+  extra-models  Manage extra-openai-models.yaml
+  models        List models available to you from the OpenAI API
+```
+
+(help-openai-extra-models)=
+#### llm openai extra-models --help
+```
+Usage: llm openai extra-models [OPTIONS] COMMAND [ARGS]...
+
+  Manage extra-openai-models.yaml
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  list*     List configured extra OpenAI models
+  add       Add a record to extra-openai-models.yaml
+  edit      Edit extra-openai-models.yaml using the default $EDITOR
+  path      Output the path to extra-openai-models.yaml
+  remove    Remove a conventional YAML record by model ID
+  show      Show one configured extra OpenAI model
+  validate  Validate extra-openai-models.yaml
+```
+
+(help-openai-extra-models-list)=
+##### llm openai extra-models list --help
+```
+Usage: llm openai extra-models list [OPTIONS]
+
+  List configured extra OpenAI models
+
+Options:
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-extra-models-path)=
+##### llm openai extra-models path --help
+```
+Usage: llm openai extra-models path [OPTIONS]
+
+  Output the path to extra-openai-models.yaml
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-extra-models-show)=
+##### llm openai extra-models show --help
+```
+Usage: llm openai extra-models show [OPTIONS] MODEL_ID
+
+  Show one configured extra OpenAI model
+
+Options:
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-extra-models-add)=
+##### llm openai extra-models add --help
+```
+Usage: llm openai extra-models add [OPTIONS] MODEL_ID
+
+  Add a record to extra-openai-models.yaml
+
+Options:
+  --model-name TEXT               Model identifier to send to the API; defaults
+                                  to MODEL_ID
+  --alias TEXT                    Alias; repeatable
+  --mode [chat|responses|completion]
+                                  API mode used by the model  [default: chat]
+  --api-base TEXT                 Base URL for an OpenAI-compatible API
+  --api-key-name TEXT             Name of a key stored by llm keys
+  --api-type TEXT                 OpenAI client API type
+  --api-version TEXT              OpenAI client API version
+  --api-engine TEXT               OpenAI client engine
+  --reasoning                     Enable reasoning options
+  --supports-tools                Enable tool calling
+  --supports-schema               Enable structured schema output
+  --vision                        Accept image attachments
+  --audio                         Accept audio attachments
+  --no-stream                     Disable streaming
+  --header NAME VALUE             Additional HTTP header; repeatable
+  -h, --help                      Show this message and exit.
+```
+
+(help-openai-extra-models-remove)=
+##### llm openai extra-models remove --help
+```
+Usage: llm openai extra-models remove [OPTIONS] MODEL_ID
+
+  Remove a conventional YAML record by model ID
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-extra-models-edit)=
+##### llm openai extra-models edit --help
+```
+Usage: llm openai extra-models edit [OPTIONS]
+
+  Edit extra-openai-models.yaml using the default $EDITOR
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-extra-models-validate)=
+##### llm openai extra-models validate --help
+```
+Usage: llm openai extra-models validate [OPTIONS]
+
+  Validate extra-openai-models.yaml
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-openai-models)=

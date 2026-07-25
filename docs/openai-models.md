@@ -142,33 +142,54 @@ Completion models can be called with the `-o logprobs 3` option (not supported b
 
 OpenAI occasionally release new models with new names. LLM aims to ship new releases to support these, but you can also configure them directly, by adding them to a `extra-openai-models.yaml` configuration file.
 
-Run this command to find the directory in which this file should be created:
+Run this command to see the path to that file:
 
 ```bash
-dirname "$(llm logs path)"
+llm openai extra-models path
 ```
-On my Mac laptop I get this:
-```
-~/Library/Application Support/io.datasette.llm
-```
-Create a file in that directory called `extra-openai-models.yaml`.
 
 Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
+
+```bash
+llm openai extra-models add gpt-3.5-turbo-0613 --alias 0613
+```
+
+This creates the following YAML:
 
 ```yaml
 - model_id: gpt-3.5-turbo-0613
   model_name: gpt-3.5-turbo-0613
-  aliases: ["0613"]
+  aliases:
+  - '0613'
 ```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
-If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+If the API model name differs from the ID used by LLM, pass `--model-name`:
 
-If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration. This is useful for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through `/v1/responses`.
+```bash
+llm openai extra-models add local-model --model-name provider/model-name
+```
 
-If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
+Use `--mode completion` for a completion model such as `gpt-3.5-turbo-instruct`. Use `--mode responses` for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through the OpenAI Responses API rather than Chat Completions.
 
-For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
+Capability flags include `--reasoning`, `--supports-schema`, `--supports-tools`, `--vision`, `--audio` and `--no-stream`. Run `llm openai extra-models add --help` for the full list.
+
+You can inspect and validate the file using:
+
+```bash
+llm openai extra-models list
+llm openai extra-models show gpt-3.5-turbo-0613
+llm openai extra-models validate
+llm openai extra-models edit
+```
+
+To remove a record by its model ID:
+
+```bash
+llm openai extra-models remove gpt-3.5-turbo-0613
+```
+
+The remove command preserves the existing text instead of rewriting the YAML. It supports the conventional format where each record starts with `- model_id:`. It parses the file both before and after the edit and refuses to write if anything other than the requested record would change. Use `llm openai extra-models edit` for YAML written in a different shape.
 
 With this configuration in place, the following command should run a prompt against the new model:
 

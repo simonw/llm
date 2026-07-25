@@ -32,7 +32,15 @@ The `model_id` is the name LLM will use for the model. The `model_name` is the n
 
 The `api_base` key can be used to point the OpenAI client library at a different API endpoint.
 
-To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/), add this to your `extra-openai-models.yaml` file:
+To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/), run:
+
+```bash
+llm openai extra-models add orca-openai-compat \
+  --model-name orca-mini-3b.ggmlv3 \
+  --api-base http://localhost:8080
+```
+
+This adds the following to your `extra-openai-models.yaml` file:
 
 ```yaml
 - model_id: orca-openai-compat
@@ -75,4 +83,15 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
   headers:
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
+```
+
+The equivalent command is:
+
+```bash
+llm openai extra-models add claude \
+  --model-name anthropic/claude-2 \
+  --api-base https://openrouter.ai/api/v1 \
+  --api-key-name openrouter \
+  --header HTTP-Referer https://llm.datasette.io/ \
+  --header X-Title LLM
 ```
