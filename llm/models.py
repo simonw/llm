@@ -933,6 +933,7 @@ class _BaseResponse:
     resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
     _key: str | None = None
+
     def __init__(
         self,
         prompt: Prompt,
