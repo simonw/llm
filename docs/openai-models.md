@@ -164,6 +164,8 @@ The `model_id` is the identifier that will be recorded in the LLM logs. You can 
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
 
+If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration. This is useful for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through `/v1/responses`.
+
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
 For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
