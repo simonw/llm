@@ -1,9 +1,12 @@
 from click.testing import CliRunner
+import click
 import json
 import llm
 from llm.cli import cli
+from pathlib import Path
 import pytest
 import sqlite_utils
+import yaml
 
 
 @pytest.fixture
@@ -41,6 +44,220 @@ def test_openai_models(mocked_models):
         "ada:2020-05-03        openai      2020-05-03T20:26:40+00:00\n"
         "babbage:2020-05-03    openai      2020-05-03T20:26:40+00:00\n"
     )
+
+
+def test_openai_extra_models_path(user_path):
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "path"])
+    assert result.exit_code == 0
+    assert result.output.strip() == str(user_path / "extra-openai-models.yaml")
+
+
+def test_openai_extra_models_add_and_list(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "openai",
+            "extra-models",
+            "add",
+            "gpt-future",
+            "--alias",
+            "future",
+            "--alias",
+            "f",
+            "--mode",
+            "responses",
+            "--reasoning",
+            "--supports-tools",
+            "--supports-schema",
+            "--vision",
+            "--audio",
+            "--no-stream",
+            "--api-base",
+            "https://example.com/v1",
+            "--api-key-name",
+            "example",
+            "--api-type",
+            "custom",
+            "--api-version",
+            "2026-07-25",
+            "--api-engine",
+            "engine",
+            "--header",
+            "X-Title",
+            "LLM",
+        ],
+    )
+    assert result.exit_code == 0
+    assert yaml.safe_load(path.read_text("utf-8")) == [
+        {
+            "model_id": "gpt-future",
+            "model_name": "gpt-future",
+            "aliases": ["future", "f"],
+            "api_base": "https://example.com/v1",
+            "api_key_name": "example",
+            "api_type": "custom",
+            "api_version": "2026-07-25",
+            "api_engine": "engine",
+            "responses": True,
+            "reasoning": True,
+            "supports_tools": True,
+            "supports_schema": True,
+            "vision": True,
+            "audio": True,
+            "can_stream": False,
+            "headers": {"X-Title": "LLM"},
+        }
+    ]
+
+    list_result = runner.invoke(cli, ["openai", "extra-models", "list", "--json"])
+    assert list_result.exit_code == 0
+    assert json.loads(list_result.output) == yaml.safe_load(path.read_text("utf-8"))
+
+    default_result = runner.invoke(cli, ["openai", "extra-models", "--json"])
+    assert default_result.exit_code == 0
+    assert json.loads(default_result.output) == yaml.safe_load(path.read_text("utf-8"))
+
+    show_result = runner.invoke(cli, ["openai", "extra-models", "show", "gpt-future"])
+    assert show_result.exit_code == 0
+    assert (
+        yaml.safe_load(show_result.output) == yaml.safe_load(path.read_text("utf-8"))[0]
+    )
+
+
+def test_openai_extra_models_add_preserves_existing_text(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = (
+        "# Keep this comment\n"
+        "- model_id: one\n"
+        "  model_name: provider/one # And this one\n"
+    )
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "extra-models",
+            "add",
+            "two",
+            "--model-name",
+            "provider/two",
+        ],
+    )
+    assert result.exit_code == 0
+    assert path.read_text("utf-8").startswith(original)
+    assert yaml.safe_load(path.read_text("utf-8")) == [
+        {"model_id": "one", "model_name": "provider/one"},
+        {"model_id": "two", "model_name": "provider/two"},
+    ]
+
+
+def test_openai_extra_models_add_duplicate_leaves_file_unchanged(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = "- model_id: one\n  model_name: one\n"
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "add", "one"])
+    assert result.exit_code == 1
+    assert "Model ID 'one' is already configured" in result.output
+    assert path.read_text("utf-8") == original
+
+
+def test_openai_extra_models_validate(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["openai", "extra-models", "validate"])
+    assert result.exit_code == 0
+    assert result.output == "Valid: 0 extra OpenAI models\n"
+
+    path.write_text(
+        "- model_id: one\n  model_name: one\n  supports_tool: true\n", "utf-8"
+    )
+    invalid_result = runner.invoke(cli, ["openai", "extra-models", "validate"])
+    assert invalid_result.exit_code == 1
+    assert "Unknown key 'supports_tool'" in invalid_result.output
+
+
+def test_openai_extra_models_edit_creates_and_validates(user_path, monkeypatch):
+    path = user_path / "extra-openai-models.yaml"
+
+    def fake_edit(filename):
+        assert filename == str(path)
+        Path(filename).write_text(
+            "# Added in the editor\n- model_id: edited\n  model_name: edited\n",
+            "utf-8",
+        )
+
+    monkeypatch.setattr(click, "edit", fake_edit)
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "edit"])
+    assert result.exit_code == 0
+    assert "Valid: 1 extra OpenAI model" in result.output
+
+
+def test_openai_extra_models_remove_preserves_surrounding_comments(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = (
+        "# File header\n"
+        "- model_id: one\n"
+        "  model_name: provider/one\n"
+        "  aliases:\n"
+        "  - first\n"
+        "\n"
+        "# Keep this comment with model two\n"
+        "- model_id: two\n"
+        "  model_name: provider/two\n"
+    )
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "remove", "one"])
+    assert result.exit_code == 0
+    updated = path.read_text("utf-8")
+    assert "# File header" in updated
+    assert "# Keep this comment with model two" in updated
+    assert yaml.safe_load(updated) == [
+        {"model_id": "two", "model_name": "provider/two"}
+    ]
+
+
+def test_openai_extra_models_remove_unknown_leaves_file_unchanged(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = "- model_id: one\n  model_name: one\n"
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "remove", "two"])
+    assert result.exit_code == 1
+    assert "No extra OpenAI model with ID 'two'" in result.output
+    assert path.read_text("utf-8") == original
+
+
+def test_openai_extra_models_remove_refuses_unexpected_shape(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = "- model_name: provider/one\n  model_id: one\n"
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "remove", "one"])
+    assert result.exit_code == 1
+    assert "Could not safely locate" in result.output
+    assert path.read_text("utf-8") == original
+
+
+def test_openai_extra_models_remove_verifies_result_before_writing(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    original = (
+        "- model_id: one\n"
+        "  model_name: &shared_name provider/one\n"
+        "- model_id: two\n"
+        "  model_name: *shared_name\n"
+    )
+    path.write_text(original, "utf-8")
+
+    result = CliRunner().invoke(cli, ["openai", "extra-models", "remove", "one"])
+    assert result.exit_code == 1
+    assert "the result is invalid" in result.output
+    assert path.read_text("utf-8") == original
 
 
 def test_openai_options_min_max():
