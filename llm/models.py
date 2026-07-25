@@ -1861,6 +1861,15 @@ class Response(_BaseResponse):
 
         for tool_call in tool_calls_list:
             tool: Optional[Tool] = tools_by_name.get(tool_call.name)
+            if tool is None:
+                # Fallback: some models (e.g. Qwen via Ollama) strip the toolbox
+                # class-name prefix when calling a tool.  Try matching by just the
+                # function-name suffix ("_<name>") so "execute_js" resolves to
+                # "QuickJS_execute_js" when that is the only candidate.
+                suffix = "_" + tool_call.name
+                candidates = [t for n, t in tools_by_name.items() if n.endswith(suffix)]
+                if len(candidates) == 1:
+                    tool = candidates[0]
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
             if before_call:
@@ -2212,6 +2221,11 @@ class AsyncResponse(_BaseResponse):
 
         for idx, tc in enumerate(tool_calls_list):
             tool: Optional[Tool] = tools_by_name.get(tc.name)
+            if tool is None:
+                suffix = "_" + tc.name
+                candidates = [t for n, t in tools_by_name.items() if n.endswith(suffix)]
+                if len(candidates) == 1:
+                    tool = candidates[0]
             exception: Optional[Exception] = None
 
             if tool is None or not tool.implementation:

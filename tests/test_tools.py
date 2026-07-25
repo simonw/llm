@@ -392,6 +392,45 @@ def test_incorrect_tool_usage():
     assert 'Error: tool \\"bad_tool\\" does not exist' in output
 
 
+def test_toolbox_unqualified_name_fallback():
+    """Models that strip the toolbox class-name prefix still resolve the tool."""
+    model = llm.get_model("echo")
+
+    class QuickJS(llm.Toolbox):
+        def execute_javascript(self, code: str):
+            return f"result:{code}"
+
+    instance = QuickJS()
+    # Model calls "execute_javascript" but the registered name is "QuickJS_execute_javascript"
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "execute_javascript", "arguments": {"code": "1+1"}}]}),
+        tools=[instance],
+    )
+    output = chain_response.text()
+    assert "result:1+1" in output
+    assert "does not exist" not in output
+
+
+def test_toolbox_unqualified_name_ambiguous():
+    """When two toolboxes share a function name, the unqualified fallback is skipped."""
+    model = llm.get_model("echo")
+
+    class Box1(llm.Toolbox):
+        def run(self):
+            return "box1"
+
+    class Box2(llm.Toolbox):
+        def run(self):
+            return "box2"
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "run"}]}),
+        tools=[Box1(), Box2()],
+    )
+    output = chain_response.text()
+    assert 'Error: tool \\"run\\" does not exist' in output
+
+
 def test_tool_returning_attachment():
     model = llm.get_model("echo")
 
