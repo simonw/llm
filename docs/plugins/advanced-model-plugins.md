@@ -58,7 +58,8 @@ The async version of a model subclasses `llm.AsyncModel` instead of `llm.Model`.
 This example shows a subset of the OpenAI default plugin illustrating how this method might work:
 
 ```python
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 import llm
 
 class MyAsyncModel(llm.AsyncModel):
@@ -168,17 +169,19 @@ See {ref}`the Python attachments documentation <python-api-attachments>` for det
 
 ### Specifying attachment types
 
-A `Model` subclass can list the types of attachments it accepts by defining a `attachment_types` class attribute:
+A `Model` subclass can list the types of attachments it accepts by defining an `attachment_types` class attribute:
 
 ```python
 class NewModel(llm.Model):
     model_id = "new-model"
-    attachment_types = {
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "image/gif",
-    }
+    attachment_types = frozenset(
+        {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        }
+    )
 ```
 These content types are detected when an attachment is passed to LLM using `llm -a filename`, or can be specified by the user using the `--attachment-type filename image/png` option.
 

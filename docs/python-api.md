@@ -173,20 +173,20 @@ for response in chain.responses():
 
 Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
 
-The method signature is `def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
+The method signature is `def before_call(tool: llm.Tool | None, tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
 
 Here's an example:
 ```python
 import llm
-from typing import Optional
 
 def upper(text: str) -> str:
     "Convert text to uppercase."
     return text.upper()
 
-def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall):
-    print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
-    if tool.name == "upper" and "bad" in repr(tool_call.arguments):
+def before_call(tool: llm.Tool | None, tool_call: llm.ToolCall):
+    tool_name = tool.name if tool is not None else tool_call.name
+    print(f"About to call tool {tool_name} with arguments {tool_call.arguments}")
+    if tool_name == "upper" and "bad" in repr(tool_call.arguments):
         raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")
 
 model = llm.get_model("gpt-4.1-mini")
@@ -460,11 +460,13 @@ print(model.prompt(
 The {ref}`fragment system <usage-fragments>` from the CLI tool can also be accessed from the Python API, by passing `fragments=` and/or `system_fragments=` lists of strings to the `prompt()` method:
 
 ```python
+from pathlib import Path
+
 response = model.prompt(
     "What do these documents say about dogs?",
     fragments=[
-        open("dogs1.txt").read(),
-        open("dogs2.txt").read(),
+        Path("dogs1.txt").read_text(),
+        Path("dogs2.txt").read_text(),
     ],
     system_fragments=[
         "You answer questions like Snoopy",

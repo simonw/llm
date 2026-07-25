@@ -13,8 +13,10 @@ vector = embedding_model.embed("my happy hound")
 ```
 If the embedding model can handle binary input, you can call `.embed()` with a byte string instead. You can check the `supports_binary` property to see if this is supported:
 ```python
+from pathlib import Path
+
 if embedding_model.supports_binary:
-    vector = embedding_model.embed(open("my-image.jpg", "rb").read())
+    vector = embedding_model.embed(Path("my-image.jpg").read_bytes())
 ```
 The `embedding_model.supports_text` property indicates if the model supports text input.
 
@@ -122,12 +124,12 @@ A collection instance has the following properties and methods:
 - `model_id` - the string ID of the embedding model used for this collection
 - `model()` - returns the `EmbeddingModel` instance, based on that `model_id`
 - `count()` - returns the integer number of items in the collection
-- `embed(id: str, text: str, metadata: dict=None, store: bool=False)` - embeds the given string and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON) and store the text content itself in the database table.
-- `embed_multi(entries: Iterable, store: bool=False, batch_size: int=100)` - see above
-- `embed_multi_with_metadata(entries: Iterable, store: bool=False, batch_size: int=100)` - see above
-- `similar(query: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the given query string
-- `similar_by_id(id: str, number: int=10)` - returns a list of entries that are most similar to the embedding of the item with the given ID
-- `similar_by_vector(vector: List[float], number: int=10, skip_id: str=None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
+- `embed(id: str, value: str | bytes, metadata: dict[str, Any] | None = None, store: bool = False)` - embeds the given value and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON) and store the text or binary content itself in the database table.
+- `embed_multi(entries: Iterable[tuple[str, str | bytes]], store: bool = False, batch_size: int = 100)` - see above
+- `embed_multi_with_metadata(entries: Iterable[tuple[str, str | bytes, dict[str, Any] | None]], store: bool = False, batch_size: int = 100)` - see above
+- `similar(value: str | bytes, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the given value
+- `similar_by_id(id: str, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the item with the given ID
+- `similar_by_vector(vector: list[float], number: int = 10, skip_id: str | None = None, prefix: str | None = None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
 - `delete()` - deletes the collection and its embeddings from the database
 
 There is also a `Collection.exists(db, name)` class method which returns a boolean value and can be used to determine if a collection exists or not in a database:

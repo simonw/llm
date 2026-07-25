@@ -228,7 +228,7 @@ The `llm.Template` class has the following constructor:
 .. autoclass:: llm.Template
 ```
 
-The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message.
+The loader function should raise a `ValueError` if the template cannot be found or loaded correctly, providing a clear error message. If you need to translate an exception from another library, catch that specific exception and use `raise ValueError(...) from ex` to preserve its context.
 
 Note that `functions:` provided by templates using this plugin hook will not be made available, to avoid the risk of plugin hooks that load templates from remote sources introducing arbitrary code execution vulnerabilities.
 
@@ -275,11 +275,13 @@ def my_fragment_loader(argument: str) -> llm.Fragment:
         )
 
 # Or for the case where you want to return multiple fragments and attachments:
-def my_fragment_loader(argument: str) -> list[llm.Fragment]:
+def my_fragment_loader(
+    argument: str,
+) -> list[llm.Fragment | llm.Attachment]:
     "Docs go here."
     return [
-        llm.Fragment("Fragment 1 content", "my-fragments:{argument}"),
-        llm.Fragment("Fragment 2 content", "my-fragments:{argument}"),
+        llm.Fragment("Fragment 1 content", f"my-fragments:{argument}"),
+        llm.Fragment("Fragment 2 content", f"my-fragments:{argument}"),
         llm.Attachment(path="/path/to/image.png"),
     ]
 ```
