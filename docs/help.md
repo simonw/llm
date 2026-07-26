@@ -117,6 +117,11 @@ Usage: llm prompt [OPTIONS] [PROMPT]
 
       llm 'JavaScript function for reversing a string' -x
 
+  The --json option outputs details of the prompt and response as JSON, in the
+  same format as the llm logs --json command.
+
+      llm 'Capital of France?' --json
+
 Options:
   -s, --system TEXT               System prompt to use
   -m, --model TEXT                Model to use
@@ -154,6 +159,8 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  --json                          Output the response as JSON, same format as
+                                  llm logs --json
   -h, --help                      Show this message and exit.
 ```
 

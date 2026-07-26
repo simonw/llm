@@ -60,7 +60,7 @@ from llm import (
     set_default_model,
     user_dir,
 )
-from llm.models import ChainResponse, _BaseConversation
+from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
 
 from .migrations import migrate
 from .plugins import load_plugins, pm
@@ -513,6 +513,12 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "json_output",
+    "--json",
+    is_flag=True,
+    help="Output the response as JSON, same format as llm logs --json",
+)
 def prompt(
     prompt,
     system,
@@ -546,6 +552,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    json_output,
 ):
     """
     Execute a prompt
@@ -573,6 +580,12 @@ def prompt(
 
     \b
         llm 'JavaScript function for reversing a string' -x
+
+    The --json option outputs details of the prompt and response as JSON, in the
+    same format as the llm logs --json command.
+
+    \b
+        llm 'Capital of France?' --json
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
@@ -777,7 +790,7 @@ def prompt(
                 resolve_attachment_with_type(at.value, at.type)
                 for at in template_obj.attachment_types
             ] + list(attachment_types)
-    if extract or extract_last:
+    if extract or extract_last or json_output:
         no_stream = True
 
     conversation = None
@@ -927,7 +940,8 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
-                    print(text)
+                    if not json_output:
+                        print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -951,7 +965,8 @@ def prompt(
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+                if not json_output:
+                    print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -980,12 +995,27 @@ def prompt(
             )
 
     # Log responses to the database
+    log_db = None
     if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database
+        log_db = sqlite_utils.Database(memory=True)
+        migrate(log_db)
+
+    if log_db is not None:
         # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
         if isinstance(response, AsyncResponse):
             response = asyncio.run(response.to_sync_response())
         # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(db)
+        response.log_to_db(log_db)
+
+    if json_output:
+        if isinstance(response, _BaseChainResponse):
+            response_ids = [response_.id for response_ in response._responses]
+        else:
+            response_ids = [response.id]
+        click.echo(logs_json_for_response_ids(log_db, response_ids))
 
 
 @cli.command()
@@ -1543,6 +1573,189 @@ where prompt_attachments.response_id in ({})
 order by prompt_attachments."order"
 """
 
+FRAGMENTS_SQL = """
+select
+    {table}.response_id,
+    fragments.hash,
+    fragments.id as fragment_id,
+    fragments.content,
+    (
+        select json_group_array(fragment_aliases.alias)
+        from fragment_aliases
+        where fragment_aliases.fragment_id = fragments.id
+    ) as aliases
+from {table}
+join fragments on {table}.fragment_id = fragments.id
+where {table}.response_id in ({placeholders})
+order by {table}."order"
+"""
+
+# Tool usage information
+TOOLS_SQL = """
+SELECT responses.id,
+-- Tools related to this response
+COALESCE(
+    (SELECT json_group_array(json_object(
+        'id', t.id,
+        'hash', t.hash,
+        'name', t.name,
+        'description', t.description,
+        'input_schema', json(t.input_schema)
+    ))
+    FROM tools t
+    JOIN tool_responses tr ON t.id = tr.tool_id
+    WHERE tr.response_id = responses.id
+    ),
+    '[]'
+) AS tools,
+-- Tool calls for this response
+COALESCE(
+    (SELECT json_group_array(json_object(
+        'id', tc.id,
+        'tool_id', tc.tool_id,
+        'name', tc.name,
+        'arguments', json(tc.arguments),
+        'tool_call_id', tc.tool_call_id
+    ))
+    FROM tool_calls tc
+    WHERE tc.response_id = responses.id
+    ),
+    '[]'
+) AS tool_calls,
+-- Tool results for this response
+COALESCE(
+    (SELECT json_group_array(json_object(
+        'id', tr.id,
+        'tool_id', tr.tool_id,
+        'name', tr.name,
+        'output', tr.output,
+        'tool_call_id', tr.tool_call_id,
+        'exception', tr.exception,
+        'attachments', COALESCE(
+            (SELECT json_group_array(json_object(
+                'id', a.id,
+                'type', a.type,
+                'path', a.path,
+                'url', a.url,
+                'content', a.content
+            ))
+            FROM tool_results_attachments tra
+            JOIN attachments a ON tra.attachment_id = a.id
+            WHERE tra.tool_result_id = tr.id
+            ),
+            '[]'
+        )
+    ))
+    FROM tool_results tr
+    WHERE tr.response_id = responses.id
+    ),
+    '[]'
+) AS tool_results
+FROM responses
+where id in ({placeholders})
+"""
+
+
+def attachments_by_response_id(db, ids):
+    "Fetch prompt attachments for these response IDs, grouped by response ID"
+    attachments_by_id = {}
+    for attachment in db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids):
+        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
+    return attachments_by_id
+
+
+def annotate_log_rows(db, rows, expand=False, truncate=False):
+    """
+    Modify log rows in place to add fragments and tool information and to
+    decode (or, if truncate is on, remove) their JSON columns
+    """
+    ids = [row["id"] for row in rows]
+
+    # Fetch any prompt or system prompt fragments
+    prompt_fragments_by_id = {}
+    system_fragments_by_id = {}
+    for table, dictionary in (
+        ("prompt_fragments", prompt_fragments_by_id),
+        ("system_fragments", system_fragments_by_id),
+    ):
+        for fragment in db.query(
+            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
+            ids,
+        ):
+            dictionary.setdefault(fragment["response_id"], []).append(fragment)
+
+    tool_info_by_id = {
+        row["id"]: {
+            "tools": json.loads(row["tools"]),
+            "tool_calls": json.loads(row["tool_calls"]),
+            "tool_results": json.loads(row["tool_results"]),
+        }
+        for row in db.query(
+            TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
+        )
+    }
+
+    for row in rows:
+        if truncate:
+            row["prompt"] = truncate_string(row["prompt"] or "")
+            row["response"] = truncate_string(row["response"] or "")
+        # Add prompt and system fragments
+        for key in ("prompt_fragments", "system_fragments"):
+            row[key] = [
+                {
+                    "hash": fragment["hash"],
+                    "content": (
+                        fragment["content"]
+                        if expand
+                        else truncate_string(fragment["content"])
+                    ),
+                    "aliases": json.loads(fragment["aliases"]),
+                }
+                for fragment in (
+                    prompt_fragments_by_id.get(row["id"], [])
+                    if key == "prompt_fragments"
+                    else system_fragments_by_id.get(row["id"], [])
+                )
+            ]
+        # Either decode or remove all JSON keys
+        keys = list(row.keys())
+        for key in keys:
+            if key.endswith("_json") and row[key] is not None:
+                if truncate:
+                    del row[key]
+                else:
+                    row[key] = json.loads(row[key])
+        row.update(tool_info_by_id[row["id"]])
+
+
+def log_rows_as_json(rows, attachments_by_id):
+    "Serialize annotated log rows to the JSON used by 'llm logs --json'"
+    for row in rows:
+        row["attachments"] = [
+            {k: v for k, v in attachment.items() if k != "response_id"}
+            for attachment in attachments_by_id.get(row["id"], [])
+        ]
+    return json.dumps(list(rows), indent=2)
+
+
+def logs_json_for_response_ids(db, ids):
+    """
+    Return the JSON that 'llm logs --json' would output for these response IDs,
+    in chronological order
+    """
+    if not ids:
+        return "[]"
+    placeholders = ",".join("?" * len(ids))
+    sql = LOGS_SQL.format(
+        columns=LOGS_COLUMNS,
+        extra_where=f" where responses.id in ({placeholders})",
+        order_by="responses.id",
+        limit="",
+    )
+    rows = list(db.query(sql, ids))
+    annotate_log_rows(db, rows)
+    return log_rows_as_json(rows, attachments_by_response_id(db, ids))
+
 
 @logs.command(name="list")
 @click.option(
@@ -1847,42 +2060,7 @@ def logs_list(
     if not query and not data:
         rows.reverse()
 
-    # Fetch any attachments
     ids = [row["id"] for row in rows]
-    attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
-    attachments_by_id = {}
-    for attachment in attachments:
-        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
-
-    FRAGMENTS_SQL = """
-    select
-        {table}.response_id,
-        fragments.hash,
-        fragments.id as fragment_id,
-        fragments.content,
-        (
-            select json_group_array(fragment_aliases.alias)
-            from fragment_aliases
-            where fragment_aliases.fragment_id = fragments.id
-        ) as aliases
-    from {table}
-    join fragments on {table}.fragment_id = fragments.id
-    where {table}.response_id in ({placeholders})
-    order by {table}."order"
-    """
-
-    # Fetch any prompt or system prompt fragments
-    prompt_fragments_by_id = {}
-    system_fragments_by_id = {}
-    for table, dictionary in (
-        ("prompt_fragments", prompt_fragments_by_id),
-        ("system_fragments", system_fragments_by_id),
-    ):
-        for fragment in db.query(
-            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
-            ids,
-        ):
-            dictionary.setdefault(fragment["response_id"], []).append(fragment)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1910,132 +2088,22 @@ def logs_list(
             click.echo(line)
         return
 
-    # Tool usage information
-    TOOLS_SQL = """
-    SELECT responses.id,
-    -- Tools related to this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', t.id,
-            'hash', t.hash,
-            'name', t.name,
-            'description', t.description,
-            'input_schema', json(t.input_schema)
-        ))
-        FROM tools t
-        JOIN tool_responses tr ON t.id = tr.tool_id
-        WHERE tr.response_id = responses.id
-        ),
-        '[]'
-    ) AS tools,
-    -- Tool calls for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tc.id,
-            'tool_id', tc.tool_id,
-            'name', tc.name,
-            'arguments', json(tc.arguments),
-            'tool_call_id', tc.tool_call_id
-        ))
-        FROM tool_calls tc
-        WHERE tc.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_calls,
-    -- Tool results for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tr.id,
-            'tool_id', tr.tool_id,
-            'name', tr.name,
-            'output', tr.output,
-            'tool_call_id', tr.tool_call_id,
-            'exception', tr.exception,
-            'attachments', COALESCE(
-                (SELECT json_group_array(json_object(
-                    'id', a.id,
-                    'type', a.type,
-                    'path', a.path,
-                    'url', a.url,
-                    'content', a.content
-                ))
-                FROM tool_results_attachments tra
-                JOIN attachments a ON tra.attachment_id = a.id
-                WHERE tra.tool_result_id = tr.id
-                ),
-                '[]'
-            )
-        ))
-        FROM tool_results tr
-        WHERE tr.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_results
-    FROM responses
-    where id in ({placeholders})
-    """
-    tool_info_by_id = {
-        row["id"]: {
-            "tools": json.loads(row["tools"]),
-            "tool_calls": json.loads(row["tool_calls"]),
-            "tool_results": json.loads(row["tool_results"]),
-        }
-        for row in db.query(
-            TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
-        )
-    }
-
-    for row in rows:
-        if truncate:
-            row["prompt"] = truncate_string(row["prompt"] or "")
-            row["response"] = truncate_string(row["response"] or "")
-        # Add prompt and system fragments
-        for key in ("prompt_fragments", "system_fragments"):
-            row[key] = [
-                {
-                    "hash": fragment["hash"],
-                    "content": (
-                        fragment["content"]
-                        if expand
-                        else truncate_string(fragment["content"])
-                    ),
-                    "aliases": json.loads(fragment["aliases"]),
-                }
-                for fragment in (
-                    prompt_fragments_by_id.get(row["id"], [])
-                    if key == "prompt_fragments"
-                    else system_fragments_by_id.get(row["id"], [])
-                )
-            ]
-        # Either decode or remove all JSON keys
-        keys = list(row.keys())
-        for key in keys:
-            if key.endswith("_json") and row[key] is not None:
-                if truncate:
-                    del row[key]
-                else:
-                    row[key] = json.loads(row[key])
-        row.update(tool_info_by_id[row["id"]])
+    attachments_by_id = attachments_by_response_id(db, ids)
+    annotate_log_rows(db, rows, expand=expand, truncate=truncate)
 
     output = None
     if json_output:
         # Output as JSON if requested
-        for row in rows:
-            row["attachments"] = [
-                {k: v for k, v in attachment.items() if k != "response_id"}
-                for attachment in attachments_by_id.get(row["id"], [])
-            ]
-        output = json.dumps(list(rows), indent=2)
+        output = log_rows_as_json(rows, attachments_by_id)
     elif extract or extract_last:
         # Extract and return first code block
         for row in rows:
             output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
-    elif response:
+    elif response and rows:
         # Just output the last response
-        if rows:
-            output = rows[-1]["response"]
+        output = rows[-1]["response"]
 
     if output is not None:
         click.echo(output)
