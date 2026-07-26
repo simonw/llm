@@ -719,3 +719,45 @@ class TestLegacyConversations:
 
         result = run("-m", "echo", "Second", "-c")
         assert "First" in result.output
+
+
+# ---- logging through the library API ---------------------------------
+
+
+class TestLibraryLogging:
+    """`log_to_db` is what plugins call, so the store write belongs there
+    rather than in the CLI - otherwise anything that is not `llm` itself
+    writes only the legacy tables."""
+
+    def test_log_to_db_writes_the_store_too(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        assert store.db["turns"].count == 1
+        assert store.db["messages"].count == 2
+
+    def test_log_to_db_still_writes_the_legacy_tables(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        assert store.db["responses"].count == 1
+
+    def test_a_chain_writes_the_store_too(self, store, mock_model):
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["Hello"])
+        chain = conversation.chain("Hi")
+        chain.text()
+        chain.log_to_db(store.db)
+        assert store.db["turns"].count == 1
+        assert len(store.thread_messages(conversation.id)) == 2
+
+    def test_successive_library_turns_extend_the_thread(self, store, mock_model):
+        conversation = mock_model.conversation()
+        for reply in ("One", "Two"):
+            mock_model.enqueue([reply])
+            response = conversation.prompt("Ask")
+            response.text()
+            response.log_to_db(store.db)
+        assert len(store.thread_messages(conversation.id)) == 4

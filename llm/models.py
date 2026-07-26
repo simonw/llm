@@ -1431,6 +1431,12 @@ class _BaseResponse:
         )
 
     def log_to_db(self, db):
+        # Built up front because it applies migrations, which have to run
+        # before the inserts below create any tables implicitly.
+        from .logs import LogStore
+
+        store = LogStore(db)
+
         conversation = self.conversation
         if not conversation:
             conversation = Conversation(model=self.model)
@@ -1628,6 +1634,12 @@ class _BaseResponse:
                         "order": index,
                     },
                 )
+
+        # Mirror into the content-addressed tables. This lives here
+        # rather than in the CLI because log_to_db() is what plugins
+        # call - anything that logs a response should populate both
+        # representations, not just `llm` itself.
+        store.log(self)
 
 
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:

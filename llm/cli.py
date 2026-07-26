@@ -991,7 +991,6 @@ def prompt(
             response = asyncio.run(response.to_sync_response())
         # At this point ALL forms should have a log_to_db() method that works:
         response.log_to_db(db)
-        log_to_store(db, response)
 
 
 @cli.command()
@@ -1309,21 +1308,7 @@ def chat(
             show_reasoning=not hide_reasoning,
         )
         response.log_to_db(db)
-        log_to_store(db, response)
         print()
-
-
-def log_to_store(db, response):
-    """Mirror a response into the content-addressed tables.
-
-    Written alongside the legacy tables, not instead of them, so every
-    existing read path keeps working while the new schema beds in.
-    """
-    store = LogStore(db)
-    for item in getattr(response, "_responses", None) or [response]:
-        if isinstance(item, AsyncResponse):
-            item = asyncio.run(item.to_sync_response())
-        store.log(item)
 
 
 def load_conversation(
