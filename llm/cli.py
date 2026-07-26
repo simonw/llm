@@ -62,6 +62,7 @@ from llm import (
 )
 from llm.models import ChainResponse, _BaseConversation
 
+from .logs import LogStore
 from .migrations import migrate
 from .plugins import load_plugins, pm
 from .utils import (
@@ -813,7 +814,11 @@ def prompt(
         click.echo(render_model_with_options(model_id, async_=async_))
         return
 
-    if conversation is None and (tools or python_tools):
+    if conversation is None:
+        # Always work through a conversation, even for a one-off prompt.
+        # The legacy logger invents one anyway and throws the id away;
+        # creating it here means both writers agree on which conversation
+        # (and so which thread) this response belongs to.
         conversation = model.conversation()
 
     if conversation:
@@ -986,6 +991,7 @@ def prompt(
             response = asyncio.run(response.to_sync_response())
         # At this point ALL forms should have a log_to_db() method that works:
         response.log_to_db(db)
+        log_to_store(db, response)
 
 
 @cli.command()
@@ -1303,7 +1309,21 @@ def chat(
             show_reasoning=not hide_reasoning,
         )
         response.log_to_db(db)
+        log_to_store(db, response)
         print()
+
+
+def log_to_store(db, response):
+    """Mirror a response into the content-addressed tables.
+
+    Written alongside the legacy tables, not instead of them, so every
+    existing read path keeps working while the new schema beds in.
+    """
+    store = LogStore(db)
+    for item in getattr(response, "_responses", None) or [response]:
+        if isinstance(item, AsyncResponse):
+            item = asyncio.run(item.to_sync_response())
+        store.log(item)
 
 
 def load_conversation(
@@ -1345,6 +1365,17 @@ def load_conversation(
                 + list(response_obj.prompt.messages)
             )
         conversation.responses.append(response_obj)
+
+    # If this conversation has a thread in the content-addressed tables,
+    # take the history from there. That chain is the exact message list
+    # that was sent and returned, so reasoning signatures and provider
+    # metadata survive - unlike the rebuild above, which can only work
+    # from the flattened legacy columns.
+    try:
+        conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
+    except KeyError:
+        pass
+
     return conversation
 
 

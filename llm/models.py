@@ -563,11 +563,24 @@ class _BaseConversation:
     responses: list["_BaseResponse"] = field(default_factory=list)
     tools: list[ToolDef] | None = None
     chain_limit: int | None = None
+    # History read back from storage, used as the chain for the next turn
+    # when this conversation has not yet produced a response in this
+    # process. Unlike a chain rebuilt from logged responses this is the
+    # exact message list, so reasoning signatures and provider metadata
+    # survive being reloaded.
+    loaded_messages: list[Any] | None = None
 
     @classmethod
     @abstractmethod
     def from_row(cls, row: Any) -> "_BaseConversation":
         raise NotImplementedError
+
+    def _record_response(self, response: "_BaseResponse") -> None:
+        "Record a completed response as part of this conversation."
+        self.responses.append(response)
+        # History now comes from the live responses, so anything read
+        # back from storage is superseded.
+        self.loaded_messages = None
 
     def _build_full_chain(
         self,
@@ -602,7 +615,12 @@ class _BaseConversation:
             return list(explicit_messages)
 
         chain: list[Any] = []
-        if self.responses:
+        if self.loaded_messages:
+            # Storage holds the exact chain, so prefer it over anything
+            # rebuilt from logged responses. Cleared as soon as this
+            # conversation produces a response of its own.
+            chain.extend(self.loaded_messages)
+        elif self.responses:
             last = self.responses[-1]
             # last.prompt.messages already contains the full input chain
             # under the invariant, so use the last response only and then
@@ -2013,7 +2031,7 @@ class Response(_BaseResponse):
                 yield text
 
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
@@ -2039,7 +2057,7 @@ class Response(_BaseResponse):
             yield self._stream_events[-1]
 
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
@@ -2440,7 +2458,7 @@ class AsyncResponse(_BaseResponse):
 
     async def _async_finalize(self):
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         if hasattr(self, "_generator"):

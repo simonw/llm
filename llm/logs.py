@@ -20,7 +20,7 @@ import json
 from typing import Any
 
 from .migrations import migrate
-from .models import Attachment
+from .models import Attachment, _conversation_name
 from .parts import (
     AttachmentPart,
     Message,
@@ -271,9 +271,10 @@ class LogStore:
         name: str | None = None,
         tip: str | None = None,
         forked_from: str | None = None,
+        id: str | None = None,
     ) -> str:
         "Create a named pointer at a message and return its id."
-        thread_id = str(monotonic_ulid()).lower()
+        thread_id = id or str(monotonic_ulid()).lower()
         self.db["threads"].insert(
             {
                 "id": thread_id,
@@ -283,6 +284,17 @@ class LogStore:
                 "datetime_utc": _now(),
             }
         )
+        return thread_id
+
+    def ensure_thread(self, thread_id: str, name: str | None = None) -> str:
+        """Return the thread with this id, creating it if it is new.
+
+        Threads created from a conversation reuse the conversation's id,
+        so the two identifier spaces line up while both sets of tables
+        are being written.
+        """
+        if not self.db["threads"].count_where("id = ?", [thread_id]):
+            self.create_thread(name=name, id=thread_id)
         return thread_id
 
     def fork(
@@ -328,8 +340,20 @@ class LogStore:
         timings, usage, which model answered - goes on the turn, because
         message rows are shared and so cannot carry provenance.
         """
+        if thread_id is None:
+            conversation = getattr(response, "conversation", None)
+            if conversation is not None:
+                thread_id = self.ensure_thread(
+                    conversation.id,
+                    name=_conversation_name(
+                        response.prompt.prompt or response.prompt.system or ""
+                    ),
+                )
+
         parent = self.ensure_chain(response.prompt.messages)
-        tip = self.ensure_chain(response.messages(), parent=parent)
+        # _messages_now() rather than messages(), which is a coroutine on
+        # AsyncResponse.
+        tip = self.ensure_chain(response._messages_now(), parent=parent)
 
         schema_id = None
         if response.prompt.schema:

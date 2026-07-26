@@ -8,8 +8,10 @@ history from a stateless client both write only what is new.
 
 import pytest
 import sqlite_utils
+from click.testing import CliRunner
 
 import llm
+from llm.cli import cli
 from llm.logs import LogStore, canonical_json, message_hash
 from llm.models import Attachment
 from llm.parts import (
@@ -541,3 +543,179 @@ class TestLogResponse:
         assert store.log(response) == store.log(response)
         assert store.db["messages"].count == 2
         assert store.db["turns"].count == 1
+
+
+# ---- conversations map onto threads ----------------------------------
+
+
+class TestConversationThreads:
+    def test_log_uses_the_conversation_id_as_the_thread_id(self, store, mock_model):
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["Hello"])
+        response = conversation.prompt("Hi")
+        response.text()
+        store.log(response)
+        assert store.db["threads"].get(conversation.id) is not None
+
+    def test_successive_turns_extend_the_same_thread(self, store, mock_model):
+        conversation = mock_model.conversation()
+        for reply in ("Hello", "Hello again"):
+            mock_model.enqueue([reply])
+            response = conversation.prompt("Hi")
+            response.text()
+            store.log(response)
+        assert store.db["threads"].count == 1
+        assert [
+            message.parts[0].text for message in store.thread_messages(conversation.id)
+        ] == ["Hi", "Hello", "Hi", "Hello again"]
+
+    def test_a_response_without_a_conversation_creates_no_thread(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        store.log(response)
+        assert store.db["threads"].count == 0
+
+    def test_an_explicit_thread_id_wins(self, store, mock_model):
+        thread_id = store.create_thread(name="Mine")
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["Hello"])
+        response = conversation.prompt("Hi")
+        response.text()
+        store.log(response, thread_id=thread_id)
+        assert store.db["threads"].count == 1
+        assert len(store.thread_messages(thread_id)) == 2
+
+
+# ---- CLI integration -------------------------------------------------
+
+
+@pytest.fixture
+def cli_store(user_path):
+    "A LogStore over the same database the CLI logs to."
+    return LogStore(sqlite_utils.Database(str(user_path / "logs.db")))
+
+
+def run(*args):
+    result = CliRunner().invoke(cli, list(args), catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    return result
+
+
+class TestCliDualWrite:
+    def test_a_prompt_writes_a_turn(self, cli_store):
+        run("-m", "echo", "Hi")
+        assert cli_store.db["turns"].count == 1
+
+    def test_a_prompt_still_writes_the_legacy_tables(self, cli_store):
+        run("-m", "echo", "Hi")
+        assert cli_store.db["responses"].count == 1
+
+    def test_the_turn_points_at_the_stored_chain(self, cli_store):
+        run("-m", "echo", "Hi")
+        turn = next(iter(cli_store.db["turns"].rows))
+        chain = cli_store.load_chain(turn["tip_message_hash"])
+        assert [message.role for message in chain] == ["user", "assistant"]
+
+    def test_the_thread_matches_the_conversation(self, cli_store):
+        run("-m", "echo", "Hi")
+        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        assert cli_store.thread_tip(conversation_id) is not None
+
+    def test_no_log_writes_nothing(self, cli_store):
+        run("-m", "echo", "Hi", "--no-log")
+        assert cli_store.db["turns"].count == 0
+        assert cli_store.db["messages"].count == 0
+
+
+class TestCliContinuation:
+    def test_continuing_extends_the_same_thread(self, cli_store):
+        run("-m", "echo", "First")
+        run("-m", "echo", "Second", "-c")
+        assert cli_store.db["threads"].count == 1
+        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        assert len(cli_store.thread_messages(conversation_id)) == 4
+
+    def test_history_comes_from_the_new_tables(self, user_path):
+        # Delete the legacy rows the old continuation path reads from. If
+        # `-c` still sends the full history, it can only have come from
+        # the content-addressed tables.
+        run("-m", "echo", "First")
+
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        conversation_id = next(iter(db["conversations"].rows))["id"]
+        with db.conn:
+            db.execute("delete from responses")
+        db.close()
+
+        run("-m", "echo", "Second", "-c")
+
+        # Four messages only if the second turn was built on top of the
+        # first. Had the history been lost, the second turn would have
+        # started a fresh root and the thread would hold just two.
+        store = LogStore(sqlite_utils.Database(str(user_path / "logs.db")))
+        chain = store.thread_messages(conversation_id)
+        assert len(chain) == 4
+        assert chain[0].parts[0].text == "First"
+
+    def test_continuing_writes_only_the_new_messages(self, cli_store):
+        run("-m", "echo", "First")
+        before = cli_store.db["messages"].count
+        run("-m", "echo", "Second", "-c")
+        assert cli_store.db["messages"].count == before + 2
+
+
+# ---- history loaded from storage -------------------------------------
+
+
+class TestLoadedMessages:
+    def test_loaded_messages_supply_the_history(self, mock_model):
+        conversation = mock_model.conversation()
+        conversation.loaded_messages = [llm.user("Earlier"), llm.assistant("Reply")]
+        mock_model.enqueue(["Next"])
+        response = conversation.prompt("Now")
+        response.text()
+        assert [message.parts[0].text for message in response.prompt.messages] == [
+            "Earlier",
+            "Reply",
+            "Now",
+        ]
+
+    def test_a_completed_response_supersedes_them(self, mock_model):
+        conversation = mock_model.conversation()
+        conversation.loaded_messages = [llm.user("Earlier"), llm.assistant("Reply")]
+        mock_model.enqueue(["First"])
+        conversation.prompt("One").text()
+        mock_model.enqueue(["Second"])
+        response = conversation.prompt("Two")
+        response.text()
+        # The live response takes over; the loaded history is not
+        # replayed a second time.
+        assert [message.parts[0].text for message in response.prompt.messages] == [
+            "Earlier",
+            "Reply",
+            "One",
+            "First",
+            "Two",
+        ]
+
+
+class TestLegacyConversations:
+    def test_continuing_a_conversation_with_no_thread_still_works(self, user_path):
+        # Conversations logged before this schema existed have no thread,
+        # so `-c` has to fall back to rebuilding from the legacy rows.
+        run("-m", "echo", "First")
+
+        path = str(user_path / "logs.db")
+        db = sqlite_utils.Database(path)
+        with db.conn:
+            db.execute("delete from threads")
+            db.execute("delete from turns")
+            db.execute("delete from parts")
+            db.execute("delete from messages")
+        db.close()
+
+        result = run("-m", "echo", "Second", "-c")
+        assert "First" in result.output
