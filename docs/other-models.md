@@ -94,7 +94,26 @@ llm openai endpoint https://example.com/v1 \
 ```
 
 The `-m` option can be omitted if the template specifies a model. In an
-interactive chat the template is applied to each turn.
+interactive chat started using `--chat`, the template is applied to each turn.
+Without `--chat`, a template that provides its own prompt runs once even when
+no prompt argument is supplied.
+
+Use `-T` or `--tool` to make an installed LLM tool available to the model, or
+`--functions` to load Python functions from an inline code block or file:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  -T llm_time \
+  --functions tools.py \
+  "What time is it?"
+```
+
+Tool calls are executed locally and their results are sent back to the endpoint
+until it returns a final answer. `--chain-limit` controls the maximum number of
+responses, `--tools-debug` shows tool execution details, and `--tools-approve`
+asks for confirmation before each call. Tools and trusted Python functions
+declared by local templates are supported too.
 
 The command uses the Chat Completions API by default. Add `--responses` for an
 endpoint that implements the Responses API:

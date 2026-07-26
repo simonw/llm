@@ -33,6 +33,45 @@ def _add_chat_response(httpx_mock, url, text):
     )
 
 
+def _add_chat_tool_call_response(httpx_mock, url, name, arguments):
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{url}/chat/completions",
+        json={
+            "id": "chatcmpl_tool_test",
+            "object": "chat.completion",
+            "created": 1,
+            "model": "test-model",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_test",
+                                "type": "function",
+                                "function": {
+                                    "name": name,
+                                    "arguments": json.dumps(arguments),
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 3,
+                "completion_tokens": 2,
+                "total_tokens": 5,
+            },
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+
 def _responses_payload(text):
     return {
         "id": "resp_test",
@@ -52,6 +91,31 @@ def _responses_payload(text):
                         "annotations": [],
                     }
                 ],
+            }
+        ],
+        "usage": {
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "total_tokens": 5,
+        },
+        "status": "completed",
+    }
+
+
+def _responses_tool_call_payload(name, arguments):
+    return {
+        "id": "resp_tool_test",
+        "object": "response",
+        "created_at": 1,
+        "model": "test-model",
+        "output": [
+            {
+                "type": "function_call",
+                "id": "fc_test",
+                "call_id": "call_test",
+                "name": name,
+                "arguments": json.dumps(arguments),
+                "status": "completed",
             }
         ],
         "usage": {
@@ -229,6 +293,100 @@ attachment_types:
         "stream": False,
         "temperature": 0.4,
     }
+
+
+def test_endpoint_static_template_runs_once_on_terminal(
+    httpx_mock, user_path, templates_path, monkeypatch
+):
+    base_url = "https://terminal-template.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "Five pelicans")
+    (templates_path / "pelican.yaml").write_text(
+        "prompt: List five pelican names\n", "utf-8"
+    )
+    monkeypatch.setattr("click.testing._NamedTextIOWrapper.isatty", lambda self: True)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "-m",
+            "test-model",
+            "-t",
+            "pelican",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Five pelicans\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content)["messages"] == [
+        {"role": "user", "content": "List five pelican names"}
+    ]
+
+
+def test_endpoint_tools_and_functions(httpx_mock, user_path):
+    base_url = "https://tools.example.test/v1"
+    _add_chat_tool_call_response(httpx_mock, base_url, "multiply", {"a": 6, "b": 7})
+    _add_chat_response(httpx_mock, base_url, "The answer is 42")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "What is 6 * 7?",
+            "-m",
+            "test-model",
+            "--no-stream",
+            "-T",
+            "llm_version",
+            "--functions",
+            (
+                "def multiply(a: int, b: int) -> int:\n"
+                '    "Multiply two numbers."\n'
+                "    return a * b\n"
+            ),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "The answer is 42\n"
+    assert not (user_path / "logs.db").exists()
+
+    requests = [json.loads(request.content) for request in httpx_mock.get_requests()]
+    assert len(requests) == 2
+    assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {
+        "llm_version",
+        "multiply",
+    }
+    assert requests[1]["messages"] == [
+        {"role": "user", "content": "What is 6 * 7?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_test",
+                    "type": "function",
+                    "function": {
+                        "name": "multiply",
+                        "arguments": '{"a": 6, "b": 7}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": "42",
+            "tool_call_id": "call_test",
+        },
+    ]
 
 
 def test_endpoint_streams_by_default(httpx_mock, user_path):
@@ -417,6 +575,64 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
     ]
 
 
+def test_endpoint_responses_api_tools(httpx_mock, user_path):
+    base_url = "https://responses-tools.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_tool_call_payload("multiply", {"a": 6, "b": 7}),
+        headers={"Content-Type": "application/json"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_payload("The answer is 42"),
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "What is 6 * 7?",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+            "--functions",
+            (
+                "def multiply(a: int, b: int) -> int:\n"
+                '    "Multiply two numbers."\n'
+                "    return a * b\n"
+            ),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "The answer is 42\n"
+    assert not (user_path / "logs.db").exists()
+
+    requests = [json.loads(request.content) for request in httpx_mock.get_requests()]
+    assert requests[0]["tools"][0]["name"] == "multiply"
+    assert requests[1]["input"] == [
+        {"role": "user", "content": "What is 6 * 7?"},
+        {
+            "type": "function_call",
+            "call_id": "call_test",
+            "name": "multiply",
+            "arguments": '{"a": 6, "b": 7}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_test",
+            "output": "42",
+        },
+    ]
+
+
 def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     base_url = "https://stdin.example.test/v1"
     _add_chat_response(httpx_mock, base_url, "From stdin")
@@ -465,6 +681,12 @@ def test_endpoint_interactive_chat_preserves_history(
             "Be brief",
             "--template",
             "endpoint-chat",
+            "--functions",
+            (
+                "def lookup(value: str) -> str:\n"
+                '    "Look up a value."\n'
+                "    return value\n"
+            ),
             "--at",
             "https://images.example.test/context.jpg",
             "image/jpeg",
@@ -480,7 +702,11 @@ def test_endpoint_interactive_chat_preserves_history(
 
     requests = httpx_mock.get_requests()
     assert len(requests) == 2
-    assert json.loads(requests[1].content)["messages"] == [
+    request_bodies = [json.loads(request.content) for request in requests]
+    assert all(
+        body["tools"][0]["function"]["name"] == "lookup" for body in request_bodies
+    )
+    assert request_bodies[1]["messages"] == [
         {"role": "system", "content": "Be brief"},
         {
             "role": "user",

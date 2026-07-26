@@ -402,7 +402,7 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 
 @hookimpl
 def register_commands(cli):
-    from llm.cli import AttachmentType, attachment_types_callback
+    from llm.cli import AttachmentType, attachment_types_callback, tool_options
 
     @cli.group(name="openai")
     def openai_():
@@ -452,6 +452,7 @@ def register_commands(cli):
         callback=attachment_types_callback,
         help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
     )
+    @tool_options
     @click.option("--key", help="API key or stored key alias to send")
     @click.option(
         "headers",
@@ -491,6 +492,11 @@ def register_commands(cli):
         options,
         attachments,
         attachment_types,
+        tools,
+        python_tools,
+        tools_debug,
+        tools_approve,
+        chain_limit,
         key,
         headers,
         use_responses,
@@ -503,8 +509,9 @@ def register_commands(cli):
         Run against an OpenAI-compatible endpoint without logging.
 
         If PROMPT is provided, execute it once. If PROMPT is omitted in an
-        interactive terminal, start a chat. Piped stdin is treated as a
-        one-off prompt unless --chat is specified. Use --models to list the
+        interactive terminal, start a chat unless --template is provided.
+        Templates run once by default; use --chat to apply one interactively.
+        Piped stdin is treated as a one-off prompt. Use --models to list the
         available model IDs without running a prompt.
         """
         from llm.cli import (
@@ -513,7 +520,9 @@ def register_commands(cli):
             _apply_template,
             _merge_template_attachments,
             _merge_template_options,
+            _merge_template_tools,
             _run_chat,
+            _tool_chain_kwargs,
             display_stream_events,
             load_template,
             render_errors,
@@ -523,6 +532,8 @@ def register_commands(cli):
             raise click.ClickException("--models cannot be used with a prompt")
         if list_models and template:
             raise click.ClickException("--models cannot be used with --template")
+        if list_models and (tools or python_tools):
+            raise click.ClickException("--models cannot be used with tools")
         if force_chat and prompt is not None:
             raise click.ClickException("--chat cannot be used with a prompt")
 
@@ -540,6 +551,9 @@ def register_commands(cli):
                 model_id = template_obj.model
             if template_obj.options:
                 options = _merge_template_options(template_obj, options)
+            tools, python_tools = _merge_template_tools(
+                template_obj, tools, python_tools
+            )
 
         if not list_models and not model_id:
             raise click.ClickException(
@@ -554,6 +568,7 @@ def register_commands(cli):
             headers=dict(headers),
             vision=True,
             audio=not use_responses,
+            supports_tools=True,
         )
 
         # A configured api_base never receives the user's default OpenAI key.
@@ -579,8 +594,13 @@ def register_commands(cli):
         if key:
             prompt_kwargs["key"] = key
 
+        tool_kwargs = _tool_chain_kwargs(
+            tools, python_tools, tools_debug, tools_approve, chain_limit
+        )
         resolved_attachments = [*attachments, *attachment_types]
-        is_chat = force_chat or (prompt is None and sys.stdin.isatty())
+        is_chat = force_chat or (
+            prompt is None and template_obj is None and sys.stdin.isatty()
+        )
         try:
             if list_models:
                 for available_model in model.get_client(key).models.list():
@@ -600,11 +620,15 @@ def register_commands(cli):
 
                 def execute_chat_prompt(chat_prompt, _fragments, turn_attachments):
                     nonlocal system
-                    response = conversation.prompt(
+                    prompt_method = (
+                        conversation.chain if tool_kwargs else conversation.prompt
+                    )
+                    response = prompt_method(
                         chat_prompt,
                         system=system,
                         attachments=turn_attachments,
                         **prompt_kwargs,
+                        **tool_kwargs,
                     )
                     system = None
                     return response
@@ -630,12 +654,21 @@ def register_commands(cli):
                 raise click.ClickException(
                     "A prompt is required when stdin is not interactive"
                 )
-            response = model.prompt(
-                prompt,
-                system=system,
-                attachments=resolved_attachments,
-                **prompt_kwargs,
-            )
+            if tool_kwargs:
+                response = model.conversation().chain(
+                    prompt,
+                    system=system,
+                    attachments=resolved_attachments,
+                    **prompt_kwargs,
+                    **tool_kwargs,
+                )
+            else:
+                response = model.prompt(
+                    prompt,
+                    system=system,
+                    attachments=resolved_attachments,
+                    **prompt_kwargs,
+                )
             display_stream_events(
                 response.stream_events(),
                 show_reasoning=not hide_reasoning,

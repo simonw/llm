@@ -1082,9 +1082,10 @@ Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
   Run against an OpenAI-compatible endpoint without logging.
 
   If PROMPT is provided, execute it once. If PROMPT is omitted in an interactive
-  terminal, start a chat. Piped stdin is treated as a one-off prompt unless
-  --chat is specified. Use --models to list the available model IDs without
-  running a prompt.
+  terminal, start a chat unless --template is provided. Templates run once by
+  default; use --chat to apply one interactively. Piped stdin is treated as a
+  one-off prompt. Use --models to list the available model IDs without running a
+  prompt.
 
 Options:
   -m, --model TEXT                Model ID (required unless --models or provided
@@ -1097,6 +1098,13 @@ Options:
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype,
                                   --at image.jpg image/jpeg
+  -T, --tool TEXT                 Name of a tool to make available to the model
+  --functions TEXT                Python code block or file path defining
+                                  functions to register as tools
+  --td, --tools-debug             Show full details of tool executions
+  --ta, --tools-approve           Manually approve every tool execution
+  --cl, --chain-limit INTEGER     How many chained tool responses to allow,
+                                  default 5, set 0 for unlimited
   --key TEXT                      API key or stored key alias to send
   -H, --header <TEXT TEXT>...     Additional HTTP header
   --responses                     Use the Responses API instead of Chat

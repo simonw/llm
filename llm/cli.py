@@ -443,6 +443,15 @@ def _merge_template_attachments(template, attachments, attachment_types):
     return attachments, attachment_types
 
 
+def _merge_template_tools(template, tools, python_tools):
+    """Prepend trusted tool definitions declared by a loaded template."""
+    if template.tools:
+        tools = [*template.tools, *tools]
+    if template.functions and template._functions_is_trusted:
+        python_tools = [template.functions, *python_tools]
+    return tools, python_tools
+
+
 def json_validator(object_name):
     def validator(ctx, param, value):
         if value is None:
@@ -464,6 +473,54 @@ def schema_option(fn):
         "--schema",
         help="JSON schema, filepath or ID",
     )(fn)
+    return fn
+
+
+def tool_options(fn):
+    """Add the shared CLI options for selecting and executing tools."""
+    decorators = (
+        click.option(
+            "tools",
+            "-T",
+            "--tool",
+            multiple=True,
+            help="Name of a tool to make available to the model",
+        ),
+        click.option(
+            "python_tools",
+            "--functions",
+            multiple=True,
+            help="Python code block or file path defining functions to register as tools",
+        ),
+        click.option(
+            "tools_debug",
+            "--td",
+            "--tools-debug",
+            is_flag=True,
+            help="Show full details of tool executions",
+            envvar="LLM_TOOLS_DEBUG",
+        ),
+        click.option(
+            "tools_approve",
+            "--ta",
+            "--tools-approve",
+            is_flag=True,
+            help="Manually approve every tool execution",
+        ),
+        click.option(
+            "chain_limit",
+            "--cl",
+            "--chain-limit",
+            type=int,
+            default=5,
+            help=(
+                "How many chained tool responses to allow, "
+                "default 5, set 0 for unlimited"
+            ),
+        ),
+    )
+    for decorator in reversed(decorators):
+        fn = decorator(fn)
     return fn
 
 
@@ -535,42 +592,7 @@ def cli():
     callback=attachment_types_callback,
     help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
 )
-@click.option(
-    "tools",
-    "-T",
-    "--tool",
-    multiple=True,
-    help="Name of a tool to make available to the model",
-)
-@click.option(
-    "python_tools",
-    "--functions",
-    help="Python code block or file path defining functions to register as tools",
-    multiple=True,
-)
-@click.option(
-    "tools_debug",
-    "--td",
-    "--tools-debug",
-    is_flag=True,
-    help="Show full details of tool executions",
-    envvar="LLM_TOOLS_DEBUG",
-)
-@click.option(
-    "tools_approve",
-    "--ta",
-    "--tools-approve",
-    is_flag=True,
-    help="Manually approve every tool execution",
-)
-@click.option(
-    "chain_limit",
-    "--cl",
-    "--chain-limit",
-    type=int,
-    default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
-)
+@tool_options
 @click.option(
     "options",
     "-o",
@@ -867,10 +889,7 @@ def prompt(
             system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
-        if template_obj.tools:
-            tools = [*template_obj.tools, *tools]
-        if template_obj.functions and template_obj._functions_is_trusted:
-            python_tools = [template_obj.functions, *python_tools]
+        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
         if template_obj.options:
             options = _merge_template_options(template_obj, options)
         if "input" in template_obj.vars():
@@ -983,17 +1002,13 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
-    tool_implementations = _gather_tools(tools, python_tools)
-
-    if tool_implementations:
+    tool_kwargs = _tool_chain_kwargs(
+        tools, python_tools, tools_debug, tools_approve, chain_limit
+    )
+    if tool_kwargs:
         prompt_method = conversation.chain
         kwargs["options"] = validated_options
-        kwargs["chain_limit"] = chain_limit
-        if tools_debug:
-            kwargs["after_call"] = _debug_tool_call
-        if tools_approve:
-            kwargs["before_call"] = _approve_tool_call
-        kwargs["tools"] = tool_implementations
+        kwargs.update(tool_kwargs)
     else:
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
@@ -1152,42 +1167,7 @@ def prompt(
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option("--key", help="API key to use")
-@click.option(
-    "tools",
-    "-T",
-    "--tool",
-    multiple=True,
-    help="Name of a tool to make available to the model",
-)
-@click.option(
-    "python_tools",
-    "--functions",
-    help="Python code block or file path defining functions to register as tools",
-    multiple=True,
-)
-@click.option(
-    "tools_debug",
-    "--td",
-    "--tools-debug",
-    is_flag=True,
-    help="Show full details of tool executions",
-    envvar="LLM_TOOLS_DEBUG",
-)
-@click.option(
-    "tools_approve",
-    "--ta",
-    "--tools-approve",
-    is_flag=True,
-    help="Manually approve every tool execution",
-)
-@click.option(
-    "chain_limit",
-    "--cl",
-    "--chain-limit",
-    type=int,
-    default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
-)
+@tool_options
 def chat(
     system,
     model_id,
@@ -1243,10 +1223,7 @@ def chat(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-        if template_obj.tools:
-            tools = [*template_obj.tools, *tools]
-        if template_obj.functions and template_obj._functions_is_trusted:
-            python_tools = [template_obj.functions, *python_tools]
+        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
 
     # Figure out which model we are using
     if model_id is None:
@@ -1268,11 +1245,6 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
-    if tools_debug:
-        conversation.after_call = _debug_tool_call
-    if tools_approve:
-        conversation.before_call = _approve_tool_call
-
     # Validate options
     validated_options = get_model_options(model.model_id)
     if options:
@@ -1289,11 +1261,9 @@ def chat(
     if validated_options:
         kwargs["options"] = validated_options
 
-    tool_functions = _gather_tools(tools, python_tools)
-
-    if tool_functions:
-        kwargs["chain_limit"] = chain_limit
-        kwargs["tools"] = tool_functions
+    kwargs.update(
+        _tool_chain_kwargs(tools, python_tools, tools_debug, tools_approve, chain_limit)
+    )
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -4240,6 +4210,24 @@ def _gather_tools(
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
     return tools
+
+
+def _tool_chain_kwargs(
+    tool_specs, python_tools, tools_debug, tools_approve, chain_limit
+):
+    """Build Conversation.chain() keyword arguments for CLI-selected tools."""
+    tool_implementations = _gather_tools(tool_specs, python_tools)
+    if not tool_implementations:
+        return {}
+    kwargs = {
+        "tools": tool_implementations,
+        "chain_limit": chain_limit,
+    }
+    if tools_debug:
+        kwargs["after_call"] = _debug_tool_call
+    if tools_approve:
+        kwargs["before_call"] = _approve_tool_call
+    return kwargs
 
 
 def _get_conversation_tools(conversation, tools):
