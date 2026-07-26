@@ -337,6 +337,7 @@ class ToolCall:
 
 
 def _ensure_tool_call_id(tool_call: ToolCall) -> ToolCall:
+    # Generate a tool call ID if one has not yet been specified
     if tool_call.tool_call_id is not None:
         return tool_call
     return dataclasses.replace(
@@ -1289,10 +1290,6 @@ class _BaseResponse:
         return parts
 
     def add_tool_call(self, tool_call: ToolCall):
-        # Guarantee every locally-executable tool call has a unique id.
-        # Some providers never supply one, which otherwise forces every
-        # consumer correlating calls with results (or keying external
-        # state on a call) to invent fallback matching schemes.
         self._tool_calls.append(_ensure_tool_call_id(tool_call))
 
     def set_usage(
@@ -1957,14 +1954,7 @@ class Response(_BaseResponse):
         return tool_results
 
     def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
-        """Execute one tool call requested by a provider.
-
-        Provider plugins can call this during model execution when the
-        provider orchestrates the tool loop but delegates the actual tool
-        invocation to LLM. The response's tool lifecycle callbacks are
-        applied, and the call is not added to ``tool_calls()`` because the
-        provider is responsible for returning the result to the model.
-        """
+        "Utility method for manually executing a tool call with callbacks"
         tool_call = _ensure_tool_call_id(tool_call)
         return self.execute_tool_calls(
             before_call=cast(BeforeCallSync | None, self.before_call),
@@ -2440,11 +2430,7 @@ class AsyncResponse(_BaseResponse):
         return results
 
     async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
-        """Execute one tool call requested by a provider.
-
-        This is the asynchronous counterpart to
-        :meth:`Response.execute_tool_call`.
-        """
+        "Asynchronous counterpart to :meth:`Response.execute_tool_call`."
         tool_call = _ensure_tool_call_id(tool_call)
         results = await self.execute_tool_calls(
             before_call=cast(BeforeCallAsync | None, self.before_call),
