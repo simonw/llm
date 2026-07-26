@@ -1086,17 +1086,22 @@ Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
   --chat is specified.
 
 Options:
-  -m, --model TEXT             Model ID to send to the endpoint  [required]
-  -s, --system TEXT            System prompt to use
-  -o, --option <TEXT TEXT>...  key/value options for the model
-  --key TEXT                   API key or stored key alias to send
-  -H, --header <TEXT TEXT>...  Additional HTTP header
-  --responses                  Use the Responses API instead of Chat Completions
-  --chat                       Start an interactive chat, even when stdin is not
-                               a terminal
-  --no-stream                  Do not stream output
-  -R, --hide-reasoning         Hide reasoning output
-  -h, --help                   Show this message and exit.
+  -m, --model TEXT                Model ID to send to the endpoint  [required]
+  -s, --system TEXT               System prompt to use
+  -o, --option <TEXT TEXT>...     key/value options for the model
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  --key TEXT                      API key or stored key alias to send
+  -H, --header <TEXT TEXT>...     Additional HTTP header
+  --responses                     Use the Responses API instead of Chat
+                                  Completions
+  --chat                          Start an interactive chat, even when stdin is
+                                  not a terminal
+  --no-stream                     Do not stream output
+  -R, --hide-reasoning            Hide reasoning output
+  -h, --help                      Show this message and exit.
 ```
 
 (help-openai-models)=

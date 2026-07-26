@@ -60,6 +60,20 @@ llm openai endpoint https://example.com/v1 -m model-id
 Piped stdin is treated as a one-off prompt. Use `--chat` to explicitly start
 an interactive chat when stdin is not a terminal.
 
+Use `-a` or `--attachment` to attach an image or PDF. Chat Completions
+endpoints can also receive WAV or MP3 audio attachments:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  -a image.jpg \
+  "Describe this image"
+```
+
+Use `--at path-or-url mimetype` when the attachment type cannot be inferred.
+Attachments provided when starting an interactive chat are included with the
+first message.
+
 The command uses the Chat Completions API by default. Add `--responses` for an
 endpoint that implements the Responses API:
 

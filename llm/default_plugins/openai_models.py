@@ -402,6 +402,8 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 
 @hookimpl
 def register_commands(cli):
+    from llm.cli import AttachmentType, attachment_types_callback
+
     @cli.group(name="openai")
     def openai_():
         "Commands for working with OpenAI and OpenAI-compatible APIs"
@@ -424,6 +426,23 @@ def register_commands(cli):
         type=(str, str),
         multiple=True,
         help="key/value options for the model",
+    )
+    @click.option(
+        "attachments",
+        "-a",
+        "--attachment",
+        type=AttachmentType(),
+        multiple=True,
+        help="Attachment path or URL or -",
+    )
+    @click.option(
+        "attachment_types",
+        "--at",
+        "--attachment-type",
+        type=(str, str),
+        multiple=True,
+        callback=attachment_types_callback,
+        help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
     )
     @click.option("--key", help="API key or stored key alias to send")
     @click.option(
@@ -454,6 +473,8 @@ def register_commands(cli):
         model_id,
         system,
         options,
+        attachments,
+        attachment_types,
         key,
         headers,
         use_responses,
@@ -479,6 +500,8 @@ def register_commands(cli):
             model_name=model_id,
             api_base=url,
             headers=dict(headers),
+            vision=True,
+            audio=not use_responses,
         )
 
         # A configured api_base never receives the user's default OpenAI key.
@@ -504,16 +527,18 @@ def register_commands(cli):
         if key:
             prompt_kwargs["key"] = key
 
+        resolved_attachments = [*attachments, *attachment_types]
         is_chat = force_chat or (prompt is None and sys.stdin.isatty())
         try:
             if is_chat:
                 conversation = model.conversation()
 
-                def execute_chat_prompt(chat_prompt, _fragments, _attachments):
+                def execute_chat_prompt(chat_prompt, _fragments, turn_attachments):
                     nonlocal system
                     response = conversation.prompt(
                         chat_prompt,
                         system=system,
+                        attachments=turn_attachments,
                         **prompt_kwargs,
                     )
                     system = None
@@ -522,6 +547,7 @@ def register_commands(cli):
                 _run_chat(
                     f"{model_id} at {url}",
                     execute_chat_prompt,
+                    initial_attachments=resolved_attachments,
                     show_reasoning=not hide_reasoning,
                 )
                 return
@@ -536,7 +562,12 @@ def register_commands(cli):
                 raise click.ClickException(
                     "A prompt is required when stdin is not interactive"
                 )
-            response = model.prompt(prompt, system=system, **prompt_kwargs)
+            response = model.prompt(
+                prompt,
+                system=system,
+                attachments=resolved_attachments,
+                **prompt_kwargs,
+            )
             display_stream_events(
                 response.stream_events(),
                 show_reasoning=not hide_reasoning,

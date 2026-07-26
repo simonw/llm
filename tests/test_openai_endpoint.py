@@ -1,3 +1,4 @@
+import base64
 import json
 
 from click.testing import CliRunner
@@ -127,6 +128,50 @@ def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
     }
 
 
+def test_endpoint_chat_completions_attachment(httpx_mock, user_path, tmp_path):
+    base_url = "https://attachments.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "A test image")
+    image_bytes = b"\x89PNG\r\n\x1a\nendpoint attachment"
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(image_bytes)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Describe this",
+            "-m",
+            "test-model",
+            "--no-stream",
+            "-a",
+            str(image_path),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "A test image\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content)["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:image/png;base64,{}".format(
+                            base64.b64encode(image_bytes).decode("ascii")
+                        )
+                    },
+                },
+            ],
+        }
+    ]
+
+
 def test_endpoint_streams_by_default(httpx_mock, user_path):
     base_url = "https://stream.example.test/v1"
     httpx_mock.add_response(
@@ -219,6 +264,50 @@ def test_endpoint_responses_api(httpx_mock, user_path):
     }
 
 
+def test_endpoint_responses_api_attachment(httpx_mock, user_path):
+    base_url = "https://responses-attachments.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_payload("A remote image"),
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Describe this",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+            "--at",
+            "https://images.example.test/test.jpg",
+            "image/jpeg",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "A remote image\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content)["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "Describe this"},
+                {
+                    "type": "input_image",
+                    "image_url": "https://images.example.test/test.jpg",
+                },
+            ],
+        }
+    ]
+
+
 def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     base_url = "https://stdin.example.test/v1"
     _add_chat_response(httpx_mock, base_url, "From stdin")
@@ -260,6 +349,9 @@ def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
             "--no-stream",
             "--system",
             "Be brief",
+            "--at",
+            "https://images.example.test/context.jpg",
+            "image/jpeg",
         ],
         input="First question\nSecond question\nquit\n",
         catch_exceptions=False,
@@ -274,7 +366,18 @@ def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
     assert len(requests) == 2
     assert json.loads(requests[1].content)["messages"] == [
         {"role": "system", "content": "Be brief"},
-        {"role": "user", "content": "First question"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "First question"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://images.example.test/context.jpg",
+                    },
+                },
+            ],
+        },
         {"role": "assistant", "content": "First answer"},
         {"role": "user", "content": "Second question"},
     ]
