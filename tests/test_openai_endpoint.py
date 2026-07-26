@@ -1,0 +1,280 @@
+import json
+
+from click.testing import CliRunner
+from pytest_httpx import IteratorStream
+
+from llm.cli import cli
+
+
+def _add_chat_response(httpx_mock, url, text):
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{url}/chat/completions",
+        json={
+            "id": "chatcmpl_test",
+            "object": "chat.completion",
+            "created": 1,
+            "model": "test-model",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 3,
+                "completion_tokens": 2,
+                "total_tokens": 5,
+            },
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+
+def _responses_payload(text):
+    return {
+        "id": "resp_test",
+        "object": "response",
+        "created_at": 1,
+        "model": "test-model",
+        "output": [
+            {
+                "type": "message",
+                "id": "msg_test",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": text,
+                        "annotations": [],
+                    }
+                ],
+            }
+        ],
+        "usage": {
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "total_tokens": 5,
+        },
+        "status": "completed",
+    }
+
+
+def _chat_stream_events():
+    for delta, finish_reason in (
+        ({"role": "assistant", "content": ""}, None),
+        ({"content": "Hello"}, None),
+        ({"content": " streamed"}, None),
+        ({}, "stop"),
+    ):
+        yield "data: {}\n\n".format(
+            json.dumps(
+                {
+                    "id": "chatcmpl_stream_test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "test-model",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": delta,
+                            "finish_reason": finish_reason,
+                        }
+                    ],
+                }
+            )
+        ).encode("utf-8")
+    yield b"data: [DONE]\n\n"
+
+
+def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
+    httpx_mock, user_path, monkeypatch
+):
+    base_url = "https://example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "Hello from the endpoint")
+    monkeypatch.setenv("OPENAI_API_KEY", "real-default-openai-key")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Hello",
+            "-m",
+            "test-model",
+            "--no-stream",
+            "-H",
+            "X-Test",
+            "one",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Hello from the endpoint\n"
+    assert not (user_path / "logs.db").exists()
+
+    request = httpx_mock.get_requests()[0]
+    assert request.headers["Authorization"] == "Bearer DUMMY_KEY"
+    assert request.headers["X-Test"] == "one"
+    assert json.loads(request.content) == {
+        "messages": [{"role": "user", "content": "Hello"}],
+        "model": "test-model",
+        "stream": False,
+    }
+
+
+def test_endpoint_streams_by_default(httpx_mock, user_path):
+    base_url = "https://stream.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/chat/completions",
+        stream=IteratorStream(_chat_stream_events()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Hello",
+            "-m",
+            "test-model",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Hello streamed\n"
+    assert not (user_path / "logs.db").exists()
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["stream"] is True
+    assert request_body["stream_options"] == {"include_usage": True}
+
+
+def test_endpoint_uses_explicit_key(httpx_mock, user_path):
+    base_url = "https://example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "Authenticated")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Hello",
+            "-m",
+            "test-model",
+            "--no-stream",
+            "--key",
+            "endpoint-key",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert httpx_mock.get_requests()[0].headers["Authorization"] == (
+        "Bearer endpoint-key"
+    )
+    assert not (user_path / "logs.db").exists()
+
+
+def test_endpoint_responses_api(httpx_mock, user_path):
+    base_url = "https://responses.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_payload("Hello from Responses"),
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Hello",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Hello from Responses\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content) == {
+        "input": [{"role": "user", "content": "Hello"}],
+        "model": "test-model",
+        "store": False,
+        "stream": False,
+    }
+
+
+def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
+    base_url = "https://stdin.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "From stdin")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "-m",
+            "test-model",
+            "--no-stream",
+        ],
+        input="Hello from stdin",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["messages"] == [{"role": "user", "content": "Hello from stdin"}]
+    assert not (user_path / "logs.db").exists()
+
+
+def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
+    base_url = "https://chat.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "First answer")
+    _add_chat_response(httpx_mock, base_url, "Second answer")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "-m",
+            "test-model",
+            "--chat",
+            "--no-stream",
+            "--system",
+            "Be brief",
+        ],
+        input="First question\nSecond question\nquit\n",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert "First answer" in result.output
+    assert "Second answer" in result.output
+    assert not (user_path / "logs.db").exists()
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert json.loads(requests[1].content)["messages"] == [
+        {"role": "system", "content": "Be brief"},
+        {"role": "user", "content": "First question"},
+        {"role": "assistant", "content": "First answer"},
+        {"role": "user", "content": "Second question"},
+    ]

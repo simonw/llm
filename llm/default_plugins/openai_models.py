@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
 from typing import Any, cast
@@ -9,7 +10,7 @@ import click
 import httpx
 import openai
 import yaml
-from pydantic import Field, create_model, field_validator
+from pydantic import Field, ValidationError, create_model, field_validator
 
 import llm
 from llm import (
@@ -403,7 +404,154 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 def register_commands(cli):
     @cli.group(name="openai")
     def openai_():
-        "Commands for working directly with the OpenAI API"
+        "Commands for working with OpenAI and OpenAI-compatible APIs"
+
+    @openai_.command()
+    @click.argument("url")
+    @click.argument("prompt", required=False)
+    @click.option(
+        "model_id",
+        "-m",
+        "--model",
+        required=True,
+        help="Model ID to send to the endpoint",
+    )
+    @click.option("-s", "--system", help="System prompt to use")
+    @click.option(
+        "options",
+        "-o",
+        "--option",
+        type=(str, str),
+        multiple=True,
+        help="key/value options for the model",
+    )
+    @click.option("--key", help="API key or stored key alias to send")
+    @click.option(
+        "headers",
+        "-H",
+        "--header",
+        type=(str, str),
+        multiple=True,
+        help="Additional HTTP header",
+    )
+    @click.option(
+        "use_responses",
+        "--responses",
+        is_flag=True,
+        help="Use the Responses API instead of Chat Completions",
+    )
+    @click.option(
+        "force_chat",
+        "--chat",
+        is_flag=True,
+        help="Start an interactive chat, even when stdin is not a terminal",
+    )
+    @click.option("--no-stream", is_flag=True, help="Do not stream output")
+    @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
+    def endpoint(
+        url,
+        prompt,
+        model_id,
+        system,
+        options,
+        key,
+        headers,
+        use_responses,
+        force_chat,
+        no_stream,
+        hide_reasoning,
+    ):
+        """
+        Run against an OpenAI-compatible endpoint without logging.
+
+        If PROMPT is provided, execute it once. If PROMPT is omitted in an
+        interactive terminal, start a chat. Piped stdin is treated as a
+        one-off prompt unless --chat is specified.
+        """
+        from llm.cli import _run_chat, display_stream_events, render_errors
+
+        if force_chat and prompt is not None:
+            raise click.ClickException("--chat cannot be used with a prompt")
+
+        model_class = Responses if use_responses else Chat
+        model = model_class(
+            model_id=model_id,
+            model_name=model_id,
+            api_base=url,
+            headers=dict(headers),
+        )
+
+        # A configured api_base never receives the user's default OpenAI key.
+        # Match that safety property here: only send credentials when --key
+        # was explicitly provided for this invocation.
+        if not key:
+            model.needs_key = None
+
+        try:
+            validated_options = {
+                option_name: option_value
+                for option_name, option_value in model.Options(**dict(options))
+                if option_value is not None
+            }
+        except ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
+        prompt_kwargs = {
+            "options": validated_options,
+            "stream": not no_stream,
+            "hide_reasoning": hide_reasoning,
+        }
+        if key:
+            prompt_kwargs["key"] = key
+
+        is_chat = force_chat or (prompt is None and sys.stdin.isatty())
+        try:
+            if is_chat:
+                conversation = model.conversation()
+
+                def execute_chat_prompt(chat_prompt, _fragments, _attachments):
+                    nonlocal system
+                    response = conversation.prompt(
+                        chat_prompt,
+                        system=system,
+                        **prompt_kwargs,
+                    )
+                    system = None
+                    return response
+
+                _run_chat(
+                    f"{model_id} at {url}",
+                    execute_chat_prompt,
+                    show_reasoning=not hide_reasoning,
+                )
+                return
+
+            if not sys.stdin.isatty():
+                stdin_prompt = sys.stdin.read()
+                if stdin_prompt:
+                    prompt = " ".join(
+                        part for part in (stdin_prompt, prompt) if part is not None
+                    )
+            if prompt is None:
+                raise click.ClickException(
+                    "A prompt is required when stdin is not interactive"
+                )
+            response = model.prompt(prompt, system=system, **prompt_kwargs)
+            display_stream_events(
+                response.stream_events(),
+                show_reasoning=not hide_reasoning,
+            )
+            click.echo()
+        except (click.Abort, click.ClickException):
+            raise
+        except (ValueError, NotImplementedError) as ex:
+            raise click.ClickException(str(ex))
+        except Exception as ex:
+            if getattr(sys, "_called_from_test", False) or os.environ.get(
+                "LLM_RAISE_ERRORS"
+            ):
+                raise
+            raise click.ClickException(str(ex))
 
     @openai_.command()
     @click.option("json_", "--json", is_flag=True, help="Output as JSON")

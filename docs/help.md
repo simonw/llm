@@ -80,7 +80,7 @@ Commands:
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
   models        Manage available models
-  openai        Commands for working directly with the OpenAI API
+  openai        Commands for working with OpenAI and OpenAI-compatible APIs
   plugins       List installed plugins
   schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
@@ -1064,13 +1064,39 @@ Options:
 ```
 Usage: llm openai [OPTIONS] COMMAND [ARGS]...
 
-  Commands for working directly with the OpenAI API
+  Commands for working with OpenAI and OpenAI-compatible APIs
 
 Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  models  List models available to you from the OpenAI API
+  endpoint  Run against an OpenAI-compatible endpoint without logging.
+  models    List models available to you from the OpenAI API
+```
+
+(help-openai-endpoint)=
+#### llm openai endpoint --help
+```
+Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
+
+  Run against an OpenAI-compatible endpoint without logging.
+
+  If PROMPT is provided, execute it once. If PROMPT is omitted in an interactive
+  terminal, start a chat. Piped stdin is treated as a one-off prompt unless
+  --chat is specified.
+
+Options:
+  -m, --model TEXT             Model ID to send to the endpoint  [required]
+  -s, --system TEXT            System prompt to use
+  -o, --option <TEXT TEXT>...  key/value options for the model
+  --key TEXT                   API key or stored key alias to send
+  -H, --header <TEXT TEXT>...  Additional HTTP header
+  --responses                  Use the Responses API instead of Chat Completions
+  --chat                       Start an interactive chat, even when stdin is not
+                               a terminal
+  --no-stream                  Do not stream output
+  -R, --hide-reasoning         Hide reasoning output
+  -h, --help                   Show this message and exit.
 ```
 
 (help-openai-models)=

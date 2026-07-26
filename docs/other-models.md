@@ -28,6 +28,50 @@ Check the {ref}`plugin directory <plugin-directory>` for the latest list of avai
 
 Projects such as [LocalAI](https://localai.io/) offer a REST API that imitates the OpenAI API but can be used to run other models, including models that can be installed on your own machine. These can be added using the same configuration mechanism.
 
+### Run against an endpoint without configuring it
+
+Use `llm openai endpoint` to run a prompt directly against an
+OpenAI-compatible base URL:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  "What is the capital of France?"
+```
+
+This command does not register the model and does not log the prompt or
+response. It also does not send your configured OpenAI API key to the endpoint.
+Use `--key` to explicitly provide a key or the alias of a key saved using
+`llm keys set`:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  --key custom-endpoint \
+  "What is the capital of France?"
+```
+
+Omit the prompt to start an interactive chat:
+
+```bash
+llm openai endpoint https://example.com/v1 -m model-id
+```
+
+Piped stdin is treated as a one-off prompt. Use `--chat` to explicitly start
+an interactive chat when stdin is not a terminal.
+
+The command uses the Chat Completions API by default. Add `--responses` for an
+endpoint that implements the Responses API:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  --responses \
+  "What is the capital of France?"
+```
+
+### Configure an OpenAI-compatible model
+
 The `model_id` is the name LLM will use for the model. The `model_name` is the name which needs to be passed to the API - this might differ from the `model_id`, especially if the `model_id` could potentially clash with other installed models.
 
 The `api_base` key can be used to point the OpenAI client library at a different API endpoint.
