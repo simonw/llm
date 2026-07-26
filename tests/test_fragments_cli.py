@@ -1,3 +1,4 @@
+import json
 import os
 import textwrap
 from importlib.metadata import version
@@ -126,6 +127,24 @@ def test_fragments_list(user_path):
               source: file3.txt
               content: '3'
             """).strip())
+
+
+def test_fragment_absolute_path(user_path, tmp_path):
+    path = tmp_path / "fragment.txt"
+    path.write_text("Hello from an absolute path")
+
+    result = CliRunner().invoke(
+        cli, ["prompt", "-m", "echo", "-f", str(path)], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "prompt": "Hello from an absolute path",
+        "system": "",
+        "attachments": [],
+        "stream": True,
+        "previous": [],
+    }
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})

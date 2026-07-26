@@ -168,7 +168,7 @@ def resolve_fragments(
             resolved.append(Fragment(response.text, fragment))
         elif fragment == "-":
             resolved.append(Fragment(sys.stdin.read(), "-"))
-        elif has_plugin_prefix(fragment):
+        elif has_plugin_prefix(fragment) and not pathlib.Path(fragment).exists():
             prefix, rest = fragment.split(":", 1)
             loaders = get_fragment_loaders()
             if prefix not in loaders:
