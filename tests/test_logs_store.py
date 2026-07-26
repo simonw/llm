@@ -28,8 +28,10 @@ NEW_TABLES = {
     "messages",
     "parts",
     "part_attachments",
+    "part_fragments",
     "turns",
     "turn_tools",
+    "turn_fragments",
     "threads",
 }
 
@@ -304,35 +306,6 @@ class TestChainRoundTrip:
     def test_unknown_tip_raises(self, store):
         with pytest.raises(KeyError):
             store.load_chain("b2:does-not-exist")
-
-
-# ---- storage by reference --------------------------------------------
-
-
-class TestStorageByReference:
-    def test_text_matching_a_fragment_is_stored_by_reference(self, store):
-        content = "a large reusable fragment"
-        ensure_fragment(store.db, content)
-        store.ensure_chain([llm.user(content)])
-        row = next(iter(store.db["parts"].rows))
-        assert row["text"] is None
-        assert row["fragment_id"] is not None
-
-    def test_fragment_backed_text_still_round_trips(self, store):
-        content = "a large reusable fragment"
-        ensure_fragment(store.db, content)
-        messages = [llm.user(content)]
-        assert round_trip(store, messages) == messages
-
-    def test_fragment_backed_text_hashes_the_same_as_inline(self, store):
-        content = "a large reusable fragment"
-        inline_tip = store.ensure_chain([llm.user(content)])
-        ensure_fragment(store.db, content)
-        by_reference_tip = store.ensure_chain([llm.user(content)])
-        # Identity is the resolved text, so where the bytes live makes
-        # no difference to the hash - and the second write is a no-op.
-        assert inline_tip == by_reference_tip
-        assert store.db["messages"].count == 1
 
 
 # ---- dedup -----------------------------------------------------------
@@ -761,3 +734,184 @@ class TestLibraryLogging:
             response.text()
             response.log_to_db(store.db)
         assert len(store.thread_messages(conversation.id)) == 4
+
+
+# ---- storage by reference --------------------------------------------
+
+
+class TestFragmentReferences:
+    """The point of fragments is that a novel is stored once and pointed
+    at from every prompt about it, so the text must not be expanded into
+    each message that uses it."""
+
+    NOVEL = "CALL ME ISHMAEL. " * 500
+
+    def messages_using(self, fragment, question):
+        # What Prompt.prompt builds: fragments joined to the prompt text.
+        return [llm.user(f"{fragment}\n{question}")]
+
+    def test_fragment_text_is_not_duplicated_into_the_part(self, store):
+        ensure_fragment(store.db, self.NOVEL)
+        store.ensure_chain(
+            self.messages_using(self.NOVEL, "who is the narrator?"),
+            fragments=[self.NOVEL],
+        )
+        payload = next(iter(store.db["parts"].rows))["payload"]
+        assert self.NOVEL not in payload
+        assert len(payload) < 200
+
+    def test_many_prompts_about_one_fragment_store_it_once(self, store):
+        ensure_fragment(store.db, self.NOVEL)
+        for question in ("who?", "where?", "when?", "why?"):
+            store.ensure_chain(
+                self.messages_using(self.NOVEL, question), fragments=[self.NOVEL]
+            )
+        assert store.db["fragments"].count == 1
+        assert store.db["parts"].count == 4
+        total = sum(len(row["payload"]) for row in store.db["parts"].rows)
+        assert total < len(self.NOVEL)
+
+    def test_referenced_text_round_trips(self, store):
+        ensure_fragment(store.db, self.NOVEL)
+        messages = self.messages_using(self.NOVEL, "who is the narrator?")
+        tip = store.ensure_chain(messages, fragments=[self.NOVEL])
+        assert store.load_chain(tip) == messages
+
+    def test_several_fragments_in_one_part_round_trip(self, store):
+        one, two = "FIRST FRAGMENT", "SECOND FRAGMENT"
+        for content in (one, two):
+            ensure_fragment(store.db, content)
+        messages = [llm.user(f"{one}\n{two}\ncompare them")]
+        tip = store.ensure_chain(messages, fragments=[one, two])
+        assert store.load_chain(tip) == messages
+
+    def test_part_fragments_records_the_link(self, store):
+        ensure_fragment(store.db, self.NOVEL)
+        store.ensure_chain(
+            self.messages_using(self.NOVEL, "who?"), fragments=[self.NOVEL]
+        )
+        assert store.db["part_fragments"].count == 1
+
+    def test_messages_using_a_fragment_are_one_join_away(self, store):
+        ensure_fragment(store.db, self.NOVEL)
+        for question in ("who?", "where?"):
+            store.ensure_chain(
+                self.messages_using(self.NOVEL, question), fragments=[self.NOVEL]
+            )
+        fragment_id = next(iter(store.db["fragments"].rows))["id"]
+        found = list(
+            store.db.query(
+                """
+                select distinct parts.message_hash from part_fragments
+                join parts on parts.id = part_fragments.part_id
+                where part_fragments.fragment_id = ?
+                """,
+                [fragment_id],
+            )
+        )
+        assert len(found) == 2
+
+    def test_unknown_fragments_are_stored_inline(self, store):
+        messages = [llm.user("just some text")]
+        tip = store.ensure_chain(messages)
+        assert store.db["part_fragments"].count == 0
+        assert store.load_chain(tip) == messages
+
+    def test_hashes_do_not_depend_on_where_the_bytes_live(self, store):
+        # Identity is the resolved content, so storing by reference must
+        # produce exactly the hash that storing inline would.
+        messages = self.messages_using(self.NOVEL, "who?")
+        inline = store.ensure_chain(messages)
+        ensure_fragment(store.db, self.NOVEL)
+        by_reference = store.ensure_chain(messages, fragments=[self.NOVEL])
+        assert inline == by_reference
+
+
+# ---- verification ----------------------------------------------------
+
+
+class TestVerify:
+    """Reads resolve references, so a reconstruction bug would produce a
+    chain that differs from what was hashed - and would do it silently.
+    Re-hashing every stored message catches the whole class at once."""
+
+    def test_a_fresh_store_verifies(self, store):
+        assert store.verify() == []
+
+    def test_every_kind_of_part_verifies(self, store):
+        novel = "CALL ME ISHMAEL. " * 100
+        store.ensure_chain(
+            [
+                llm.system("be brief"),
+                llm.user(
+                    f"{novel}\nwho is the narrator?",
+                    Attachment(type="image/png", content=b"bytes"),
+                ),
+                llm.assistant(
+                    ReasoningPart(text="thinking", provider_metadata={"a": 1}),
+                    ReasoningPart(redacted=True),
+                    ToolCallPart(name="s", arguments={"q": 1}, tool_call_id="tc1"),
+                    TextPart(text="answer"),
+                ),
+                llm.tool_message(
+                    ToolResultPart(
+                        name="s",
+                        output="out",
+                        tool_call_id="tc1",
+                        exception="ValueError: x",
+                        attachments=[Attachment(type="image/png", content=b"one")],
+                    )
+                ),
+            ],
+            fragments=[novel],
+        )
+        assert store.verify() == []
+
+    def test_a_corrupted_payload_is_caught(self, store):
+        tip = store.ensure_chain([llm.user("Hi")])
+        with store.db.conn:
+            store.db.execute(
+                "update parts set payload = ?", ['{"type":"text","text":"tampered"}']
+            )
+        assert store.verify() == [tip]
+
+    def test_a_missing_fragment_is_caught(self, store):
+        novel = "CALL ME ISHMAEL. " * 100
+        tip = store.ensure_chain([llm.user(f"{novel}\nwho?")], fragments=[novel])
+        with store.db.conn:
+            store.db.execute("delete from fragments")
+        assert store.verify() == [tip]
+
+
+class TestFragmentsEndToEnd:
+
+    def test_a_conversation_chain_includes_fragment_text(self, mock_model):
+        # prompt.messages is meant to be exactly what the model sees, and
+        # what the model sees has the fragments concatenated in.
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["ok"])
+        response = conversation.prompt("question", fragments=["FRAGMENT-BODY"])
+        response.text()
+        assert response.prompt.messages[-1].parts[0].text == response.prompt.prompt
+
+    def test_the_cli_stores_a_fragment_by_reference(self, user_path, tmpdir):
+        novel = "CALL ME ISHMAEL. " * 3000
+        path = tmpdir / "novel.txt"
+        path.write_text(novel, "utf-8")
+        for question in ("who?", "where?", "when?"):
+            run("-m", "echo", question, "-f", str(path))
+
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        assert db["fragments"].count == 1
+        assert db["part_fragments"].count >= 3
+        # Every question re-sends the novel; it must be stored once.
+        user_payloads = sum(
+            len(row["payload"])
+            for row in db.query(
+                "select payload from parts join messages"
+                " on messages.hash = parts.message_hash"
+                " where messages.role = 'user'"
+            )
+        )
+        assert user_payloads < len(novel)
+        assert LogStore(db).verify() == []

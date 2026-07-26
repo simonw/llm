@@ -590,6 +590,7 @@ class _BaseConversation:
         explicit_messages,
         system=None,
         system_fragments=None,
+        fragments=None,
     ) -> list[Any]:
         """Build the full message chain for the next turn.
 
@@ -652,8 +653,15 @@ class _BaseConversation:
             )
 
         user_parts: list[Any] = []
-        if prompt:
-            user_parts.append(TextPart(text=prompt))
+        # Fragments are concatenated into the prompt text before it is
+        # sent, so they have to be in the chain too - prompt.messages is
+        # meant to be exactly what the model sees. Matches Prompt.prompt.
+        prompt_text = "\n".join(
+            [str(fragment) for fragment in fragments or []]
+            + ([prompt] if prompt else [])
+        )
+        if prompt_text:
+            user_parts.append(TextPart(text=prompt_text))
         for att in attachments or []:
             user_parts.append(AttachmentPart(attachment=att))
         if user_parts:
@@ -695,6 +703,7 @@ class Conversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return Response(
             Prompt(
@@ -749,6 +758,7 @@ class Conversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return ChainResponse(
             Prompt(
@@ -823,6 +833,7 @@ class AsyncConversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return AsyncChainResponse(
             Prompt(
@@ -874,6 +885,7 @@ class AsyncConversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return AsyncResponse(
             Prompt(

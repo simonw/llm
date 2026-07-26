@@ -302,7 +302,8 @@ for table in (
     "fragments", "fragment_aliases", "prompt_fragments", "system_fragments", "tools",
     "tool_responses", "tool_calls", "tool_results", "tool_instances",
     "tool_results_attachments",
-    "messages", "parts", "part_attachments", "turns", "turn_tools", "threads",
+    "messages", "parts", "part_attachments", "part_fragments",
+    "threads", "turns", "turn_tools", "turn_fragments",
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -440,18 +441,8 @@ CREATE TABLE "parts" (
   "message_hash" TEXT REFERENCES "messages"("hash"),
   "position" INTEGER,
   "type" TEXT,
-  "text" TEXT,
-  "fragment_id" INTEGER REFERENCES "fragments"("id"),
-  "redacted" INTEGER,
-  "name" TEXT,
-  "arguments" TEXT,
-  "output" TEXT,
-  "tool_call_id" TEXT,
-  "server_executed" INTEGER,
-  "exception" TEXT,
-  "tool_id" INTEGER REFERENCES "tools"("id"),
-  "instance_id" INTEGER REFERENCES "tool_instances"("id"),
-  "provider_metadata" TEXT
+  "tool_name" TEXT,
+  "payload" TEXT
 );
 CREATE TABLE "part_attachments" (
   "part_id" INTEGER REFERENCES "parts"("id"),
@@ -460,9 +451,24 @@ CREATE TABLE "part_attachments" (
   PRIMARY KEY ("part_id",
   "attachment_id")
 );
+CREATE TABLE "part_fragments" (
+  "part_id" INTEGER REFERENCES "parts"("id"),
+  "fragment_id" INTEGER REFERENCES "fragments"("id"),
+  "order" INTEGER,
+  PRIMARY KEY ("part_id",
+  "fragment_id",
+  "order")
+);
+CREATE TABLE "threads" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT,
+  "tip_message_hash" TEXT REFERENCES "messages"("hash"),
+  "forked_from" TEXT REFERENCES "threads"("id"),
+  "datetime_utc" TEXT
+);
 CREATE TABLE "turns" (
   "id" TEXT PRIMARY KEY,
-  "thread_id" TEXT,
+  "thread_id" TEXT REFERENCES "threads"("id"),
   "parent_message_hash" TEXT REFERENCES "messages"("hash"),
   "tip_message_hash" TEXT REFERENCES "messages"("hash"),
   "model" TEXT,
@@ -473,9 +479,7 @@ CREATE TABLE "turns" (
   "output_tokens" INTEGER,
   "token_details" TEXT,
   "duration_ms" INTEGER,
-  "datetime_utc" TEXT,
-  "response_json" TEXT,
-  "error" TEXT
+  "datetime_utc" TEXT
 );
 CREATE TABLE "turn_tools" (
   "turn_id" TEXT REFERENCES "turns"("id"),
@@ -483,12 +487,14 @@ CREATE TABLE "turn_tools" (
   PRIMARY KEY ("turn_id",
   "tool_id")
 );
-CREATE TABLE "threads" (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT,
-  "tip_message_hash" TEXT REFERENCES "messages"("hash"),
-  "forked_from" TEXT REFERENCES "threads"("id"),
-  "datetime_utc" TEXT
+CREATE TABLE "turn_fragments" (
+  "turn_id" TEXT REFERENCES "turns"("id"),
+  "fragment_id" INTEGER REFERENCES "fragments"("id"),
+  "order" INTEGER,
+  "kind" TEXT,
+  PRIMARY KEY ("turn_id",
+  "fragment_id",
+  "kind")
 );
 ```
 <!-- [[[end]]] -->

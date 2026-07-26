@@ -553,3 +553,167 @@ def m023_content_addressed_messages(db):
             ("forked_from", "threads", "id"),
         ),
     )
+
+
+@migration
+def m024_message_store_payloads(db):
+    # Reshape the m023 tables. Parts now carry the wire form of the part
+    # as a payload rather than a column per field, so a new part type or
+    # field needs no schema change and reading is Part.from_dict().
+    #
+    # The payload stores large content by reference - fragment ids for
+    # text, attachment ids for binary - which is the whole point of the
+    # fragments feature: a novel is stored once and pointed at from every
+    # prompt about it. Hashing is unaffected either way, because identity
+    # is computed over the resolved content before anything is written.
+    #
+    # m023 shipped only in alphas and its tables are a mirror of data the
+    # legacy tables still hold in full, so this drops and recreates
+    # rather than carrying a data migration for a schema nobody has.
+    for table in (
+        "turn_tools",
+        "turn_fragments",
+        "turns",
+        "threads",
+        "part_attachments",
+        "part_fragments",
+        "parts",
+        "messages",
+    ):
+        db[table].drop(ignore=True)
+
+    db["messages"].create(
+        {
+            "hash": str,
+            "parent_hash": str,
+            "role": str,
+            "provider_metadata": str,
+        },
+        pk="hash",
+        foreign_keys=(("parent_hash", "messages", "hash"),),
+    )
+    # Needed by the recursive descent through the tree and by the
+    # child count that identifies a fork.
+    db["messages"].create_index(["parent_hash"])
+
+    db["parts"].create(
+        {
+            "id": int,
+            "message_hash": str,
+            "position": int,
+            # text | reasoning | tool_call | tool_result | attachment
+            "type": str,
+            # Tool name for tool_call and tool_result parts, else NULL.
+            "tool_name": str,
+            # Part.to_dict(), with large content replaced by references.
+            # Authoritative: reading is Part.from_dict(resolved payload).
+            # type and tool_name above are write-time projections for
+            # querying; the read path ignores them.
+            "payload": str,
+        },
+        pk="id",
+        foreign_keys=(("message_hash", "messages", "hash"),),
+    )
+    # The hot read path, and it enforces one part per position.
+    db["parts"].create_index(["message_hash", "position"], unique=True)
+
+    # Attachment and fragment ids are in the payload too. These tables
+    # exist so referential integrity, garbage collection reachability and
+    # "everything that used X" are plain joins rather than a json_each
+    # over every payload in the database.
+    db["part_attachments"].create(
+        {
+            "part_id": int,
+            "attachment_id": str,
+            "order": int,
+        },
+        pk=("part_id", "attachment_id"),
+        foreign_keys=(
+            ("part_id", "parts", "id"),
+            ("attachment_id", "attachments", "id"),
+        ),
+    )
+
+    db["part_fragments"].create(
+        {
+            "part_id": int,
+            "fragment_id": int,
+            "order": int,
+        },
+        pk=("part_id", "fragment_id", "order"),
+        foreign_keys=(
+            ("part_id", "parts", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+    )
+    db["part_fragments"].create_index(["fragment_id"])
+
+    # The only mutable rows in the schema. A fork is a second thread
+    # pointing at a message that already exists.
+    db["threads"].create(
+        {
+            "id": str,
+            "name": str,
+            "tip_message_hash": str,
+            "forked_from": str,
+            "datetime_utc": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("tip_message_hash", "messages", "hash"),
+            ("forked_from", "threads", "id"),
+        ),
+    )
+
+    # One model call. Self-contained - it does not read anything from the
+    # older responses table. parent_ and tip_message_hash together
+    # delimit what this turn contributed, which nothing else records,
+    # because message rows are shared and cannot carry provenance.
+    db["turns"].create(
+        {
+            "id": str,
+            "thread_id": str,
+            "parent_message_hash": str,
+            "tip_message_hash": str,
+            "model": str,
+            "resolved_model": str,
+            "options_json": str,
+            "schema_id": str,
+            "input_tokens": int,
+            "output_tokens": int,
+            "token_details": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+        },
+        pk="id",
+        foreign_keys=(
+            ("thread_id", "threads", "id"),
+            ("parent_message_hash", "messages", "hash"),
+            ("tip_message_hash", "messages", "hash"),
+            ("schema_id", "schemas", "id"),
+        ),
+    )
+    db["turns"].create_index(["thread_id"])
+
+    db["turn_tools"].create(
+        {"turn_id": str, "tool_id": int},
+        pk=("turn_id", "tool_id"),
+        foreign_keys=(("turn_id", "turns", "id"), ("tool_id", "tools", "id")),
+    )
+
+    # Provenance: which fragments this call was given. Distinct from
+    # part_fragments, which says what a message's text is built from.
+    db["turn_fragments"].create(
+        {
+            "turn_id": str,
+            "fragment_id": int,
+            "order": int,
+            "kind": str,  # 'prompt' | 'system'
+        },
+        pk=("turn_id", "fragment_id", "kind"),
+        foreign_keys=(
+            ("turn_id", "turns", "id"),
+            ("fragment_id", "fragments", "id"),
+        ),
+    )
+    db["turn_fragments"].create_index(["fragment_id"])

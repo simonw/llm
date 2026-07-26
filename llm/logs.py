@@ -7,11 +7,13 @@ rows that store it. Forking a conversation, or re-sending a history from
 a client that holds the conversation state itself, both write only the
 messages that are genuinely new.
 
-The identity of a message is its *resolved* content. Storage may still
-be by reference — a text part sourced from a fragment stores a
-``fragment_id`` rather than a second copy of the text, and attachments
-reuse the existing content-addressed ``attachments`` table — but the
-hash always covers the content as the model saw it.
+The identity of a message is its *resolved* content, but storage is by
+reference: text that borrows from a fragment stores the fragment's id in
+place of a copy, and attachments store an id into the existing
+content-addressed ``attachments`` table. Ask a hundred questions about a
+novel and the novel is stored once. Reading resolves the references
+again, so the hash always covers the content as the model saw it -
+``LogStore.verify()`` re-derives it to prove that stays true.
 """
 
 import datetime
@@ -24,12 +26,11 @@ from .models import Attachment, _conversation_name
 from .parts import (
     AttachmentPart,
     Message,
-    ReasoningPart,
-    TextPart,
+    Part,
     ToolCallPart,
     ToolResultPart,
 )
-from .utils import ensure_tool, make_schema_id, monotonic_ulid
+from .utils import ensure_fragment, ensure_tool, make_schema_id, monotonic_ulid
 
 __all__ = [
     "HASH_PREFIX",
@@ -97,7 +98,12 @@ class LogStore:
 
     # -- writing -------------------------------------------------------
 
-    def ensure_chain(self, messages, parent: str | None = None) -> str | None:
+    def ensure_chain(
+        self,
+        messages,
+        parent: str | None = None,
+        fragments=None,
+    ) -> str | None:
         """Store ``messages`` as a chain and return the hash of the tip.
 
         Messages already present are left alone, so a caller that
@@ -105,13 +111,36 @@ class LogStore:
         itself, or a fork of an existing thread - writes only the
         messages that are new. Passing ``parent`` appends to an existing
         chain instead of starting a new one.
+
+        ``fragments`` is an optional list of fragment contents that may
+        appear inside these messages. Any that do are stored as a
+        reference rather than a copy, which is the point of the fragments
+        feature: ask a hundred questions about a novel and the novel is
+        stored once. It never affects the hashes - identity is always the
+        resolved text.
         """
+        fragment_map = self._fragment_map(fragments)
         tip = parent
         for message in messages:
-            tip = self._ensure_message(message, tip)
+            tip = self._ensure_message(message, tip, fragment_map)
         return tip
 
-    def _ensure_message(self, message: Message, parent_hash: str | None) -> str:
+    def _fragment_map(self, fragments) -> dict[str, int]:
+        "Map fragment content to its id, registering any that are new."
+        if not fragments:
+            return {}
+        return {
+            str(fragment): ensure_fragment(self.db, fragment)
+            for fragment in fragments
+            if str(fragment)
+        }
+
+    def _ensure_message(
+        self,
+        message: Message,
+        parent_hash: str | None,
+        fragment_map: dict[str, int],
+    ) -> str:
         hash = message_hash(message, parent_hash)
         if self.db["messages"].count_where("hash = ?", [hash]):
             # Already stored - and because the hash covers the parent,
@@ -127,72 +156,60 @@ class LogStore:
                 }
             )
             for position, part in enumerate(message.parts):
-                self._write_part(hash, position, part)
+                self._write_part(hash, position, part, fragment_map)
         return hash
 
-    def _write_part(self, message_hash_: str, position: int, part) -> None:
-        row: dict[str, Any] = {
-            "message_hash": message_hash_,
-            "position": position,
-            "provider_metadata": _dump(getattr(part, "provider_metadata", None)),
-        }
-        attachments: list[Any] = []
+    def _write_part(
+        self,
+        message_hash_: str,
+        position: int,
+        part,
+        fragment_map: dict[str, int],
+    ) -> None:
+        payload = part.to_dict()
+        attachments = _attachments_of(part)
 
-        if isinstance(part, TextPart):
-            row["type"] = "text"
-            row.update(self._text_columns(part.text))
-        elif isinstance(part, ReasoningPart):
-            row["type"] = "reasoning"
-            row.update(self._text_columns(part.text))
-            row["redacted"] = int(part.redacted)
-        elif isinstance(part, ToolCallPart):
-            row["type"] = "tool_call"
-            row["name"] = part.name
-            row["arguments"] = json.dumps(part.arguments)
-            row["tool_call_id"] = part.tool_call_id
-            row["server_executed"] = int(part.server_executed)
-        elif isinstance(part, ToolResultPart):
-            row["type"] = "tool_result"
-            row["name"] = part.name
-            row["output"] = part.output
-            row["tool_call_id"] = part.tool_call_id
-            row["server_executed"] = int(part.server_executed)
-            row["exception"] = part.exception
-            attachments = list(part.attachments)
-        elif isinstance(part, AttachmentPart):
-            row["type"] = "attachment"
-            if part.attachment is not None:
-                attachments = [part.attachment]
+        # Large content out of the payload and into the tables that
+        # already store it once: fragments for text, attachments for
+        # bytes. Both are resolved again on the way back out.
+        used_fragments = _encode_text_refs(payload, fragment_map)
+        if attachments:
+            attachment_ids = [
+                ensure_attachment(self.db, attachment) for attachment in attachments
+            ]
+            _encode_attachment_refs(payload, attachment_ids)
         else:
-            raise TypeError(f"Cannot store {part!r}")
+            attachment_ids = []
 
-        part_id = self.db["parts"].insert(row).last_pk
-        for order, attachment in enumerate(attachments):
+        part_id = (
+            self.db["parts"]
+            .insert(
+                {
+                    "message_hash": message_hash_,
+                    "position": position,
+                    "type": payload["type"],
+                    "tool_name": payload.get("name"),
+                    "payload": canonical_json(payload),
+                }
+            )
+            .last_pk
+        )
+        for order, attachment_id in enumerate(attachment_ids):
             self.db["part_attachments"].insert(
                 {
                     "part_id": part_id,
-                    "attachment_id": ensure_attachment(self.db, attachment),
+                    "attachment_id": attachment_id,
                     "order": order,
                 }
             )
-
-    def _text_columns(self, text: str) -> dict[str, Any]:
-        """Store text by reference when the same content is already a
-        fragment, otherwise inline.
-
-        The hash always covers the resolved text either way - this only
-        decides where the bytes live.
-        """
-        if text:
-            rows = list(
-                self.db.query(
-                    "select id from fragments where hash = ?",
-                    [hashlib.sha256(text.encode("utf-8")).hexdigest()],
-                )
+        for order, fragment_id in enumerate(used_fragments):
+            self.db["part_fragments"].insert(
+                {
+                    "part_id": part_id,
+                    "fragment_id": fragment_id,
+                    "order": order,
+                }
             )
-            if rows:
-                return {"text": None, "fragment_id": rows[0]["id"]}
-        return {"text": text, "fragment_id": None}
 
     # -- reading -------------------------------------------------------
 
@@ -229,40 +246,55 @@ class LogStore:
         part_rows = list(
             self.db.query(
                 f"""
-                select parts.*, fragments.content as fragment_content
-                from parts
-                left join fragments on parts.fragment_id = fragments.id
-                where parts.message_hash in ({placeholders})
-                order by parts.message_hash, parts.position
+                select * from parts
+                where message_hash in ({placeholders})
+                order by message_hash, position
                 """,
                 message_hashes,
             )
         )
-        attachments = self._load_part_attachments([row["id"] for row in part_rows])
+        payloads = [json.loads(row["payload"]) for row in part_rows]
+        # Resolve the references put in on the way in. Both lookups are
+        # batched across the whole chain rather than done per part.
+        fragments = self._load_fragments(payloads)
+        attachments = self._load_attachments(payloads)
         out: dict[str, list[Any]] = {}
-        for row in part_rows:
-            out.setdefault(row["message_hash"], []).append(
-                _part_from_row(row, attachments.get(row["id"], []))
-            )
+        for row, payload in zip(part_rows, payloads):
+            _decode_text_refs(payload, fragments)
+            # Strip the attachment references before rebuilding, then
+            # hang the resolved objects back on.
+            ids = _attachment_ids(payload)
+            payload.pop("attachment", None)
+            payload.pop("attachments", None)
+            part = Part.from_dict(payload)
+            _resolve_attachments(part, ids, attachments)
+            out.setdefault(row["message_hash"], []).append(part)
         return out
 
-    def _load_part_attachments(self, part_ids: list[int]) -> dict[int, list[Any]]:
-        if not part_ids:
+    def _load_fragments(self, payloads: list[dict]) -> dict[int, str]:
+        ids = sorted({id for payload in payloads for id in _fragment_ids(payload)})
+        if not ids:
             return {}
-        placeholders = ",".join("?" * len(part_ids))
-        out: dict[int, list[Any]] = {}
-        for row in self.db.query(
-            f"""
-            select part_attachments.part_id, attachments.*
-            from part_attachments
-            join attachments on part_attachments.attachment_id = attachments.id
-            where part_attachments.part_id in ({placeholders})
-            order by part_attachments.part_id, part_attachments."order"
-            """,
-            part_ids,
-        ):
-            out.setdefault(row["part_id"], []).append(Attachment.from_row(row))
-        return out
+        placeholders = ",".join("?" * len(ids))
+        return {
+            row["id"]: row["content"]
+            for row in self.db.query(
+                f"select id, content from fragments where id in ({placeholders})",
+                ids,
+            )
+        }
+
+    def _load_attachments(self, payloads: list[dict]) -> dict[str, Any]:
+        ids = sorted({id for payload in payloads for id in _attachment_ids(payload)})
+        if not ids:
+            return {}
+        placeholders = ",".join("?" * len(ids))
+        return {
+            row["id"]: Attachment.from_row(row)
+            for row in self.db.query(
+                f"select * from attachments where id in ({placeholders})", ids
+            )
+        }
 
     # -- threads -------------------------------------------------------
 
@@ -350,7 +382,13 @@ class LogStore:
                     ),
                 )
 
-        parent = self.ensure_chain(response.prompt.messages)
+        prompt_fragments = list(response.prompt.fragments or [])
+        system_fragments = list(response.prompt.system_fragments or [])
+
+        parent = self.ensure_chain(
+            response.prompt.messages,
+            fragments=prompt_fragments + system_fragments,
+        )
         # _messages_now() rather than messages(), which is a coroutine on
         # AsyncResponse.
         tip = self.ensure_chain(response._messages_now(), parent=parent)
@@ -384,7 +422,6 @@ class LogStore:
                 "token_details": _dump(response.token_details),
                 "duration_ms": response.duration_ms(),
                 "datetime_utc": response.datetime_utc(),
-                "response_json": _dump(response.response_json),
             },
             replace=True,
         )
@@ -393,9 +430,60 @@ class LogStore:
                 {"turn_id": turn_id, "tool_id": ensure_tool(self.db, tool)},
                 replace=True,
             )
+        # Which fragments this call was given - provenance, so it belongs
+        # on the turn rather than on the shared message rows. This is what
+        # answers "show me everything that used fragment X".
+        for kind, fragments in (
+            ("prompt", prompt_fragments),
+            ("system", system_fragments),
+        ):
+            for order, fragment in enumerate(fragments):
+                self.db["turn_fragments"].insert(
+                    {
+                        "turn_id": turn_id,
+                        "fragment_id": ensure_fragment(self.db, fragment),
+                        "order": order,
+                        "kind": kind,
+                    },
+                    replace=True,
+                )
         if thread_id is not None:
             self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return turn_id
+
+    # -- verification --------------------------------------------------
+
+    def verify(self) -> list[str]:
+        """Re-hash every stored message and return those that disagree.
+
+        Reads resolve references - fragment text and attachment bytes are
+        stitched back in - so a bug there, or a fragment deleted out from
+        under a message, produces a chain that differs from the one that
+        was hashed. Nothing else would notice: the wrong text would just
+        be silently sent to the model. Re-deriving the hash from what
+        comes back out catches the whole class.
+
+        An empty list means every message on disk still resolves to the
+        content its hash was taken over.
+        """
+        broken = []
+        for row in self.db.query("select hash, parent_hash from messages"):
+            parts = self._load_parts([row["hash"]]).get(row["hash"], [])
+            message_row = next(
+                iter(
+                    self.db.query(
+                        "select * from messages where hash = ?", [row["hash"]]
+                    )
+                )
+            )
+            message = Message(
+                role=message_row["role"],
+                parts=parts,
+                provider_metadata=_load(message_row["provider_metadata"]),
+            )
+            if message_hash(message, row["parent_hash"]) != row["hash"]:
+                broken.append(row["hash"])
+        return broken
 
     # -- pending work --------------------------------------------------
 
@@ -427,42 +515,115 @@ def ensure_attachment(db, attachment) -> str:
     return attachment_id
 
 
-def _part_from_row(row: dict, attachments: list[Any]):
-    type = row["type"]
-    provider_metadata = _load(row["provider_metadata"])
-    text = row["fragment_content"] if row["fragment_id"] else row["text"]
-    if type == "text":
-        return TextPart(text=text or "", provider_metadata=provider_metadata)
-    if type == "reasoning":
-        return ReasoningPart(
-            text=text or "",
-            redacted=bool(row["redacted"]),
-            provider_metadata=provider_metadata,
+# -- reference encoding ------------------------------------------------
+#
+# A stored payload is Part.to_dict() with large content swapped for a
+# reference: fragment ids in place of text, attachment ids in place of
+# bytes. Resolving it reproduces the wire form exactly, which is what
+# makes it safe for the hash to be taken over the resolved content and
+# never over what is on disk.
+
+
+def _attachments_of(part) -> list[Any]:
+    "The Attachment objects a part carries, in order."
+    if isinstance(part, ToolResultPart):
+        return list(part.attachments)
+    if isinstance(part, AttachmentPart) and part.attachment is not None:
+        return [part.attachment]
+    return []
+
+
+def _encode_text_refs(payload: dict, fragment_map: dict[str, int]) -> list[int]:
+    """Replace ``text`` with a ``text_ref`` list of fragments and
+    literals. Returns the fragment ids used, in order.
+
+    Nothing is replaced unless a fragment actually occurs in the text, so
+    a part that borrows no fragments keeps its plain ``text`` key.
+    """
+    text = payload.get("text")
+    if not text or not fragment_map:
+        return []
+    pieces: list[dict] = []
+    used: list[int] = []
+    remaining = text
+    while remaining:
+        # Earliest occurrence wins; on a tie the longer fragment does, so
+        # a fragment that is a prefix of another cannot mask it.
+        best: tuple[int, str] | None = None
+        for content in fragment_map:
+            index = remaining.find(content)
+            if index == -1:
+                continue
+            if best is None or (index, -len(content)) < (best[0], -len(best[1])):
+                best = (index, content)
+        if best is None:
+            pieces.append({"literal": remaining})
+            break
+        index, content = best
+        if index:
+            pieces.append({"literal": remaining[:index]})
+        pieces.append({"fragment": fragment_map[content]})
+        used.append(fragment_map[content])
+        remaining = remaining[index + len(content) :]
+    if not used:
+        return []
+    del payload["text"]
+    payload["text_ref"] = pieces
+    return used
+
+
+def _decode_text_refs(payload: dict, fragments: dict[int, str]) -> None:
+    "Reverse of _encode_text_refs, restoring the exact original text."
+    pieces = payload.pop("text_ref", None)
+    if pieces is None:
+        return
+    payload["text"] = "".join(
+        (
+            piece["literal"]
+            if "literal" in piece
+            else fragments.get(piece["fragment"], "")
         )
-    if type == "tool_call":
-        return ToolCallPart(
-            name=row["name"] or "",
-            arguments=json.loads(row["arguments"] or "{}"),
-            tool_call_id=row["tool_call_id"],
-            server_executed=bool(row["server_executed"]),
-            provider_metadata=provider_metadata,
-        )
-    if type == "tool_result":
-        return ToolResultPart(
-            name=row["name"] or "",
-            output=row["output"] or "",
-            tool_call_id=row["tool_call_id"],
-            server_executed=bool(row["server_executed"]),
-            exception=row["exception"],
-            attachments=attachments,
-            provider_metadata=provider_metadata,
-        )
-    if type == "attachment":
-        return AttachmentPart(
-            attachment=attachments[0] if attachments else None,
-            provider_metadata=provider_metadata,
-        )
-    raise ValueError(f"Unknown part type: {type!r}")
+        for piece in pieces
+    )
+
+
+def _fragment_ids(payload: dict) -> list[int]:
+    return [
+        piece["fragment"]
+        for piece in payload.get("text_ref") or []
+        if "fragment" in piece
+    ]
+
+
+def _encode_attachment_refs(payload: dict, attachment_ids: list[str]) -> None:
+    "Replace inline attachment dicts with their content-addressed ids."
+    if payload["type"] == "attachment":
+        payload["attachment"] = {"id": attachment_ids[0]}
+    elif payload["type"] == "tool_result":
+        payload["attachments"] = [{"id": id} for id in attachment_ids]
+
+
+def _resolve_attachments(part, ids: list[str], attachments: dict[str, Any]) -> None:
+    """Hang the resolved Attachment objects back on a part.
+
+    Done after ``Part.from_dict`` rather than by putting them back into
+    the payload, so the bytes are never round-tripped through base64 and
+    the objects keep the content-addressed id they were stored under.
+    """
+    if not ids:
+        return
+    if isinstance(part, AttachmentPart):
+        part.attachment = attachments[ids[0]]
+    elif isinstance(part, ToolResultPart):
+        part.attachments = [attachments[id] for id in ids]
+
+
+def _attachment_ids(payload: dict) -> list[str]:
+    if payload["type"] == "attachment" and "attachment" in payload:
+        return [payload["attachment"]["id"]]
+    if payload["type"] == "tool_result":
+        return [ref["id"] for ref in payload.get("attachments") or []]
+    return []
 
 
 def _dump(value: dict | None) -> str | None:
