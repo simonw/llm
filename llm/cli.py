@@ -126,6 +126,92 @@ async def display_async_stream_events(events, *, show_reasoning=True):
             click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
 
 
+def _run_chat(
+    model_label,
+    prompt_callback,
+    *,
+    db=None,
+    initial_fragments=None,
+    initial_attachments=None,
+    transform_prompt=None,
+    after_response=None,
+    show_reasoning=True,
+):
+    """Run the terminal chat loop shared by managed and transient models."""
+    click.echo(f"Chatting with {model_label}")
+    click.echo("Type 'exit' or 'quit' to exit")
+    click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    click.echo("Type '!edit' to open your default editor and modify the prompt")
+    if db is not None:
+        click.echo(
+            "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+        )
+
+    argument_fragments = list(initial_fragments or [])
+    argument_attachments = list(initial_attachments or [])
+    in_multi = False
+    accumulated = []
+    accumulated_fragments = []
+    accumulated_attachments = []
+    end_token = "!end"
+
+    while True:
+        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        fragments = []
+        attachments = []
+        if argument_fragments:
+            fragments += argument_fragments
+            # Fragments from command options are added to the first message only.
+            argument_fragments = []
+        if argument_attachments:
+            attachments = argument_attachments
+            argument_attachments = []
+        if prompt.strip().startswith("!multi"):
+            in_multi = True
+            bits = prompt.strip().split()
+            if len(bits) > 1:
+                end_token = "!end {}".format(" ".join(bits[1:]))
+            continue
+        if prompt.strip() == "!edit":
+            edited_prompt = click.edit()
+            if edited_prompt is None:
+                click.echo("Editor closed without saving.", err=True)
+                continue
+            prompt = edited_prompt.strip()
+        if db is not None and prompt.strip().startswith("!fragment "):
+            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+
+        if in_multi:
+            if prompt.strip() == end_token:
+                prompt = "\n".join(accumulated)
+                fragments = accumulated_fragments
+                attachments = accumulated_attachments
+                in_multi = False
+                accumulated = []
+                accumulated_fragments = []
+                accumulated_attachments = []
+            else:
+                if prompt:
+                    accumulated.append(prompt)
+                accumulated_fragments += fragments
+                accumulated_attachments += attachments
+                continue
+
+        if transform_prompt is not None:
+            prompt = transform_prompt(prompt)
+        if prompt.strip() in ("exit", "quit"):
+            break
+
+        response = prompt_callback(prompt, fragments, attachments)
+        display_stream_events(
+            response.stream_events(),
+            show_reasoning=show_reasoning,
+        )
+        if after_response is not None:
+            after_response(response)
+        print()
+
+
 def validate_fragment_alias(ctx, param, value):
     if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise click.BadParameter("Fragment alias must be alphanumeric")
@@ -1219,60 +1305,8 @@ def chat(
     except FragmentNotFound as ex:
         raise click.ClickException(str(ex))
 
-    click.echo(f"Chatting with {model.model_id}")
-    click.echo("Type 'exit' or 'quit' to exit")
-    click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
-    click.echo("Type '!edit' to open your default editor and modify the prompt")
-    click.echo(
-        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
-    )
-    in_multi = False
-
-    accumulated = []
-    accumulated_fragments = []
-    accumulated_attachments = []
-    end_token = "!end"
-    while True:
-        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
-        fragments = []
-        attachments = []
-        if argument_fragments:
-            fragments += argument_fragments
-            # fragments from --fragments will get added to the first message only
-            argument_fragments = []
-        if argument_attachments:
-            attachments = argument_attachments
-            argument_attachments = []
-        if prompt.strip().startswith("!multi"):
-            in_multi = True
-            bits = prompt.strip().split()
-            if len(bits) > 1:
-                end_token = "!end {}".format(" ".join(bits[1:]))
-            continue
-        if prompt.strip() == "!edit":
-            edited_prompt = click.edit()
-            if edited_prompt is None:
-                click.echo("Editor closed without saving.", err=True)
-                continue
-            prompt = edited_prompt.strip()
-        if prompt.strip().startswith("!fragment "):
-            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
-
-        if in_multi:
-            if prompt.strip() == end_token:
-                prompt = "\n".join(accumulated)
-                fragments = accumulated_fragments
-                attachments = accumulated_attachments
-                in_multi = False
-                accumulated = []
-                accumulated_fragments = []
-                accumulated_attachments = []
-            else:
-                if prompt:
-                    accumulated.append(prompt)
-                accumulated_fragments += fragments
-                accumulated_attachments += attachments
-                continue
+    def transform_chat_prompt(prompt):
+        nonlocal system
         if template_obj:
             try:
                 # Mirror prompt() logic: only pass input if template uses it
@@ -1288,9 +1322,10 @@ def chat(
                     prompt = f"{template_prompt}\n{prompt}"
                 else:
                     prompt = template_prompt
-        if prompt.strip() in ("exit", "quit"):
-            break
+        return prompt
 
+    def execute_chat_prompt(prompt, fragments, attachments):
+        nonlocal system, argument_system_fragments
         response = conversation.chain(
             prompt,
             fragments=fragments,
@@ -1303,12 +1338,18 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        display_stream_events(
-            response.stream_events(),
-            show_reasoning=not hide_reasoning,
-        )
-        response.log_to_db(db)
-        print()
+        return response
+
+    _run_chat(
+        model.model_id,
+        execute_chat_prompt,
+        db=db,
+        initial_fragments=argument_fragments,
+        initial_attachments=argument_attachments,
+        transform_prompt=transform_chat_prompt,
+        after_response=lambda response: response.log_to_db(db),
+        show_reasoning=not hide_reasoning,
+    )
 
 
 def load_conversation(
