@@ -915,3 +915,54 @@ class TestFragmentsEndToEnd:
         )
         assert user_payloads < len(novel)
         assert LogStore(db).verify() == []
+
+
+# ---- async ------------------------------------------------------------
+
+
+class TestAsyncLogging:
+    """The CLI converts an async response to a sync one before logging,
+    so anything the conversion drops is dropped from the log."""
+
+    def enqueue_reasoning(self, model):
+        model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking hard",
+                    provider_metadata={"anthropic": {"signature": "SIG"}},
+                ),
+                llm.parts.StreamEvent(type="text", chunk="the answer"),
+            ]
+        )
+
+    async def respond(self, model, prompt="q"):
+        response = model.prompt(prompt)
+        await response.text()
+        return response
+
+    @pytest.mark.asyncio
+    async def test_to_sync_response_keeps_the_parts(self, async_mock_model):
+        self.enqueue_reasoning(async_mock_model)
+        response = await self.respond(async_mock_model)
+        before = response._messages_now()
+        after = (await response.to_sync_response())._messages_now()
+        assert after == before
+
+    @pytest.mark.asyncio
+    async def test_logging_an_async_response_keeps_reasoning(
+        self, store, async_mock_model
+    ):
+        self.enqueue_reasoning(async_mock_model)
+        response = await self.respond(async_mock_model)
+        store.log(await response.to_sync_response())
+
+        parts = store.load_chain(
+            next(iter(store.db["turns"].rows))["tip_message_hash"]
+        )[-1].parts
+        assert [type(part).__name__ for part in parts] == [
+            "ReasoningPart",
+            "TextPart",
+        ]
+        assert parts[0].provider_metadata == {"anthropic": {"signature": "SIG"}}
+        assert store.verify() == []

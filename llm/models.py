@@ -2633,6 +2633,11 @@ class AsyncResponse(_BaseResponse):
         response._prompt_json = self._prompt_json
         response.response_json = self.response_json
         response._tool_calls = list(self._tool_calls)
+        # Without these the sync response falls back to assembling a bare
+        # TextPart from _chunks, so reasoning, redacted markers and every
+        # part's provider_metadata are lost. The CLI converts before
+        # logging, so that loss would apply to every async response.
+        response._stream_events = list(self._stream_events)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response
