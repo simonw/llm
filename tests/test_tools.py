@@ -483,6 +483,102 @@ async def test_tool_conversation_settings_async():
     assert len(after_collected) == 2
 
 
+def test_provider_managed_tool_execution_uses_response_context():
+    events = []
+    implementation_call = {}
+
+    def lookup(value: str, llm_tool_call: llm.ToolCall) -> dict:
+        implementation_call["tool_call"] = llm_tool_call
+        return {"value": value.upper()}
+
+    def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class ProviderManagedToolModel(llm.Model):
+        model_id = "provider-managed-tool"
+        supports_tools = True
+
+        def execute(self, prompt, stream, response, conversation=None):
+            tool_result = response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = ProviderManagedToolModel().chain(
+        "pelican",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert chain.text() == '{"value": "PELICAN"}'
+    assert len(chain._responses) == 1
+    tool_call = implementation_call["tool_call"]
+    assert tool_call.tool_call_id.startswith("tc_")
+    assert events == [
+        ("before", "lookup", tool_call.tool_call_id),
+        ("after", "lookup", tool_call.tool_call_id, '{"value": "PELICAN"}'),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_provider_managed_tool_execution_uses_response_context():
+    events = []
+
+    async def lookup(value: str) -> str:
+        await asyncio.sleep(0)
+        return value.upper()
+
+    async def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    async def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class AsyncProviderManagedToolModel(llm.AsyncModel):
+        model_id = "async-provider-managed-tool"
+        supports_tools = True
+
+        async def execute(self, prompt, stream, response, conversation=None):
+            tool_result = await response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = AsyncProviderManagedToolModel().chain(
+        "puffin",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert await chain.text() == "PUFFIN"
+    assert len(chain._responses) == 1
+    assert events[0][0:2] == ("before", "lookup")
+    assert events[0][2].startswith("tc_")
+    assert events == [
+        ("before", "lookup", events[0][2]),
+        ("after", "lookup", events[0][2], "PUFFIN"),
+    ]
+
+
 ERROR_FUNCTION = """
 def trigger_error(msg: str):
     raise Exception(msg)
