@@ -82,6 +82,20 @@ Use `--at path-or-url mimetype` when the attachment type cannot be inferred.
 Attachments provided when starting an interactive chat are included with the
 first message.
 
+Use `-t` or `--template` to apply an existing LLM template. Template prompts,
+system prompts, defaults, model options, model IDs, and attachments are
+supported. Pass template variables using `-p` or `--param`:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -t summarize \
+  -p style concise \
+  "Text to summarize"
+```
+
+The `-m` option can be omitted if the template specifies a model. In an
+interactive chat the template is applied to each turn.
+
 The command uses the Chat Completions API by default. Add `--responses` for an
 endpoint that implements the Responses API:
 

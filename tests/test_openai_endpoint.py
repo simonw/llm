@@ -172,6 +172,65 @@ def test_endpoint_chat_completions_attachment(httpx_mock, user_path, tmp_path):
     ]
 
 
+def test_endpoint_template(httpx_mock, user_path, templates_path):
+    base_url = "https://templates.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "Template response")
+    (templates_path / "endpoint.yaml").write_text(
+        """
+model: template-model
+system: You are $persona
+prompt: "Question: $input"
+options:
+  temperature: 0.4
+attachment_types:
+- type: image/jpeg
+  value: https://images.example.test/template.jpg
+""".strip(),
+        "utf-8",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Where?",
+            "--template",
+            "endpoint",
+            "--param",
+            "persona",
+            "concise",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Template response\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content) == {
+        "messages": [
+            {"role": "system", "content": "You are concise"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Question: Where?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "https://images.example.test/template.jpg"
+                        },
+                    },
+                ],
+            },
+        ],
+        "model": "template-model",
+        "stream": False,
+        "temperature": 0.4,
+    }
+
+
 def test_endpoint_streams_by_default(httpx_mock, user_path):
     base_url = "https://stream.example.test/v1"
     httpx_mock.add_response(
@@ -382,10 +441,15 @@ def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     assert not (user_path / "logs.db").exists()
 
 
-def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
+def test_endpoint_interactive_chat_preserves_history(
+    httpx_mock, user_path, templates_path
+):
     base_url = "https://chat.example.test/v1"
     _add_chat_response(httpx_mock, base_url, "First answer")
     _add_chat_response(httpx_mock, base_url, "Second answer")
+    (templates_path / "endpoint-chat.yaml").write_text(
+        'prompt: "Question: $input"\n', "utf-8"
+    )
 
     result = CliRunner().invoke(
         cli,
@@ -399,6 +463,8 @@ def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
             "--no-stream",
             "--system",
             "Be brief",
+            "--template",
+            "endpoint-chat",
             "--at",
             "https://images.example.test/context.jpg",
             "image/jpeg",
@@ -419,7 +485,7 @@ def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "First question"},
+                {"type": "text", "text": "Question: First question"},
                 {
                     "type": "image_url",
                     "image_url": {
@@ -429,5 +495,5 @@ def test_endpoint_interactive_chat_preserves_history(httpx_mock, user_path):
             ],
         },
         {"role": "assistant", "content": "First answer"},
-        {"role": "user", "content": "Second question"},
+        {"role": "user", "content": "Question: Second question"},
     ]

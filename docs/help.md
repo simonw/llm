@@ -1087,9 +1087,11 @@ Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
   running a prompt.
 
 Options:
-  -m, --model TEXT                Model ID to send to the endpoint (required
-                                  unless --models)
+  -m, --model TEXT                Model ID (required unless --models or provided
+                                  by template)
   -s, --system TEXT               System prompt to use
+  -t, --template TEXT             Template to use
+  -p, --param <TEXT TEXT>...      Parameters for template
   -o, --option <TEXT TEXT>...     key/value options for the model
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...

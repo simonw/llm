@@ -415,9 +415,18 @@ def register_commands(cli):
         "model_id",
         "-m",
         "--model",
-        help="Model ID to send to the endpoint (required unless --models)",
+        help="Model ID (required unless --models or provided by template)",
     )
     @click.option("-s", "--system", help="System prompt to use")
+    @click.option("-t", "--template", help="Template to use")
+    @click.option(
+        "param",
+        "-p",
+        "--param",
+        multiple=True,
+        type=(str, str),
+        help="Parameters for template",
+    )
     @click.option(
         "options",
         "-o",
@@ -477,6 +486,8 @@ def register_commands(cli):
         prompt,
         model_id,
         system,
+        template,
+        param,
         options,
         attachments,
         attachment_types,
@@ -496,14 +507,44 @@ def register_commands(cli):
         one-off prompt unless --chat is specified. Use --models to list the
         available model IDs without running a prompt.
         """
-        from llm.cli import _run_chat, display_stream_events, render_errors
+        from llm.cli import (
+            AttachmentError,
+            LoadTemplateError,
+            _apply_template,
+            _merge_template_attachments,
+            _merge_template_options,
+            _run_chat,
+            display_stream_events,
+            load_template,
+            render_errors,
+        )
 
         if list_models and prompt is not None:
             raise click.ClickException("--models cannot be used with a prompt")
-        if not list_models and not model_id:
-            raise click.ClickException("--model is required unless --models is used")
+        if list_models and template:
+            raise click.ClickException("--models cannot be used with --template")
         if force_chat and prompt is not None:
             raise click.ClickException("--chat cannot be used with a prompt")
+
+        template_obj = None
+        params = dict(param)
+        if template:
+            try:
+                template_obj = load_template(template)
+                attachments, attachment_types = _merge_template_attachments(
+                    template_obj, attachments, attachment_types
+                )
+            except (AttachmentError, LoadTemplateError) as ex:
+                raise click.ClickException(str(ex))
+            if not model_id and template_obj.model:
+                model_id = template_obj.model
+            if template_obj.options:
+                options = _merge_template_options(template_obj, options)
+
+        if not list_models and not model_id:
+            raise click.ClickException(
+                "--model is required unless --models or a template model is used"
+            )
 
         model_class = Responses if use_responses else Chat
         model = model_class(
@@ -549,6 +590,14 @@ def register_commands(cli):
             if is_chat:
                 conversation = model.conversation()
 
+                def transform_chat_prompt(chat_prompt):
+                    nonlocal system
+                    if template_obj:
+                        chat_prompt, system = _apply_template(
+                            template_obj, chat_prompt, params, system
+                        )
+                    return chat_prompt
+
                 def execute_chat_prompt(chat_prompt, _fragments, turn_attachments):
                     nonlocal system
                     response = conversation.prompt(
@@ -564,6 +613,7 @@ def register_commands(cli):
                     f"{model_id} at {url}",
                     execute_chat_prompt,
                     initial_attachments=resolved_attachments,
+                    transform_prompt=transform_chat_prompt,
                     show_reasoning=not hide_reasoning,
                 )
                 return
@@ -574,6 +624,8 @@ def register_commands(cli):
                     prompt = " ".join(
                         part for part in (stdin_prompt, prompt) if part is not None
                     )
+            if template_obj:
+                prompt, system = _apply_template(template_obj, prompt, params, system)
             if prompt is None:
                 raise click.ClickException(
                     "A prompt is required when stdin is not interactive"

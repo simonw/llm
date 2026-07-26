@@ -197,10 +197,10 @@ def _run_chat(
                 accumulated_attachments += attachments
                 continue
 
-        if transform_prompt is not None:
-            prompt = transform_prompt(prompt)
         if prompt.strip() in ("exit", "quit"):
             break
+        if transform_prompt is not None:
+            prompt = transform_prompt(prompt)
 
         response = prompt_callback(prompt, fragments, attachments)
         display_stream_events(
@@ -399,6 +399,48 @@ def attachment_types_callback(ctx, param, values) -> list[Attachment]:
     for value, mimetype in values:
         collected.append(resolve_attachment_with_type(value, mimetype))
     return collected
+
+
+def _apply_template(template, prompt, params, system):
+    """Apply a loaded template to a prompt and system prompt."""
+    try:
+        uses_input = "input" in template.vars()
+        input_ = prompt if uses_input else ""
+        template_prompt, template_system = template.evaluate(input_, params)
+    except Template.MissingVariables as ex:
+        raise click.ClickException(str(ex))
+    if template_system and not system:
+        system = template_system
+    if template_prompt:
+        if prompt and not uses_input:
+            prompt = f"{template_prompt}\n{prompt}"
+        else:
+            prompt = template_prompt
+    return prompt, system
+
+
+def _merge_template_options(template, options):
+    """Add template options unless the same option was provided explicitly."""
+    merged_options = list(options)
+    specified_options = dict(merged_options)
+    for option_name, option_value in (template.options or {}).items():
+        if option_name not in specified_options:
+            merged_options.append((option_name, option_value))
+    return merged_options
+
+
+def _merge_template_attachments(template, attachments, attachment_types):
+    """Resolve and prepend attachments declared by a loaded template."""
+    if template.attachments:
+        attachments = [
+            resolve_attachment(value) for value in template.attachments
+        ] + list(attachments)
+    if template.attachment_types:
+        attachment_types = [
+            resolve_attachment_with_type(item.value, item.type)
+            for item in template.attachment_types
+        ] + list(attachment_types)
+    return attachments, attachment_types
 
 
 def json_validator(object_name):
@@ -829,41 +871,16 @@ def prompt(
             tools = [*template_obj.tools, *tools]
         if template_obj.functions and template_obj._functions_is_trusted:
             python_tools = [template_obj.functions, *python_tools]
-        input_ = ""
         if template_obj.options:
-            # Make options mutable (they start as a tuple)
-            options = list(options)
-            # Load any options, provided they were not set using -o already
-            specified_options = dict(options)
-            for option_name, option_value in template_obj.options.items():
-                if option_name not in specified_options:
-                    options.append((option_name, option_value))
+            options = _merge_template_options(template_obj, options)
         if "input" in template_obj.vars():
-            input_ = read_prompt()
-        try:
-            template_prompt, template_system = template_obj.evaluate(input_, params)
-            if template_prompt:
-                # Combine with user prompt
-                if prompt and "input" not in template_obj.vars():
-                    prompt = template_prompt + "\n" + prompt
-                else:
-                    prompt = template_prompt
-            if template_system and not system:
-                system = template_system
-        except Template.MissingVariables as ex:
-            raise click.ClickException(str(ex))
+            prompt = read_prompt()
+        prompt, system = _apply_template(template_obj, prompt, params, system)
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-        # Merge in any attachments
-        if template_obj.attachments:
-            attachments = [
-                resolve_attachment(a) for a in template_obj.attachments
-            ] + list(attachments)
-        if template_obj.attachment_types:
-            attachment_types = [
-                resolve_attachment_with_type(at.value, at.type)
-                for at in template_obj.attachment_types
-            ] + list(attachment_types)
+        attachments, attachment_types = _merge_template_attachments(
+            template_obj, attachments, attachment_types
+        )
     if extract or extract_last:
         no_stream = True
 
@@ -1308,20 +1325,7 @@ def chat(
     def transform_chat_prompt(prompt):
         nonlocal system
         if template_obj:
-            try:
-                # Mirror prompt() logic: only pass input if template uses it
-                uses_input = "input" in template_obj.vars()
-                input_ = prompt if uses_input else ""
-                template_prompt, template_system = template_obj.evaluate(input_, params)
-            except Template.MissingVariables as ex:
-                raise click.ClickException(str(ex))
-            if template_system and not system:
-                system = template_system
-            if template_prompt:
-                if prompt and not uses_input:
-                    prompt = f"{template_prompt}\n{prompt}"
-                else:
-                    prompt = template_prompt
+            prompt, system = _apply_template(template_obj, prompt, params, system)
         return prompt
 
     def execute_chat_prompt(prompt, fragments, attachments):
