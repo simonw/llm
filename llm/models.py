@@ -336,6 +336,16 @@ class ToolCall:
     tool_call_id: str | None = None
 
 
+def _ensure_tool_call_id(tool_call: ToolCall) -> ToolCall:
+    # Generate a tool call ID if one has not yet been specified
+    if tool_call.tool_call_id is not None:
+        return tool_call
+    return dataclasses.replace(
+        tool_call,
+        tool_call_id=f"tc_{str(monotonic_ulid()).lower()}",
+    )
+
+
 @dataclass
 class ToolResult:
     "The result of executing a tool call."
@@ -697,6 +707,8 @@ class Conversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
 
     def chain(
@@ -876,6 +888,8 @@ class AsyncConversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
 
     def to_sync_conversation(self):
@@ -941,6 +955,8 @@ class _BaseResponse:
         stream: bool,
         conversation: _BaseConversation | None = None,
         key: str | None = None,
+        before_call: BeforeCallSync | BeforeCallAsync | None = None,
+        after_call: AfterCallSync | AfterCallAsync | None = None,
     ):
         self.id = str(monotonic_ulid()).lower()
         self.prompt = prompt
@@ -948,6 +964,8 @@ class _BaseResponse:
         self.model = model
         self.stream = stream
         self._key = key
+        self.before_call = before_call
+        self.after_call = after_call
         self._chunks: list[str] = []
         # Every StreamEvent ever yielded by execute(), in order. Plain
         # str yields are wrapped as text events (with part_index resolved
@@ -1272,16 +1290,7 @@ class _BaseResponse:
         return parts
 
     def add_tool_call(self, tool_call: ToolCall):
-        if tool_call.tool_call_id is None:
-            # Guarantee every locally-executable tool call has a unique id.
-            # Some providers never supply one, which otherwise forces every
-            # consumer correlating calls with results (or keying external
-            # state on a call) to invent fallback matching schemes.
-            tool_call = dataclasses.replace(
-                tool_call,
-                tool_call_id=f"tc_{str(monotonic_ulid()).lower()}",
-            )
-        self._tool_calls.append(tool_call)
+        self._tool_calls.append(_ensure_tool_call_id(tool_call))
 
     def set_usage(
         self,
@@ -1944,6 +1953,15 @@ class Response(_BaseResponse):
             tool_results.append(tool_result_obj)
         return tool_results
 
+    def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
+        "Utility method for manually executing a tool call with callbacks"
+        tool_call = _ensure_tool_call_id(tool_call)
+        return self.execute_tool_calls(
+            before_call=cast(BeforeCallSync | None, self.before_call),
+            after_call=cast(AfterCallSync | None, self.after_call),
+            tool_calls_list=[tool_call],
+        )[0]
+
     def tool_calls(self) -> list[ToolCall]:
         "Return the list of tool calls made during this response."
         self._force()
@@ -2411,6 +2429,16 @@ class AsyncResponse(_BaseResponse):
 
         return results
 
+    async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
+        "Asynchronous counterpart to :meth:`Response.execute_tool_call`."
+        tool_call = _ensure_tool_call_id(tool_call)
+        results = await self.execute_tool_calls(
+            before_call=cast(BeforeCallAsync | None, self.before_call),
+            after_call=cast(AfterCallAsync | None, self.after_call),
+            tool_calls_list=[tool_call],
+        )
+        return results[0]
+
     def __aiter__(self):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
@@ -2827,6 +2855,8 @@ class ChainResponse(_BaseChainResponse):
             self.stream,
             key=self._key,
             conversation=self.conversation,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
         # Resume: a history ending in unresolved tool calls means a
         # previous run stopped (paused or crashed) before executing
@@ -2846,6 +2876,8 @@ class ChainResponse(_BaseChainResponse):
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
+                before_call=self.before_call,
+                after_call=self.after_call,
             )
         current_response: Response | None = initial_response
         while current_response:
@@ -2892,6 +2924,8 @@ class ChainResponse(_BaseChainResponse):
                     stream=self.stream,
                     key=self._key,
                     conversation=self.conversation,
+                    before_call=self.before_call,
+                    after_call=self.after_call,
                 )
             else:
                 current_response = None
@@ -2924,6 +2958,8 @@ class AsyncChainResponse(_BaseChainResponse):
             self.stream,
             key=self._key,
             conversation=self.conversation,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
         # Resume: see ChainResponse.responses() - execute trailing
         # unresolved tool calls before the first provider call. This
@@ -2941,6 +2977,8 @@ class AsyncChainResponse(_BaseChainResponse):
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
+                before_call=self.before_call,
+                after_call=self.after_call,
             )
         current_response: AsyncResponse | None = initial_response
         while current_response:
@@ -2984,6 +3022,8 @@ class AsyncChainResponse(_BaseChainResponse):
                     stream=self.stream,
                     key=self._key,
                     conversation=self.conversation,
+                    before_call=self.before_call,
+                    after_call=self.after_call,
                 )
             else:
                 current_response = None
