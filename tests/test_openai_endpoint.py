@@ -229,6 +229,56 @@ def test_endpoint_uses_explicit_key(httpx_mock, user_path):
     assert not (user_path / "logs.db").exists()
 
 
+def test_endpoint_lists_models_without_model_or_logging(
+    httpx_mock, user_path, monkeypatch
+):
+    base_url = "https://models.example.test/v1"
+    monkeypatch.setenv("OPENAI_API_KEY", "real-default-openai-key")
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{base_url}/models",
+        json={
+            "object": "list",
+            "data": [
+                {
+                    "id": "first-model",
+                    "object": "model",
+                    "created": 1,
+                    "owned_by": "example",
+                },
+                {
+                    "id": "second-model",
+                    "object": "model",
+                    "created": 2,
+                    "owned_by": "example",
+                },
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "--models",
+            "-H",
+            "X-Test",
+            "one",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "first-model\nsecond-model\n"
+    assert not (user_path / "logs.db").exists()
+    request = httpx_mock.get_requests()[0]
+    assert request.headers["Authorization"] == "Bearer DUMMY_KEY"
+    assert request.headers["X-Test"] == "one"
+
+
 def test_endpoint_responses_api(httpx_mock, user_path):
     base_url = "https://responses.example.test/v1"
     httpx_mock.add_response(

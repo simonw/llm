@@ -415,8 +415,7 @@ def register_commands(cli):
         "model_id",
         "-m",
         "--model",
-        required=True,
-        help="Model ID to send to the endpoint",
+        help="Model ID to send to the endpoint (required unless --models)",
     )
     @click.option("-s", "--system", help="System prompt to use")
     @click.option(
@@ -465,6 +464,12 @@ def register_commands(cli):
         is_flag=True,
         help="Start an interactive chat, even when stdin is not a terminal",
     )
+    @click.option(
+        "list_models",
+        "--models",
+        is_flag=True,
+        help="List model IDs from the endpoint and exit",
+    )
     @click.option("--no-stream", is_flag=True, help="Do not stream output")
     @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
     def endpoint(
@@ -479,6 +484,7 @@ def register_commands(cli):
         headers,
         use_responses,
         force_chat,
+        list_models,
         no_stream,
         hide_reasoning,
     ):
@@ -487,17 +493,22 @@ def register_commands(cli):
 
         If PROMPT is provided, execute it once. If PROMPT is omitted in an
         interactive terminal, start a chat. Piped stdin is treated as a
-        one-off prompt unless --chat is specified.
+        one-off prompt unless --chat is specified. Use --models to list the
+        available model IDs without running a prompt.
         """
         from llm.cli import _run_chat, display_stream_events, render_errors
 
+        if list_models and prompt is not None:
+            raise click.ClickException("--models cannot be used with a prompt")
+        if not list_models and not model_id:
+            raise click.ClickException("--model is required unless --models is used")
         if force_chat and prompt is not None:
             raise click.ClickException("--chat cannot be used with a prompt")
 
         model_class = Responses if use_responses else Chat
         model = model_class(
-            model_id=model_id,
-            model_name=model_id,
+            model_id=model_id or "",
+            model_name=model_id or "",
             api_base=url,
             headers=dict(headers),
             vision=True,
@@ -530,6 +541,11 @@ def register_commands(cli):
         resolved_attachments = [*attachments, *attachment_types]
         is_chat = force_chat or (prompt is None and sys.stdin.isatty())
         try:
+            if list_models:
+                for available_model in model.get_client(key).models.list():
+                    click.echo(available_model.id)
+                return
+
             if is_chat:
                 conversation = model.conversation()
 

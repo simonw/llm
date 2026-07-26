@@ -1083,10 +1083,12 @@ Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
 
   If PROMPT is provided, execute it once. If PROMPT is omitted in an interactive
   terminal, start a chat. Piped stdin is treated as a one-off prompt unless
-  --chat is specified.
+  --chat is specified. Use --models to list the available model IDs without
+  running a prompt.
 
 Options:
-  -m, --model TEXT                Model ID to send to the endpoint  [required]
+  -m, --model TEXT                Model ID to send to the endpoint (required
+                                  unless --models)
   -s, --system TEXT               System prompt to use
   -o, --option <TEXT TEXT>...     key/value options for the model
   -a, --attachment ATTACHMENT     Attachment path or URL or -
@@ -1099,6 +1101,7 @@ Options:
                                   Completions
   --chat                          Start an interactive chat, even when stdin is
                                   not a terminal
+  --models                        List model IDs from the endpoint and exit
   --no-stream                     Do not stream output
   -R, --hide-reasoning            Hide reasoning output
   -h, --help                      Show this message and exit.

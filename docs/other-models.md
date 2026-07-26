@@ -51,6 +51,14 @@ llm openai endpoint https://example.com/v1 \
   "What is the capital of France?"
 ```
 
+List the model IDs advertised by the endpoint using `--models`. This requests
+the `models` resource relative to the base URL, so a base URL ending in `/v1`
+will request `/v1/models`:
+
+```bash
+llm openai endpoint https://example.com/v1 --models
+```
+
 Omit the prompt to start an interactive chat:
 
 ```bash
