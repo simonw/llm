@@ -14,7 +14,13 @@ from click.testing import CliRunner
 
 import llm
 from llm.cli import cli
-from llm.logs import LogStore, canonical_json, message_hash
+from llm.logs import (
+    LogStore,
+    canonical_json,
+    log_row_extras,
+    merged_log_rows,
+    message_hash,
+)
 from llm.migrations import migrate
 from llm.models import Attachment
 from llm.parts import (
@@ -812,6 +818,35 @@ class TestLibraryLogging:
 
 
 # ---- storage by reference --------------------------------------------
+
+
+class TestTurnInputBoundary:
+    """A turn whose input ends [tool results, user prompt] owns both -
+    the tool results must not vanish from display or the -T filter just
+    because a user message follows them."""
+
+    def _log_turn_with_results_and_prompt(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next question",
+            messages=[llm.user("orig"), llm.assistant("first answer")],
+            tool_results=[llm.ToolResult(name="t", output="RESULT", tool_call_id="c9")],
+        )
+        response.text()
+        response.log_to_db(store.db)
+
+    def test_tool_results_and_prompt_both_display(self, store, mock_model):
+        self._log_turn_with_results_and_prompt(store, mock_model)
+        row = merged_log_rows(store)[0]
+        assert row["prompt"] == "next question"
+        extras = log_row_extras(store, row)
+        assert [result["output"] for result in extras["tool_results"]] == ["RESULT"]
+
+    def test_tool_filters_match(self, store, mock_model):
+        self._log_turn_with_results_and_prompt(store, mock_model)
+        assert len(merged_log_rows(store, any_tools=True)) == 1
+        assert len(merged_log_rows(store, tool_names=["t"])) == 1
+        assert merged_log_rows(store, tool_names=["other"]) == []
 
 
 class TestMigrationRetrySafety:

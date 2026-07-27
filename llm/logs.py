@@ -789,7 +789,23 @@ class _LogRowBuilder:
         inputs = self.store.load_chain(row["parent_message_hash"])
         outputs = self.store.load_chain(row["tip_message_hash"])[len(inputs) :]
 
-        prompt_parts = inputs[-1].parts if inputs else []
+        # The turn's own input is the trailing run of user and tool
+        # messages: everything after the last assistant (or system)
+        # message belongs to this turn, because a turn's new input
+        # never contains an assistant message. A turn carrying both
+        # tool results and a fresh user prompt therefore keeps both.
+        boundary = len(inputs)
+        while boundary and inputs[boundary - 1].role in ("user", "tool"):
+            boundary -= 1
+        input_messages = inputs[boundary:]
+
+        prompt_parts = [
+            part
+            for message in input_messages
+            if message.role == "user"
+            for part in message.parts
+        ]
+        input_parts = [part for message in input_messages for part in message.parts]
         system_parts = inputs[0].parts if inputs and inputs[0].role == "system" else []
         out_parts = [part for message in outputs for part in message.parts]
 
@@ -829,7 +845,7 @@ class _LogRowBuilder:
                 # redundant with it.
                 "prompt_json": None,
                 "response_json": None,
-                "_input_parts": prompt_parts,
+                "_input_parts": input_parts,
                 "_output_parts": out_parts,
                 # Internal, stripped before rendering - the enrichment
                 # needs them to find the parts rows behind these parts.
@@ -935,10 +951,18 @@ def log_rows(
 
 
 def _tool_result_clause(extra: str = "") -> str:
-    return f"""turns.parent_message_hash in (
+    # A turn's tool results sit either in its parent message directly,
+    # or - when a fresh user prompt followed the results - in the
+    # parent's own parent, one step further up the same input segment.
+    return f"""(turns.parent_message_hash in (
         select parts.message_hash from parts
         where parts.type = 'tool_result' {extra}
-    )"""
+    ) or turns.parent_message_hash in (
+        select messages.hash from messages
+        join parts on parts.message_hash = messages.parent_hash
+        where messages.role = 'user'
+        and parts.type = 'tool_result' {extra}
+    ))"""
 
 
 def log_row_extras(store: "LogStore", row: dict) -> dict:
