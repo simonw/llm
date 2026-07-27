@@ -16,7 +16,7 @@ jobs:
         include:
         - os: ubuntu-latest
           python-version: "3.14"
-          sqlite-utils-version: "4.0rc4"
+          sqlite-utils-version: "4.1.1"
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
@@ -36,7 +36,7 @@ jobs:
       run: |
         python -m pytest -vv
     - name: Check if cog needs to be run
-      if: matrix.sqlite-utils-version == '4.0rc4'
+      if: matrix.sqlite-utils-version == '4.1.1'
       run: |
         cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \

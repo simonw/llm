@@ -506,8 +506,6 @@ Two conversations of two turns each - eight messages sent to the model in total 
 
 Because messages form a parent-linked tree, a conversation can fork: a new thread can point at any existing message and continue from there, sharing its entire history with the thread it came from until the two diverge. Nothing is copied when this happens. The `threads.forked_from` column records which thread a fork came from.
 
-TODO: description of diagram
-
 Shared rows cut both ways. Deleting a conversation is not the same as deleting its rows, because another thread may reach the same messages - removing them would silently corrupt that thread's history. For this reason LLM does not currently delete message rows at all; garbage collection of unreachable messages is deliberately left as future work.
 
 (logging-message-store-references)=
