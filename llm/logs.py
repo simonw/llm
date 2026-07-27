@@ -986,7 +986,25 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
     # `llm logs` is unchanged.
     call_ids = _part_ids(store, row.get("_tip_message_hash"), "tool_call")
     result_ids = _part_ids(store, row.get("_parent_message_hash"), "tool_result")
-    tool_ids = _tool_ids_by_name(store)
+
+    # input_schema is rendered as a dict, so decode it here rather than
+    # handing the caller the raw JSON text out of the column.
+    tools = [
+        {**tool_row, "input_schema": json.loads(tool_row["input_schema"] or "{}")}
+        for tool_row in store.db.query(
+            """
+            select tools.id, tools.hash, tools.name, tools.description,
+                   tools.input_schema
+            from tools join turn_tools on turn_tools.tool_id = tools.id
+            where turn_tools.turn_id = ?
+            """,
+            [row["id"]],
+        )
+    ]
+    # Resolved through this turn's own turn_tools rows - definitions
+    # sharing a name can differ between turns, and a global map would
+    # attribute the wrong one.
+    tool_ids = {tool["name"]: tool["id"] for tool in tools}
 
     tool_calls = [
         {
@@ -1019,21 +1037,6 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
             "attachments": [_attachment_summary(a) for a in part.attachments],
         }
         for part in result_parts
-    ]
-
-    # input_schema is rendered as a dict, so decode it here rather than
-    # handing the caller the raw JSON text out of the column.
-    tools = [
-        {**tool_row, "input_schema": json.loads(tool_row["input_schema"] or "{}")}
-        for tool_row in store.db.query(
-            """
-            select tools.id, tools.hash, tools.name, tools.description,
-                   tools.input_schema
-            from tools join turn_tools on turn_tools.tool_id = tools.id
-            where turn_tools.turn_id = ?
-            """,
-            [row["id"]],
-        )
     ]
 
     fragments: dict[str, list[dict]] = {
@@ -1088,13 +1091,6 @@ def _part_ids(store: "LogStore", message_hash: str | None, type: str) -> dict:
             "select id, payload from parts where message_hash = ? and type = ?",
             [message_hash, type],
         )
-    }
-
-
-def _tool_ids_by_name(store: "LogStore") -> dict:
-    return {
-        tool_row["name"]: tool_row["id"]
-        for tool_row in store.db.query("select id, name from tools")
     }
 
 

@@ -853,6 +853,34 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestPerTurnToolResolution:
+    def test_same_name_different_definitions_resolve_per_turn(self, store, mock_model):
+        # Two turns using tools that share a name but differ in
+        # definition - each turn's extras must report its own tool_id.
+        def make_tool(description):
+            return llm.Tool(name="lookup", description=description, input_schema={})
+
+        for description in ("first definition", "second definition"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi", tools=[make_tool(description)])
+            response.text()
+            response.log_to_db(store.db)
+
+        rows = merged_log_rows(store)
+        rows.reverse()
+        for row in rows:
+            extras = log_row_extras(store, row)
+            assert len(extras["tools"]) == 1
+        descriptions_to_ids = {
+            log_row_extras(store, row)["tools"][0]["description"]: log_row_extras(
+                store, row
+            )["tools"][0]["id"]
+            for row in rows
+        }
+        assert len(descriptions_to_ids) == 2
+        assert len(set(descriptions_to_ids.values())) == 2
+
+
 class TestRepeatedFragments:
     def test_passing_the_same_fragment_twice_keeps_both_rows(self, store, mock_model):
         mock_model.enqueue(["ok"])
