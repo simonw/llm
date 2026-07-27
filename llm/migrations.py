@@ -834,3 +834,23 @@ def m027_parts_text_column(db):
             row["id"],
             {"text": text, "payload": json.dumps(payload) if payload else None},
         )
+
+
+@migration
+def m028_tool_instantiations(db):
+    # Which configured toolbox instance served a tool call - e.g. that
+    # SQLite_query ran against SQLite("mydb.db"). Local execution
+    # provenance, so it lives outside the hashed message tree, joined
+    # to the chain by tool_call_id (unique per call, stored on both the
+    # call and result parts). Deliberately the seed of a fuller
+    # execution-events table: duration or exception details would be
+    # additive columns here.
+    db["tool_instantiations"].create(
+        {
+            "tool_call_id": str,
+            "name": str,
+            "plugin": str,
+            "arguments": str,
+        },
+        pk="tool_call_id",
+    )

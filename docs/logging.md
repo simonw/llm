@@ -543,6 +543,7 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 - `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
 - `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
+- `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call: the toolbox name, its plugin and its constructor arguments, keyed by `tool_call_id`. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it, and is what lets `llm logs --json` show that a `SQLite_query` call ran against `SQLite("mydb.db")`.
 
 (logging-message-store-queries)=
 

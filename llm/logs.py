@@ -477,6 +477,32 @@ class LogStore:
                     },
                     replace=True,
                 )
+        # Which configured toolbox instance served each tool call. This
+        # is local execution provenance, so it lives outside the hashed
+        # message tree, keyed by the tool_call_id both worlds share.
+        for tool_result in response.prompt.tool_results:
+            # instance is annotated as Toolbox but a tool built from a
+            # bound method can carry an arbitrary __self__ here, so ask
+            # for the config rather than trusting the type.
+            config = getattr(tool_result.instance, "_config", None)
+            if config is None or not tool_result.tool_call_id:
+                continue
+            self.db["tool_instantiations"].insert(
+                {
+                    "tool_call_id": tool_result.tool_call_id,
+                    "name": tool_result.name.split("_")[0],
+                    "plugin": next(
+                        (
+                            tool.plugin
+                            for tool in response.prompt.tools
+                            if tool.name == tool_result.name
+                        ),
+                        None,
+                    ),
+                    "arguments": json.dumps(config),
+                },
+                replace=True,
+            )
         # Refresh this turn's search row. Delete-then-derive rather than
         # replace, so a re-logged turn with a different tip converges on
         # what the turn now says. Derived in SQL from the stored
@@ -923,6 +949,12 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
         for part in row.get("_output_parts", [])
         if isinstance(part, ToolCallPart)
     ]
+    result_parts = [
+        part for part in row.get("_input_parts", []) if isinstance(part, ToolResultPart)
+    ]
+    instances = _instances_by_tool_call_id(
+        store, [part.tool_call_id for part in result_parts if part.tool_call_id]
+    )
     tool_results = [
         {
             "id": result_ids.get(part.tool_call_id),
@@ -931,10 +963,10 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
             "output": part.output,
             "tool_call_id": part.tool_call_id,
             "exception": part.exception,
+            "instance": instances.get(part.tool_call_id),
             "attachments": [_attachment_summary(a) for a in part.attachments],
         }
-        for part in row.get("_input_parts", [])
-        if isinstance(part, ToolResultPart)
+        for part in result_parts
     ]
 
     # input_schema is rendered as a dict, so decode it here rather than
@@ -1011,6 +1043,28 @@ def _tool_ids_by_name(store: "LogStore") -> dict:
     return {
         tool_row["name"]: tool_row["id"]
         for tool_row in store.db.query("select id, name from tools")
+    }
+
+
+def _instances_by_tool_call_id(store: "LogStore", tool_call_ids: list) -> dict:
+    "Which configured toolbox instance served each call, for display."
+    if not tool_call_ids:
+        return {}
+    placeholders = ",".join("?" * len(tool_call_ids))
+    return {
+        row["tool_call_id"]: {
+            "name": row["name"],
+            "plugin": row["plugin"],
+            "arguments": row["arguments"],
+        }
+        for row in store.db.query(
+            f"""
+            select tool_call_id, name, plugin, arguments
+            from tool_instantiations
+            where tool_call_id in ({placeholders})
+            """,
+            tool_call_ids,
+        )
     }
 
 
@@ -1260,6 +1314,11 @@ select responses.id,
             'output', tr.output,
             'tool_call_id', tr.tool_call_id,
             'exception', tr.exception,
+            'instance', case when ti.id is not null then json_object(
+                'name', ti.name,
+                'plugin', ti.plugin,
+                'arguments', ti.arguments
+            ) else null end,
             'attachments', coalesce(
                 (select json_group_array(json_object(
                     'id', a.id,
@@ -1276,6 +1335,7 @@ select responses.id,
             )
         ))
         from tool_results tr
+        left join tool_instances ti on tr.instance_id = ti.id
         where tr.response_id = responses.id
         ),
         '[]'

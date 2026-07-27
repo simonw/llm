@@ -475,12 +475,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -488,7 +488,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -818,8 +818,24 @@ def test_register_toolbox(tmpdir, logs_db):
                 "model": "echo",
                 "tool_calls": [],
                 "tool_results": [
-                    {"name": "Memory_set", "output": "null"},
-                    {"name": "Memory_get", "output": "two"},
+                    {
+                        "name": "Memory_set",
+                        "output": "null",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": "{}",
+                        },
+                    },
+                    {
+                        "name": "Memory_get",
+                        "output": "two",
+                        "instance": {
+                            "name": "Memory",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": "{}",
+                        },
+                    },
                 ],
             },
             {
@@ -834,6 +850,11 @@ def test_register_toolbox(tmpdir, logs_db):
                     {
                         "name": "Filesystem_list_files",
                         "output": json.dumps([str(other_path)]),
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": json.dumps({"path": str(my_dir2)}),
+                        },
                     }
                 ],
             },
@@ -925,9 +946,33 @@ def test_toolbox_logging_async(logs_db, tmpdir):
             "model": "echo",
             "tool_calls": [],
             "tool_results": [
-                {"name": "Memory_set", "output": "null"},
-                {"name": "Memory_get", "output": "two"},
-                {"name": "Filesystem_list_files", "output": "[]"},
+                {
+                    "name": "Memory_set",
+                    "output": "null",
+                    "instance": {
+                        "name": "Memory",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": "{}",
+                    },
+                },
+                {
+                    "name": "Memory_get",
+                    "output": "two",
+                    "instance": {
+                        "name": "Memory",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": "{}",
+                    },
+                },
+                {
+                    "name": "Filesystem_list_files",
+                    "output": "[]",
+                    "instance": {
+                        "name": "Filesystem",
+                        "plugin": "ToolboxPlugin",
+                        "arguments": json.dumps({"path": str(path)}),
+                    },
+                },
             ],
         },
     ]
@@ -960,12 +1005,7 @@ def test_plugins_command():
 
 def tool_activity_rows(db):
     """Per-turn tool calls and results from the message store, in the
-    shape the old TOOL_RESULTS_SQL produced from the legacy tables.
-
-    Toolbox instance provenance is absent: the store does not record
-    which instance served a call - tool execution provenance is still
-    an open design decision.
-    """
+    shape the old TOOL_RESULTS_SQL produced from the legacy tables."""
     from llm.logs import LogStore, log_row_extras, merged_log_rows
 
     store = LogStore(db)
@@ -982,7 +1022,11 @@ def tool_activity_rows(db):
                     for call in extras["tool_calls"]
                 ],
                 "tool_results": [
-                    {"name": result["name"], "output": result["output"]}
+                    {
+                        "name": result["name"],
+                        "output": result["output"],
+                        "instance": result["instance"],
+                    }
                     for result in extras["tool_results"]
                 ],
             }

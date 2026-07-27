@@ -773,6 +773,34 @@ class TestLibraryLogging:
         assert texts == ["original", "follow-up", "Hello"]
         assert store.verify() == []
 
+    def test_log_to_db_records_tool_instantiations(self, store, mock_model):
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next",
+            tool_results=[
+                llm.ToolResult(
+                    name="Notes_read",
+                    output="hello",
+                    tool_call_id="tc_1",
+                    instance=Notes("/tmp/notes"),
+                )
+            ],
+        )
+        response.text()
+        response.log_to_db(store.db)
+        assert list(store.db["tool_instantiations"].rows) == [
+            {
+                "tool_call_id": "tc_1",
+                "name": "Notes",
+                "plugin": None,
+                "arguments": '{"path": "/tmp/notes"}',
+            }
+        ]
+
     def test_successive_library_turns_extend_the_thread(self, store, mock_model):
         conversation = mock_model.conversation()
         for reply in ("One", "Two"):
