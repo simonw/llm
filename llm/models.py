@@ -512,6 +512,8 @@ class Prompt:
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
+                            exception=_format_tool_exception(tr.exception),
+                            attachments=list(tr.attachments or []),
                         )
                         for tr in self.tool_results
                     ],
@@ -656,6 +658,8 @@ class _BaseConversation:
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
+                            exception=_format_tool_exception(tr.exception),
+                            attachments=list(tr.attachments or []),
                         )
                         for tr in tool_results
                     ],
@@ -1809,6 +1813,8 @@ class Response(_BaseResponse):
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
+                            exception=_format_tool_exception(tr.exception),
+                            attachments=list(tr.attachments or []),
                         )
                         for tr in tool_results
                     ],
@@ -2170,6 +2176,8 @@ class AsyncResponse(_BaseResponse):
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
+                            exception=_format_tool_exception(tr.exception),
+                            attachments=list(tr.attachments or []),
                         )
                         for tr in tool_results
                     ],
@@ -3498,6 +3506,20 @@ class EmbeddingModelWithAliases:
         all_strings.extend(self.aliases)
         all_strings.append(str(self.model))
         return any(query_lower in alias.lower() for alias in all_strings)
+
+
+
+def _format_tool_exception(exception) -> str | None:
+    """Render a tool's exception the way it is recorded.
+
+    ToolResult carries the exception object; ToolResultPart carries the
+    rendered string, so the chain has to convert rather than drop it.
+    """
+    if exception is None:
+        return None
+    if isinstance(exception, str):
+        return exception
+    return f"{exception.__class__.__name__}: {exception!s}"
 
 
 def _conversation_name(text):

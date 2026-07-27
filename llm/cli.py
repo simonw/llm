@@ -62,7 +62,7 @@ from llm import (
 )
 from llm.models import ChainResponse, _BaseConversation
 
-from .logs import LogStore
+from .logs import LogStore, log_row_extras, log_rows
 from .migrations import migrate
 from .plugins import load_plugins, pm
 from .utils import (
@@ -1745,160 +1745,60 @@ def logs_list(
             # Maybe they uninstalled a model, use the -m option as-is
             model_id = model
 
-    sql = LOGS_SQL
-    order_by = "responses.id desc"
     if query:
-        sql = LOGS_SQL_SEARCH
-        if not latest:
-            order_by = "responses_fts.rank desc"
+        raise click.ClickException(
+            "-q/--query is not supported against the new log tables yet"
+        )
 
-    limit = ""
-    if count is not None and count > 0:
-        limit = f" limit {count}"
+    fragment_hashes = [fragment.id() for fragment in resolve_fragments(db, fragments)]
 
-    sql_format = {
-        "limit": limit,
-        "columns": LOGS_COLUMNS,
-        "extra_where": "",
-        "order_by": order_by,
-    }
-    where_bits = []
-    sql_params = {
-        "model": model_id,
-        "query": query,
-        "conversation_id": conversation_id,
-        "id_gt": id_gt,
-        "id_gte": id_gte,
-    }
-    if model_id:
-        where_bits.append("responses.model = :model")
-    if conversation_id:
-        where_bits.append("responses.conversation_id = :conversation_id")
-    if id_gt:
-        where_bits.append("responses.id > :id_gt")
-    if id_gte:
-        where_bits.append("responses.id >= :id_gte")
-    if fragments:
-        # Resolve the fragments to their hashes
-        fragment_hashes = [
-            fragment.id() for fragment in resolve_fragments(db, fragments)
-        ]
-        exists_clauses = []
+    schema_id = make_schema_id(schema)[0] if schema else None
 
-        for i, fragment_hash in enumerate(fragment_hashes):
-            exists_clause = f"""
-            exists (
-                select 1 from prompt_fragments
-                where prompt_fragments.response_id = responses.id
-                and prompt_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
-                )
-                union
-                select 1 from system_fragments
-                where system_fragments.response_id = responses.id
-                and system_fragments.fragment_id in (
-                    select fragments.id from fragments
-                    where hash = :f{i}
-                )
-            )
-            """
-            exists_clauses.append(exists_clause)
-            sql_params[f"f{i}"] = fragment_hash
+    rows = log_rows(
+        LogStore(db),
+        count=count if count and count > 0 else None,
+        model_id=model_id,
+        thread_id=conversation_id,
+        fragment_hashes=fragment_hashes,
+        tool_names=tools,
+        any_tools=any_tools,
+        schema_id=schema_id,
+        id_gt=id_gt,
+        id_gte=id_gte,
+    )
 
-        where_bits.append(" and ".join(exists_clauses))
-
-    if any_tools:
-        # Any response that involved at least one tool result
-        where_bits.append("""
-            exists (
-              select 1
-                from tool_results
-              where
-                tool_results.response_id = responses.id
-            )
-        """)
-    if tools:
-        tools_by_name = get_tools()
-        # Filter responses by tools (must have ALL of the named tools, including plugin)
-        tool_clauses = []
-        for i, tool_name in enumerate(tools):
-            try:
-                plugin_name = tools_by_name[tool_name].plugin
-            except KeyError:
-                raise click.ClickException(f"Unknown tool: {tool_name}")
-
-            tool_clauses.append(f"""
-            exists (
-              select 1
-                from tool_results
-                join tools on tools.id = tool_results.tool_id
-               where tool_results.response_id = responses.id
-                 and tools.name = :tool{i}
-                 and tools.plugin = :plugin{i}
-            )
-            """)
-            sql_params[f"tool{i}"] = tool_name
-            sql_params[f"plugin{i}"] = plugin_name
-
-        # AND means “must have all” — use OR instead if you want “any of”
-        where_bits.append(" and ".join(tool_clauses))
-
-    schema_id = None
-    if schema:
-        schema_id = make_schema_id(schema)[0]
-        where_bits.append("responses.schema_id = :schema_id")
-        sql_params["schema_id"] = schema_id
-
-    if where_bits:
-        where_ = " and " if query else " where "
-        sql_format["extra_where"] = where_ + " and ".join(where_bits)
-
-    final_sql = sql.format(**sql_format)
-    rows = list(db.query(final_sql, sql_params))
-
-    # Reverse the order - we do this because we 'order by id desc limit 3' to get the
-    # 3 most recent results, but we still want to display them in chronological order
-    # ... except for searches where we don't do this
-    if not query and not data:
+    # Newest first out of the query, but read chronologically.
+    if not data:
         rows.reverse()
 
-    # Fetch any attachments
-    ids = [row["id"] for row in rows]
-    attachments = list(db.query(ATTACHMENTS_SQL.format(",".join("?" * len(ids))), ids))
-    attachments_by_id = {}
-    for attachment in attachments:
-        attachments_by_id.setdefault(attachment["response_id"], []).append(attachment)
-
-    FRAGMENTS_SQL = """
-    select
-        {table}.response_id,
-        fragments.hash,
-        fragments.id as fragment_id,
-        fragments.content,
-        (
-            select json_group_array(fragment_aliases.alias)
-            from fragment_aliases
-            where fragment_aliases.fragment_id = fragments.id
-        ) as aliases
-    from {table}
-    join fragments on {table}.fragment_id = fragments.id
-    where {table}.response_id in ({placeholders})
-    order by {table}."order"
-    """
-
-    # Fetch any prompt or system prompt fragments
-    prompt_fragments_by_id = {}
-    system_fragments_by_id = {}
-    for table, dictionary in (
-        ("prompt_fragments", prompt_fragments_by_id),
-        ("system_fragments", system_fragments_by_id),
-    ):
-        for fragment in db.query(
-            FRAGMENTS_SQL.format(placeholders=",".join("?" * len(ids)), table=table),
-            ids,
+    # Attachments, fragments and tool info, all from the new tables.
+    store = LogStore(db)
+    extras_by_id = {row["id"]: log_row_extras(store, row) for row in rows}
+    attachments_by_id = {
+        id: extras["attachments"] for id, extras in extras_by_id.items()
+    }
+    prompt_fragments_by_id = {
+        id: extras["prompt_fragments"] for id, extras in extras_by_id.items()
+    }
+    system_fragments_by_id = {
+        id: extras["system_fragments"] for id, extras in extras_by_id.items()
+    }
+    tool_info_by_id = {
+        id: {
+            "tools": extras["tools"],
+            "tool_calls": extras["tool_calls"],
+            "tool_results": extras["tool_results"],
+        }
+        for id, extras in extras_by_id.items()
+    }
+    for row in rows:
+        for internal in (
+            "_input_parts",
+            "_output_parts",
+            "_parent_message_hash",
+            "_tip_message_hash",
         ):
-            dictionary.setdefault(fragment["response_id"], []).append(fragment)
+            row.pop(internal, None)
 
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
@@ -1925,81 +1825,6 @@ def logs_list(
         for line in output_rows_as_json(to_output, nl=not data_array, compact=True):
             click.echo(line)
         return
-
-    # Tool usage information
-    TOOLS_SQL = """
-    SELECT responses.id,
-    -- Tools related to this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', t.id,
-            'hash', t.hash,
-            'name', t.name,
-            'description', t.description,
-            'input_schema', json(t.input_schema)
-        ))
-        FROM tools t
-        JOIN tool_responses tr ON t.id = tr.tool_id
-        WHERE tr.response_id = responses.id
-        ),
-        '[]'
-    ) AS tools,
-    -- Tool calls for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tc.id,
-            'tool_id', tc.tool_id,
-            'name', tc.name,
-            'arguments', json(tc.arguments),
-            'tool_call_id', tc.tool_call_id
-        ))
-        FROM tool_calls tc
-        WHERE tc.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_calls,
-    -- Tool results for this response
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'id', tr.id,
-            'tool_id', tr.tool_id,
-            'name', tr.name,
-            'output', tr.output,
-            'tool_call_id', tr.tool_call_id,
-            'exception', tr.exception,
-            'attachments', COALESCE(
-                (SELECT json_group_array(json_object(
-                    'id', a.id,
-                    'type', a.type,
-                    'path', a.path,
-                    'url', a.url,
-                    'content', a.content
-                ))
-                FROM tool_results_attachments tra
-                JOIN attachments a ON tra.attachment_id = a.id
-                WHERE tra.tool_result_id = tr.id
-                ),
-                '[]'
-            )
-        ))
-        FROM tool_results tr
-        WHERE tr.response_id = responses.id
-        ),
-        '[]'
-    ) AS tool_results
-    FROM responses
-    where id in ({placeholders})
-    """
-    tool_info_by_id = {
-        row["id"]: {
-            "tools": json.loads(row["tools"]),
-            "tool_calls": json.loads(row["tool_calls"]),
-            "tool_results": json.loads(row["tool_results"]),
-        }
-        for row in db.query(
-            TOOLS_SQL.format(placeholders=",".join("?" * len(ids))), ids
-        )
-    }
 
     for row in rows:
         if truncate:

@@ -136,17 +136,11 @@ def test_llm_default_prompt(
             "model": "gpt-4o-mini",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
-            "prompt_json": {
-                "messages": [
-                    {"role": "user", "content": "three names \nfor a pet pelican"}
-                ]
-            },
+            # prompt_json and response_json are no longer recorded: the
+            # message chain holds the structure, and the raw provider
+            # payload was dropped as redundant with it.
             "options_json": {},
             "response": "Bob, Alice, Eve",
-            "response_json": {
-                "model": "gpt-4o-mini",
-                "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
-            },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
             "conversation_model": "gpt-4o-mini",

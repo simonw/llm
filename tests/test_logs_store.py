@@ -6,6 +6,8 @@ prefixes are stored once, so forking a conversation and re-sending a
 history from a stateless client both write only what is new.
 """
 
+import json
+
 import pytest
 import sqlite_utils
 from click.testing import CliRunner
@@ -966,3 +968,125 @@ class TestAsyncLogging:
         ]
         assert parts[0].provider_metadata == {"anthropic": {"signature": "SIG"}}
         assert store.verify() == []
+
+
+# ---- llm logs against the new tables ---------------------------------
+
+
+def forget_legacy(user_path):
+    """Empty the table the old `llm logs` reads from.
+
+    Every test below runs this first, so a passing assertion can only
+    have been served by the content-addressed tables. Without it these
+    tests pass against the legacy path and prove nothing.
+    """
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    with db.conn:
+        db.execute("delete from responses")
+    db.close()
+
+
+class TestLogsCommand:
+    """`llm logs` reads the content-addressed tables only. Conversations
+    logged before this schema existed are deliberately not shown yet."""
+
+    def test_shows_a_logged_prompt(self, user_path):
+        run("-m", "echo", "hello there")
+        forget_legacy(user_path)
+        assert "hello there" in run("logs", "-n", "1").output
+
+    def test_json_output_carries_the_turn(self, user_path):
+        run("-m", "echo", "hello there")
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "-n", "1", "--json").output)
+        assert len(rows) == 1
+        assert rows[0]["model"] == "echo"
+        assert rows[0]["prompt"] == "hello there"
+        assert "hello there" in rows[0]["response"]
+
+    def test_count_limits_results(self, user_path):
+        for word in ("one", "two", "three"):
+            run("-m", "echo", word)
+        forget_legacy(user_path)
+        assert len(json.loads(run("logs", "-n", "2", "--json").output)) == 2
+
+    def test_results_are_chronological(self, user_path):
+        for word in ("one", "two", "three"):
+            run("-m", "echo", word)
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "-n", "0", "--json").output)
+        assert [r["prompt"] for r in rows] == ["one", "two", "three"]
+
+    def test_filters_by_model(self, user_path):
+        run("-m", "echo", "hello")
+        forget_legacy(user_path)
+        assert json.loads(run("logs", "-m", "echo", "--json").output)
+        assert json.loads(run("logs", "-m", "gpt-4o", "--json").output) == []
+
+    def test_filters_to_a_conversation(self, user_path):
+        run("-m", "echo", "first")
+        run("-c", "second")
+        run("-m", "echo", "unrelated")
+        forget_legacy(user_path)
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        thread_id = next(
+            iter(db.query("select thread_id from turns order by id limit 1"))
+        )["thread_id"]
+        rows = json.loads(run("logs", "--cid", thread_id, "--json").output)
+        assert [r["prompt"] for r in rows] == ["first", "second"]
+
+    def test_filters_by_fragment(self, user_path, tmpdir):
+        path = tmpdir / "frag.txt"
+        path.write_text("FRAGMENT BODY", "utf-8")
+        run("-m", "echo", "with fragment", "-f", str(path))
+        run("-m", "echo", "without fragment")
+        forget_legacy(user_path)
+
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        fragment_hash = next(iter(db["fragments"].rows))["hash"]
+        rows = json.loads(run("logs", "-f", fragment_hash, "--json").output)
+        # The stored prompt is the resolved text the model was sent.
+        assert [r["prompt"] for r in rows] == ["FRAGMENT BODY\nwith fragment"]
+
+    def test_filters_by_tool(self, user_path):
+        run("-m", "echo", '{"tool_calls": [{"name": "llm_version"}]}', "-T", "llm_version")
+        run("-m", "echo", "no tools here")
+        forget_legacy(user_path)
+        assert len(json.loads(run("logs", "-T", "llm_version", "--json").output)) == 1
+
+    def test_usage_is_reported(self, user_path):
+        run("-m", "echo", "hello")
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "--json").output)
+        assert "input_tokens" in rows[0]
+        assert "datetime_utc" in rows[0]
+
+
+class TestPayloadOrdering:
+    def test_tool_call_argument_order_is_preserved(self, store):
+        # canonical_json sorts keys - that is for hashing, not storage.
+        # Arguments come back in the order the model produced them.
+        messages = [
+            llm.assistant(
+                ToolCallPart(
+                    name="demo",
+                    arguments={"timeout": 120, "options": ["tick"]},
+                    tool_call_id="tc1",
+                )
+            )
+        ]
+        tip = store.ensure_chain(messages)
+        assert list(store.load_chain(tip)[0].parts[0].arguments) == [
+            "timeout",
+            "options",
+        ]
+
+    def test_hashing_still_ignores_key_order(self, store):
+        one = store.ensure_chain(
+            [llm.assistant(ToolCallPart(name="d", arguments={"a": 1, "b": 2}))]
+        )
+        two = store.ensure_chain(
+            [llm.assistant(ToolCallPart(name="d", arguments={"b": 2, "a": 1}))]
+        )
+        assert one == two
+        assert store.db["messages"].count == 1

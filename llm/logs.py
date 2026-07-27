@@ -27,6 +27,8 @@ from .parts import (
     AttachmentPart,
     Message,
     Part,
+    ReasoningPart,
+    TextPart,
     ToolCallPart,
     ToolResultPart,
 )
@@ -189,7 +191,11 @@ class LogStore:
                     "position": position,
                     "type": payload["type"],
                     "tool_name": payload.get("name"),
-                    "payload": canonical_json(payload),
+                    # Plain dumps, not canonical_json: sorting keys is
+                    # for hashing. Storage keeps the order the model
+                    # produced, so tool call arguments read back as
+                    # they were written.
+                    "payload": json.dumps(payload),
                 }
             )
             .last_pk
@@ -636,3 +642,298 @@ def _load(value: str | None) -> dict | None:
 
 def _now() -> str:
     return str(datetime.datetime.now(datetime.timezone.utc))
+
+
+# -- llm logs support ---------------------------------------------------
+#
+# Rows shaped like the ones the older `responses` query produced, so the
+# existing rendering in llm.cli works unchanged, but derived entirely
+# from the content-addressed tables.
+
+LOG_ROWS_SQL = """
+select
+    turns.id,
+    turns.model,
+    turns.resolved_model,
+    turns.options_json,
+    turns.thread_id as conversation_id,
+    turns.duration_ms,
+    turns.datetime_utc,
+    turns.input_tokens,
+    turns.output_tokens,
+    turns.token_details,
+    turns.parent_message_hash,
+    turns.tip_message_hash,
+    threads.name as conversation_name,
+    turns.model as conversation_model,
+    schemas.content as schema_json
+from turns
+left join threads on turns.thread_id = threads.id
+left join schemas on turns.schema_id = schemas.id
+{where}
+order by turns.id desc{limit}
+"""
+
+
+def _text_of(parts, kind) -> str:
+    "Concatenated text of every part of ``kind`` in order."
+    return "".join(part.text for part in parts if isinstance(part, kind) and part.text)
+
+
+class _LogRowBuilder:
+    """Turns a turn row into the shape `llm logs` renders.
+
+    A turn's prompt is the last message it was given and its response is
+    whatever it appended, so both are derived from the parent/tip pair
+    rather than stored a second time. The chain up to the parent is a
+    prefix of the chain up to the tip, so splitting them is a matter of
+    length.
+    """
+
+    def __init__(self, store: "LogStore"):
+        self.store = store
+
+    def build(self, row: dict) -> dict:
+        inputs = self.store.load_chain(row["parent_message_hash"])
+        outputs = self.store.load_chain(row["tip_message_hash"])[len(inputs) :]
+
+        prompt_parts = inputs[-1].parts if inputs else []
+        system_parts = (
+            inputs[0].parts if inputs and inputs[0].role == "system" else []
+        )
+        out_parts = [part for message in outputs for part in message.parts]
+
+        built = {
+            key: row[key]
+            for key in (
+                "id",
+                "model",
+                "resolved_model",
+                "options_json",
+                "conversation_id",
+                "duration_ms",
+                "datetime_utc",
+                "input_tokens",
+                "output_tokens",
+                "token_details",
+                "conversation_name",
+                "conversation_model",
+                "schema_json",
+            )
+        }
+        built.update(
+            {
+                "prompt": _text_of(prompt_parts, TextPart),
+                # None rather than "" when there was no system
+                # message, matching what was recorded before.
+                "system": _text_of(system_parts, TextPart) or None,
+                "response": _text_of(out_parts, TextPart),
+                "reasoning": _text_of(out_parts, ReasoningPart) or None,
+                # Neither is stored any more: the chain holds the
+                # structure, and the raw provider payload was dropped as
+                # redundant with it.
+                "prompt_json": None,
+                "response_json": None,
+                "_input_parts": prompt_parts,
+                "_output_parts": out_parts,
+                # Internal, stripped before rendering - the enrichment
+                # needs them to find the parts rows behind these parts.
+                "_parent_message_hash": row["parent_message_hash"],
+                "_tip_message_hash": row["tip_message_hash"],
+            }
+        )
+        return built
+
+
+def log_rows(
+    store: "LogStore",
+    *,
+    count: int | None = None,
+    model_id: str | None = None,
+    thread_id: str | None = None,
+    fragment_hashes=(),
+    tool_names=(),
+    any_tools: bool = False,
+    schema_id: str | None = None,
+    id_gt: str | None = None,
+    id_gte: str | None = None,
+) -> list[dict]:
+    """Rows for `llm logs`, newest first, drawn from the new tables.
+
+    Deliberately blind to anything logged before this schema existed -
+    those conversations have no turns, so they simply do not appear.
+    """
+    where: list[str] = []
+    params: dict[str, Any] = {}
+
+    if model_id:
+        where.append("(turns.model = :model or turns.resolved_model = :model)")
+        params["model"] = model_id
+    if thread_id:
+        where.append("turns.thread_id = :thread_id")
+        params["thread_id"] = thread_id
+    if id_gt:
+        where.append("turns.id > :id_gt")
+        params["id_gt"] = id_gt
+    if id_gte:
+        where.append("turns.id >= :id_gte")
+        params["id_gte"] = id_gte
+    if schema_id:
+        where.append("turns.schema_id = :schema_id")
+        params["schema_id"] = schema_id
+
+    # Fragments come from turn_fragments - what this call was given -
+    # rather than from the message text, so it matches what -f means.
+    for index, fragment_hash in enumerate(fragment_hashes):
+        key = f"fragment_{index}"
+        where.append(
+            f"""turns.id in (
+                select turn_fragments.turn_id from turn_fragments
+                join fragments on fragments.id = turn_fragments.fragment_id
+                where fragments.hash = :{key}
+            )"""
+        )
+        params[key] = fragment_hash
+
+    # A turn "used" a tool when a tool result was among its inputs,
+    # matching what -T has always meant: the result came back and was
+    # fed to the model. The result sits in the turn's parent message.
+    if any_tools:
+        where.append(_tool_result_clause())
+    for index, tool_name in enumerate(tool_names):
+        key = f"tool_{index}"
+        where.append(_tool_result_clause(f"and parts.tool_name = :{key}"))
+        params[key] = tool_name
+
+    sql = LOG_ROWS_SQL.format(
+        where=("where " + " and ".join(where)) if where else "",
+        limit=f" limit {count}" if count else "",
+    )
+    builder = _LogRowBuilder(store)
+    return [builder.build(row) for row in store.db.query(sql, params)]
+
+
+def _tool_result_clause(extra: str = "") -> str:
+    return f"""turns.parent_message_hash in (
+        select parts.message_hash from parts
+        where parts.type = 'tool_result' {extra}
+    )"""
+
+
+def log_row_extras(store: "LogStore", row: dict) -> dict:
+    """Attachments, fragments and tool info for one `llm logs` row.
+
+    Attachments and tool calls come from the row's parts, which the row
+    builder kept hold of. Fragments come from turn_fragments - what the
+    call was given - so `-f` and the displayed list agree.
+    """
+    attachments = [
+        _attachment_summary(part.attachment)
+        for part in row.get("_input_parts", [])
+        if isinstance(part, AttachmentPart) and part.attachment is not None
+    ]
+
+    # parts.id and tools.id stand in for the row ids the old
+    # tool_calls / tool_results tables exposed, so the JSON shape of
+    # `llm logs` is unchanged.
+    call_ids = _part_ids(store, row.get("_tip_message_hash"), "tool_call")
+    result_ids = _part_ids(store, row.get("_parent_message_hash"), "tool_result")
+    tool_ids = _tool_ids_by_name(store)
+
+    tool_calls = [
+        {
+            "id": call_ids.get(part.tool_call_id),
+            "tool_id": tool_ids.get(part.name),
+            "name": part.name,
+            "arguments": part.arguments,
+            "tool_call_id": part.tool_call_id,
+        }
+        for part in row.get("_output_parts", [])
+        if isinstance(part, ToolCallPart)
+    ]
+    tool_results = [
+        {
+            "id": result_ids.get(part.tool_call_id),
+            "tool_id": tool_ids.get(part.name),
+            "name": part.name,
+            "output": part.output,
+            "tool_call_id": part.tool_call_id,
+            "exception": part.exception,
+            "attachments": [_attachment_summary(a) for a in part.attachments],
+        }
+        for part in row.get("_input_parts", [])
+        if isinstance(part, ToolResultPart)
+    ]
+
+    # input_schema is rendered as a dict, so decode it here rather than
+    # handing the caller the raw JSON text out of the column.
+    tools = [
+        {**tool_row, "input_schema": json.loads(tool_row["input_schema"] or "{}")}
+        for tool_row in store.db.query(
+            """
+            select tools.id, tools.hash, tools.name, tools.description,
+                   tools.input_schema
+            from tools join turn_tools on turn_tools.tool_id = tools.id
+            where turn_tools.turn_id = ?
+            """,
+            [row["id"]],
+        )
+    ]
+
+    fragments = {"prompt_fragments": [], "system_fragments": []}
+    for fragment_row in store.db.query(
+        """
+        select turn_fragments.kind, fragments.hash, fragments.content,
+               (select json_group_array(fragment_aliases.alias)
+                  from fragment_aliases
+                 where fragment_aliases.fragment_id = fragments.id) as aliases
+        from turn_fragments
+        join fragments on fragments.id = turn_fragments.fragment_id
+        where turn_fragments.turn_id = ?
+        order by turn_fragments."order"
+        """,
+        [row["id"]],
+    ):
+        key = f"{fragment_row['kind']}_fragments"
+        fragments[key].append(dict(fragment_row))
+
+    return {
+        "attachments": attachments,
+        "tools": tools,
+        "tool_calls": tool_calls,
+        "tool_results": tool_results,
+        **fragments,
+    }
+
+
+def _attachment_summary(attachment) -> dict:
+    "The attachment shape `llm logs` renders."
+    content = attachment.content or b""
+    return {
+        "id": attachment.id(),
+        "type": attachment.resolve_type(),
+        "path": attachment.path,
+        "url": attachment.url,
+        "content": bool(content) or None,
+        "content_length": len(content) or None,
+    }
+
+
+def _part_ids(store: "LogStore", message_hash: str | None, type: str) -> dict:
+    "Map tool_call_id to the parts row id, for one message."
+    if not message_hash:
+        return {}
+    return {
+        json.loads(part_row["payload"]).get("tool_call_id"): part_row["id"]
+        for part_row in store.db.query(
+            "select id, payload from parts where message_hash = ? and type = ?",
+            [message_hash, type],
+        )
+    }
+
+
+def _tool_ids_by_name(store: "LogStore") -> dict:
+    return {
+        tool_row["name"]: tool_row["id"]
+        for tool_row in store.db.query("select id, name from tools")
+    }
