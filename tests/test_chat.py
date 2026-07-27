@@ -315,7 +315,7 @@ def test_chat_tools(logs_db):
         '  "attachments": [],\n'
         '  "stream": true,\n'
         '  "previous": []\n'
-        "}{\n"
+        "} {\n"
         '  "prompt": "",\n'
         '  "system": "",\n'
         '  "attachments": [],\n'

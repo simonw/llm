@@ -2813,13 +2813,50 @@ class ChainResponse(_BaseChainResponse):
                 break
 
     def __iter__(self) -> Iterator[str]:
+        # Rounds of a chain are separate model responses; joined with
+        # nothing between them the text of one runs straight into the
+        # next ("...have dragons.Now that I..."). Yield one space at
+        # each boundary where neither side brings its own whitespace.
+        # Display only: the separator never enters any response's
+        # recorded events, so it is not stored or hashed.
+        last_char = ""
         for response_item in self.responses():
-            yield from response_item
+            first_chunk = True
+            for chunk in response_item:
+                if not chunk:
+                    continue
+                if (
+                    first_chunk
+                    and last_char
+                    and not last_char.isspace()
+                    and not chunk[0].isspace()
+                ):
+                    yield " "
+                first_chunk = False
+                yield chunk
+                last_char = chunk[-1]
 
     def stream_events(self):
         "Yield StreamEvents from every response in the chain."
+        from .parts import StreamEvent
+
+        # The same round-boundary separator as __iter__, synthesized at
+        # the chain level so it is never part of a response's events.
+        last_char = ""
         for response_item in self.responses():
-            yield from response_item.stream_events()
+            first_text = True
+            for event in response_item.stream_events():
+                if event.type == "text" and event.chunk:
+                    if (
+                        first_text
+                        and last_char
+                        and not last_char.isspace()
+                        and not event.chunk[0].isspace()
+                    ):
+                        yield StreamEvent(type="text", chunk=" ")
+                    first_text = False
+                    last_char = event.chunk[-1]
+                yield event
 
     def text(self) -> str:
         return "".join(self)
@@ -2911,14 +2948,44 @@ class AsyncChainResponse(_BaseChainResponse):
                 break
 
     async def __aiter__(self) -> AsyncIterator[str]:
+        # Round-boundary separator - same reasoning as the sync chain.
+        last_char = ""
         async for response_item in self.responses():
+            first_chunk = True
             async for chunk in response_item:
+                if not chunk:
+                    continue
+                if (
+                    first_chunk
+                    and last_char
+                    and not last_char.isspace()
+                    and not chunk[0].isspace()
+                ):
+                    yield " "
+                first_chunk = False
                 yield chunk
+                last_char = chunk[-1]
 
     async def astream_events(self):
         "Yield StreamEvents from every response in the chain."
+        from .parts import StreamEvent
+
+        # Same round-boundary separator as __aiter__, synthesized at the
+        # chain level so it is never part of a response's events.
+        last_char = ""
         async for response_item in self.responses():
+            first_text = True
             async for event in response_item.astream_events():
+                if event.type == "text" and event.chunk:
+                    if (
+                        first_text
+                        and last_char
+                        and not last_char.isspace()
+                        and not event.chunk[0].isspace()
+                    ):
+                        yield StreamEvent(type="text", chunk=" ")
+                    first_text = False
+                    last_char = event.chunk[-1]
                 yield event
 
     async def text(self) -> str:

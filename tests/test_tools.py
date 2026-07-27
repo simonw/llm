@@ -114,6 +114,31 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
+def test_chain_round_separator_is_display_only():
+    """The space between chain rounds is synthesized at the chain level
+    for display - it must never become a stored whitespace part."""
+
+    def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    events = list(chain_response.stream_events())
+    text = "".join(e.chunk for e in events if e.type == "text")
+    # The separator reached the streamed output...
+    assert "\n} {\n" in text
+
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    chain_response.log_to_db(db)
+    # ...but no whitespace-only text part was stored.
+    for row in db["parts"].rows:
+        if row["type"] == "text" and row["text"] is not None:
+            assert row["text"].strip(), row
+
+
 def test_tool_use_async_tool_function():
     async def hello():
         return "world"
@@ -123,8 +148,8 @@ def test_tool_use_async_tool_function():
         json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
     )
     output = chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     tool_call_id = objects[1]["tool_results"][0]["tool_call_id"]
@@ -167,8 +192,8 @@ async def test_async_tools_run_tools_in_parallel():
         tools=[hello, hello2],
     )
     output = await chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     ids = [r["tool_call_id"] for r in objects[1]["tool_results"]]
