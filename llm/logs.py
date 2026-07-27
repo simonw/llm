@@ -780,6 +780,7 @@ def log_rows(
     schema_id: str | None = None,
     id_gt: str | None = None,
     id_gte: str | None = None,
+    ids=(),
     query: str | None = None,
     latest: bool = False,
 ) -> list[dict]:
@@ -810,6 +811,10 @@ def log_rows(
     if schema_id:
         where.append("turns.schema_id = :schema_id")
         params["schema_id"] = schema_id
+    if ids:
+        keys = [f"row_id_{index}" for index in range(len(ids))]
+        where.append("turns.id in ({})".format(", ".join(f":{key}" for key in keys)))
+        params.update(dict(zip(keys, ids)))
 
     # Fragments come from turn_fragments - what this call was given -
     # rather than from the message text, so it matches what -f means.
@@ -1035,6 +1040,7 @@ def legacy_log_rows(
     schema_id: str | None = None,
     id_gt: str | None = None,
     id_gte: str | None = None,
+    ids=(),
     query: str | None = None,
     latest: bool = False,
 ) -> list[dict]:
@@ -1065,6 +1071,12 @@ def legacy_log_rows(
     if schema_id:
         where.append("responses.schema_id = :schema_id")
         params["schema_id"] = schema_id
+    if ids:
+        keys = [f"row_id_{index}" for index in range(len(ids))]
+        where.append(
+            "responses.id in ({})".format(", ".join(f":{key}" for key in keys))
+        )
+        params.update(dict(zip(keys, ids)))
 
     for index, fragment_hash in enumerate(fragment_hashes):
         key = f"fragment_{index}"

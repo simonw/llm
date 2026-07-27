@@ -16,7 +16,10 @@ jobs:
         include:
         - os: ubuntu-latest
           python-version: "3.14"
-          sqlite-utils-version: "4.1.1"
+          sqlite-utils-version: "<4"
+        - os: ubuntu-latest
+          python-version: "3.14"
+          sqlite-utils-version: ">=4"
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
@@ -28,15 +31,15 @@ jobs:
     - name: Install dependencies
       run: |
         pip install . --group dev
-    - name: Install sqlite-utils pre-release
+    - name: Install sqlite-utils ${{ matrix.sqlite-utils-version }}
       if: matrix.sqlite-utils-version != ''
       run: |
-        pip install sqlite-utils==${{ matrix.sqlite-utils-version }}
+        pip install 'sqlite-utils${{ matrix.sqlite-utils-version }}'
     - name: Run tests
       run: |
         python -m pytest -vv
     - name: Check if cog needs to be run
-      if: matrix.sqlite-utils-version == '4.1.1'
+      if: matrix.sqlite-utils-version == '>=4'
       run: |
         cog --check \
           -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \

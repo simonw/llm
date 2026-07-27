@@ -61,7 +61,7 @@ from llm import (
     set_default_model,
     user_dir,
 )
-from llm.models import ChainResponse, _BaseConversation
+from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
 
 from .logs import (
     LogStore,
@@ -520,6 +520,12 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "json_output",
+    "--json",
+    is_flag=True,
+    help="Output the response as JSON, same format as llm logs --json",
+)
 def prompt(
     prompt,
     system,
@@ -553,6 +559,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    json_output,
 ):
     """
     Execute a prompt
@@ -784,7 +791,7 @@ def prompt(
                 resolve_attachment_with_type(at.value, at.type)
                 for at in template_obj.attachment_types
             ] + list(attachment_types)
-    if extract or extract_last:
+    if extract or extract_last or json_output:
         no_stream = True
 
     conversation = None
@@ -938,7 +945,8 @@ def prompt(
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
                         )
-                    print(text)
+                    if not json_output:
+                        print(text)
                 return response
 
             response = asyncio.run(inner())
@@ -962,7 +970,8 @@ def prompt(
                 text = response.text()
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+                if not json_output:
+                    print(text)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -991,12 +1000,27 @@ def prompt(
             )
 
     # Log responses to the database
+    log_db = None
     if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database
+        log_db = sqlite_utils.Database(memory=True)
+        migrate(log_db)
+
+    if log_db is not None:
         # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
         if isinstance(response, AsyncResponse):
             response = asyncio.run(response.to_sync_response())
         # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(db)
+        response.log_to_db(log_db)
+
+    if json_output:
+        if isinstance(response, _BaseChainResponse):
+            response_ids = [response_.id for response_ in response._responses]
+        else:
+            response_ids = [response.id]
+        click.echo(logs_json_for_response_ids(log_db, response_ids))
 
 
 @cli.command()
@@ -1557,61 +1581,96 @@ def logs_turn_off():
     path.touch()
 
 
-LOGS_COLUMNS = """    responses.id,
-    responses.model,
-    responses.resolved_model,
-    responses.prompt,
-    responses.system,
-    responses.prompt_json,
-    responses.options_json,
-    responses.response,
-    responses.reasoning,
-    responses.response_json,
-    responses.conversation_id,
-    responses.duration_ms,
-    responses.datetime_utc,
-    responses.input_tokens,
-    responses.output_tokens,
-    responses.token_details,
-    conversations.name as conversation_name,
-    conversations.model as conversation_model,
-    schemas.content as schema_json"""
+def annotate_log_rows(db, rows, expand=False, truncate=False):
+    """
+    Modify log rows from the merged reader in place: attach fragments
+    and tool information, decode (or, if truncate is on, remove) their
+    JSON columns and strip the reader's internal keys.
 
-LOGS_SQL = """
-select
-{columns}
-from
-    responses
-left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id{extra_where}
-order by {order_by}{limit}
-"""
-LOGS_SQL_SEARCH = """
-select
-{columns}
-from
-    responses
-left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id
-join responses_fts on responses_fts.rowid = responses.rowid
-where responses_fts match :query{extra_where}
-order by {order_by}{limit}
-"""
+    Returns a dict mapping row id to its attachments, for
+    log_rows_as_json and the rendered output.
+    """
+    store = LogStore(db)
+    # New rows carry their extras in the row's parts; legacy rows
+    # batch-fetch from the legacy tables.
+    legacy_extras = legacy_log_row_extras(
+        db, [row["id"] for row in rows if row.get("_legacy")]
+    )
+    extras_by_id = {
+        row["id"]: (
+            legacy_extras[row["id"]]
+            if row.get("_legacy")
+            else log_row_extras(store, row)
+        )
+        for row in rows
+    }
+    for row in rows:
+        for internal in (
+            "_input_parts",
+            "_output_parts",
+            "_parent_message_hash",
+            "_tip_message_hash",
+            "_legacy",
+            "_search_rank",
+        ):
+            row.pop(internal, None)
+        extras = extras_by_id[row["id"]]
+        if truncate:
+            row["prompt"] = truncate_string(row["prompt"] or "")
+            row["response"] = truncate_string(row["response"] or "")
+        # Add prompt and system fragments
+        for key in ("prompt_fragments", "system_fragments"):
+            row[key] = [
+                {
+                    "hash": fragment["hash"],
+                    "content": (
+                        fragment["content"]
+                        if expand
+                        else truncate_string(fragment["content"])
+                    ),
+                    "aliases": json.loads(fragment["aliases"]),
+                }
+                for fragment in extras[key]
+            ]
+        # Either decode or remove all JSON keys
+        keys = list(row.keys())
+        for key in keys:
+            if key.endswith("_json") and row[key] is not None:
+                if truncate:
+                    del row[key]
+                else:
+                    row[key] = json.loads(row[key])
+        row.update(
+            {
+                "tools": extras["tools"],
+                "tool_calls": extras["tool_calls"],
+                "tool_results": extras["tool_results"],
+            }
+        )
+    return {id: extras["attachments"] for id, extras in extras_by_id.items()}
 
-ATTACHMENTS_SQL = """
-select
-    response_id,
-    attachments.id,
-    attachments.type,
-    attachments.path,
-    attachments.url,
-    length(attachments.content) as content_length
-from attachments
-join prompt_attachments
-    on attachments.id = prompt_attachments.attachment_id
-where prompt_attachments.response_id in ({})
-order by prompt_attachments."order"
-"""
+
+def log_rows_as_json(rows, attachments_by_id):
+    "Serialize annotated log rows to the JSON used by 'llm logs --json'"
+    for row in rows:
+        row["attachments"] = [
+            {k: v for k, v in attachment.items() if k != "response_id"}
+            for attachment in attachments_by_id.get(row["id"], [])
+        ]
+    return json.dumps(list(rows), indent=2)
+
+
+def logs_json_for_response_ids(db, ids):
+    """
+    Return the JSON that 'llm logs --json' would output for these response IDs,
+    in chronological order
+    """
+    if not ids:
+        return "[]"
+    rows = merged_log_rows(LogStore(db), ids=list(ids))
+    # Newest first out of the reader, chronological out here
+    rows.reverse()
+    return log_rows_as_json(rows, annotate_log_rows(db, rows))
 
 
 @logs.command(name="list")
@@ -1838,47 +1897,6 @@ def logs_list(
     if not query and not data:
         rows.reverse()
 
-    # Attachments, fragments and tool info. New rows carry theirs in
-    # the row's parts; legacy rows batch-fetch from the legacy tables.
-    legacy_extras = legacy_log_row_extras(
-        db, [row["id"] for row in rows if row.get("_legacy")]
-    )
-    extras_by_id = {
-        row["id"]: (
-            legacy_extras[row["id"]]
-            if row.get("_legacy")
-            else log_row_extras(store, row)
-        )
-        for row in rows
-    }
-    attachments_by_id = {
-        id: extras["attachments"] for id, extras in extras_by_id.items()
-    }
-    prompt_fragments_by_id = {
-        id: extras["prompt_fragments"] for id, extras in extras_by_id.items()
-    }
-    system_fragments_by_id = {
-        id: extras["system_fragments"] for id, extras in extras_by_id.items()
-    }
-    tool_info_by_id = {
-        id: {
-            "tools": extras["tools"],
-            "tool_calls": extras["tool_calls"],
-            "tool_results": extras["tool_results"],
-        }
-        for id, extras in extras_by_id.items()
-    }
-    for row in rows:
-        for internal in (
-            "_input_parts",
-            "_output_parts",
-            "_parent_message_hash",
-            "_tip_message_hash",
-            "_legacy",
-            "_search_rank",
-        ):
-            row.pop(internal, None)
-
     if data or data_array or data_key or data_ids:
         # Special case for --data to output valid JSON
         to_output = []
@@ -1905,57 +1923,21 @@ def logs_list(
             click.echo(line)
         return
 
-    for row in rows:
-        if truncate:
-            row["prompt"] = truncate_string(row["prompt"] or "")
-            row["response"] = truncate_string(row["response"] or "")
-        # Add prompt and system fragments
-        for key in ("prompt_fragments", "system_fragments"):
-            row[key] = [
-                {
-                    "hash": fragment["hash"],
-                    "content": (
-                        fragment["content"]
-                        if expand
-                        else truncate_string(fragment["content"])
-                    ),
-                    "aliases": json.loads(fragment["aliases"]),
-                }
-                for fragment in (
-                    prompt_fragments_by_id.get(row["id"], [])
-                    if key == "prompt_fragments"
-                    else system_fragments_by_id.get(row["id"], [])
-                )
-            ]
-        # Either decode or remove all JSON keys
-        keys = list(row.keys())
-        for key in keys:
-            if key.endswith("_json") and row[key] is not None:
-                if truncate:
-                    del row[key]
-                else:
-                    row[key] = json.loads(row[key])
-        row.update(tool_info_by_id[row["id"]])
+    attachments_by_id = annotate_log_rows(db, rows, expand=expand, truncate=truncate)
 
     output = None
     if json_output:
         # Output as JSON if requested
-        for row in rows:
-            row["attachments"] = [
-                {k: v for k, v in attachment.items() if k != "response_id"}
-                for attachment in attachments_by_id.get(row["id"], [])
-            ]
-        output = json.dumps(list(rows), indent=2)
+        output = log_rows_as_json(rows, attachments_by_id)
     elif extract or extract_last:
         # Extract and return first code block
         for row in rows:
             output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
-    elif response:
+    elif response and rows:
         # Just output the last response
-        if rows:
-            output = rows[-1]["response"]
+        output = rows[-1]["response"]
 
     if output is not None:
         click.echo(output)

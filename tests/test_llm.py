@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+from importlib.metadata import version
 from unittest import mock
 
 import pytest
@@ -853,6 +854,82 @@ def test_llm_prompt_continue_with_database(
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
     assert sqlite_utils.Database(db_path)["turns"].count == 2
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_llm_prompt_json(logs_db, async_):
+    "llm --json should output the same JSON as llm logs --json"
+    runner = CliRunner()
+    args = ["-m", "echo", "hello world", "--json"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["model"] == "echo"
+    assert row["prompt"] == "hello world"
+    assert json.loads(row["response"])["prompt"] == "hello world"
+    assert row["attachments"] == []
+    assert row["tools"] == []
+    assert row["tool_calls"] == []
+    assert row["tool_results"] == []
+    # Should be identical to the output of llm logs --json
+    logs_result = runner.invoke(
+        cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
+    )
+    assert logs_result.exit_code == 0, logs_result.output
+    assert json.loads(logs_result.output) == rows
+
+
+@pytest.mark.parametrize("logs_args", (["--no-log"], ["-n"], []))
+def test_llm_prompt_json_without_logging(logs_db, logs_args):
+    "--json should work even when the response is not logged to the database"
+    runner = CliRunner()
+    if not logs_args:
+        # Turn logging off entirely instead
+        runner.invoke(cli, ["logs", "off"], catch_exceptions=False)
+    result = runner.invoke(
+        cli, ["-m", "echo", "hello world", "--json"] + logs_args, catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    assert rows[0]["prompt"] == "hello world"
+    # But nothing should have been logged
+    assert logs_db["responses"].count == 0
+
+
+def test_llm_prompt_json_with_tools(logs_db):
+    "Each response in a tool chain should be included in the JSON"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+            "--json",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 2
+    assert [tool["name"] for tool in rows[0]["tools"]] == ["llm_version"]
+    assert [call["name"] for call in rows[0]["tool_calls"]] == ["llm_version"]
+    assert rows[0]["tool_results"] == []
+    assert rows[1]["tool_calls"] == []
+    assert [result_["output"] for result_ in rows[1]["tool_results"]] == [
+        version("llm")
+    ]
+    logs_result = runner.invoke(
+        cli, ["logs", "-n", "2", "--json"], catch_exceptions=False
+    )
+    assert json.loads(logs_result.output) == rows
 
 
 def test_default_exports():

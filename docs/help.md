@@ -154,6 +154,8 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  --json                          Output the response as JSON, same format as
+                                  llm logs --json
   -h, --help                      Show this message and exit.
 ```
 
