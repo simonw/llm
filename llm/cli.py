@@ -580,12 +580,6 @@ def prompt(
 
     \b
         llm 'JavaScript function for reversing a string' -x
-
-    The --json option outputs details of the prompt and response as JSON, in the
-    same format as the llm logs --json command.
-
-    \b
-        llm 'Capital of France?' --json
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
