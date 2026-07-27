@@ -117,6 +117,7 @@ schemas
 templates
 fragments
 aliases
+model-cards
 embeddings/index
 plugins/index
 python-api

@@ -386,6 +386,7 @@ Options:
 
 Commands:
   list*    List available models
+  cards    Manage executable model cards
   default  Show or set the default model
   options  Manage default options for models
 ```
@@ -492,6 +493,116 @@ Usage: llm models options clear [OPTIONS] MODEL [KEY]
       llm models options clear gpt-4o
       # Or for a single option
       llm models options clear gpt-4o temperature
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-cards)=
+#### llm models cards --help
+```
+Usage: llm models cards [OPTIONS] COMMAND [ARGS]...
+
+  Manage executable model cards
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  list*   List installed model cards
+  add     Install a model card from a file path or URL
+  path    Display the path to the model cards directory
+  remove  Remove an installed model card
+  show    Show the contents of an installed model card
+```
+
+(help-models-cards-list)=
+##### llm models cards list --help
+```
+Usage: llm models cards list [OPTIONS]
+
+  List installed model cards
+
+  Example usage:
+
+      llm models cards list
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-cards-add)=
+##### llm models cards add --help
+```
+Usage: llm models cards add [OPTIONS] PATH_OR_URL
+
+  Install a model card from a file path or URL
+
+  A model card is a Markdown file with YAML frontmatter specifying the plugin,
+  model class and constructor arguments for a model:
+
+      ---
+      model_id: anthropic/claude-opus-4-5
+      plugin: llm-anthropic
+      model_class: ClaudeMessages
+      init:
+        model_id: claude-opus-4-5-20251101
+        supports_pdf: true
+      ---
+      # Claude Opus 4.5
+      Documentation for the model goes here.
+
+  Example usage:
+
+      llm models cards add ./claude-opus-4-5.md
+      llm models cards add https://example.com/cards/claude-opus-4-5.md
+
+Options:
+  --name TEXT  Filename to save the card as (without .md)
+  --force      Install the card even if the model cannot currently be loaded
+  -h, --help   Show this message and exit.
+```
+
+(help-models-cards-show)=
+##### llm models cards show --help
+```
+Usage: llm models cards show [OPTIONS] NAME
+
+  Show the contents of an installed model card
+
+  Example usage:
+
+      llm models cards show anthropic-claude-opus-4-5
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-cards-remove)=
+##### llm models cards remove --help
+```
+Usage: llm models cards remove [OPTIONS] NAME
+
+  Remove an installed model card
+
+  Example usage:
+
+      llm models cards remove anthropic-claude-opus-4-5
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-models-cards-path)=
+##### llm models cards path --help
+```
+Usage: llm models cards path [OPTIONS]
+
+  Display the path to the model cards directory
+
+  Example usage:
+
+      llm models cards path
 
 Options:
   -h, --help  Show this message and exit.

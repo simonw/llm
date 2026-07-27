@@ -3925,6 +3925,186 @@ def options_clear(model, key):
             )
 
 
+@models.group(
+    cls=DefaultGroup,
+    default="list",
+    default_if_no_args=True,
+)
+def cards():
+    "Manage executable model cards"
+
+
+@cards.command(name="list")
+def cards_list():
+    """
+    List installed model cards
+
+    Example usage:
+
+    \b
+        llm models cards list
+    """
+    from llm.model_cards import load_model_cards, model_cards_dir
+
+    errors = []
+
+    def on_error(path, ex):
+        errors.append((path, ex))
+
+    found = False
+    for card in load_model_cards(on_error=on_error):
+        found = True
+        bits = [f"{card.name}: {card.model_id} ({card.type})"]
+        try:
+            card.build_model()
+        except Exception as ex:  # noqa: BLE001
+            bits.append(f"  error: {ex}")
+        if card.aliases:
+            bits.append("  aliases: {}".format(", ".join(card.aliases)))
+        click.echo("\n".join(bits))
+    for path, error in errors:
+        found = True
+        click.echo(f"{path.stem}: invalid card - {error}")
+    if not found:
+        click.echo("No model cards installed in {}".format(model_cards_dir()), err=True)
+
+
+@cards.command(name="add")
+@click.argument("path_or_url")
+@click.option("--name", help="Filename to save the card as (without .md)")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Install the card even if the model cannot currently be loaded",
+)
+def cards_add(path_or_url, name, force):
+    """
+    Install a model card from a file path or URL
+
+    A model card is a Markdown file with YAML frontmatter specifying the
+    plugin, model class and constructor arguments for a model:
+
+    \b
+        ---
+        model_id: anthropic/claude-opus-4-5
+        plugin: llm-anthropic
+        model_class: ClaudeMessages
+        init:
+          model_id: claude-opus-4-5-20251101
+          supports_pdf: true
+        ---
+        # Claude Opus 4.5
+        Documentation for the model goes here.
+
+    Example usage:
+
+    \b
+        llm models cards add ./claude-opus-4-5.md
+        llm models cards add https://example.com/cards/claude-opus-4-5.md
+    """
+    from llm.model_cards import (
+        ModelCardError,
+        card_filename_for_model_id,
+        model_cards_dir,
+        parse_model_card,
+    )
+
+    if path_or_url.startswith(("http://", "https://")):
+        try:
+            response = httpx.get(path_or_url, follow_redirects=True)
+            response.raise_for_status()
+        except httpx.HTTPError as ex:
+            raise click.ClickException(f"Could not fetch {path_or_url}: {ex}")
+        content = response.text
+    else:
+        path = pathlib.Path(path_or_url)
+        if not path.exists():
+            raise click.ClickException(f"File does not exist: {path_or_url}")
+        content = path.read_text("utf-8")
+
+    try:
+        card = parse_model_card(content)
+    except ModelCardError as ex:
+        raise click.ClickException(str(ex))
+
+    # Verify the model can actually be built
+    try:
+        model = card.build_model()
+        card.build_async_model()
+        if model.model_id != card.model_id:
+            click.echo(
+                "Warning: card says model_id {} but model registered as {}".format(
+                    card.model_id, model.model_id
+                ),
+                err=True,
+            )
+    except ModelCardError as ex:
+        if not force:
+            raise click.ClickException(f"{ex}\nUse --force to install the card anyway")
+        click.echo(f"Warning: {ex}", err=True)
+
+    filename = (name + ".md") if name else card_filename_for_model_id(card.model_id)
+    cards_path = model_cards_dir()
+    cards_path.mkdir(parents=True, exist_ok=True)
+    destination = cards_path / filename
+    destination.write_text(content, "utf-8")
+    click.echo(f"Installed model card: {destination}", err=True)
+
+
+@cards.command(name="show")
+@click.argument("name")
+def cards_show(name):
+    """
+    Show the contents of an installed model card
+
+    Example usage:
+
+    \b
+        llm models cards show anthropic-claude-opus-4-5
+    """
+    from llm.model_cards import model_cards_dir
+
+    path = model_cards_dir() / (name if name.endswith(".md") else name + ".md")
+    if not path.exists():
+        raise click.ClickException(f"No model card found: {name}")
+    click.echo(path.read_text("utf-8"))
+
+
+@cards.command(name="remove")
+@click.argument("name")
+def cards_remove(name):
+    """
+    Remove an installed model card
+
+    Example usage:
+
+    \b
+        llm models cards remove anthropic-claude-opus-4-5
+    """
+    from llm.model_cards import model_cards_dir
+
+    path = model_cards_dir() / (name if name.endswith(".md") else name + ".md")
+    if not path.exists():
+        raise click.ClickException(f"No model card found: {name}")
+    path.unlink()
+    click.echo(f"Removed model card: {path}", err=True)
+
+
+@cards.command(name="path")
+def cards_path():
+    """
+    Display the path to the model cards directory
+
+    Example usage:
+
+    \b
+        llm models cards path
+    """
+    from llm.model_cards import model_cards_dir
+
+    click.echo(model_cards_dir())
+
+
 def template_dir():
     path = user_dir() / "templates"
     path.mkdir(parents=True, exist_ok=True)
