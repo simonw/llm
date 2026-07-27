@@ -715,7 +715,7 @@ def m024_message_store_payloads(db):
             "order": int,
             "kind": str,  # 'prompt' | 'system'
         },
-        pk=("turn_id", "fragment_id", "kind"),
+        pk=("turn_id", "fragment_id", "kind", "order"),
         foreign_keys=(
             ("turn_id", "turns", "id"),
             ("fragment_id", "fragments", "id"),
@@ -991,3 +991,12 @@ def m030_tool_instantiations_turn_scope(db):
             """)
         db.execute("delete from tool_instantiations where turn_id is null")
     db["tool_instantiations"].transform(pk=("turn_id", "tool_call_id"))
+
+
+@migration
+def m031_turn_fragments_order_pk(db):
+    # The same fragment can be passed to a prompt more than once - m016
+    # established that for the legacy tables - so order joins the key
+    # and repeats are preserved instead of collapsing to one row.
+    if "order" not in db["turn_fragments"].pks:
+        db["turn_fragments"].transform(pk=("turn_id", "fragment_id", "kind", "order"))

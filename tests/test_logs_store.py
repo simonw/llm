@@ -853,6 +853,19 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestRepeatedFragments:
+    def test_passing_the_same_fragment_twice_keeps_both_rows(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("hi", fragments=["CONTEXT", "CONTEXT"])
+        response.text()
+        response.log_to_db(store.db)
+        rows = list(
+            store.db["turn_fragments"].rows_where("kind = 'prompt'", order_by='"order"')
+        )
+        assert [row["order"] for row in rows] == [0, 1]
+        assert rows[0]["fragment_id"] == rows[1]["fragment_id"]
+
+
 class TestConcurrentWriters:
     def test_losing_the_insert_race_neither_raises_nor_duplicates(
         self, tmp_path, monkeypatch
