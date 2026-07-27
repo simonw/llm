@@ -728,6 +728,20 @@ class TestLibraryLogging:
         assert store.db["turns"].count == 1
         assert len(store.thread_messages(conversation.id)) == 2
 
+    def test_messages_plus_prompt_both_reach_the_chain(self, store, mock_model):
+        """prompt= alongside messages= used to vanish from the logged
+        chain: Prompt.messages returned the explicit list verbatim, so
+        the text the model answered was absent from the store."""
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        response.log_to_db(store.db)
+        turn = next(iter(store.db["turns"].rows))
+        chain = store.load_chain(turn["tip_message_hash"])
+        texts = [part.text for message in chain for part in message.parts]
+        assert texts == ["original", "follow-up", "Hello"]
+        assert store.verify() == []
+
     def test_successive_library_turns_extend_the_thread(self, store, mock_model):
         conversation = mock_model.conversation()
         for reply in ("One", "Two"):

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Passing `prompt=`, `fragments=`, `attachments=` or `tool_results=` alongside `messages=` to `model.prompt()` or `conversation.prompt()` now appends that new input to the supplied message history, instead of silently omitting it from `prompt.messages` - previously the model could receive text that never appeared in the logged conversation. [#1562](https://github.com/simonw/llm/pull/1562)
+
 (v0_31_1)=
 ## 0.31.1 (2026-07-09)
 

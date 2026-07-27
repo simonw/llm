@@ -545,6 +545,61 @@ def _wrap_tools(tools: list[ToolDef]) -> list[Tool]:
     return wrapped_tools
 
 
+def _append_turn_input(
+    chain: list[Any],
+    prompt: str | None,
+    fragments=None,
+    attachments=None,
+    tool_results=None,
+) -> list[Any]:
+    """Append a turn's new input to a message chain.
+
+    A tool-role message for any tool results, then a user-role message
+    built from fragments + prompt text + attachments. This is what makes
+    ``messages=`` mean "authoritative history" without the other prompt
+    arguments being silently dropped from the chain. Mutates and returns
+    ``chain``.
+    """
+    from .parts import (
+        AttachmentPart,
+        Message,
+        TextPart,
+        ToolResultPart,
+    )
+
+    if tool_results:
+        chain.append(
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name=tr.name,
+                        output=tr.output,
+                        tool_call_id=tr.tool_call_id,
+                        exception=_format_tool_exception(tr.exception),
+                        attachments=list(tr.attachments or []),
+                    )
+                    for tr in tool_results
+                ],
+            )
+        )
+
+    user_parts: list[Any] = []
+    # Fragments are concatenated into the prompt text before it is
+    # sent, so they have to be in the chain too - prompt.messages is
+    # meant to be exactly what the model sees. Matches Prompt.prompt.
+    prompt_text = "\n".join(
+        [str(fragment) for fragment in fragments or []] + ([prompt] if prompt else [])
+    )
+    if prompt_text:
+        user_parts.append(TextPart(text=prompt_text))
+    for att in attachments or []:
+        user_parts.append(AttachmentPart(attachment=att))
+    if user_parts:
+        chain.append(Message(role="user", parts=user_parts))
+    return chain
+
+
 def _combine_system(system, system_fragments):
     "Concatenate the system prompt and any system fragments into one string."
     bits = [
@@ -615,17 +670,19 @@ class _BaseConversation:
         exactly what the model sees.
 
         If ``explicit_messages`` is provided, the caller has opted out
-        of history reconstruction and the list is used as-is.
+        of history reconstruction: the list is the authoritative history,
+        and the new turn's input is appended to it.
         """
-        from .parts import (
-            AttachmentPart,
-            Message,
-            TextPart,
-            ToolResultPart,
-        )
+        from .parts import Message, TextPart
 
         if explicit_messages is not None:
-            return list(explicit_messages)
+            return _append_turn_input(
+                list(explicit_messages),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
+            )
 
         chain: list[Any] = []
         if self.loaded_messages:
@@ -648,40 +705,7 @@ class _BaseConversation:
             if system_text:
                 chain.append(Message(role="system", parts=[TextPart(text=system_text)]))
 
-        # Append the new turn's input
-        if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                            exception=_format_tool_exception(tr.exception),
-                            attachments=list(tr.attachments or []),
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
-
-        user_parts: list[Any] = []
-        # Fragments are concatenated into the prompt text before it is
-        # sent, so they have to be in the chain too - prompt.messages is
-        # meant to be exactly what the model sees. Matches Prompt.prompt.
-        prompt_text = "\n".join(
-            [str(fragment) for fragment in fragments or []]
-            + ([prompt] if prompt else [])
-        )
-        if prompt_text:
-            user_parts.append(TextPart(text=prompt_text))
-        for att in attachments or []:
-            user_parts.append(AttachmentPart(attachment=att))
-        if user_parts:
-            chain.append(Message(role="user", parts=user_parts))
-
-        return chain
+        return _append_turn_input(chain, prompt, fragments, attachments, tool_results)
 
 
 @dataclass
@@ -3213,6 +3237,13 @@ class _Model(_BaseModel):
         key_value = kwargs.pop("key", None)
         merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
+        if messages is not None:
+            # messages= is the authoritative history; the other prompt
+            # arguments are this turn's new input, folded in so that
+            # response.prompt.messages stays exactly what the model sees.
+            messages = _append_turn_input(
+                list(messages), prompt, fragments, attachments, tool_results
+            )
         return Response(
             Prompt(
                 prompt,
@@ -3332,6 +3363,12 @@ class _AsyncModel(_BaseModel):
         key_value = kwargs.pop("key", None)
         merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
+        if messages is not None:
+            # Same fold as Model.prompt: messages= is the history, the
+            # other prompt arguments are this turn's new input.
+            messages = _append_turn_input(
+                list(messages), prompt, fragments, attachments, tool_results
+            )
         return AsyncResponse(
             Prompt(
                 prompt,
