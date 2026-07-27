@@ -798,13 +798,46 @@ class TestLibraryLogging:
         )
         response.text()
         response.log_to_db(store.db)
+        turn_id = next(iter(store.db["turns"].rows))["id"]
         assert list(store.db["tool_instantiations"].rows) == [
             {
                 "tool_call_id": "tc_1",
                 "name": "Notes",
                 "plugin": None,
                 "arguments": '{"path": "/tmp/notes"}',
+                "turn_id": turn_id,
             }
+        ]
+
+    def test_tool_instantiations_are_scoped_by_turn(self, store, mock_model):
+        # Providers with per-request counters can reuse a tool_call_id
+        # across turns - each turn keeps its own provenance row.
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+        for path in ("/tmp/one", "/tmp/two"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(
+                "next",
+                tool_results=[
+                    llm.ToolResult(
+                        name="Notes_read",
+                        output="hello",
+                        tool_call_id="call_0",
+                        instance=Notes(path),
+                    )
+                ],
+            )
+            response.text()
+            response.log_to_db(store.db)
+        arguments = {
+            row["turn_id"]: row["arguments"]
+            for row in store.db["tool_instantiations"].rows
+        }
+        assert sorted(arguments.values()) == [
+            '{"path": "/tmp/one"}',
+            '{"path": "/tmp/two"}',
         ]
 
     def test_successive_library_turns_extend_the_thread(self, store, mock_model):

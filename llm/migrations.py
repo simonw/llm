@@ -964,3 +964,30 @@ def m029_rehash_messages(db):
 
 def _load_json(value):
     return json.loads(value) if value else None
+
+
+@migration
+def m030_tool_instantiations_turn_scope(db):
+    # tool_call_id is not globally unique - providers with per-request
+    # counters can reuse the same id across independent turns - so the
+    # table is keyed by (turn_id, tool_call_id). Existing rows recover
+    # their turn through the stored parts; any row that cannot be
+    # matched is dropped rather than left able to collide.
+    if "turn_id" in db["tool_instantiations"].columns_dict:
+        return
+    db["tool_instantiations"].add_column("turn_id", str)
+    with db.conn:
+        db.execute("""
+            update tool_instantiations set turn_id = (
+                select turns.id from turns
+                join messages on messages.hash = turns.parent_message_hash
+                    or messages.parent_hash = turns.parent_message_hash
+                join parts on parts.message_hash = messages.hash
+                where parts.type = 'tool_result'
+                and json_extract(parts.payload, '$.tool_call_id')
+                    = tool_instantiations.tool_call_id
+                limit 1
+            )
+            """)
+        db.execute("delete from tool_instantiations where turn_id is null")
+    db["tool_instantiations"].transform(pk=("turn_id", "tool_call_id"))

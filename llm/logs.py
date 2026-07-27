@@ -512,6 +512,7 @@ class LogStore:
                 continue
             self.db["tool_instantiations"].insert(
                 {
+                    "turn_id": turn_id,
                     "tool_call_id": tool_result.tool_call_id,
                     "name": tool_result.name.split("_")[0],
                     "plugin": next(
@@ -1000,7 +1001,9 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
         part for part in row.get("_input_parts", []) if isinstance(part, ToolResultPart)
     ]
     instances = _instances_by_tool_call_id(
-        store, [part.tool_call_id for part in result_parts if part.tool_call_id]
+        store,
+        row["id"],
+        [part.tool_call_id for part in result_parts if part.tool_call_id],
     )
     tool_results = [
         {
@@ -1093,8 +1096,14 @@ def _tool_ids_by_name(store: "LogStore") -> dict:
     }
 
 
-def _instances_by_tool_call_id(store: "LogStore", tool_call_ids: list) -> dict:
-    "Which configured toolbox instance served each call, for display."
+def _instances_by_tool_call_id(
+    store: "LogStore", turn_id: str, tool_call_ids: list
+) -> dict:
+    """Which configured toolbox instance served each call, for display.
+
+    Scoped to the turn: providers with per-request counters can reuse
+    the same tool_call_id across independent turns.
+    """
     if not tool_call_ids:
         return {}
     placeholders = ",".join("?" * len(tool_call_ids))
@@ -1108,9 +1117,9 @@ def _instances_by_tool_call_id(store: "LogStore", tool_call_ids: list) -> dict:
             f"""
             select tool_call_id, name, plugin, arguments
             from tool_instantiations
-            where tool_call_id in ({placeholders})
+            where turn_id = ? and tool_call_id in ({placeholders})
             """,
-            tool_call_ids,
+            [turn_id] + tool_call_ids,
         )
     }
 
