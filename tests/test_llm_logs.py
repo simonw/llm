@@ -154,7 +154,6 @@ def test_logs_text(log_path, usage):
     assert output == expected
 
 
-
 @legacy_rows_only
 def test_logs_text_with_options(user_path):
     """Test that ## Options section appears when options_json is set"""

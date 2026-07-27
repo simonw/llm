@@ -698,9 +698,7 @@ class _LogRowBuilder:
         outputs = self.store.load_chain(row["tip_message_hash"])[len(inputs) :]
 
         prompt_parts = inputs[-1].parts if inputs else []
-        system_parts = (
-            inputs[0].parts if inputs and inputs[0].role == "system" else []
-        )
+        system_parts = inputs[0].parts if inputs and inputs[0].role == "system" else []
         out_parts = [part for message in outputs for part in message.parts]
 
         built = {
@@ -723,6 +721,9 @@ class _LogRowBuilder:
         }
         built.update(
             {
+                # The turn stores null when no options were set; the
+                # responses table always recorded "{}".
+                "options_json": row["options_json"] or "{}",
                 "prompt": _text_of(prompt_parts, TextPart),
                 # None rather than "" when there was no system
                 # message, matching what was recorded before.
@@ -786,13 +787,11 @@ def log_rows(
     # rather than from the message text, so it matches what -f means.
     for index, fragment_hash in enumerate(fragment_hashes):
         key = f"fragment_{index}"
-        where.append(
-            f"""turns.id in (
+        where.append(f"""turns.id in (
                 select turn_fragments.turn_id from turn_fragments
                 join fragments on fragments.id = turn_fragments.fragment_id
                 where fragments.hash = :{key}
-            )"""
-        )
+            )""")
         params[key] = fragment_hash
 
     # A turn "used" a tool when a tool result was among its inputs,
@@ -880,7 +879,10 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
         )
     ]
 
-    fragments = {"prompt_fragments": [], "system_fragments": []}
+    fragments: dict[str, list[dict]] = {
+        "prompt_fragments": [],
+        "system_fragments": [],
+    }
     for fragment_row in store.db.query(
         """
         select turn_fragments.kind, fragments.hash, fragments.content,

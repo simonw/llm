@@ -1049,7 +1049,13 @@ class TestLogsCommand:
         assert [r["prompt"] for r in rows] == ["FRAGMENT BODY\nwith fragment"]
 
     def test_filters_by_tool(self, user_path):
-        run("-m", "echo", '{"tool_calls": [{"name": "llm_version"}]}', "-T", "llm_version")
+        run(
+            "-m",
+            "echo",
+            '{"tool_calls": [{"name": "llm_version"}]}',
+            "-T",
+            "llm_version",
+        )
         run("-m", "echo", "no tools here")
         forget_legacy(user_path)
         assert len(json.loads(run("logs", "-T", "llm_version", "--json").output)) == 1

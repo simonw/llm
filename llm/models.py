@@ -2728,6 +2728,7 @@ def _append_tool_results_to_chain(chain, tool_results, attachments) -> list[Any]
                         name=tr.name,
                         output=tr.output,
                         tool_call_id=tr.tool_call_id,
+                        exception=_format_tool_exception(tr.exception),
                     )
                     for tr in tool_results
                 ],
@@ -3506,7 +3507,6 @@ class EmbeddingModelWithAliases:
         all_strings.extend(self.aliases)
         all_strings.append(str(self.model))
         return any(query_lower in alias.lower() for alias in all_strings)
-
 
 
 def _format_tool_exception(exception) -> str | None:
