@@ -1097,6 +1097,48 @@ class TestAttachmentHashing:
         )
         assert store.verify() == []
 
+    def test_m029_survives_foreign_key_enforcement(self, tmp_path):
+        # Rekeying messages.hash while parts and turns still reference
+        # it would fail immediately on a connection running with
+        # PRAGMA foreign_keys = ON - the migration defers enforcement
+        # to commit, inside a real transaction.
+        db = sqlite_utils.Database(str(tmp_path / "fk.db"))
+        db.conn.execute("PRAGMA foreign_keys = ON")
+        store = LogStore(db)
+        path = tmp_path / "x.png"
+        path.write_bytes(b"PNG BYTES")
+        messages = [
+            Message(
+                role="user",
+                parts=[
+                    AttachmentPart(
+                        attachment=Attachment(type="image/png", path=str(path))
+                    )
+                ],
+            ),
+            llm.assistant("A fine image"),
+        ]
+        tip = store.ensure_chain(messages)
+        real = [row["hash"] for row in db.query("select hash from messages")]
+        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
+        db.conn.execute("PRAGMA foreign_keys = OFF")
+        for old, fake in fakes.items():
+            db.execute("update messages set hash = ? where hash = ?", [fake, old])
+            db.execute(
+                "update messages set parent_hash = ? where parent_hash = ?",
+                [fake, old],
+            )
+            db.execute(
+                "update parts set message_hash = ? where message_hash = ?",
+                [fake, old],
+            )
+        db.execute("delete from _llm_migrations where name = 'm029_rehash_messages'")
+        db.conn.execute("PRAGMA foreign_keys = ON")
+        migrate(db)
+        assert store.verify() == []
+        assert store.load_chain(tip) == messages
+        assert db.conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
     def test_m029_recomputes_stale_hashes(self, store, tmp_path):
         # Build a real chain, then rewrite its hashes to bogus values -
         # simulating rows written by the old path-based algorithm - and

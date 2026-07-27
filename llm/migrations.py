@@ -2,6 +2,8 @@ import datetime
 import json
 from collections.abc import Callable
 
+from .utils import sqlite_transaction
+
 MIGRATIONS: list[Callable] = []
 migration = MIGRATIONS.append
 
@@ -828,7 +830,7 @@ def m027_parts_text_column(db):
     # the old keys - so an interrupted run can be retried without the
     # already-migrated rows (whose payloads no longer have a text key)
     # being blanked back to text=None.
-    with db.conn:
+    with sqlite_transaction(db):
         for row in list(db.query("select id, type, payload from parts")):
             payload = json.loads(row["payload"]) if row["payload"] else {}
             if "type" not in payload and "text" not in payload:
@@ -903,7 +905,12 @@ def m029_rehash_messages(db):
         mapping[old_hash] = message_hash(message, mapping.get(parent, parent))
         queue.extend(children.get(old_hash, []))
 
-    with db.conn:
+    with sqlite_transaction(db):
+        # Primary keys are rewritten while other rows still reference
+        # them; defer enforcement to commit for connections that run
+        # with foreign keys enabled. The pragma only takes effect
+        # inside a transaction and resets itself at commit.
+        db.conn.execute("PRAGMA defer_foreign_keys = ON")
         seen: set = set()
         for old_hash, new_hash in mapping.items():
             if new_hash in seen:
@@ -976,7 +983,7 @@ def m030_tool_instantiations_turn_scope(db):
     if "turn_id" in db["tool_instantiations"].columns_dict:
         return
     db["tool_instantiations"].add_column("turn_id", str)
-    with db.conn:
+    with sqlite_transaction(db):
         db.execute("""
             update tool_instantiations set turn_id = (
                 select turns.id from turns
