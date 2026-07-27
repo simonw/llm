@@ -824,16 +824,21 @@ def m027_parts_text_column(db):
     # message content before anything is written, so no hash changes.
     if "text" not in db["parts"].columns_dict:
         db["parts"].add_column("text", str)
-    for row in list(db.query("select id, type, payload from parts")):
-        payload = json.loads(row["payload"]) if row["payload"] else {}
-        payload.pop("type", None)
-        text = None
-        if row["type"] in ("text", "reasoning") and "text" in payload:
-            text = payload.pop("text")
-        db["parts"].update(
-            row["id"],
-            {"text": text, "payload": json.dumps(payload) if payload else None},
-        )
+    # One transaction, and each row is only touched if it still carries
+    # the old keys - so an interrupted run can be retried without the
+    # already-migrated rows (whose payloads no longer have a text key)
+    # being blanked back to text=None.
+    with db.conn:
+        for row in list(db.query("select id, type, payload from parts")):
+            payload = json.loads(row["payload"]) if row["payload"] else {}
+            if "type" not in payload and "text" not in payload:
+                continue
+            payload.pop("type", None)
+            update: dict = {}
+            if row["type"] in ("text", "reasoning") and "text" in payload:
+                update["text"] = payload.pop("text")
+            update["payload"] = json.dumps(payload) if payload else None
+            db["parts"].update(row["id"], update)
 
 
 @migration

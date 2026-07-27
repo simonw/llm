@@ -814,6 +814,27 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestMigrationRetrySafety:
+    def test_m027_retry_does_not_erase_migrated_text(self, store, mock_model):
+        # Simulate an interrupted m027: rows already in the new format
+        # but the migration not recorded as applied. Retrying must not
+        # blank the text column back out.
+        mock_model.enqueue(["Hello there"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        before = {row["id"]: row["text"] for row in store.db["parts"].rows}
+        assert any(before.values())
+        with store.db.conn:
+            store.db.execute(
+                "delete from _llm_migrations where name = 'm027_parts_text_column'"
+            )
+        migrate(store.db)
+        after = {row["id"]: row["text"] for row in store.db["parts"].rows}
+        assert after == before
+        assert store.verify() == []
+
+
 class TestAttachmentHashing:
     """Message identity covers attachment content, never the filesystem
     path the bytes were loaded from."""
