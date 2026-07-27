@@ -492,7 +492,7 @@ def m023_content_addressed_messages(db):
             "attachment_id": str,
             "order": int,
         },
-        pk=("part_id", "attachment_id"),
+        pk=("part_id", "attachment_id", "order"),
         foreign_keys=(
             ("part_id", "parts", "id"),
             ("attachment_id", "attachments", "id"),
@@ -634,7 +634,7 @@ def m024_message_store_payloads(db):
             "attachment_id": str,
             "order": int,
         },
-        pk=("part_id", "attachment_id"),
+        pk=("part_id", "attachment_id", "order"),
         foreign_keys=(
             ("part_id", "parts", "id"),
             ("attachment_id", "attachments", "id"),
@@ -1030,3 +1030,13 @@ def m032_rehash_for_attachment_types(db):
     # actual bytes rather than a cached id. Both change hashes of
     # attachment-bearing messages, so recompute the stored tree again.
     _rehash_messages(db)
+
+
+@migration
+def m033_part_attachments_order_pk(db):
+    # A tool result can return the same attachment more than once; with
+    # order outside the key the second reference raised a UNIQUE error
+    # while the payload happily recorded both. Order joins the key,
+    # matching part_fragments and turn_fragments.
+    if "order" not in db["part_attachments"].pks:
+        db["part_attachments"].transform(pk=("part_id", "attachment_id", "order"))

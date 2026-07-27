@@ -1328,6 +1328,27 @@ class TestAttachmentHashing:
         assert store.load_chain(tip) == messages
 
 
+class TestRepeatedAttachments:
+    def test_a_tool_result_can_carry_the_same_attachment_twice(self, store):
+        attachment = Attachment(type="image/png", content=b"PNG BYTES")
+        message = Message(
+            role="tool",
+            parts=[
+                ToolResultPart(
+                    name="t",
+                    output="ok",
+                    tool_call_id="c1",
+                    attachments=[attachment, attachment],
+                )
+            ],
+        )
+        tip = store.ensure_chain([message])
+        assert store.db["part_attachments"].count == 2
+        loaded = store.load_chain(tip)
+        assert len(loaded[0].parts[0].attachments) == 2
+        assert store.verify() == []
+
+
 class TestPartStorageFormat:
     """Literal text is stored raw in its own column - never escaped,
     never parsed - and the JSON payload holds only structure, with the
