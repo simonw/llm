@@ -717,3 +717,88 @@ def m024_message_store_payloads(db):
         ),
     )
     db["turn_fragments"].create_index(["fragment_id"])
+
+
+# Literal text of one parts row: plain text payloads as-is, text_ref
+# payloads contribute only their literal segments - fragment content is
+# deliberately not searchable.
+TURN_SEARCH_LITERAL = """coalesce(
+  json_extract(parts.payload, '$.text'),
+  (select group_concat(json_extract(je.value, '$.literal'), '')
+     from json_each(parts.payload, '$.text_ref') je
+    where json_extract(je.value, '$.literal') is not null)
+)"""
+
+# Derives the searchable prompt and response text for turns. Serves both
+# the migration backfill (turn_filter="") and the per-turn refresh in
+# LogStore.log (turn_filter="and turns.id = :turn_id" - the slot appears
+# in three places so the filtered form touches only that turn's chain).
+TURN_SEARCH_INSERT_SQL = """
+with recursive output_messages(turn_id, hash) as (
+    select turns.id, turns.tip_message_hash
+      from turns
+     where turns.tip_message_hash is not null
+       and (turns.parent_message_hash is null
+            or turns.tip_message_hash != turns.parent_message_hash)
+       {turn_filter}
+    union all
+    select om.turn_id, messages.parent_hash
+      from output_messages om
+      join messages on messages.hash = om.hash
+      join turns on turns.id = om.turn_id
+     where messages.parent_hash is not null
+       and (turns.parent_message_hash is null
+            or messages.parent_hash != turns.parent_message_hash)
+),
+prompt_text as (
+    select turns.id as turn_id,
+           (select group_concat({LITERAL}, '')
+              from parts
+             where parts.message_hash = turns.parent_message_hash
+               and parts.type = 'text'
+             order by parts.position) as text
+      from turns
+      join messages on messages.hash = turns.parent_message_hash
+     where messages.role = 'user' {turn_filter}
+),
+response_text as (
+    select om.turn_id, group_concat(part_text.text, '') as text
+      from output_messages om
+      join messages on messages.hash = om.hash and messages.role = 'assistant'
+      join (
+          select parts.message_hash, parts.position, {LITERAL} as text
+            from parts where parts.type = 'text'
+      ) part_text on part_text.message_hash = om.hash
+     group by om.turn_id
+)
+insert into turn_search (turn_id, prompt, response)
+select turns.id,
+       coalesce(prompt_text.text, ''),
+       coalesce(response_text.text, '')
+  from turns
+  left join prompt_text on prompt_text.turn_id = turns.id
+  left join response_text on response_text.turn_id = turns.id
+ where (coalesce(prompt_text.text, '') != ''
+        or coalesce(response_text.text, '') != '') {turn_filter}
+""".replace("{LITERAL}", TURN_SEARCH_LITERAL)
+
+
+@migration
+def m025_turn_search(db):
+    # Searchable text per turn: the user's typed prompt (fragment
+    # content excluded) and the assistant's text output. An explicit id
+    # primary key because external-content FTS is keyed by rowid, and
+    # implicit rowids are not stable across VACUUM.
+    db["turn_search"].create(
+        {
+            "id": int,
+            "turn_id": str,
+            "prompt": str,
+            "response": str,
+        },
+        pk="id",
+        foreign_keys=(("turn_id", "turns", "id"),),
+    )
+    db["turn_search"].create_index(["turn_id"], unique=True)
+    db["turn_search"].enable_fts(["prompt", "response"], create_triggers=True)
+    db.execute(TURN_SEARCH_INSERT_SQL.format(turn_filter=""))

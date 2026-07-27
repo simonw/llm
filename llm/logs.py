@@ -21,7 +21,7 @@ import hashlib
 import json
 from typing import Any
 
-from .migrations import migrate
+from .migrations import TURN_SEARCH_INSERT_SQL, migrate
 from .models import Attachment, _conversation_name
 from .parts import (
     AttachmentPart,
@@ -456,6 +456,16 @@ class LogStore:
                     },
                     replace=True,
                 )
+        # Refresh this turn's search row. Delete-then-derive rather than
+        # replace, so a re-logged turn with a different tip converges on
+        # what the turn now says. Derived in SQL from the stored
+        # payloads, not from load_chain - resolving references would put
+        # fragment content back into the searchable text.
+        self.db["turn_search"].delete_where("turn_id = ?", [turn_id])
+        self.db.execute(
+            TURN_SEARCH_INSERT_SQL.format(turn_filter="and turns.id = :turn_id"),
+            {"turn_id": turn_id},
+        )
         if thread_id is not None:
             self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return turn_id
@@ -669,13 +679,20 @@ select
     turns.tip_message_hash,
     threads.name as conversation_name,
     turns.model as conversation_model,
-    schemas.content as schema_json
+    schemas.content as schema_json{rank_select}
 from turns
 left join threads on turns.thread_id = threads.id
-left join schemas on turns.schema_id = schemas.id
+left join schemas on turns.schema_id = schemas.id{join}
 {where}
-order by turns.id desc{limit}
+order by {order_by}{limit}
 """
+
+# Relevance ranking for -q. bm25 scores are negative-better, ascending
+# order is best-first. The prompt column is weighted well above the
+# response: what you typed is a stronger signal of what a turn is about
+# than what the model said back.
+TURN_SEARCH_RANK = "bm25(turn_search_fts, 10.0, 1.0)"
+LEGACY_SEARCH_RANK = "bm25(responses_fts, 10.0, 1.0)"
 
 
 def _text_of(parts, kind) -> str:
@@ -722,6 +739,8 @@ class _LogRowBuilder:
                 "schema_json",
             )
         }
+        if "_search_rank" in row:
+            built["_search_rank"] = row["_search_rank"]
         built.update(
             {
                 # The turn stores null when no options were set; the
@@ -761,11 +780,17 @@ def log_rows(
     schema_id: str | None = None,
     id_gt: str | None = None,
     id_gte: str | None = None,
+    query: str | None = None,
+    latest: bool = False,
 ) -> list[dict]:
     """Rows for `llm logs`, newest first, drawn from the new tables.
 
     Sees only conversations with turns - merged_log_rows adds the rows
     that exist solely in the legacy `responses` table.
+
+    With ``query`` the rows are the best matches from the turn_search
+    index, most relevant first - or newest first when ``latest`` is
+    also set.
     """
     where: list[str] = []
     params: dict[str, Any] = {}
@@ -807,8 +832,25 @@ def log_rows(
         where.append(_tool_result_clause(f"and parts.tool_name = :{key}"))
         params[key] = tool_name
 
+    rank_select = ""
+    join = ""
+    order_by = "turns.id desc"
+    if query:
+        rank_select = f",\n    {TURN_SEARCH_RANK} as _search_rank"
+        join = (
+            "\njoin turn_search on turn_search.turn_id = turns.id"
+            "\njoin turn_search_fts on turn_search_fts.rowid = turn_search.id"
+        )
+        where.append("turn_search_fts match :query")
+        params["query"] = query
+        if not latest:
+            order_by = TURN_SEARCH_RANK
+
     sql = LOG_ROWS_SQL.format(
+        rank_select=rank_select,
+        join=join,
         where=("where " + " and ".join(where)) if where else "",
+        order_by=order_by,
         limit=f" limit {count}" if count else "",
     )
     builder = _LogRowBuilder(store)
@@ -972,12 +1014,12 @@ select
     responses.token_details,
     conversations.name as conversation_name,
     conversations.model as conversation_model,
-    schemas.content as schema_json
+    schemas.content as schema_json{rank_select}
 from responses
 left join schemas on responses.schema_id = schemas.id
-left join conversations on responses.conversation_id = conversations.id
+left join conversations on responses.conversation_id = conversations.id{join}
 where responses.id not in (select id from turns){extra_where}
-order by responses.id desc{limit}
+order by {order_by}{limit}
 """
 
 
@@ -993,6 +1035,8 @@ def legacy_log_rows(
     schema_id: str | None = None,
     id_gt: str | None = None,
     id_gte: str | None = None,
+    query: str | None = None,
+    latest: bool = False,
 ) -> list[dict]:
     """Rows for `llm logs` that exist only in the legacy tables.
 
@@ -1000,6 +1044,9 @@ def legacy_log_rows(
     schema. Thread ids are conversation ids, so the two filters match
     the same conversations on either side of the upgrade.
     """
+    if query and "responses_fts" not in db.table_names():
+        # A database that never saw legacy llm has no legacy index.
+        return []
     where: list[str] = []
     params: dict[str, Any] = {}
 
@@ -1051,8 +1098,22 @@ def legacy_log_rows(
             )""")
         params[key] = tool_name
 
+    rank_select = ""
+    join = ""
+    order_by = "responses.id desc"
+    if query:
+        rank_select = f",\n    {LEGACY_SEARCH_RANK} as _search_rank"
+        join = "\njoin responses_fts on responses_fts.rowid = responses.rowid"
+        where.append("responses_fts match :query")
+        params["query"] = query
+        if not latest:
+            order_by = LEGACY_SEARCH_RANK
+
     sql = LEGACY_LOG_ROWS_SQL.format(
+        rank_select=rank_select,
+        join=join,
         extra_where=(" and " + " and ".join(where)) if where else "",
+        order_by=order_by,
         limit=f" limit {count}" if count else "",
     )
     rows = [dict(row) for row in db.query(sql, params)]
@@ -1061,17 +1122,35 @@ def legacy_log_rows(
     return rows
 
 
-def merged_log_rows(store: "LogStore", *, count: int | None = None, **filters):
+def merged_log_rows(
+    store: "LogStore",
+    *,
+    count: int | None = None,
+    query: str | None = None,
+    latest: bool = False,
+    **filters,
+):
     """Rows for `llm logs`: the new tables plus legacy-only responses.
 
     Both sides are newest-first and ids are ULIDs on both sides of the
     upgrade, so a straight sort interleaves the two histories
     chronologically and the top ``count`` of the union is always within
     the top ``count`` of each side.
+
+    With ``query``, each side returns its best matches and the union is
+    ordered most-relevant first. The two bm25 scores come from separate
+    indexes so the interleave is approximate - close enough in practice,
+    since both index the same kind of corpus with the same tokenizer.
+    ``latest`` makes the query a pure filter and keeps recency order.
     """
-    rows = log_rows(store, count=count, **filters)
-    rows.extend(legacy_log_rows(store.db, count=count, **filters))
-    rows.sort(key=lambda row: row["id"], reverse=True)
+    rows = log_rows(store, count=count, query=query, latest=latest, **filters)
+    rows.extend(
+        legacy_log_rows(store.db, count=count, query=query, latest=latest, **filters)
+    )
+    if query and not latest:
+        rows.sort(key=lambda row: row["_search_rank"])
+    else:
+        rows.sort(key=lambda row: row["id"], reverse=True)
     if count:
         rows = rows[:count]
     return rows

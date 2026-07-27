@@ -173,16 +173,25 @@ llm logs --cid 01h82n0q9crqtnzmf13gkyxawg
 
 ### Searching the logs
 
-You can search the logs for a search term in the `prompt` or the `response` columns.
+You can search the logs for a search term across your prompts and the model's responses.
 ```bash
 llm logs -q 'cheesecake'
 ```
 The most relevant results will be shown first.
 
+Search covers the text you typed and the text the model produced, and nothing else. System prompts, {ref}`fragment <fragments>` contents, tool calls and their output, and reasoning traces are all excluded from the index - a query only matches words that appeared in a prompt or a response. If a prompt used fragments, the fragment text is not searchable but the question you typed alongside it is.
+
+Ranking uses [SQLite FTS5](https://www.sqlite.org/fts5.html) relevance scores, with matches in your prompt weighted well above matches in the response - what you asked is usually a stronger signal of what a conversation was about than what came back. The full [FTS5 query syntax](https://www.sqlite.org/fts5.html#full_text_query_syntax) is available, including phrase queries:
+```bash
+llm logs -q '"pet pelican"'
+```
+
 To switch to sorting with most recent first, add `-l/--latest`. This can be combined with `-n` to limit the number of results shown:
 ```bash
 llm logs -q 'cheesecake' -l -n 3
 ```
+
+Search spans both generations of log tables: new conversations are matched through the `turn_search` index over the content-addressed tables, and history recorded by older versions of LLM is matched through its original `responses_fts` index, with the two result sets merged. The relevance scores come from two separate indexes, so the interleaving between very old and new results is approximate.
 
 (logging-filter-id)=
 
@@ -528,6 +537,7 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 - `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
 - `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
+- `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
 
 (logging-message-store-queries)=
 

@@ -8,6 +8,7 @@ import pathlib
 import re
 import readline
 import shutil
+import sqlite3
 import sys
 import textwrap
 import warnings
@@ -1802,31 +1803,39 @@ def logs_list(
             # Maybe they uninstalled a model, use the -m option as-is
             model_id = model
 
-    if query:
-        raise click.ClickException(
-            "-q/--query is not supported against the new log tables yet"
-        )
-
     fragment_hashes = [fragment.id() for fragment in resolve_fragments(db, fragments)]
 
     schema_id = make_schema_id(schema)[0] if schema else None
 
     store = LogStore(db)
-    rows = merged_log_rows(
-        store,
-        count=count if count and count > 0 else None,
-        model_id=model_id,
-        thread_id=conversation_id,
-        fragment_hashes=fragment_hashes,
-        tool_names=tools,
-        any_tools=any_tools,
-        schema_id=schema_id,
-        id_gt=id_gt,
-        id_gte=id_gte,
-    )
+    try:
+        rows = merged_log_rows(
+            store,
+            count=count if count and count > 0 else None,
+            model_id=model_id,
+            thread_id=conversation_id,
+            fragment_hashes=fragment_hashes,
+            tool_names=tools,
+            any_tools=any_tools,
+            schema_id=schema_id,
+            id_gt=id_gt,
+            id_gte=id_gte,
+            query=query,
+            latest=latest,
+        )
+    except sqlite3.OperationalError as ex:
+        if query:
+            # Almost certainly FTS5 syntax - unbalanced quotes, stray
+            # operators and the like
+            raise click.ClickException(
+                f"Invalid search query: {ex} - see the FTS5 query syntax "
+                "documentation at https://sqlite.org/fts5.html#full_text_query_syntax"
+            )
+        raise
 
-    # Newest first out of the query, but read chronologically.
-    if not data:
+    # Newest first out of the query, but read chronologically - except
+    # for search results, which are already most-relevant first.
+    if not query and not data:
         rows.reverse()
 
     # Attachments, fragments and tool info. New rows carry theirs in
@@ -1865,6 +1874,8 @@ def logs_list(
             "_output_parts",
             "_parent_message_hash",
             "_tip_message_hash",
+            "_legacy",
+            "_search_rank",
         ):
             row.pop(internal, None)
 

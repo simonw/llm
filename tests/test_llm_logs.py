@@ -17,13 +17,6 @@ from llm.cli import cli
 from llm.migrations import migrate
 from llm.utils import monotonic_ulid
 
-# -q/--query was backed by responses_fts, which is legacy-only. Full
-# text search against the new tables has not been designed yet.
-search_not_supported = pytest.mark.xfail(
-    reason="-q/--query has no implementation against the new log tables",
-)
-
-
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
 MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
 
@@ -368,24 +361,130 @@ def test_logs_filtered(user_path, model, path_option):
     assert all(record["model"] == model for record in records)
 
 
+def test_logs_search_new_tables(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(["A fine city"])
+    runner.invoke(
+        cli, ["-m", "mock", "tell me about Ljubljana"], catch_exceptions=False
+    )
+    mock_model.enqueue(["Try httpx-retries for that"])
+    runner.invoke(
+        cli, ["-m", "mock", "what retry library should I use"], catch_exceptions=False
+    )
+
+    # Matches prompt text
+    result = runner.invoke(
+        cli, ["logs", "-q", "Ljubljana", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert [row["prompt"] for row in rows] == ["tell me about Ljubljana"]
+
+    # Matches response text
+    result2 = runner.invoke(
+        cli, ["logs", "-q", "httpx", "--json"], catch_exceptions=False
+    )
+    assert result2.exit_code == 0
+    rows2 = json.loads(result2.output)
+    assert [row["response"] for row in rows2] == ["Try httpx-retries for that"]
+
+
+def test_logs_search_prompt_outranks_response(mock_model, logs_db):
+    # The prompt column carries a much higher bm25 weight: what you
+    # typed says more about what a turn is about than what came back.
+    runner = CliRunner()
+    mock_model.enqueue(["I recommend a python one-liner"])
+    runner.invoke(cli, ["-m", "mock", "how do I sort a list"], catch_exceptions=False)
+    mock_model.enqueue(["Use yield"])
+    runner.invoke(
+        cli, ["-m", "mock", "explain python generators"], catch_exceptions=False
+    )
+    result = runner.invoke(
+        cli, ["logs", "-q", "python", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert [row["prompt"] for row in rows] == [
+        "explain python generators",
+        "how do I sort a list",
+    ]
+
+
+def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
+    fragment_path = str(tmpdir / "notes.txt")
+    with open(fragment_path, "w", encoding="utf-8") as fp:
+        fp.write("Wombats are sturdy quadrupedal marsupials")
+    runner = CliRunner()
+    mock_model.enqueue(["They do indeed"])
+    runner.invoke(
+        cli,
+        ["-m", "mock", "-f", fragment_path, "do zebras have stripes"],
+        catch_exceptions=False,
+    )
+    # The typed question is searchable
+    found = runner.invoke(
+        cli, ["logs", "-q", "zebras", "--json"], catch_exceptions=False
+    )
+    assert len(json.loads(found.output)) == 1
+    # The fragment's content is not
+    not_found = runner.invoke(
+        cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False
+    )
+    assert json.loads(not_found.output) == []
+
+
+def test_logs_search_merges_legacy_rows(mock_model, logs_db):
+    # A legacy-only row and a new turn matching the same query both
+    # come back from one search.
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": "name a pet pelican",
+            "response": "Percy",
+            "model": "davinci",
+            "datetime_utc": "2025-01-01T00:00:00",
+        },
+        alter=True,
+    )
+    runner = CliRunner()
+    mock_model.enqueue(["Scoop"])
+    runner.invoke(
+        cli, ["-m", "mock", "another pelican name please"], catch_exceptions=False
+    )
+    result = runner.invoke(
+        cli, ["logs", "-q", "pelican", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    prompts = {row["prompt"] for row in json.loads(result.output)}
+    assert prompts == {"name a pet pelican", "another pelican name please"}
+
+
+def test_logs_search_bad_query_is_a_clean_error(logs_db):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-q", 'unbalanced"quote'])
+    assert result.exit_code == 1
+    assert "Invalid search query" in result.output
+
+
 @pytest.mark.parametrize(
     "query,extra_args,expected",
     (
         # With no search term order should be by datetime
         ("", [], ["doc1", "doc2", "doc3"]),
-        # With a search it's order by rank instead
-        pytest.param("llama", [], ["doc1", "doc3"], marks=search_not_supported),
-        pytest.param("alpaca", [], ["doc2"], marks=search_not_supported),
+        # With a search it's order by rank instead - best match first.
+        # doc3 says llama twice. (The old implementation ordered by
+        # `rank desc`, which with bm25's negative-is-better scores put
+        # the weakest matches first; that sign bug is fixed.)
+        ("llama", [], ["doc3", "doc1"]),
+        ("alpaca", [], ["doc2"]),
         # Model filter should work too
-        pytest.param(
-            "llama", ["-m", "davinci"], ["doc1", "doc3"], marks=search_not_supported
-        ),
-        pytest.param("llama", ["-m", "davinci2"], [], marks=search_not_supported),
+        ("llama", ["-m", "davinci"], ["doc3", "doc1"]),
+        ("llama", ["-m", "davinci2"], []),
         # Adding -l/--latest should return latest first (order by id desc)
-        pytest.param("llama", ["-l"], ["doc3", "doc1"], marks=search_not_supported),
-        pytest.param(
-            "llama", ["--latest"], ["doc3", "doc1"], marks=search_not_supported
-        ),
+        ("llama", ["-l"], ["doc3", "doc1"]),
+        ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
 )
 def test_logs_search(user_path, query, extra_args, expected):
