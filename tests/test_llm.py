@@ -276,6 +276,24 @@ def test_openai_completion(mocked_openai_completion, user_path):
     )
 
 
+def test_openai_completion_continue_includes_history(
+    mocked_openai_completion, user_path
+):
+    # A continued conversation reloaded from storage must send the
+    # prior exchanges, not just the newest prompt - prompt.messages
+    # carries them; conversation.responses does not.
+    runner = CliRunner()
+    base = ["-m", "gpt-3.5-turbo-instruct", "--no-stream", "--key", "x"]
+    result = runner.invoke(cli, base + ["Say this is a test"], catch_exceptions=False)
+    assert result.exit_code == 0
+    result2 = runner.invoke(cli, base + ["Say it again", "-c"], catch_exceptions=False)
+    assert result2.exit_code == 0
+    body = json.loads(mocked_openai_completion.get_requests()[-1].content)
+    assert body["prompt"] == (
+        "Say this is a test\n\n\nThis is indeed a test\nSay it again"
+    )
+
+
 def test_openai_completion_system_prompt_error():
     runner = CliRunner()
     result = runner.invoke(

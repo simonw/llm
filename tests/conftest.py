@@ -337,6 +337,7 @@ def mocked_openai_completion(httpx_mock):
             "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
         },
         headers={"Content-Type": "application/json"},
+        is_reusable=True,
     )
     return httpx_mock
 
