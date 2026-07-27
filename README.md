@@ -163,6 +163,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [System prompts](https://llm.datasette.io/en/stable/usage.html#system-prompts)
     * [Tools](https://llm.datasette.io/en/stable/usage.html#tools)
     * [Extracting fenced code blocks](https://llm.datasette.io/en/stable/usage.html#extracting-fenced-code-blocks)
+    * [JSON output](https://llm.datasette.io/en/stable/usage.html#json-output)
     * [Schemas](https://llm.datasette.io/en/stable/usage.html#schemas)
     * [Fragments](https://llm.datasette.io/en/stable/usage.html#fragments)
     * [Continuing a conversation](https://llm.datasette.io/en/stable/usage.html#continuing-a-conversation)

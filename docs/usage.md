@@ -239,6 +239,49 @@ Use `--xl/--extract-last` to return the last fenced code block instead of the fi
 
 The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
 
+(usage-json-output)=
+### JSON output
+
+Add `--json` to get back a JSON array describing the prompt and the response, in the same format as {ref}`llm logs --json <logging-view>`:
+
+```bash
+llm 'Five names for a pet pelican' --json
+```
+```json
+[
+  {
+    "id": "01jm8ec74wxsdatyn5pq1fp0s5",
+    "model": "gpt-4o-mini",
+    "resolved_model": null,
+    "prompt": "Five names for a pet pelican",
+    "system": null,
+    "prompt_json": null,
+    "options_json": {},
+    "response": "1. Captain Beaky\n...",
+    "reasoning": null,
+    "response_json": null,
+    "conversation_id": "01jm8ec74taftdgj2t4zra9z0j",
+    "duration_ms": 1560,
+    "datetime_utc": "2025-02-16T22:34:30.374882+00:00",
+    "input_tokens": 8,
+    "output_tokens": 62,
+    "token_details": null,
+    "conversation_name": "Five names for a pet pelican",
+    "conversation_model": "gpt-4o-mini",
+    "schema_json": null,
+    "prompt_fragments": [],
+    "system_fragments": [],
+    "tools": [],
+    "tool_calls": [],
+    "tool_results": [],
+    "attachments": []
+  }
+]
+```
+The array will contain more than one object if the prompt triggered {ref}`tool calls <usage-tools>`, since each round-trip with the model is logged as a separate response.
+
+This works even if logging is turned off or you use `-n/--no-log` - in that case the JSON is assembled without writing anything to your logs database.
+
 (usage-schemas)=
 ### Schemas
 
