@@ -62,7 +62,12 @@ from llm import (
 )
 from llm.models import ChainResponse, _BaseConversation
 
-from .logs import LogStore, log_row_extras, log_rows
+from .logs import (
+    LogStore,
+    legacy_log_row_extras,
+    log_row_extras,
+    merged_log_rows,
+)
 from .migrations import migrate
 from .plugins import load_plugins, pm
 from .utils import (
@@ -1320,8 +1325,16 @@ def load_conversation(
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
-        # Return the most recent conversation, or None if there are none
-        matches = list(db["conversations"].rows_where(order_by="id desc", limit=1))
+        # Most recent conversation from either generation of tables -
+        # thread ids are conversation ids, so the union dedupes rows
+        # from the dual-write era.
+        matches = list(db.query("""
+                select id from (
+                    select id from threads
+                    union
+                    select id from conversations
+                ) order by id desc limit 1
+                """))
         if matches:
             conversation_id = matches[0]["id"]
         else:
@@ -1329,7 +1342,30 @@ def load_conversation(
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
     except sqlite_utils.db.NotFoundError:
-        raise click.ClickException(f"No conversation found with id={conversation_id}")
+        # No legacy record - reconstruct the equivalent from the thread
+        # and its most recent turn's model.
+        try:
+            thread_row = cast(sqlite_utils.db.Table, db["threads"]).get(conversation_id)
+        except sqlite_utils.db.NotFoundError:
+            raise click.ClickException(
+                f"No conversation found with id={conversation_id}"
+            )
+        model_match = next(
+            db.query(
+                "select model from turns where thread_id = ? order by id desc limit 1",
+                [conversation_id],
+            ),
+            None,
+        )
+        if model_match is None:
+            raise click.ClickException(
+                f"No conversation found with id={conversation_id}"
+            )
+        row = {
+            "id": conversation_id,
+            "name": thread_row["name"],
+            "model": model_match["model"],
+        }
     # Inflate that conversation
     conversation_class = AsyncConversation if async_ else Conversation
     response_class = AsyncResponse if async_ else Response
@@ -1360,6 +1396,23 @@ def load_conversation(
         conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
     except KeyError:
         pass
+
+    # Plugin tools recorded against the first turn, for the same
+    # reuse-on-continue behaviour the rebuilt responses provide.
+    conversation.loaded_tools = [
+        tool_row["name"]
+        for tool_row in db.query(
+            """
+            select tools.name from tools
+            join turn_tools on turn_tools.tool_id = tools.id
+            where tools.plugin is not null
+            and turn_tools.turn_id = (
+                select id from turns where thread_id = ? order by id limit 1
+            )
+            """,
+            [conversation_id],
+        )
+    ]
 
     return conversation
 
@@ -1720,11 +1773,15 @@ def logs_list(
 
     if current_conversation:
         try:
-            conversation_id = next(
-                db.query(
-                    "select conversation_id from responses order by id desc limit 1"
-                )
-            )["conversation_id"]
+            # Thread ids are conversation ids and both id spaces are
+            # ULIDs, so the most recent of either world wins.
+            conversation_id = next(db.query("""
+                    select conversation_id from (
+                        select thread_id as conversation_id, id from turns
+                        union all
+                        select conversation_id, id from responses
+                    ) order by id desc limit 1
+                    """))["conversation_id"]
         except StopIteration:
             # No conversations yet
             raise click.ClickException("No conversations found")
@@ -1754,8 +1811,9 @@ def logs_list(
 
     schema_id = make_schema_id(schema)[0] if schema else None
 
-    rows = log_rows(
-        LogStore(db),
+    store = LogStore(db)
+    rows = merged_log_rows(
+        store,
         count=count if count and count > 0 else None,
         model_id=model_id,
         thread_id=conversation_id,
@@ -1771,9 +1829,19 @@ def logs_list(
     if not data:
         rows.reverse()
 
-    # Attachments, fragments and tool info, all from the new tables.
-    store = LogStore(db)
-    extras_by_id = {row["id"]: log_row_extras(store, row) for row in rows}
+    # Attachments, fragments and tool info. New rows carry theirs in
+    # the row's parts; legacy rows batch-fetch from the legacy tables.
+    legacy_extras = legacy_log_row_extras(
+        db, [row["id"] for row in rows if row.get("_legacy")]
+    )
+    extras_by_id = {
+        row["id"]: (
+            legacy_extras[row["id"]]
+            if row.get("_legacy")
+            else log_row_extras(store, row)
+        )
+        for row in rows
+    }
     attachments_by_id = {
         id: extras["attachments"] for id, extras in extras_by_id.items()
     }
@@ -4023,9 +4091,15 @@ def _gather_tools(
 
 
 def _get_conversation_tools(conversation, tools):
-    if conversation and not tools and conversation.responses:
+    if not conversation or tools:
+        return None
+    if conversation.responses:
         # Copy plugin tools from first response in conversation
         initial_tools = conversation.responses[0].prompt.tools
         if initial_tools:
             # Only tools from plugins:
             return [tool.name for tool in initial_tools if tool.plugin]
+    elif conversation.loaded_tools:
+        # Conversation loaded from the message store - the tool names
+        # were read from turn_tools instead of rebuilt responses.
+        return list(conversation.loaded_tools)

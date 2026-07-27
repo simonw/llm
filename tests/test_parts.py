@@ -1215,13 +1215,28 @@ class TestSqliteRehydrateMessages:
 
         from llm.migrations import migrate
 
-        mock_model.enqueue(["answer text"])
-        r1 = mock_model.prompt("q1")
-        r1.text()
-
         db = sqlite_utils.Database(str(tmp_path / "logs.db"))
         migrate(db)
-        r1.log_to_db(db)
+        # log_to_db no longer writes the legacy tables - seed the row
+        # the way an older version of llm recorded it, since from_row
+        # is the reader for exactly that history.
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "model": "mock",
+                "prompt": "q1",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "answer text",
+                "response_json": None,
+                "conversation_id": None,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+            },
+            alter=True,
+        )
 
         # Rehydrate the response
         row = next(db["responses"].rows)

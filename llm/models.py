@@ -28,7 +28,6 @@ from typing import (
 )
 
 import httpx
-from condense_json import condense_json
 
 from .errors import NeedsKeyException
 from .serialization import ResponseDict
@@ -43,9 +42,6 @@ from pydantic import BaseModel, ConfigDict, create_model
 
 from .utils import (
     Fragment,
-    ensure_fragment,
-    ensure_tool,
-    make_schema_id,
     mimetype_from_path,
     mimetype_from_string,
     monotonic_ulid,
@@ -636,6 +632,11 @@ class _BaseConversation:
     # exact message list, so reasoning signatures and provider metadata
     # survive being reloaded.
     loaded_messages: list[Any] | None = None
+    # Names of plugin tools recorded against this conversation's first
+    # turn in storage. Read when the conversation was loaded from the
+    # message store, where there are no rebuilt responses to copy
+    # prompt.tools from.
+    loaded_tools: list[str] | None = None
 
     @classmethod
     @abstractmethod
@@ -1480,215 +1481,15 @@ class _BaseResponse:
         )
 
     def log_to_db(self, db):
-        # Built up front because it applies migrations, which have to run
-        # before the inserts below create any tables implicitly.
+        # Everything - thread, turn, messages, parts, fragments,
+        # attachments, tools - is recorded in the content-addressed
+        # tables. The legacy tables are no longer written; they hold
+        # history logged by older versions and are still read.
+        # This lives here rather than in the CLI because log_to_db()
+        # is what plugins call.
         from .logs import LogStore
 
-        store = LogStore(db)
-
-        conversation = self.conversation
-        if not conversation:
-            conversation = Conversation(model=self.model)
-        db["conversations"].insert(
-            {
-                "id": conversation.id,
-                "name": _conversation_name(
-                    self.prompt.prompt or self.prompt.system or ""
-                ),
-                "model": conversation.model.model_id,
-            },
-            ignore=True,
-        )
-        schema_id = None
-        if self.prompt.schema:
-            schema_id, schema_json = make_schema_id(self.prompt.schema)
-            db["schemas"].insert({"id": schema_id, "content": schema_json}, ignore=True)
-
-        response_id = self.id
-        replacements = {}
-        # Include replacements from previous responses
-        for previous_response in conversation.responses[:-1]:
-            for fragment in (previous_response.prompt.fragments or []) + (
-                previous_response.prompt.system_fragments or []
-            ):
-                fragment_id = ensure_fragment(db, fragment)
-                replacements[f"f:{fragment_id}"] = fragment
-                replacements[f"r:{previous_response.id}"] = (
-                    previous_response.text_or_raise()
-                )
-
-        for i, fragment in enumerate(self.prompt.fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["prompt_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-        for i, fragment in enumerate(self.prompt.system_fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["system_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-
-        response_text = self.text_or_raise()
-        replacements[f"r:{response_id}"] = response_text
-        # Concatenate visible reasoning text from the assembled
-        # ReasoningPart entries; redacted markers contribute nothing.
-        from .parts import ReasoningPart
-
-        reasoning_text = "".join(
-            p.text
-            for m in self._messages_now()
-            for p in m.parts
-            if isinstance(p, ReasoningPart) and p.text
-        )
-        json_data = self.json()
-
-        response = {
-            "id": response_id,
-            "model": self.model.model_id,
-            "prompt": self.prompt._prompt,
-            "system": self.prompt._system,
-            "prompt_json": condense_json(self._prompt_json, replacements),
-            "options_json": {
-                key: value
-                for key, value in dict(self.prompt.options).items()
-                if value is not None
-            },
-            "response": response_text,
-            "reasoning": reasoning_text or None,
-            "response_json": condense_json(json_data, replacements),
-            "conversation_id": conversation.id,
-            "duration_ms": self.duration_ms(),
-            "datetime_utc": self.datetime_utc(),
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "token_details": (
-                json.dumps(self.token_details) if self.token_details else None
-            ),
-            "schema_id": schema_id,
-            "resolved_model": self.resolved_model,
-        }
-        db["responses"].insert(response)
-
-        # Persist any attachments - loop through with index
-        for index, attachment in enumerate(self.prompt.attachments):
-            attachment_id = attachment.id()
-            db["attachments"].insert(
-                {
-                    "id": attachment_id,
-                    "type": attachment.resolve_type(),
-                    "path": attachment.path,
-                    "url": attachment.url,
-                    "content": attachment.content,
-                },
-                replace=True,
-            )
-            db["prompt_attachments"].insert(
-                {
-                    "response_id": response_id,
-                    "attachment_id": attachment_id,
-                    "order": index,
-                },
-            )
-
-        # Persist any tools, tool calls and tool results
-        tool_ids_by_name = {}
-        for tool in self.prompt.tools:
-            tool_id = ensure_tool(db, tool)
-            tool_ids_by_name[tool.name] = tool_id
-            db["tool_responses"].insert(
-                {
-                    "tool_id": tool_id,
-                    "response_id": response_id,
-                }
-            )
-        for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
-            db["tool_calls"].insert(
-                {
-                    "response_id": response_id,
-                    "tool_id": tool_ids_by_name.get(tool_call.name) or None,
-                    "name": tool_call.name,
-                    "arguments": json.dumps(tool_call.arguments),
-                    "tool_call_id": tool_call.tool_call_id,
-                }
-            )
-        for tool_result in self.prompt.tool_results:
-            instance_id = None
-            if tool_result.instance:
-                try:
-                    if not tool_result.instance.instance_id:
-                        tool_result.instance.instance_id = (
-                            db["tool_instances"]
-                            .insert(
-                                {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
-                                    "arguments": json.dumps(
-                                        tool_result.instance._config
-                                    ),
-                                }
-                            )
-                            .last_pk
-                        )
-                    instance_id = tool_result.instance.instance_id
-                except AttributeError:
-                    pass
-            tool_result_id = (
-                db["tool_results"]
-                .insert(
-                    {
-                        "response_id": response_id,
-                        "tool_id": tool_ids_by_name.get(tool_result.name) or None,
-                        "name": tool_result.name,
-                        "output": tool_result.output,
-                        "tool_call_id": tool_result.tool_call_id,
-                        "instance_id": instance_id,
-                        "exception": (
-                            (
-                                f"{tool_result.exception.__class__.__name__}: {tool_result.exception!s}"
-                            )
-                            if tool_result.exception
-                            else None
-                        ),
-                    }
-                )
-                .last_pk
-            )
-            # Persist attachments for tool results
-            for index, attachment in enumerate(tool_result.attachments):
-                attachment_id = attachment.id()
-                db["attachments"].insert(
-                    {
-                        "id": attachment_id,
-                        "type": attachment.resolve_type(),
-                        "path": attachment.path,
-                        "url": attachment.url,
-                        "content": attachment.content,
-                    },
-                    replace=True,
-                )
-                db["tool_results_attachments"].insert(
-                    {
-                        "tool_result_id": tool_result_id,
-                        "attachment_id": attachment_id,
-                        "order": index,
-                    },
-                )
-
-        # Mirror into the content-addressed tables. This lives here
-        # rather than in the CLI because log_to_db() is what plugins
-        # call - anything that logs a response should populate both
-        # representations, not just `llm` itself.
-        store.log(self)
+        LogStore(db).log(self)
 
 
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:

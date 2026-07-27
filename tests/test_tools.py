@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 import llm
 from llm import CancelToolCall, cli
+from llm.logs import LogStore
 from llm.migrations import migrate
 from llm.tools import llm_time
 
@@ -44,13 +45,10 @@ def test_tool_use_basic(vcr):
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset(
-        {"tools", "tool_responses", "tool_calls", "tool_results"}
-    )
 
-    responses = list(db["responses"].rows)
-    assert len(responses) == 2
-    first_response, second_response = responses
+    turns = list(db["turns"].rows)
+    assert len(turns) == 2
+    first_turn, second_turn = turns
 
     tools = list(db["tools"].rows)
     assert len(tools) == 1
@@ -58,18 +56,30 @@ def test_tool_use_basic(vcr):
     assert tools[0]["description"] == "Multiply two numbers."
     assert tools[0]["plugin"] is None
 
-    tool_results = list(db["tool_results"].rows)
-    tool_calls = list(db["tool_calls"].rows)
-
+    # The tool call is in the first turn's output parts; the result is
+    # among the second turn's inputs.
+    store = LogStore(db)
+    first_chain = store.load_chain(first_turn["tip_message_hash"])
+    tool_calls = [
+        part
+        for message in first_chain
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolCallPart)
+    ]
     assert len(tool_calls) == 1
-    assert tool_calls[0]["response_id"] == first_response["id"]
-    assert tool_calls[0]["name"] == "multiply"
-    assert tool_calls[0]["arguments"] == '{"a": 1231, "b": 2331}'
+    assert tool_calls[0].name == "multiply"
+    assert tool_calls[0].arguments == {"a": 1231, "b": 2331}
 
-    assert len(tool_results) == 1
-    assert tool_results[0]["response_id"] == second_response["id"]
-    assert tool_results[0]["output"] == "2869461"
-    assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+    second_inputs = store.load_chain(second_turn["parent_message_hash"])
+    tool_results_parts = [
+        part
+        for message in second_inputs
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolResultPart)
+    ]
+    assert len(tool_results_parts) == 1
+    assert tool_results_parts[0].output == "2869461"
+    assert tool_results_parts[0].tool_call_id == tool_calls[0].tool_call_id
 
 
 @pytest.mark.vcr

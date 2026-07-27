@@ -15,6 +15,7 @@ from click.testing import CliRunner
 import llm
 from llm.cli import cli
 from llm.logs import LogStore, canonical_json, message_hash
+from llm.migrations import migrate
 from llm.models import Attachment
 from llm.parts import (
     AttachmentPart,
@@ -544,14 +545,17 @@ class TestConversationThreads:
             message.parts[0].text for message in store.thread_messages(conversation.id)
         ] == ["Hi", "Hello", "Hi", "Hello again"]
 
-    def test_a_response_without_a_conversation_creates_no_thread(
+    def test_a_response_without_a_conversation_gets_its_own_thread(
         self, store, mock_model
     ):
+        # Parity with the legacy tables, which recorded a conversation
+        # for every response - without this, a response logged through
+        # the library API could never be continued with `llm -c`.
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("Hi")
         response.text()
         store.log(response)
-        assert store.db["threads"].count == 0
+        assert store.db["threads"].count == 1
 
     def test_an_explicit_thread_id_wins(self, store, mock_model):
         thread_id = store.create_thread(name="Mine")
@@ -579,14 +583,15 @@ def run(*args):
     return result
 
 
-class TestCliDualWrite:
+class TestCliWrites:
     def test_a_prompt_writes_a_turn(self, cli_store):
         run("-m", "echo", "Hi")
         assert cli_store.db["turns"].count == 1
 
-    def test_a_prompt_still_writes_the_legacy_tables(self, cli_store):
+    def test_a_prompt_does_not_write_the_legacy_tables(self, cli_store):
         run("-m", "echo", "Hi")
-        assert cli_store.db["responses"].count == 1
+        assert cli_store.db["responses"].count == 0
+        assert cli_store.db["conversations"].count == 0
 
     def test_the_turn_points_at_the_stored_chain(self, cli_store):
         run("-m", "echo", "Hi")
@@ -594,9 +599,9 @@ class TestCliDualWrite:
         chain = cli_store.load_chain(turn["tip_message_hash"])
         assert [message.role for message in chain] == ["user", "assistant"]
 
-    def test_the_thread_matches_the_conversation(self, cli_store):
+    def test_the_thread_has_a_tip(self, cli_store):
         run("-m", "echo", "Hi")
-        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        conversation_id = next(iter(cli_store.db["threads"].rows))["id"]
         assert cli_store.thread_tip(conversation_id) is not None
 
     def test_no_log_writes_nothing(self, cli_store):
@@ -610,19 +615,14 @@ class TestCliContinuation:
         run("-m", "echo", "First")
         run("-m", "echo", "Second", "-c")
         assert cli_store.db["threads"].count == 1
-        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        conversation_id = next(iter(cli_store.db["threads"].rows))["id"]
         assert len(cli_store.thread_messages(conversation_id)) == 4
 
     def test_history_comes_from_the_new_tables(self, user_path):
-        # Delete the legacy rows the old continuation path reads from. If
-        # `-c` still sends the full history, it can only have come from
-        # the content-addressed tables.
         run("-m", "echo", "First")
 
         db = sqlite_utils.Database(str(user_path / "logs.db"))
-        conversation_id = next(iter(db["conversations"].rows))["id"]
-        with db.conn:
-            db.execute("delete from responses")
+        conversation_id = next(iter(db["threads"].rows))["id"]
         db.close()
 
         run("-m", "echo", "Second", "-c")
@@ -681,15 +681,31 @@ class TestLegacyConversations:
     def test_continuing_a_conversation_with_no_thread_still_works(self, user_path):
         # Conversations logged before this schema existed have no thread,
         # so `-c` has to fall back to rebuilding from the legacy rows.
-        run("-m", "echo", "First")
-
+        # Nothing writes those rows any more - seed them the way an
+        # older version of llm would have.
         path = str(user_path / "logs.db")
         db = sqlite_utils.Database(path)
-        with db.conn:
-            db.execute("delete from threads")
-            db.execute("delete from turns")
-            db.execute("delete from parts")
-            db.execute("delete from messages")
+        migrate(db)
+        db["conversations"].insert(
+            {"id": "01aaaaaaaaaaaaaaaaaaaaaaaa", "name": "First", "model": "echo"}
+        )
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaab",
+                "model": "echo",
+                "prompt": "First",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "First response",
+                "response_json": None,
+                "conversation_id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+            },
+            alter=True,
+        )
         db.close()
 
         result = run("-m", "echo", "Second", "-c")
@@ -712,12 +728,27 @@ class TestLibraryLogging:
         assert store.db["turns"].count == 1
         assert store.db["messages"].count == 2
 
-    def test_log_to_db_still_writes_the_legacy_tables(self, store, mock_model):
+    def test_log_to_db_leaves_the_legacy_tables_alone(self, store, mock_model):
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("Hi")
         response.text()
         response.log_to_db(store.db)
-        assert store.db["responses"].count == 1
+        assert store.db["responses"].count == 0
+        assert store.db["conversations"].count == 0
+
+    def test_log_to_db_without_conversation_still_gets_a_thread(
+        self, store, mock_model
+    ):
+        # The legacy path recorded a conversation for every response;
+        # the store keeps that guarantee with a thread, so `llm -c` can
+        # continue a response logged through the library API.
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        assert store.db["threads"].count == 1
+        turn = next(iter(store.db["turns"].rows))
+        assert turn["thread_id"] is not None
 
     def test_a_chain_writes_the_store_too(self, store, mock_model):
         conversation = mock_model.conversation()

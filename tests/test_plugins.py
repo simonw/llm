@@ -801,11 +801,7 @@ def test_register_toolbox(tmpdir, logs_db):
         )
 
         # Test the logging worked
-        rows = list(logs_db.query(TOOL_RESULTS_SQL))
-        # JSON decode things in rows
-        for row in rows:
-            row["tool_calls"] = json.loads(row["tool_calls"])
-            row["tool_results"] = json.loads(row["tool_results"])
+        rows = tool_activity_rows(logs_db)
         assert rows == [
             {
                 "model": "echo",
@@ -822,24 +818,8 @@ def test_register_toolbox(tmpdir, logs_db):
                 "model": "echo",
                 "tool_calls": [],
                 "tool_results": [
-                    {
-                        "name": "Memory_set",
-                        "output": "null",
-                        "instance": {
-                            "name": "Memory",
-                            "plugin": "ToolboxPlugin",
-                            "arguments": "{}",
-                        },
-                    },
-                    {
-                        "name": "Memory_get",
-                        "output": "two",
-                        "instance": {
-                            "name": "Memory",
-                            "plugin": "ToolboxPlugin",
-                            "arguments": "{}",
-                        },
-                    },
+                    {"name": "Memory_set", "output": "null"},
+                    {"name": "Memory_get", "output": "two"},
                 ],
             },
             {
@@ -854,11 +834,6 @@ def test_register_toolbox(tmpdir, logs_db):
                     {
                         "name": "Filesystem_list_files",
                         "output": json.dumps([str(other_path)]),
-                        "instance": {
-                            "name": "Filesystem",
-                            "plugin": "ToolboxPlugin",
-                            "arguments": json.dumps({"path": str(my_dir2)}),
-                        },
                     }
                 ],
             },
@@ -935,11 +910,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
         plugins.pm.unregister(name="ToolboxPlugin")
 
     # Check the database
-    rows = list(logs_db.query(TOOL_RESULTS_SQL))
-    # JSON decode things in rows
-    for row in rows:
-        row["tool_calls"] = json.loads(row["tool_calls"])
-        row["tool_results"] = json.loads(row["tool_results"])
+    rows = tool_activity_rows(logs_db)
     assert rows == [
         {
             "model": "echo",
@@ -954,33 +925,9 @@ def test_toolbox_logging_async(logs_db, tmpdir):
             "model": "echo",
             "tool_calls": [],
             "tool_results": [
-                {
-                    "name": "Memory_set",
-                    "output": "null",
-                    "instance": {
-                        "name": "Filesystem",
-                        "plugin": "ToolboxPlugin",
-                        "arguments": "{}",
-                    },
-                },
-                {
-                    "name": "Memory_get",
-                    "output": "two",
-                    "instance": {
-                        "name": "Filesystem",
-                        "plugin": "ToolboxPlugin",
-                        "arguments": "{}",
-                    },
-                },
-                {
-                    "name": "Filesystem_list_files",
-                    "output": "[]",
-                    "instance": {
-                        "name": "Filesystem",
-                        "plugin": "ToolboxPlugin",
-                        "arguments": json.dumps({"path": str(path)}),
-                    },
-                },
+                {"name": "Memory_set", "output": "null"},
+                {"name": "Memory_get", "output": "two"},
+                {"name": "Filesystem_list_files", "output": "[]"},
             ],
         },
     ]
@@ -1011,57 +958,33 @@ def test_plugins_command():
     ]
 
 
-TOOL_RESULTS_SQL = """
--- First, create ordered subqueries for tool_calls and tool_results
-with ordered_tool_calls as (
-    select
-        tc.response_id,
-        json_group_array(
-            json_object(
-                'name', tc.name,
-                'arguments', tc.arguments
-            )
-        ) as tool_calls_json
-    from (
-        select * from tool_calls order by id
-    ) tc
-    where tc.id is not null
-    group by tc.response_id
-),
-ordered_tool_results as (
-    select
-        tr.response_id,
-        json_group_array(
-            json_object(
-                'name', tr.name,
-                'output', tr.output,
-                'instance', case
-                    when ti.id is not null then json_object(
-                        'name', ti.name,
-                        'plugin', ti.plugin,
-                        'arguments', ti.arguments
-                    )
-                    else null
-                end
-            )
-        ) as tool_results_json
-    from (
-        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
-               ti.plugin, ti.arguments as ti_arguments
-        from tool_results tr
-        left join tool_instances ti on tr.instance_id = ti.id
-        order by tr.id
-    ) tr
-    left join tool_instances ti on tr.instance_id = ti.id
-    where tr.id is not null
-    group by tr.response_id
-)
-select
-    r.model,
-    coalesce(otc.tool_calls_json, '[]') as tool_calls,
-    coalesce(otr.tool_results_json, '[]') as tool_results
-from responses r
-left join ordered_tool_calls otc on r.id = otc.response_id
-left join ordered_tool_results otr on r.id = otr.response_id
-group by r.id, r.model
-order by r.id"""
+def tool_activity_rows(db):
+    """Per-turn tool calls and results from the message store, in the
+    shape the old TOOL_RESULTS_SQL produced from the legacy tables.
+
+    Toolbox instance provenance is absent: the store does not record
+    which instance served a call - tool execution provenance is still
+    an open design decision.
+    """
+    from llm.logs import LogStore, log_row_extras, merged_log_rows
+
+    store = LogStore(db)
+    rows = merged_log_rows(store)
+    rows.reverse()
+    out = []
+    for row in rows:
+        extras = log_row_extras(store, row)
+        out.append(
+            {
+                "model": row["model"],
+                "tool_calls": [
+                    {"name": call["name"], "arguments": json.dumps(call["arguments"])}
+                    for call in extras["tool_calls"]
+                ],
+                "tool_results": [
+                    {"name": result["name"], "output": result["output"]}
+                    for result in extras["tool_results"]
+                ],
+            }
+        )
+    return out

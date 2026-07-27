@@ -276,6 +276,359 @@ llm logs backup /tmp/backup.db
 ```
 This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
+(logging-message-store)=
+
+## The message store
+
+The `logs.db` database contains two generations of tables. Databases created by older versions of LLM recorded everything in a `responses` table, with companion tables such as `prompt_attachments` and `tool_calls` hanging off it. Current versions write to a set of **content-addressed** tables instead: `threads`, `turns`, `messages` and `parts`. Content-addressed means that rows are identified by a hash of their content rather than an assigned id, so identical content is stored exactly once.
+
+The legacy tables are read-only history now. The `llm logs` command merges the two generations: rows that only exist in the legacy `responses` table are combined with rows from the new tables, so history recorded by an older version stays visible after an upgrade. All new logging writes only the content-addressed tables.
+
+(logging-message-store-vocabulary)=
+
+### Threads, turns, messages and parts
+
+From the top down:
+
+- A **thread** is a conversation. It is a named pointer at the message at the head of that conversation, and its id is the conversation id displayed by `llm logs`.
+- A **turn** is a single model call within a thread. It records everything specific to that call - which model answered, options, token counts, timings - and points at the messages that were its input and output.
+- A **message** is one entry in a conversation, with a role of `system`, `user` or `assistant`. Each message links to its parent, forming a chain, and is identified by a hash of its content combined with that parent link.
+- A **part** is a piece of content within a message: text, reasoning, a tool call, a tool result or an attachment. A message's parts are ordered by their `position`.
+
+(logging-message-store-example)=
+
+### A worked example
+
+Here is a two turn conversation, logged to a fresh database and then dumped. It was generated with a small scripted model that returns canned replies - every model plugin logs through the same code path, so rows written by a real model have exactly the same shape, but the canned replies keep this example deterministic.
+
+<!-- [[[cog
+import cog
+import sqlite_utils
+import llm
+
+REPLIES = {
+    "Suggest a name for a pet pelican": (
+        "How about Percy? Pelicans suit a dignified name."
+    ),
+    "Now one for a pet walrus": "Wallace. It pairs nicely with Percy.",
+}
+
+class ScriptedModel(llm.Model):
+    model_id = "scripted"
+
+    def execute(self, prompt, stream, response, conversation=None):
+        yield REPLIES[prompt.prompt]
+
+db = sqlite_utils.Database(memory=True)
+conversation = ScriptedModel().conversation()
+for text in REPLIES:
+    response = conversation.prompt(text, stream=False)
+    response.text()
+    response.log_to_db(db)
+
+# ULID identifiers and timestamps differ on every run, so they are
+# replaced with placeholders. The hashes are deterministic.
+aliases = {}
+for i, row in enumerate(db.query("select id from turns order by id")):
+    aliases[row["id"]] = "$TURN_{}_ID".format(i + 1)
+thread = next(db.query("select * from threads"))
+aliases[thread["id"]] = "$THREAD_ID"
+
+lines = ["messages and their parts:"]
+for row in db.query("select * from messages"):
+    lines.append("")
+    lines.append("{} {}".format(row["role"], row["hash"]))
+    lines.append("  parent: {}".format(row["parent_hash"] or "null"))
+    for part in db.query(
+        "select * from parts where message_hash = ? order by position",
+        [row["hash"]],
+    ):
+        lines.append("  part {}: {}".format(part["position"], part["payload"]))
+lines.append("")
+lines.append("turns:")
+for row in db.query("select * from turns order by id"):
+    lines.append("")
+    lines.append("turn {}".format(aliases[row["id"]]))
+    lines.append("  thread_id: {}".format(aliases[row["thread_id"]]))
+    lines.append("  parent_message_hash: {}".format(row["parent_message_hash"]))
+    lines.append("  tip_message_hash:    {}".format(row["tip_message_hash"]))
+    lines.append("  model: {}".format(row["model"]))
+lines.append("")
+lines.append("thread:")
+lines.append("")
+lines.append("thread $THREAD_ID")
+lines.append("  name: {}".format(thread["name"]))
+lines.append("  tip_message_hash: {}".format(thread["tip_message_hash"]))
+cog.out("```\n{}\n```\n".format("\n".join(lines)))
+]]] -->
+```
+messages and their parts:
+
+user b2:d6b0cd4e7a65ea90423c50fadb3f5704
+  parent: null
+  part 0: {"type": "text", "text": "Suggest a name for a pet pelican"}
+
+assistant b2:0f2c02ad982050b623b7e034199c8c61
+  parent: b2:d6b0cd4e7a65ea90423c50fadb3f5704
+  part 0: {"type": "text", "text": "How about Percy? Pelicans suit a dignified name."}
+
+user b2:c785dd6c77540150c2647f406cacc76f
+  parent: b2:0f2c02ad982050b623b7e034199c8c61
+  part 0: {"type": "text", "text": "Now one for a pet walrus"}
+
+assistant b2:a30a236e0d1b717c592e826d06e3c9d2
+  parent: b2:c785dd6c77540150c2647f406cacc76f
+  part 0: {"type": "text", "text": "Wallace. It pairs nicely with Percy."}
+
+turns:
+
+turn $TURN_1_ID
+  thread_id: $THREAD_ID
+  parent_message_hash: b2:d6b0cd4e7a65ea90423c50fadb3f5704
+  tip_message_hash:    b2:0f2c02ad982050b623b7e034199c8c61
+  model: scripted
+
+turn $TURN_2_ID
+  thread_id: $THREAD_ID
+  parent_message_hash: b2:c785dd6c77540150c2647f406cacc76f
+  tip_message_hash:    b2:a30a236e0d1b717c592e826d06e3c9d2
+  model: scripted
+
+thread:
+
+thread $THREAD_ID
+  name: Suggest a name for a pet pelican
+  tip_message_hash: b2:a30a236e0d1b717c592e826d06e3c9d2
+```
+<!-- [[[end]]] -->
+
+Things to notice:
+
+- The four messages form a chain: the first has a `null` parent and each subsequent message names the hash of the one before it.
+- The `part N:` lines show each part's `payload` column verbatim - the part serialized as JSON.
+- Each turn brackets one model call. Its `parent_message_hash` is the tip of the chain that was sent to the model - the last input message, usually that turn's user prompt - and its `tip_message_hash` is the chain tip after the model's reply was appended. The prompt and response that `llm logs` displays are derived by splitting the chain at the parent, rather than being stored a second time.
+- The thread's id is the conversation id, its name is derived from the first prompt and its `tip_message_hash` follows the head of the conversation as new turns are logged.
+- The ULID identifiers - sortable random identifiers issued in time order, the same id space older versions used for response ids - and the timestamp columns have been replaced with placeholders because they change on every run. The hashes have not: they depend only on the message content and its position in the chain, so replaying this conversation produces these exact four hashes.
+
+(logging-message-store-hashes)=
+
+### Content addressing as a contract
+
+A message's hash is calculated like this:
+
+1. Build the object `{"parent": parent_hash, "message": message}`, where `parent_hash` is the hash of the previous message in the chain (or `null` for the first message) and `message` is the message's dictionary representation - its role, its parts and any provider metadata.
+2. Serialize that object to canonical JSON: keys sorted, compact `,` and `:` separators with no extra whitespace, non-ASCII characters left unescaped.
+3. Hash the UTF-8 encoding of that string with [BLAKE2b](https://en.wikipedia.org/wiki/BLAKE_(hash_function)) using a 16 byte digest, and prefix the hex digest with `b2:`.
+
+The `b2:` prefix tags the hash with the algorithm that produced it. If a future version of LLM ever changes the digest or the canonical form, the change will be detectable instead of silently splitting the stored data into two incompatible halves.
+
+Two design decisions matter here:
+
+- **The hash covers resolved content.** {ref}`Fragment <usage-fragments>` references and attachment references are expanded before hashing, so the hash always covers exactly the content the model saw, never the compressed form it happens to be stored in. The internal `LogStore.verify()` method re-derives every hash from the stored rows to check this stays true.
+- **The parent hash participates in the hash.** The same content appearing at a different point in a conversation is a different node. This is what makes two conversations that share a prefix collapse to shared rows, with no explicit comparison required: replaying the same messages produces the same hashes, and a hash that is already present needs nothing written.
+
+A consequence of the second decision is that a stateless client - one that holds its own conversation history and re-sends the whole thing with every call - writes only the new tail on each request. It also makes forks cheap, as described next. Here the first conversation from the worked example is logged again, followed by a second conversation that starts with the same prompt and then diverges:
+
+<!-- [[[cog
+import cog
+import sqlite_utils
+import llm
+
+REPLIES = {
+    "Suggest a name for a pet pelican": (
+        "How about Percy? Pelicans suit a dignified name."
+    ),
+    "Now one for a pet walrus": "Wallace. It pairs nicely with Percy.",
+    "Now one for a pet seagull": "Steven. Steven Seagull.",
+}
+
+class ScriptedModel(llm.Model):
+    model_id = "scripted"
+
+    def execute(self, prompt, stream, response, conversation=None):
+        yield REPLIES[prompt.prompt]
+
+db = sqlite_utils.Database(memory=True)
+model = ScriptedModel()
+
+def run(prompts):
+    conversation = model.conversation()
+    for text in prompts:
+        response = conversation.prompt(text, stream=False)
+        response.text()
+        response.log_to_db(db)
+
+run(("Suggest a name for a pet pelican", "Now one for a pet walrus"))
+first = {row["hash"] for row in db.query("select hash from messages")}
+run(("Suggest a name for a pet pelican", "Now one for a pet seagull"))
+rows = list(db.query("select * from messages"))
+lines = [
+    "message rows after the first conversation: {}".format(len(first)),
+    "message rows after both conversations:     {}".format(len(rows)),
+    "",
+    "rows added by the second conversation:",
+]
+for row in rows:
+    if row["hash"] not in first:
+        lines.append("")
+        lines.append("{} {}".format(row["role"], row["hash"]))
+        lines.append("  parent: {}".format(row["parent_hash"]))
+cog.out("```\n{}\n```\n".format("\n".join(lines)))
+]]] -->
+```
+message rows after the first conversation: 4
+message rows after both conversations:     6
+
+rows added by the second conversation:
+
+user b2:371ceec468c0ec797ac7042970992c0b
+  parent: b2:0f2c02ad982050b623b7e034199c8c61
+
+assistant b2:4ad19ddf94ea086aa9a8aa6fd8b0af05
+  parent: b2:371ceec468c0ec797ac7042970992c0b
+```
+<!-- [[[end]]] -->
+
+Two conversations of two turns each - eight messages sent to the model in total - produced six rows. The second conversation's first turn hashed to rows that were already present, so only its second turn was written, and the new user message's parent is the assistant reply both conversations share.
+
+(logging-message-store-forking)=
+
+### Forking and shared history
+
+Because messages form a parent-linked tree, a conversation can fork: a new thread can point at any existing message and continue from there, sharing its entire history with the thread it came from until the two diverge. Nothing is copied when this happens. The `threads.forked_from` column records which thread a fork came from.
+
+TODO: description of diagram
+
+Shared rows cut both ways. Deleting a conversation is not the same as deleting its rows, because another thread may reach the same messages - removing them would silently corrupt that thread's history. For this reason LLM does not currently delete message rows at all; garbage collection of unreachable messages is deliberately left as future work.
+
+(logging-message-store-references)=
+
+### Storage by reference
+
+The hash of a message covers its resolved content, but storage is by reference. A text part whose content borrows from a fragment does not store a copy of that fragment. Instead of a `text` key its payload holds a `text_ref` list of fragment references and literal segments:
+
+```json
+{"type": "text", "text_ref": [{"fragment": 1}, {"literal": "\nquestion about it"}]}
+```
+
+Here fragment `1` is an id in the existing `fragments` table. Reading the part concatenates the fragment content and the literal back together, reproducing the exact text that was hashed. Ask a hundred questions about a novel and the novel is stored once.
+
+Attachments work the same way: the binary content lives in the `attachments` table, keyed by a SHA-256 hash of the bytes, and the part payload stores that id in place of the data.
+
+(logging-message-store-tables)=
+
+### Table by table
+
+The full schema for these tables appears in {ref}`the SQL schema section <logging-sql-schema>` below.
+
+- `messages` - one row per unique message. `hash` is the content address described above, `parent_hash` links to the previous message in the chain and `role` is `system`, `user` or `assistant`. `provider_metadata` holds any provider-specific data carried by the message; it participates in the hash.
+- `parts` - the content of each message, ordered by `position`. `payload` is the part serialized as JSON - stored in the order the model produced it, not the canonical key-sorted form used for hashing. `type` and `tool_name` are copied out of the payload so they can be filtered on directly.
+- `part_attachments` and `part_fragments` - junction tables recording which rows in `attachments` and `fragments` a part's payload references, in order.
+- `threads` - one row per conversation. `id` is the conversation id, `tip_message_hash` points at the current head of the conversation and `forked_from` records the thread a fork came from.
+- `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
+- `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table.
+- `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
+
+(logging-message-store-queries)=
+
+### Querying the message store
+
+These queries can be pasted into [Datasette](https://datasette.io/) or `sqlite3` against your `logs.db`. This one renders every conversation tree as indented text, resolving `text_ref` payloads back to their full text and stepping the indentation in at each fork:
+
+```sql
+with recursive
+siblings as (
+  select
+    hash,
+    parent_hash,
+    count(*) over (partition by parent_hash) as branches
+  from messages
+),
+walk as (
+  select
+    messages.hash,
+    0 as indent,
+    printf('%08d', messages.rowid) as sort_key
+  from messages
+  where messages.parent_hash is null
+  union all
+  select
+    siblings.hash,
+    walk.indent + (siblings.branches > 1),
+    walk.sort_key || '/' || printf('%08d', messages.rowid)
+  from siblings
+  join messages on messages.hash = siblings.hash
+  join walk on siblings.parent_hash = walk.hash
+)
+select
+  substr('                                        ', 1, walk.indent * 4)
+    || messages.role || ': '
+    || coalesce(
+         json_extract(parts.payload, '$.text'),
+         (
+           select group_concat(
+             coalesce(
+               json_extract(piece.value, '$.literal'),
+               (select content from fragments
+                 where id = json_extract(piece.value, '$.fragment'))
+             ),
+             '' order by piece.key
+           )
+           from json_each(json_extract(parts.payload, '$.text_ref')) as piece
+         ),
+         parts.type
+       ) as entry
+from walk
+join messages on messages.hash = walk.hash
+left join parts on parts.message_hash = messages.hash
+order by walk.sort_key, parts.position;
+```
+
+Every turn that was given a specific fragment, via the `turn_fragments` provenance table - set `:fragment_hash` to a hash from `llm fragments`:
+
+```sql
+select turns.id, turns.model, turns.datetime_utc, turn_fragments.kind
+from turns
+join turn_fragments on turn_fragments.turn_id = turns.id
+join fragments on fragments.id = turn_fragments.fragment_id
+where fragments.hash = :fragment_hash
+order by turns.id;
+```
+
+The most recently active conversations, with a count of their turns:
+
+```sql
+select
+  threads.id,
+  threads.name,
+  count(turns.id) as num_turns,
+  max(turns.datetime_utc) as last_used
+from threads
+left join turns on turns.thread_id = threads.id
+group by threads.id
+order by last_used desc
+limit 10;
+```
+
+(logging-message-store-python)=
+
+### Logging from Python
+
+The supported way to write to a log database from Python is the `log_to_db()` method on a response, which is also what plugins should call:
+
+```python
+import llm
+import sqlite_utils
+
+db = sqlite_utils.Database("logs.db")
+model = llm.get_model("gpt-4o-mini")
+response = model.prompt("A short pelican fact")
+print(response.text())
+response.log_to_db(db)
+```
+
+`log_to_db()` takes a `sqlite_utils.Database` and records the response's thread, turn, messages, parts, fragments, attachments and tools in the content-addressed tables. It applies any outstanding migrations itself, so it is safe to call against a brand new database file or one created by an older version of LLM. The underlying `LogStore` class is internal and its API may change - `log_to_db()` and the table schema documented on this page are the supported interfaces.
+
 (logging-sql-schema)=
 
 ## SQL schema

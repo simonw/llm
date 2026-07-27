@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `llm logs` now reads both generations of log tables: history recorded by older versions of llm in the legacy `responses` table is merged into the output alongside new turns, with rows from the dual-write era deduplicated by id. The `-m`, `-c`, `-f`, `-T`, `--tools` and `--schema` filters work across both. `-q/--query` full-text search is temporarily unavailable while search against the new tables is designed. [#1562](https://github.com/simonw/llm/pull/1562)
+- Logging no longer writes the legacy tables: `Response.log_to_db()` records only the content-addressed message store. The legacy tables are kept in place as read-only history. Raw provider payloads (the old `prompt_json` and `response_json` columns) are no longer persisted - the stored message chain is the record of what was sent and returned. [#1562](https://github.com/simonw/llm/pull/1562)
+- A response logged outside of a conversation now gets a thread of its own, so responses logged through the Python API can be continued with `llm -c` - the same guarantee the `conversations` table used to provide. [#1562](https://github.com/simonw/llm/pull/1562)
+- New documentation for the message store: the schema, the content-addressing hash contract, worked examples and a SQL cookbook, in {ref}`the logging documentation <logging-message-store>`. [#1562](https://github.com/simonw/llm/pull/1562)
 - Passing `prompt=`, `fragments=`, `attachments=` or `tool_results=` alongside `messages=` to `model.prompt()` or `conversation.prompt()` now appends that new input to the supplied message history, instead of silently omitting it from `prompt.messages` - previously the model could receive text that never appeared in the logged conversation. [#1562](https://github.com/simonw/llm/pull/1562)
 
 (v0_31_1)=

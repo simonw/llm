@@ -380,13 +380,16 @@ class LogStore:
         """
         if thread_id is None:
             conversation = getattr(response, "conversation", None)
-            if conversation is not None:
-                thread_id = self.ensure_thread(
-                    conversation.id,
-                    name=_conversation_name(
-                        response.prompt.prompt or response.prompt.system or ""
-                    ),
-                )
+            # A response logged outside any conversation still gets a
+            # thread of its own, so `llm -c` and `llm logs` can always
+            # find it - the same guarantee the conversations table used
+            # to provide.
+            thread_id = self.ensure_thread(
+                conversation.id if conversation else str(monotonic_ulid()).lower(),
+                name=_conversation_name(
+                    response.prompt.prompt or response.prompt.system or ""
+                ),
+            )
 
         prompt_fragments = list(response.prompt.fragments or [])
         system_fragments = list(response.prompt.system_fragments or [])
@@ -761,8 +764,8 @@ def log_rows(
 ) -> list[dict]:
     """Rows for `llm logs`, newest first, drawn from the new tables.
 
-    Deliberately blind to anything logged before this schema existed -
-    those conversations have no turns, so they simply do not appear.
+    Sees only conversations with turns - merged_log_rows adds the rows
+    that exist solely in the legacy `responses` table.
     """
     where: list[str] = []
     params: dict[str, Any] = {}
@@ -939,3 +942,278 @@ def _tool_ids_by_name(store: "LogStore") -> dict:
         tool_row["name"]: tool_row["id"]
         for tool_row in store.db.query("select id, name from tools")
     }
+
+
+# -- legacy rows ---------------------------------------------------------
+#
+# History logged by older versions of llm lives only in the `responses`
+# table. Those rows are merged into `llm logs` output, shaped like the
+# rows _LogRowBuilder produces. A response whose id also exists in
+# `turns` is suppressed - that is what a dual-write-era row or a
+# backfilled conversation looks like, and the turn is the richer record.
+
+LEGACY_LOG_ROWS_SQL = """
+select
+    responses.id,
+    responses.model,
+    responses.resolved_model,
+    responses.prompt,
+    responses.system,
+    responses.prompt_json,
+    responses.options_json,
+    responses.response,
+    responses.reasoning,
+    responses.response_json,
+    responses.conversation_id,
+    responses.duration_ms,
+    responses.datetime_utc,
+    responses.input_tokens,
+    responses.output_tokens,
+    responses.token_details,
+    conversations.name as conversation_name,
+    conversations.model as conversation_model,
+    schemas.content as schema_json
+from responses
+left join schemas on responses.schema_id = schemas.id
+left join conversations on responses.conversation_id = conversations.id
+where responses.id not in (select id from turns){extra_where}
+order by responses.id desc{limit}
+"""
+
+
+def legacy_log_rows(
+    db,
+    *,
+    count: int | None = None,
+    model_id: str | None = None,
+    thread_id: str | None = None,
+    fragment_hashes=(),
+    tool_names=(),
+    any_tools: bool = False,
+    schema_id: str | None = None,
+    id_gt: str | None = None,
+    id_gte: str | None = None,
+) -> list[dict]:
+    """Rows for `llm logs` that exist only in the legacy tables.
+
+    Applies the same filters as log_rows, translated to the legacy
+    schema. Thread ids are conversation ids, so the two filters match
+    the same conversations on either side of the upgrade.
+    """
+    where: list[str] = []
+    params: dict[str, Any] = {}
+
+    if model_id:
+        where.append("(responses.model = :model or responses.resolved_model = :model)")
+        params["model"] = model_id
+    if thread_id:
+        where.append("responses.conversation_id = :thread_id")
+        params["thread_id"] = thread_id
+    if id_gt:
+        where.append("responses.id > :id_gt")
+        params["id_gt"] = id_gt
+    if id_gte:
+        where.append("responses.id >= :id_gte")
+        params["id_gte"] = id_gte
+    if schema_id:
+        where.append("responses.schema_id = :schema_id")
+        params["schema_id"] = schema_id
+
+    for index, fragment_hash in enumerate(fragment_hashes):
+        key = f"fragment_{index}"
+        where.append(f"""exists (
+                select 1 from prompt_fragments
+                where prompt_fragments.response_id = responses.id
+                and prompt_fragments.fragment_id in (
+                    select fragments.id from fragments where hash = :{key}
+                )
+                union
+                select 1 from system_fragments
+                where system_fragments.response_id = responses.id
+                and system_fragments.fragment_id in (
+                    select fragments.id from fragments where hash = :{key}
+                )
+            )""")
+        params[key] = fragment_hash
+
+    if any_tools:
+        where.append("""exists (
+                select 1 from tool_results
+                where tool_results.response_id = responses.id
+            )""")
+    for index, tool_name in enumerate(tool_names):
+        key = f"tool_{index}"
+        where.append(f"""exists (
+                select 1 from tool_results
+                join tools on tools.id = tool_results.tool_id
+                where tool_results.response_id = responses.id
+                and tools.name = :{key}
+            )""")
+        params[key] = tool_name
+
+    sql = LEGACY_LOG_ROWS_SQL.format(
+        extra_where=(" and " + " and ".join(where)) if where else "",
+        limit=f" limit {count}" if count else "",
+    )
+    rows = [dict(row) for row in db.query(sql, params)]
+    for row in rows:
+        row["_legacy"] = True
+    return rows
+
+
+def merged_log_rows(store: "LogStore", *, count: int | None = None, **filters):
+    """Rows for `llm logs`: the new tables plus legacy-only responses.
+
+    Both sides are newest-first and ids are ULIDs on both sides of the
+    upgrade, so a straight sort interleaves the two histories
+    chronologically and the top ``count`` of the union is always within
+    the top ``count`` of each side.
+    """
+    rows = log_rows(store, count=count, **filters)
+    rows.extend(legacy_log_rows(store.db, count=count, **filters))
+    rows.sort(key=lambda row: row["id"], reverse=True)
+    if count:
+        rows = rows[:count]
+    return rows
+
+
+LEGACY_ATTACHMENTS_SQL = """
+select
+    response_id,
+    attachments.id,
+    attachments.type,
+    attachments.path,
+    attachments.url,
+    length(attachments.content) as content_length
+from attachments
+join prompt_attachments
+    on attachments.id = prompt_attachments.attachment_id
+where prompt_attachments.response_id in ({placeholders})
+order by prompt_attachments."order"
+"""
+
+LEGACY_FRAGMENTS_SQL = """
+select
+    {table}.response_id,
+    fragments.hash,
+    fragments.id as fragment_id,
+    fragments.content,
+    (
+        select json_group_array(fragment_aliases.alias)
+        from fragment_aliases
+        where fragment_aliases.fragment_id = fragments.id
+    ) as aliases
+from {table}
+join fragments on {table}.fragment_id = fragments.id
+where {table}.response_id in ({placeholders})
+order by {table}."order"
+"""
+
+LEGACY_TOOLS_SQL = """
+select responses.id,
+    coalesce(
+        (select json_group_array(json_object(
+            'id', t.id,
+            'hash', t.hash,
+            'name', t.name,
+            'description', t.description,
+            'input_schema', json(t.input_schema)
+        ))
+        from tools t
+        join tool_responses tr on t.id = tr.tool_id
+        where tr.response_id = responses.id
+        ),
+        '[]'
+    ) as tools,
+    coalesce(
+        (select json_group_array(json_object(
+            'id', tc.id,
+            'tool_id', tc.tool_id,
+            'name', tc.name,
+            'arguments', json(tc.arguments),
+            'tool_call_id', tc.tool_call_id
+        ))
+        from tool_calls tc
+        where tc.response_id = responses.id
+        ),
+        '[]'
+    ) as tool_calls,
+    coalesce(
+        (select json_group_array(json_object(
+            'id', tr.id,
+            'tool_id', tr.tool_id,
+            'name', tr.name,
+            'output', tr.output,
+            'tool_call_id', tr.tool_call_id,
+            'exception', tr.exception,
+            'attachments', coalesce(
+                (select json_group_array(json_object(
+                    'id', a.id,
+                    'type', a.type,
+                    'path', a.path,
+                    'url', a.url,
+                    'content', a.content
+                ))
+                from tool_results_attachments tra
+                join attachments a on tra.attachment_id = a.id
+                where tra.tool_result_id = tr.id
+                ),
+                '[]'
+            )
+        ))
+        from tool_results tr
+        where tr.response_id = responses.id
+        ),
+        '[]'
+    ) as tool_results
+from responses
+where id in ({placeholders})
+"""
+
+
+def legacy_log_row_extras(db, ids: list[str]) -> dict[str, dict]:
+    """Extras for legacy rows, batch-fetched, keyed by response id.
+
+    Same shape as log_row_extras, with each entry shaped the way the
+    pre-turns `llm logs` rendered it.
+    """
+    extras: dict[str, dict] = {
+        id: {
+            "attachments": [],
+            "prompt_fragments": [],
+            "system_fragments": [],
+            "tools": [],
+            "tool_calls": [],
+            "tool_results": [],
+        }
+        for id in ids
+    }
+    if not ids:
+        return extras
+    placeholders = ",".join("?" * len(ids))
+
+    for attachment in db.query(
+        LEGACY_ATTACHMENTS_SQL.format(placeholders=placeholders), ids
+    ):
+        attachment = dict(attachment)
+        response_id = attachment.pop("response_id")
+        extras[response_id]["attachments"].append(attachment)
+
+    for table in ("prompt_fragments", "system_fragments"):
+        for fragment in db.query(
+            LEGACY_FRAGMENTS_SQL.format(table=table, placeholders=placeholders), ids
+        ):
+            fragment = dict(fragment)
+            response_id = fragment.pop("response_id")
+            extras[response_id][table].append(fragment)
+
+    for row in db.query(LEGACY_TOOLS_SQL.format(placeholders=placeholders), ids):
+        extras[row["id"]].update(
+            {
+                "tools": json.loads(row["tools"]),
+                "tool_calls": json.loads(row["tool_calls"]),
+                "tool_results": json.loads(row["tool_results"]),
+            }
+        )
+
+    return extras
