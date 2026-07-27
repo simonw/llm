@@ -111,7 +111,9 @@ def _canonical_attachment(attachment) -> dict:
         ).hexdigest()
     try:
         type_ = attachment.resolve_type()
-    except Exception:
+    except OSError:
+        # A deleted path-backed file - the content hash above already
+        # carries the missing marker
         type_ = attachment.type
     return {"id": content_id, "type": type_}
 
