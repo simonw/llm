@@ -74,14 +74,37 @@ def content_hash(obj: Any) -> str:
     return f"{HASH_PREFIX}{digest}"
 
 
+def _canonical_attachment(attachment) -> dict:
+    """The hashed form of an attachment: its content id.
+
+    Identity is the sha256 of the bytes - the same id that keys the
+    attachments table - never the filesystem path they happened to live
+    at, so editing a file after logging cannot leave a stale hash
+    looking valid, and the same bytes at two paths are one identity.
+    URL attachments hash the URL itself: the log records which URL was
+    sent, not whatever that URL served on the day.
+    """
+    return {"id": attachment.id()}
+
+
 def message_hash(message: Message, parent_hash: str | None) -> str:
     """Identity of ``message`` when reached via ``parent_hash``.
 
     The parent participates, so the same content at a different point in
     a conversation is a different node. That is what makes a shared
     prefix collapse to shared rows without any explicit comparison.
+
+    Attachments are hashed by content id, via _canonical_attachment.
     """
-    return content_hash({"parent": parent_hash, "message": message.to_dict()})
+    d: Any = message.to_dict()
+    for part, part_dict in zip(message.parts, d["parts"]):
+        attachment = getattr(part, "attachment", None)
+        if attachment is not None:
+            part_dict["attachment"] = _canonical_attachment(attachment)
+        attachments = getattr(part, "attachments", None)
+        if attachments:
+            part_dict["attachments"] = [_canonical_attachment(a) for a in attachments]
+    return content_hash({"parent": parent_hash, "message": d})
 
 
 class LogStore:

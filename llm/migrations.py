@@ -854,3 +854,108 @@ def m028_tool_instantiations(db):
         },
         pk="tool_call_id",
     )
+
+
+@migration
+def m029_rehash_messages(db):
+    # Message hashes now identify attachments by the sha256 of their
+    # content rather than the filesystem path they were loaded from.
+    # Recompute every stored hash from resolved content, bottom-up, and
+    # repoint everything that references one. Hashing from content also
+    # merges messages that only ever differed by attachment path.
+    if not db["messages"].exists() or not db["messages"].count:
+        return
+    # Runtime import - llm.logs imports this module at import time, but
+    # by the time a migration runs both modules are fully loaded.
+    from .logs import LogStore, message_hash
+    from .parts import Message
+
+    store = LogStore.__new__(LogStore)  # skip __init__, which migrates
+    store.db = db
+
+    rows = {row["hash"]: row for row in db["messages"].rows}
+    parts_by_hash = store._load_parts(list(rows))
+
+    children: dict = {}
+    roots = []
+    for row in rows.values():
+        if row["parent_hash"] is None:
+            roots.append(row["hash"])
+        else:
+            children.setdefault(row["parent_hash"], []).append(row["hash"])
+
+    mapping: dict = {}
+    queue = list(roots)
+    while queue:
+        old_hash = queue.pop()
+        row = rows[old_hash]
+        parent = row["parent_hash"]
+        message = Message(
+            role=row["role"],
+            parts=parts_by_hash.get(old_hash, []),
+            provider_metadata=_load_json(row["provider_metadata"]),
+        )
+        mapping[old_hash] = message_hash(message, mapping.get(parent, parent))
+        queue.extend(children.get(old_hash, []))
+
+    with db.conn:
+        seen: set = set()
+        for old_hash, new_hash in mapping.items():
+            if new_hash in seen:
+                # Two messages that differed only by attachment path
+                # are now one identity - keep the first, drop this
+                # one's rows and repoint its references below.
+                part_ids = [
+                    r["id"]
+                    for r in db.query(
+                        "select id from parts where message_hash = ?", [old_hash]
+                    )
+                ]
+                if part_ids:
+                    placeholders = ",".join("?" * len(part_ids))
+                    db.execute(
+                        f"delete from part_attachments where part_id in ({placeholders})",
+                        part_ids,
+                    )
+                    db.execute(
+                        f"delete from part_fragments where part_id in ({placeholders})",
+                        part_ids,
+                    )
+                    db.execute(
+                        f"delete from parts where id in ({placeholders})", part_ids
+                    )
+                db.execute("delete from messages where hash = ?", [old_hash])
+                continue
+            seen.add(new_hash)
+            if new_hash != old_hash:
+                db.execute(
+                    "update messages set hash = ? where hash = ?", [new_hash, old_hash]
+                )
+                db.execute(
+                    "update parts set message_hash = ? where message_hash = ?",
+                    [new_hash, old_hash],
+                )
+        for old_hash, new_hash in mapping.items():
+            if new_hash == old_hash:
+                continue
+            db.execute(
+                "update messages set parent_hash = ? where parent_hash = ?",
+                [new_hash, old_hash],
+            )
+            db.execute(
+                "update turns set parent_message_hash = ? "
+                "where parent_message_hash = ?",
+                [new_hash, old_hash],
+            )
+            db.execute(
+                "update turns set tip_message_hash = ? where tip_message_hash = ?",
+                [new_hash, old_hash],
+            )
+            db.execute(
+                "update threads set tip_message_hash = ? where tip_message_hash = ?",
+                [new_hash, old_hash],
+            )
+
+
+def _load_json(value):
+    return json.loads(value) if value else None

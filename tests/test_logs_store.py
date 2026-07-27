@@ -814,6 +814,136 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestAttachmentHashing:
+    """Message identity covers attachment content, never the filesystem
+    path the bytes were loaded from."""
+
+    def test_same_bytes_at_two_paths_are_one_identity(self, tmp_path):
+        path_a = tmp_path / "a.png"
+        path_b = tmp_path / "b.png"
+        path_a.write_bytes(b"SAME BYTES")
+        path_b.write_bytes(b"SAME BYTES")
+        hashes = [
+            message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(p))
+                        )
+                    ],
+                ),
+                None,
+            )
+            for p in (path_a, path_b)
+        ]
+        assert hashes[0] == hashes[1]
+
+    def test_changed_bytes_at_the_same_path_change_the_hash(self, tmp_path):
+        path = tmp_path / "x.png"
+
+        def hash_now():
+            return message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                ),
+                None,
+            )
+
+        path.write_bytes(b"first version")
+        first = hash_now()
+        path.write_bytes(b"second version")
+        assert hash_now() != first
+
+    def test_same_bytes_at_two_paths_share_the_stored_row(self, store, tmp_path):
+        for name in ("a.png", "b.png"):
+            path = tmp_path / name
+            path.write_bytes(b"SAME BYTES")
+            store.ensure_chain(
+                [
+                    Message(
+                        role="user",
+                        parts=[
+                            AttachmentPart(
+                                attachment=Attachment(type="image/png", path=str(path))
+                            )
+                        ],
+                    )
+                ]
+            )
+        assert store.db["messages"].count == 1
+
+    def test_attachment_chain_verifies(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"PNG BYTES")
+        store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                ),
+                llm.assistant("A fine image"),
+            ]
+        )
+        assert store.verify() == []
+
+    def test_m029_recomputes_stale_hashes(self, store, tmp_path):
+        # Build a real chain, then rewrite its hashes to bogus values -
+        # simulating rows written by the old path-based algorithm - and
+        # check the migration recomputes everything from content.
+        path = tmp_path / "x.png"
+        path.write_bytes(b"PNG BYTES")
+        messages = [
+            Message(
+                role="user",
+                parts=[
+                    AttachmentPart(
+                        attachment=Attachment(type="image/png", path=str(path))
+                    )
+                ],
+            ),
+            llm.assistant("A fine image"),
+        ]
+        tip = store.ensure_chain(messages)
+        thread_id = store.create_thread(name="t", tip=tip)
+        db = store.db
+        real = [row["hash"] for row in db.query("select hash from messages")]
+        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
+        with db.conn:
+            for old, fake in fakes.items():
+                db.execute("update messages set hash = ? where hash = ?", [fake, old])
+                db.execute(
+                    "update messages set parent_hash = ? where parent_hash = ?",
+                    [fake, old],
+                )
+                db.execute(
+                    "update parts set message_hash = ? where message_hash = ?",
+                    [fake, old],
+                )
+                db.execute(
+                    "update threads set tip_message_hash = ? "
+                    "where tip_message_hash = ?",
+                    [fake, old],
+                )
+            db.execute(
+                "delete from _llm_migrations where name = 'm029_rehash_messages'"
+            )
+        assert store.verify() != []
+        migrate(db)
+        assert store.verify() == []
+        assert store.thread_tip(thread_id) == tip
+        assert store.load_chain(tip) == messages
+
+
 class TestPartStorageFormat:
     """Literal text is stored raw in its own column - never escaped,
     never parsed - and the JSON payload holds only structure, with the
