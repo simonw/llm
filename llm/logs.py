@@ -81,16 +81,39 @@ def content_hash(obj: Any) -> str:
 
 
 def _canonical_attachment(attachment) -> dict:
-    """The hashed form of an attachment: its content id.
+    """The hashed form of an attachment: content identity plus the
+    model-visible media type.
 
-    Identity is the sha256 of the bytes - the same id that keys the
-    attachments table - never the filesystem path they happened to live
-    at, so editing a file after logging cannot leave a stale hash
-    looking valid, and the same bytes at two paths are one identity.
-    URL attachments hash the URL itself: the log records which URL was
-    sent, not whatever that URL served on the day.
+    The content hash is recomputed from the actual bytes every time,
+    never taken from Attachment.id()'s cache - that is what lets
+    verify() notice that a path-backed file changed after logging.
+    Path-backed attachments keep no copy of their bytes in the store
+    (by design: logs.db does not swallow large media), so their
+    fidelity depends on the file staying put; a changed or deleted
+    file shows up as a broken hash rather than passing silently.
+
+    The type participates because the model sees it: identical bytes
+    sent as image/png and as text/plain are different requests. URL
+    attachments hash the URL itself - the log records which URL was
+    sent, not whatever it served that day.
     """
-    return {"id": attachment.id()}
+    if attachment.content:
+        content_id = hashlib.sha256(attachment.content).hexdigest()
+    elif attachment.path:
+        try:
+            with open(attachment.path, "rb") as fp:
+                content_id = hashlib.sha256(fp.read()).hexdigest()
+        except OSError:
+            content_id = f"missing:{attachment.path}"
+    else:
+        content_id = hashlib.sha256(
+            json.dumps({"url": attachment.url}).encode("utf-8")
+        ).hexdigest()
+    try:
+        type_ = attachment.resolve_type()
+    except Exception:
+        type_ = attachment.type
+    return {"id": content_id, "type": type_}
 
 
 def message_hash(message: Message, parent_hash: str | None) -> str:

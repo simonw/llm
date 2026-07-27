@@ -1097,6 +1097,111 @@ class TestAttachmentHashing:
         )
         assert store.verify() == []
 
+    def test_media_type_participates_in_identity(self, tmp_path):
+        path = tmp_path / "x.bin"
+        path.write_bytes(b"SAME BYTES")
+
+        def hash_as(type_):
+            return message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type=type_, path=str(path))
+                        )
+                    ],
+                ),
+                None,
+            )
+
+        # The model sees the media type: identical bytes sent as
+        # different types are different requests.
+        assert hash_as("image/png") != hash_as("text/plain")
+
+    def test_cached_attachment_id_is_not_trusted(self, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"first")
+        attachment = Attachment(type="image/png", path=str(path))
+        attachment.id()  # caches _id from the current bytes
+        message = Message(role="user", parts=[AttachmentPart(attachment=attachment)])
+        first = message_hash(message, None)
+        path.write_bytes(b"second")
+        assert message_hash(message, None) != first
+
+    def test_editing_the_file_after_logging_breaks_verify(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"ORIGINAL")
+        tip = store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                )
+            ]
+        )
+        assert store.verify() == []
+        path.write_bytes(b"TAMPERED")
+        assert store.verify() == [tip]
+
+    def test_deleting_the_file_is_detected_not_fatal(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"ORIGINAL")
+        tip = store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                )
+            ]
+        )
+        path.unlink()
+        assert store.verify() == [tip]
+
+    def test_m032_reruns_the_rehash(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"PNG BYTES")
+        messages = [
+            Message(
+                role="user",
+                parts=[
+                    AttachmentPart(
+                        attachment=Attachment(type="image/png", path=str(path))
+                    )
+                ],
+            ),
+            llm.assistant("A fine image"),
+        ]
+        tip = store.ensure_chain(messages)
+        db = store.db
+        real = [row["hash"] for row in db.query("select hash from messages")]
+        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
+        with db.conn:
+            for old, fake in fakes.items():
+                db.execute("update messages set hash = ? where hash = ?", [fake, old])
+                db.execute(
+                    "update messages set parent_hash = ? where parent_hash = ?",
+                    [fake, old],
+                )
+                db.execute(
+                    "update parts set message_hash = ? where message_hash = ?",
+                    [fake, old],
+                )
+        db.execute(
+            "delete from _llm_migrations where name = 'm032_rehash_for_attachment_types'"
+        )
+        assert store.verify() != []
+        migrate(db)
+        assert store.verify() == []
+        assert store.load_chain(tip) == messages
+
     def test_m029_survives_foreign_key_enforcement(self, tmp_path):
         # Rekeying messages.hash while parts and turns still reference
         # it would fail immediately on a connection running with

@@ -863,13 +863,12 @@ def m028_tool_instantiations(db):
     )
 
 
-@migration
-def m029_rehash_messages(db):
-    # Message hashes now identify attachments by the sha256 of their
-    # content rather than the filesystem path they were loaded from.
-    # Recompute every stored hash from resolved content, bottom-up, and
-    # repoint everything that references one. Hashing from content also
-    # merges messages that only ever differed by attachment path.
+def _rehash_messages(db):
+    # Recompute every stored message hash from resolved content,
+    # bottom-up, and repoint everything that references one. Run by any
+    # migration that changes what participates in the hash; hashing
+    # from content also merges messages whose old hashes only ever
+    # differed by details the hash no longer covers.
     if not db["messages"].exists() or not db["messages"].count:
         return
     # Runtime import - llm.logs imports this module at import time, but
@@ -974,6 +973,14 @@ def _load_json(value):
 
 
 @migration
+def m029_rehash_messages(db):
+    # Message hashes began identifying attachments by the sha256 of
+    # their content rather than the filesystem path they were loaded
+    # from.
+    _rehash_messages(db)
+
+
+@migration
 def m030_tool_instantiations_turn_scope(db):
     # tool_call_id is not globally unique - providers with per-request
     # counters can reuse the same id across independent turns - so the
@@ -1007,3 +1014,13 @@ def m031_turn_fragments_order_pk(db):
     # and repeats are preserved instead of collapsing to one row.
     if "order" not in db["turn_fragments"].pks:
         db["turn_fragments"].transform(pk=("turn_id", "fragment_id", "kind", "order"))
+
+
+@migration
+def m032_rehash_for_attachment_types(db):
+    # The canonical attachment form now includes the media type - the
+    # model sees it, so identical bytes sent as different types are
+    # different requests - and the content hash is recomputed from the
+    # actual bytes rather than a cached id. Both change hashes of
+    # attachment-bearing messages, so recompute the stored tree again.
+    _rehash_messages(db)
