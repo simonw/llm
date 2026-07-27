@@ -172,16 +172,18 @@ class LogStore:
             # everything below it is stored too.
             return hash
         with self.db.conn:
-            self.db["messages"].insert(
-                {
-                    "hash": hash,
-                    "parent_hash": parent_hash,
-                    "role": message.role,
-                    "provider_metadata": _dump(message.provider_metadata),
-                }
+            # Another writer can store the same hash between the check
+            # above and this insert. Insert-or-ignore settles who won,
+            # and only the winner writes the parts.
+            cursor = self.db.execute(
+                "insert or ignore into messages"
+                " (hash, parent_hash, role, provider_metadata)"
+                " values (?, ?, ?, ?)",
+                [hash, parent_hash, message.role, _dump(message.provider_metadata)],
             )
-            for position, part in enumerate(message.parts):
-                self._write_part(hash, position, part, fragment_map)
+            if cursor.rowcount:
+                for position, part in enumerate(message.parts):
+                    self._write_part(hash, position, part, fragment_map)
         return hash
 
     def _write_part(

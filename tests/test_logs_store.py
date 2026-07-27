@@ -853,6 +853,29 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestConcurrentWriters:
+    def test_losing_the_insert_race_neither_raises_nor_duplicates(
+        self, tmp_path, monkeypatch
+    ):
+        # Two connections to the same database. B checks for the hash
+        # while it is absent - simulated by disabling its fast-path
+        # check - then A wins the insert. B's own insert must quietly
+        # lose: no UNIQUE error, no second set of parts.
+        path = str(tmp_path / "logs.db")
+        store_a = LogStore(sqlite_utils.Database(path))
+        store_b = LogStore(sqlite_utils.Database(path))
+        message = llm.user("Hi")
+        tip = store_a.ensure_chain([message])
+        monkeypatch.setattr(
+            sqlite_utils.db.Table, "count_where", lambda *args, **kwargs: 0
+        )
+        assert store_b.ensure_chain([message]) == tip
+        monkeypatch.undo()
+        assert store_a.db["messages"].count == 1
+        assert store_a.db["parts"].count == 1
+        assert store_a.verify() == []
+
+
 class TestTurnInputBoundary:
     """A turn whose input ends [tool results, user prompt] owns both -
     the tool results must not vanish from display or the -T filter just
