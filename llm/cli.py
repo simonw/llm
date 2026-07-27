@@ -2145,10 +2145,19 @@ def logs_list(
                         elif attachment.get("content"):
                             desc += f"<{attachment['content_length']:,} bytes>"
                         attachments += f"\n    - {desc}"
+                    instance = tool_result.get("instance")
+                    instance_bit = ""
+                    if instance:
+                        arguments = instance["arguments"]
+                        instance_bit = " - instance `{}({})`".format(
+                            instance["name"],
+                            arguments if arguments and arguments != "{}" else "",
+                        )
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}{}{}".format(
+                        "- **{}**: `{}`{}<br>\n{}{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
+                            instance_bit,
                             _fenced_block(tool_result["output"]),
                             (
                                 "<br>\n    **Error**: {}\n".format(

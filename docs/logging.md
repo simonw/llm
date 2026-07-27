@@ -191,7 +191,7 @@ To switch to sorting with most recent first, add `-l/--latest`. This can be comb
 llm logs -q 'cheesecake' -l -n 3
 ```
 
-Search spans both generations of log tables: new conversations are matched through the `turn_search` index over the content-addressed tables, and history recorded by older versions of LLM is matched through its original `responses_fts` index, with the two result sets merged. The relevance scores come from two separate indexes, so the interleaving between very old and new results is approximate.
+Search covers both new conversations and history recorded by older versions of LLM.
 
 (logging-filter-id)=
 
@@ -335,13 +335,14 @@ for text in REPLIES:
     response.text()
     response.log_to_db(db)
 
-# ULID identifiers and timestamps differ on every run, so they are
-# replaced with placeholders. The hashes are deterministic.
+# ULID identifiers differ on every run, so they are replaced with
+# fixed example ULIDs. The hashes are deterministic.
+example_ulids = ["01kf2rw8jj3nfd5t7w9y1a3c5e", "01kf2rw8jkq7h9k2m4n6p8r0t2"]
 aliases = {}
 for i, row in enumerate(db.query("select id from turns order by id")):
-    aliases[row["id"]] = "$TURN_{}_ID".format(i + 1)
+    aliases[row["id"]] = example_ulids[i]
 thread = next(db.query("select * from threads"))
-aliases[thread["id"]] = "$THREAD_ID"
+aliases[thread["id"]] = "01kf2rw8jhv1x9c2m4p6q8s0tv"
 
 lines = ["messages and their parts:"]
 for row in db.query("select * from messages"):
@@ -372,7 +373,7 @@ for row in db.query("select * from turns order by id"):
 lines.append("")
 lines.append("thread:")
 lines.append("")
-lines.append("thread $THREAD_ID")
+lines.append("thread {}".format(aliases[thread["id"]]))
 lines.append("  name: {}".format(thread["name"]))
 lines.append("  tip_message_hash: {}".format(thread["tip_message_hash"]))
 cog.out("```\n{}\n```\n".format("\n".join(lines)))
@@ -398,21 +399,21 @@ assistant b2:a30a236e0d1b717c592e826d06e3c9d2
 
 turns:
 
-turn $TURN_1_ID
-  thread_id: $THREAD_ID
+turn 01kf2rw8jj3nfd5t7w9y1a3c5e
+  thread_id: 01kf2rw8jhv1x9c2m4p6q8s0tv
   parent_message_hash: b2:d6b0cd4e7a65ea90423c50fadb3f5704
   tip_message_hash:    b2:0f2c02ad982050b623b7e034199c8c61
   model: scripted
 
-turn $TURN_2_ID
-  thread_id: $THREAD_ID
+turn 01kf2rw8jkq7h9k2m4n6p8r0t2
+  thread_id: 01kf2rw8jhv1x9c2m4p6q8s0tv
   parent_message_hash: b2:c785dd6c77540150c2647f406cacc76f
   tip_message_hash:    b2:a30a236e0d1b717c592e826d06e3c9d2
   model: scripted
 
 thread:
 
-thread $THREAD_ID
+thread 01kf2rw8jhv1x9c2m4p6q8s0tv
   name: Suggest a name for a pet pelican
   tip_message_hash: b2:a30a236e0d1b717c592e826d06e3c9d2
 ```
@@ -424,7 +425,7 @@ Things to notice:
 - The `part N:` lines show each part's storage columns. A part whose text is pure literal keeps it in the `text` column - raw, unescaped and never parsed, so text that happens to look like JSON is safe - with a `null` payload. The `payload` column holds any remaining structure as JSON: fragment references, tool call fields, provider metadata. The part's type lives only in the `type` column.
 - Each turn brackets one model call. Its `parent_message_hash` is the tip of the chain that was sent to the model - the last input message, usually that turn's user prompt - and its `tip_message_hash` is the chain tip after the model's reply was appended. The prompt and response that `llm logs` displays are derived by splitting the chain at the parent, rather than being stored a second time.
 - The thread's id is the conversation id, its name is derived from the first prompt and its `tip_message_hash` follows the head of the conversation as new turns are logged.
-- The ULID identifiers - sortable random identifiers issued in time order, the same id space older versions used for response ids - and the timestamp columns have been replaced with placeholders because they change on every run. The hashes have not: they depend only on the message content and its position in the chain, so replaying this conversation produces these exact four hashes.
+- Turn and thread ids are ULIDs: sortable identifiers issued in time order. The ids shown here are illustrative, since fresh ones are generated on every run. The hashes are not - they depend only on the message content and its position in the chain, so replaying this conversation produces these exact four hashes.
 
 (logging-message-store-hashes)=
 
@@ -436,7 +437,7 @@ A message's hash is calculated like this:
 2. Serialize that object to canonical JSON: keys sorted, compact `,` and `:` separators with no extra whitespace, non-ASCII characters left unescaped.
 3. Hash the UTF-8 encoding of that string with [BLAKE2b](https://en.wikipedia.org/wiki/BLAKE_(hash_function)) using a 16 byte digest, and prefix the hex digest with `b2:`.
 
-The `b2:` prefix tags the hash with the algorithm that produced it. If a future version of LLM ever changes the digest or the canonical form, the change will be detectable instead of silently splitting the stored data into two incompatible halves.
+The `b2:` prefix names the algorithm that produced the hash, so any future change to it will be detectable.
 
 Two design decisions matter here:
 
@@ -536,14 +537,14 @@ Attachments work the same way: the binary content lives in the `attachments` tab
 The full schema for these tables appears in {ref}`the SQL schema section <logging-sql-schema>` below.
 
 - `messages` - one row per unique message. `hash` is the content address described above, `parent_hash` links to the previous message in the chain and `role` is `system`, `user` or `assistant`. `provider_metadata` holds any provider-specific data carried by the message; it participates in the hash.
-- `parts` - the content of each message, ordered by `position`. `text` holds the part's literal text when it borrows no fragments - raw and never parsed, so `select text from parts` reads as prose. `payload` holds whatever structure remains as JSON (fragment references, tool call fields, provider metadata), in the order the model produced it, or NULL when the text column carries the whole part. `type` and `tool_name` are their own columns for direct filtering; the type never appears inside the payload.
+- `parts` - the content of each message, ordered by `position`. When a part's text is stored inline in full it lives in the `text` column - raw and never parsed, so `select text from parts` reads as prose. Text that references fragments is stored in `payload` as `text_ref` instead. `payload` holds any remaining structure as JSON (fragment references, tool call fields, provider metadata), or NULL when the text column carries the whole part. `type` and `tool_name` are their own columns for direct filtering; the type never appears inside the payload.
 - `part_attachments` and `part_fragments` - junction tables recording which rows in `attachments` and `fragments` a part's payload references, in order.
 - `threads` - one row per conversation. `id` is the conversation id, `tip_message_hash` points at the current head of the conversation and `forked_from` records the thread a fork came from.
 - `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
 - `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
 - `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
-- `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call: the toolbox name, its plugin and its constructor arguments, keyed by `tool_call_id`. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it, and is what lets `llm logs --json` show that a `SQLite_query` call ran against `SQLite("mydb.db")`.
+- `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call: the toolbox name, its plugin and its constructor arguments, keyed by `tool_call_id`. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it, and is what lets `llm logs` show that a `SQLite_query` call ran against `SQLite("mydb.db")`.
 
 (logging-message-store-queries)=
 
@@ -637,7 +638,7 @@ import llm
 import sqlite_utils
 
 db = sqlite_utils.Database("logs.db")
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.5")
 response = model.prompt("A short pelican fact")
 print(response.text())
 response.log_to_db(db)
