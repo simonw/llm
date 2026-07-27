@@ -134,9 +134,31 @@ class Collection:
         from llm import encode
 
         content_hash = self.content_hash(value)
-        if self.db["embeddings"].count_where(
-            "content_hash = ? and collection_id = ?", [content_hash, self.id]
-        ):
+        existing = list(
+            self.db["embeddings"].rows_where(
+                "content_hash = ? and collection_id = ?",
+                [content_hash, self.id],
+                limit=1,
+            )
+        )
+        if existing:
+            if store:
+                row = existing[0]
+                needs_update = (isinstance(value, str) and row.get("content") is None) or (
+                    isinstance(value, bytes) and row.get("content_blob") is None
+                )
+                if needs_update:
+                    self.db.execute(
+                        "update embeddings set content = ?, content_blob = ?, updated = ?"
+                        " where collection_id = ? and content_hash = ?",
+                        [
+                            value if isinstance(value, str) else None,
+                            value if isinstance(value, bytes) else None,
+                            int(time.time()),
+                            self.id,
+                            content_hash,
+                        ],
+                    )
             return
         embedding = self.model().embed(value)
         cast(Table, self.db["embeddings"]).insert(
@@ -199,18 +221,40 @@ class Collection:
             # Calculate hashes first
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
             # Any of those hashes already exist?
-            existing_ids = [
-                row["id"]
+            existing_rows = {
+                row["id"]: row
                 for row in self.db.query(
                     """
-                    select id from embeddings
+                    select id, content, content_blob from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
                     [collection_id]
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
-            ]
+            }
+            existing_ids = set(existing_rows.keys())
             filtered_batch = [item for item in batch if item[0] not in existing_ids]
+            # When store=True, update content for existing rows that are missing it
+            if store:
+                for id_, value, _ in batch:
+                    if id_ not in existing_rows:
+                        continue
+                    row = existing_rows[id_]
+                    needs_update = (
+                        isinstance(value, str) and row.get("content") is None
+                    ) or (isinstance(value, bytes) and row.get("content_blob") is None)
+                    if needs_update:
+                        self.db.execute(
+                            "update embeddings set content = ?, content_blob = ?,"
+                            " updated = ? where collection_id = ? and id = ?",
+                            [
+                                value if isinstance(value, str) else None,
+                                value if isinstance(value, bytes) else None,
+                                int(time.time()),
+                                collection_id,
+                                id_,
+                            ],
+                        )
             embeddings = list(
                 self.model().embed_multi(item[1] for item in filtered_batch)
             )
