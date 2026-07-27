@@ -352,7 +352,14 @@ for row in db.query("select * from messages"):
         "select * from parts where message_hash = ? order by position",
         [row["hash"]],
     ):
-        lines.append("  part {}: {}".format(part["position"], part["payload"]))
+        lines.append(
+            "  part {}: type={} text={!r} payload={}".format(
+                part["position"],
+                part["type"],
+                part["text"],
+                part["payload"] or "null",
+            )
+        )
 lines.append("")
 lines.append("turns:")
 for row in db.query("select * from turns order by id"):
@@ -375,19 +382,19 @@ messages and their parts:
 
 user b2:d6b0cd4e7a65ea90423c50fadb3f5704
   parent: null
-  part 0: {"type": "text", "text": "Suggest a name for a pet pelican"}
+  part 0: type=text text='Suggest a name for a pet pelican' payload=null
 
 assistant b2:0f2c02ad982050b623b7e034199c8c61
   parent: b2:d6b0cd4e7a65ea90423c50fadb3f5704
-  part 0: {"type": "text", "text": "How about Percy? Pelicans suit a dignified name."}
+  part 0: type=text text='How about Percy? Pelicans suit a dignified name.' payload=null
 
 user b2:c785dd6c77540150c2647f406cacc76f
   parent: b2:0f2c02ad982050b623b7e034199c8c61
-  part 0: {"type": "text", "text": "Now one for a pet walrus"}
+  part 0: type=text text='Now one for a pet walrus' payload=null
 
 assistant b2:a30a236e0d1b717c592e826d06e3c9d2
   parent: b2:c785dd6c77540150c2647f406cacc76f
-  part 0: {"type": "text", "text": "Wallace. It pairs nicely with Percy."}
+  part 0: type=text text='Wallace. It pairs nicely with Percy.' payload=null
 
 turns:
 
@@ -414,7 +421,7 @@ thread $THREAD_ID
 Things to notice:
 
 - The four messages form a chain: the first has a `null` parent and each subsequent message names the hash of the one before it.
-- The `part N:` lines show each part's `payload` column verbatim - the part serialized as JSON.
+- The `part N:` lines show each part's storage columns. A part whose text is pure literal keeps it in the `text` column - raw, unescaped and never parsed, so text that happens to look like JSON is safe - with a `null` payload. The `payload` column holds any remaining structure as JSON: fragment references, tool call fields, provider metadata. The part's type lives only in the `type` column.
 - Each turn brackets one model call. Its `parent_message_hash` is the tip of the chain that was sent to the model - the last input message, usually that turn's user prompt - and its `tip_message_hash` is the chain tip after the model's reply was appended. The prompt and response that `llm logs` displays are derived by splitting the chain at the parent, rather than being stored a second time.
 - The thread's id is the conversation id, its name is derived from the first prompt and its `tip_message_hash` follows the head of the conversation as new turns are logged.
 - The ULID identifiers - sortable random identifiers issued in time order, the same id space older versions used for response ids - and the timestamp columns have been replaced with placeholders because they change on every run. The hashes have not: they depend only on the message content and its position in the chain, so replaying this conversation produces these exact four hashes.
@@ -512,10 +519,10 @@ Shared rows cut both ways. Deleting a conversation is not the same as deleting i
 
 ### Storage by reference
 
-The hash of a message covers its resolved content, but storage is by reference. A text part whose content borrows from a fragment does not store a copy of that fragment. Instead of a `text` key its payload holds a `text_ref` list of fragment references and literal segments:
+The hash of a message covers its resolved content, but storage is by reference. A text part whose content borrows from a fragment does not store a copy of that fragment. Instead of a filled `text` column its payload holds a `text_ref` list of fragment references and literal segments:
 
 ```json
-{"type": "text", "text_ref": [{"fragment": 1}, {"literal": "\nquestion about it"}]}
+{"text_ref": [{"fragment": 1}, {"literal": "\nquestion about it"}]}
 ```
 
 Here fragment `1` is an id in the existing `fragments` table. Reading the part concatenates the fragment content and the literal back together, reproducing the exact text that was hashed. Ask a hundred questions about a novel and the novel is stored once.
@@ -529,7 +536,7 @@ Attachments work the same way: the binary content lives in the `attachments` tab
 The full schema for these tables appears in {ref}`the SQL schema section <logging-sql-schema>` below.
 
 - `messages` - one row per unique message. `hash` is the content address described above, `parent_hash` links to the previous message in the chain and `role` is `system`, `user` or `assistant`. `provider_metadata` holds any provider-specific data carried by the message; it participates in the hash.
-- `parts` - the content of each message, ordered by `position`. `payload` is the part serialized as JSON - stored in the order the model produced it, not the canonical key-sorted form used for hashing. `type` and `tool_name` are copied out of the payload so they can be filtered on directly.
+- `parts` - the content of each message, ordered by `position`. `text` holds the part's literal text when it borrows no fragments - raw and never parsed, so `select text from parts` reads as prose. `payload` holds whatever structure remains as JSON (fragment references, tool call fields, provider metadata), in the order the model produced it, or NULL when the text column carries the whole part. `type` and `tool_name` are their own columns for direct filtering; the type never appears inside the payload.
 - `part_attachments` and `part_fragments` - junction tables recording which rows in `attachments` and `fragments` a part's payload references, in order.
 - `threads` - one row per conversation. `id` is the conversation id, `tip_message_hash` points at the current head of the conversation and `forked_from` records the thread a fork came from.
 - `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
@@ -572,7 +579,7 @@ select
   substr('                                        ', 1, walk.indent * 4)
     || messages.role || ': '
     || coalesce(
-         json_extract(parts.payload, '$.text'),
+         parts.text,
          (
            select group_concat(
              coalesce(
@@ -803,6 +810,7 @@ CREATE TABLE "parts" (
   "position" INTEGER,
   "type" TEXT,
   "tool_name" TEXT,
+  "text" TEXT,
   "payload" TEXT
 );
 CREATE TABLE "part_attachments" (

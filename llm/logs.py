@@ -169,6 +169,9 @@ class LogStore:
         fragment_map: dict[str, int],
     ) -> None:
         payload = part.to_dict()
+        # The type key is redundant with the type column; readers put it
+        # back from there.
+        part_type = payload.pop("type")
         attachments = _attachments_of(part)
 
         # Large content out of the payload and into the tables that
@@ -179,9 +182,16 @@ class LogStore:
             attachment_ids = [
                 ensure_attachment(self.db, attachment) for attachment in attachments
             ]
-            _encode_attachment_refs(payload, attachment_ids)
+            _encode_attachment_refs(payload, attachment_ids, part_type)
         else:
             attachment_ids = []
+
+        # Pure literal text lives in its own column - raw, unescaped,
+        # never parsed - so prose reads as prose in SQL. Text that
+        # borrows fragments stays structured in the payload as text_ref.
+        text = None
+        if part_type in ("text", "reasoning") and "text" in payload:
+            text = payload.pop("text")
 
         part_id = (
             self.db["parts"]
@@ -189,13 +199,15 @@ class LogStore:
                 {
                     "message_hash": message_hash_,
                     "position": position,
-                    "type": payload["type"],
+                    "type": part_type,
                     "tool_name": payload.get("name"),
+                    "text": text,
                     # Plain dumps, not canonical_json: sorting keys is
                     # for hashing. Storage keeps the order the model
                     # produced, so tool call arguments read back as
-                    # they were written.
-                    "payload": json.dumps(payload),
+                    # they were written. NULL when the text column
+                    # carries the whole part.
+                    "payload": json.dumps(payload) if payload else None,
                 }
             )
             .last_pk
@@ -259,7 +271,16 @@ class LogStore:
                 message_hashes,
             )
         )
-        payloads = [json.loads(row["payload"]) for row in part_rows]
+        # Rebuild each part's full dict from its columns: type from the
+        # type column, literal text from the text column, everything
+        # else from the JSON payload.
+        payloads: list[Any] = []
+        for row in part_rows:
+            payload = json.loads(row["payload"]) if row["payload"] else {}
+            payload["type"] = row["type"]
+            if row["text"] is not None:
+                payload["text"] = row["text"]
+            payloads.append(payload)
         # Resolve the references put in on the way in. Both lookups are
         # batched across the whole chain rather than done per part.
         fragments = self._load_fragments(payloads)
@@ -614,11 +635,13 @@ def _fragment_ids(payload: dict) -> list[int]:
     ]
 
 
-def _encode_attachment_refs(payload: dict, attachment_ids: list[str]) -> None:
+def _encode_attachment_refs(
+    payload: dict, attachment_ids: list[str], part_type: str
+) -> None:
     "Replace inline attachment dicts with their content-addressed ids."
-    if payload["type"] == "attachment":
+    if part_type == "attachment":
         payload["attachment"] = {"id": attachment_ids[0]}
-    elif payload["type"] == "tool_result":
+    elif part_type == "tool_result":
         payload["attachments"] = [{"id": id} for id in attachment_ids]
 
 

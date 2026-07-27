@@ -786,6 +786,63 @@ class TestLibraryLogging:
 # ---- storage by reference --------------------------------------------
 
 
+class TestPartStorageFormat:
+    """Literal text is stored raw in its own column - never escaped,
+    never parsed - and the JSON payload holds only structure, with the
+    type key left to the type column."""
+
+    def test_plain_text_stores_raw_text_and_no_payload(self, store):
+        text = '{"looks": "like json", "but": "is text"}'
+        store.ensure_chain([llm.user(text)])
+        row = next(iter(store.db["parts"].rows))
+        assert row["type"] == "text"
+        assert row["text"] == text
+        assert row["payload"] is None
+
+    def test_redacted_reasoning_splits_text_from_structure(self, store):
+        message = Message(
+            role="assistant",
+            parts=[ReasoningPart(text="thinking", redacted=True)],
+        )
+        tip = store.ensure_chain([message])
+        row = next(iter(store.db["parts"].rows))
+        assert row["text"] == "thinking"
+        assert json.loads(row["payload"]) == {"redacted": True}
+        assert store.load_chain(tip) == [message]
+
+    def test_no_stored_payload_contains_a_type_key(self, store):
+        messages = [
+            llm.user("hi"),
+            Message(
+                role="assistant",
+                parts=[
+                    ReasoningPart(text="thinking", redacted=True),
+                    ToolCallPart(name="t", arguments={"a": 1}, tool_call_id="c1"),
+                ],
+            ),
+            Message(
+                role="tool",
+                parts=[ToolResultPart(name="t", output="ok", tool_call_id="c1")],
+            ),
+        ]
+        tip = store.ensure_chain(messages)
+        for row in store.db["parts"].rows:
+            if row["payload"] is not None:
+                assert "type" not in json.loads(row["payload"])
+        assert store.load_chain(tip) == messages
+        assert store.verify() == []
+
+    def test_fragment_referencing_text_stays_structured(self, store):
+        novel = "CALL ME ISHMAEL. " * 20
+        ensure_fragment(store.db, novel)
+        store.ensure_chain([llm.user(f"{novel}\nwho?")], fragments=[novel])
+        row = next(iter(store.db["parts"].rows))
+        assert row["text"] is None
+        assert json.loads(row["payload"]) == {
+            "text_ref": [{"fragment": 1}, {"literal": "\nwho?"}]
+        }
+
+
 class TestFragmentReferences:
     """The point of fragments is that a novel is stored once and pointed
     at from every prompt about it, so the text must not be expanded into
@@ -914,12 +971,10 @@ class TestVerify:
         )
         assert store.verify() == []
 
-    def test_a_corrupted_payload_is_caught(self, store):
+    def test_a_corrupted_part_is_caught(self, store):
         tip = store.ensure_chain([llm.user("Hi")])
         with store.db.conn:
-            store.db.execute(
-                "update parts set payload = ?", ['{"type":"text","text":"tampered"}']
-            )
+            store.db.execute("update parts set text = 'tampered'")
         assert store.verify() == [tip]
 
     def test_a_missing_fragment_is_caught(self, store):

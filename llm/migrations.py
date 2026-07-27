@@ -1,4 +1,5 @@
 import datetime
+import json
 from collections.abc import Callable
 
 MIGRATIONS: list[Callable] = []
@@ -605,10 +606,14 @@ def m024_message_store_payloads(db):
             "type": str,
             # Tool name for tool_call and tool_result parts, else NULL.
             "tool_name": str,
-            # Part.to_dict(), with large content replaced by references.
-            # Authoritative: reading is Part.from_dict(resolved payload).
-            # type and tool_name above are write-time projections for
-            # querying; the read path ignores them.
+            # The part's literal text, for text and reasoning parts whose
+            # text borrows no fragments. Raw and unescaped - this column
+            # is never parsed as anything.
+            "text": str,
+            # The part's remaining structure as JSON, with large content
+            # replaced by references (fragment ids for text, attachment
+            # ids for binary) and the type key left to the column above.
+            # NULL when the text column carries everything.
             "payload": str,
         },
         pk="id",
@@ -719,11 +724,11 @@ def m024_message_store_payloads(db):
     db["turn_fragments"].create_index(["fragment_id"])
 
 
-# Literal text of one parts row: plain text payloads as-is, text_ref
-# payloads contribute only their literal segments - fragment content is
-# deliberately not searchable.
+# Literal text of one parts row: the text column when the part's text
+# is pure literal, otherwise the literal segments of a text_ref payload
+# - fragment content is deliberately not searchable.
 TURN_SEARCH_LITERAL = """coalesce(
-  json_extract(parts.payload, '$.text'),
+  parts.text,
   (select group_concat(json_extract(je.value, '$.literal'), '')
      from json_each(parts.payload, '$.text_ref') je
     where json_extract(je.value, '$.literal') is not null)
@@ -801,4 +806,31 @@ def m025_turn_search(db):
     )
     db["turn_search"].create_index(["turn_id"], unique=True)
     db["turn_search"].enable_fts(["prompt", "response"], create_triggers=True)
+    # The backfill SQL reads parts.text, which m027 introduces - a
+    # database migrating from m024 straight through needs the column to
+    # exist before this runs. m027 skips the add when it is present.
+    if "text" not in db["parts"].columns_dict:
+        db["parts"].add_column("text", str)
     db.execute(TURN_SEARCH_INSERT_SQL.format(turn_filter=""))
+
+
+@migration
+def m027_parts_text_column(db):
+    # Literal text moves out of the JSON payload into its own column -
+    # raw, never escaped, never parsed - and the redundant "type" key
+    # (already a column) leaves every payload. What structure remains
+    # is stored as JSON, or NULL when the text column carries the whole
+    # part. Storage encoding only: hashes are computed over resolved
+    # message content before anything is written, so no hash changes.
+    if "text" not in db["parts"].columns_dict:
+        db["parts"].add_column("text", str)
+    for row in list(db.query("select id, type, payload from parts")):
+        payload = json.loads(row["payload"]) if row["payload"] else {}
+        payload.pop("type", None)
+        text = None
+        if row["type"] in ("text", "reasoning") and "text" in payload:
+            text = payload.pop("text")
+        db["parts"].update(
+            row["id"],
+            {"text": text, "payload": json.dumps(payload) if payload else None},
+        )
