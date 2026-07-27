@@ -674,6 +674,7 @@ for table in (
     "tool_results_attachments",
     "messages", "parts", "part_attachments", "part_fragments",
     "threads", "turns", "turn_tools", "turn_fragments",
+    "turn_search", "turn_search_fts", "tool_instantiations",
 ):
     schema = db[table].schema
     cog.out(format(cleanup_sql(schema)))
@@ -865,8 +866,29 @@ CREATE TABLE "turn_fragments" (
   "kind" TEXT,
   PRIMARY KEY ("turn_id",
   "fragment_id",
-  "kind")
+  "kind",
+  "order")
+);
+CREATE TABLE "turn_search" (
+  "id" INTEGER PRIMARY KEY,
+  "turn_id" TEXT REFERENCES "turns"("id"),
+  "prompt" TEXT,
+  "response" TEXT
+);
+CREATE VIRTUAL TABLE "turn_search_fts" USING FTS5 (
+  "prompt",
+  "response",
+  content="turn_search"
+);
+CREATE TABLE "tool_instantiations" (
+  "tool_call_id" TEXT,
+  "name" TEXT,
+  "plugin" TEXT,
+  "arguments" TEXT,
+  "turn_id" TEXT,
+  PRIMARY KEY ("turn_id",
+  "tool_call_id")
 );
 ```
 <!-- [[[end]]] -->
-`responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table.
+`responses_fts` configures [SQLite full-text search](https://www.sqlite.org/fts5.html) against the `prompt` and `response` columns in the `responses` table. `turn_search_fts` does the same for the `turn_search` table, which holds the searchable text of each turn in the content-addressed tables - together these are what {ref}`llm logs -q <logging-search>` queries.

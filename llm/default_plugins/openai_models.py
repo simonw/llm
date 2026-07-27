@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 import click
 import httpx
