@@ -7,6 +7,7 @@ import re
 import textwrap
 import threading
 import time
+from contextlib import contextmanager
 from typing import Any, Final
 
 import click
@@ -484,15 +485,10 @@ def ensure_fragment(db, content):
     source = None
     if isinstance(content, Fragment):
         source = content.source
-    with db.conn:
-        db.execute(sql, {"hash": hash_id, "content": content, "source": source})
-        return next(
-            iter(
-                db.query(
-                    "select id from fragments where hash = :hash", {"hash": hash_id}
-                )
-            )
-        )["id"]
+    db.execute(sql, {"hash": hash_id, "content": content, "source": source})
+    return db.execute(
+        "select id from fragments where hash = :hash", {"hash": hash_id}
+    ).fetchone()[0]
 
 
 def ensure_tool(db, tool):
@@ -501,24 +497,21 @@ def ensure_tool(db, tool):
     values (:hash, :name, :description, :input_schema, :plugin)
     on conflict(hash) do nothing
     """
-    with db.conn:
-        db.execute(
-            sql,
-            {
-                "hash": tool.hash(),
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": json.dumps(tool.input_schema),
-                "plugin": tool.plugin,
-            },
-        )
-        return next(
-            iter(
-                db.query(
-                    "select id from tools where hash = :hash", {"hash": tool.hash()}
-                )
-            )
-        )["id"]
+    # No `with db.conn:` here - its exit commit would also commit any
+    # open outer transaction, such as the one wrapping a turn write.
+    db.execute(
+        sql,
+        {
+            "hash": tool.hash(),
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": json.dumps(tool.input_schema),
+            "plugin": tool.plugin,
+        },
+    )
+    return db.execute(
+        "select id from tools where hash = :hash", {"hash": tool.hash()}
+    ).fetchone()[0]
 
 
 def maybe_fenced_code(content: str) -> str:
@@ -740,3 +733,49 @@ def _fresh(ms: int) -> bytes:
     timestamp = int.to_bytes(ms, TIMESTAMP_LEN, "big")
     randomness = os.urandom(RANDOMNESS_LEN)
     return timestamp + randomness
+
+
+@contextmanager
+def sqlite_transaction(db):
+    """A real transaction over a sqlite_utils Database.
+
+    ``with db.conn:`` is not one - sqlite-utils effectively runs in
+    autocommit, each helper call commits itself and the context manager
+    has nothing left to roll back.
+
+    sqlite-utils 4 provides Database.atomic() with the semantics needed
+    here; the supported floor includes sqlite-utils 3.x, which does
+    not, so this mirrors it there. The raw connection is used on
+    purpose: routing BEGIN through db.execute trips sqlite-utils 4's
+    transaction bookkeeping, which commits it immediately.
+    """
+    if hasattr(db, "atomic"):
+        with db.atomic():
+            yield
+        return
+    conn = db.conn
+    if conn.in_transaction:
+        # Nested use: a savepoint, so an inner failure rolls back only
+        # the inner block, matching Database.atomic().
+        savepoint = f"llm_txn_{os.urandom(8).hex()}"
+        conn.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    else:
+        conn.execute("BEGIN")
+        try:
+            yield
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+        else:
+            if conn.in_transaction:
+                conn.execute("COMMIT")

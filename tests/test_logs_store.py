@@ -7,6 +7,7 @@ history from a stateless client both write only what is new.
 """
 
 import json
+import sqlite3
 
 import pytest
 import sqlite_utils
@@ -892,6 +893,53 @@ class TestRepeatedFragments:
         )
         assert [row["order"] for row in rows] == [0, 1]
         assert rows[0]["fragment_id"] == rows[1]["fragment_id"]
+
+
+class TestAtomicWrites:
+    """sqlite-utils runs in autocommit, so `with db.conn` was never a
+    transaction - a crash mid-write could strand a message without its
+    parts, and the dedup check would then skip it forever."""
+
+    def test_failed_part_write_rolls_back_the_message(self, store, monkeypatch):
+        message = Message(role="user", parts=[TextPart(text="a"), TextPart(text="b")])
+        original = LogStore._write_part
+
+        def flaky(self, hash_, position, part, fragment_map):
+            if position == 1:
+                raise RuntimeError("disk full")
+            return original(self, hash_, position, part, fragment_map)
+
+        monkeypatch.setattr(LogStore, "_write_part", flaky)
+        with pytest.raises(RuntimeError):
+            store.ensure_chain([message])
+        monkeypatch.undo()
+        assert store.db["messages"].count == 0
+        assert store.db["parts"].count == 0
+        # A retry can now write the whole message
+        tip = store.ensure_chain([message])
+        assert store.load_chain(tip) == [message]
+        assert store.verify() == []
+
+    def test_failed_turn_write_rolls_back_the_whole_turn(
+        self, store, mock_model, monkeypatch
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        # Fail at the search refresh, one of the last steps of log()
+        monkeypatch.setattr(
+            "llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql {turn_filter}"
+        )
+        with pytest.raises(sqlite3.OperationalError):
+            store.log(response)
+        monkeypatch.undo()
+        assert store.db["turns"].count == 0
+        assert store.db["messages"].count == 0
+        assert store.db["threads"].count == 0
+        # And the retry writes everything
+        store.log(response)
+        assert store.db["turns"].count == 1
+        assert store.verify() == []
 
 
 class TestConcurrentWriters:

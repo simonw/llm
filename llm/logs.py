@@ -32,7 +32,13 @@ from .parts import (
     ToolCallPart,
     ToolResultPart,
 )
-from .utils import ensure_fragment, ensure_tool, make_schema_id, monotonic_ulid
+from .utils import (
+    ensure_fragment,
+    ensure_tool,
+    make_schema_id,
+    monotonic_ulid,
+    sqlite_transaction,
+)
 
 __all__ = [
     "HASH_PREFIX",
@@ -171,7 +177,7 @@ class LogStore:
             # Already stored - and because the hash covers the parent,
             # everything below it is stored too.
             return hash
-        with self.db.conn:
+        with sqlite_transaction(self.db):
             # Another writer can store the same hash between the check
             # above and this insert. Insert-or-ignore settles who won,
             # and only the winner writes the parts.
@@ -424,6 +430,10 @@ class LogStore:
         timings, usage, which model answered - goes on the turn, because
         message rows are shared and so cannot carry provenance.
         """
+        with sqlite_transaction(self.db):
+            return self._log_in_transaction(response, thread_id)
+
+    def _log_in_transaction(self, response, thread_id: str | None) -> str:
         if thread_id is None:
             conversation = getattr(response, "conversation", None)
             # A response logged outside any conversation still gets a

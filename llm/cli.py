@@ -86,6 +86,7 @@ from .utils import (
     resolve_schema_input,
     schema_dsl,
     schema_summary,
+    sqlite_transaction,
     token_usage_string,
     truncate_string,
 )
@@ -2942,9 +2943,9 @@ def fragments_set(alias, fragment):
     on conflict(alias) do update set
         fragment_id = excluded.fragment_id;
     """
-    with db.conn:
+    with sqlite_transaction(db):
         fragment_id = ensure_fragment(db, resolved)
-        db.conn.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
+        db.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
 
 
 @fragments.command(name="show")
@@ -2978,10 +2979,7 @@ def fragments_remove(alias):
     """
     db = sqlite_utils.Database(logs_db_path())
     migrate(db)
-    with db.conn:
-        db.conn.execute(
-            "delete from fragment_aliases where alias = :alias", {"alias": alias}
-        )
+    db.execute("delete from fragment_aliases where alias = :alias", {"alias": alias})
 
 
 @fragments.command(name="loaders")
