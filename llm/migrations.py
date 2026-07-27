@@ -991,15 +991,21 @@ def m030_tool_instantiations_turn_scope(db):
         return
     db["tool_instantiations"].add_column("turn_id", str)
     with sqlite_transaction(db):
+        # The tool result sits either in the turn's parent message,
+        # or - when a fresh user prompt followed the results - in the
+        # parent's own parent, one step up the same input segment.
         db.execute("""
             update tool_instantiations set turn_id = (
                 select turns.id from turns
-                join messages on messages.hash = turns.parent_message_hash
-                    or messages.parent_hash = turns.parent_message_hash
-                join parts on parts.message_hash = messages.hash
-                where parts.type = 'tool_result'
+                join parts on parts.type = 'tool_result'
                 and json_extract(parts.payload, '$.tool_call_id')
                     = tool_instantiations.tool_call_id
+                where parts.message_hash = turns.parent_message_hash
+                or parts.message_hash = (
+                    select messages.parent_hash from messages
+                    where messages.hash = turns.parent_message_hash
+                    and messages.role = 'user'
+                )
                 limit 1
             )
             """)

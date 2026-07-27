@@ -993,6 +993,42 @@ class TestTurnInputBoundary:
         assert len(merged_log_rows(store, tool_names=["t"])) == 1
         assert merged_log_rows(store, tool_names=["other"]) == []
 
+    def test_m030_backfill_finds_results_behind_a_user_prompt(self, store, mock_model):
+        # A turn whose input ends [tool result, user prompt] keeps its
+        # provenance row through the m030 backfill - the result lives
+        # in the parent's parent, and a wrong-direction traversal used
+        # to delete these rows as unmatched.
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next question",
+            messages=[llm.user("orig"), llm.assistant("first answer")],
+            tool_results=[
+                llm.ToolResult(
+                    name="Notes_read",
+                    output="RESULT",
+                    tool_call_id="c9",
+                    instance=Notes("/tmp/n"),
+                )
+            ],
+        )
+        response.text()
+        response.log_to_db(store.db)
+        db = store.db
+        turn_id = next(iter(db["turns"].rows))["id"]
+        # Rewind the table to its pre-m030 shape
+        db["tool_instantiations"].transform(pk="tool_call_id", drop={"turn_id"})
+        db.execute(
+            "delete from _llm_migrations"
+            " where name = 'm030_tool_instantiations_turn_scope'"
+        )
+        migrate(db)
+        rows = list(db["tool_instantiations"].rows)
+        assert [row["turn_id"] for row in rows] == [turn_id]
+
 
 class TestMigrationRetrySafety:
     def test_m027_retry_does_not_erase_migrated_text(self, store, mock_model):
