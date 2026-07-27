@@ -986,6 +986,9 @@ class TestTurnInputBoundary:
         assert row["prompt"] == "next question"
         extras = log_row_extras(store, row)
         assert [result["output"] for result in extras["tool_results"]] == ["RESULT"]
+        # The parts row id resolves even though the result sits one
+        # message above the parent.
+        assert extras["tool_results"][0]["id"] is not None
 
     def test_tool_filters_match(self, store, mock_model):
         self._log_turn_with_results_and_prompt(store, mock_model)

@@ -886,10 +886,35 @@ class _LogRowBuilder:
                 # Internal, stripped before rendering - the enrichment
                 # needs them to find the parts rows behind these parts.
                 "_parent_message_hash": row["parent_message_hash"],
+                "_input_message_hashes": self._input_segment_hashes(
+                    row["parent_message_hash"]
+                ),
                 "_tip_message_hash": row["tip_message_hash"],
             }
         )
         return built
+
+    def _input_segment_hashes(self, parent_hash: str | None) -> list[str]:
+        """Hashes of the turn's own input messages - the same trailing
+        user/tool run build() derives, walked directly in the table."""
+        hashes: list[str] = []
+        hash_ = parent_hash
+        while hash_:
+            message_row = next(
+                iter(
+                    self.store.db.query(
+                        "select parent_hash, role from messages where hash = ?",
+                        [hash_],
+                    )
+                ),
+                None,
+            )
+            if message_row is None or message_row["role"] not in ("user", "tool"):
+                break
+            hashes.append(hash_)
+            hash_ = message_row["parent_hash"]
+        hashes.reverse()
+        return hashes
 
 
 def log_rows(
@@ -1017,8 +1042,8 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
     # parts.id and tools.id stand in for the row ids the old
     # tool_calls / tool_results tables exposed, so the JSON shape of
     # `llm logs` is unchanged.
-    call_ids = _part_ids(store, row.get("_tip_message_hash"), "tool_call")
-    result_ids = _part_ids(store, row.get("_parent_message_hash"), "tool_result")
+    call_ids = _part_ids(store, [row.get("_tip_message_hash")], "tool_call")
+    result_ids = _part_ids(store, row.get("_input_message_hashes") or [], "tool_result")
 
     # input_schema is rendered as a dict, so decode it here rather than
     # handing the caller the raw JSON text out of the column.
@@ -1114,15 +1139,18 @@ def _attachment_summary(attachment) -> dict:
     }
 
 
-def _part_ids(store: "LogStore", message_hash: str | None, type: str) -> dict:
-    "Map tool_call_id to the parts row id, for one message."
-    if not message_hash:
+def _part_ids(store: "LogStore", message_hashes: list, type: str) -> dict:
+    "Map tool_call_id to the parts row id, across the given messages."
+    message_hashes = [hash_ for hash_ in message_hashes if hash_]
+    if not message_hashes:
         return {}
+    placeholders = ",".join("?" * len(message_hashes))
     return {
         json.loads(part_row["payload"]).get("tool_call_id"): part_row["id"]
         for part_row in store.db.query(
-            "select id, payload from parts where message_hash = ? and type = ?",
-            [message_hash, type],
+            f"select id, payload from parts"
+            f" where message_hash in ({placeholders}) and type = ?",
+            message_hashes + [type],
         )
     }
 

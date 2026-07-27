@@ -1610,6 +1610,7 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
             "_input_parts",
             "_output_parts",
             "_parent_message_hash",
+            "_input_message_hashes",
             "_tip_message_hash",
             "_legacy",
             "_search_rank",
