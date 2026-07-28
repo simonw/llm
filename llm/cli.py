@@ -1292,6 +1292,8 @@ def chat(
                 accumulated_fragments += fragments
                 accumulated_attachments += attachments
                 continue
+        if prompt.strip() in ("exit", "quit"):
+            break
         if template_obj:
             try:
                 # Mirror prompt() logic: only pass input if template uses it
@@ -1307,8 +1309,6 @@ def chat(
                     prompt = f"{template_prompt}\n{prompt}"
                 else:
                     prompt = template_prompt
-        if prompt.strip() in ("exit", "quit"):
-            break
 
         response = conversation.chain(
             prompt,
