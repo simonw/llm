@@ -882,11 +882,11 @@ CREATE VIRTUAL TABLE "turn_search_fts" USING FTS5 (
   content="turn_search"
 );
 CREATE TABLE "tool_instantiations" (
+  "turn_id" TEXT REFERENCES "turns"("id"),
   "tool_call_id" TEXT,
   "name" TEXT,
   "plugin" TEXT,
   "arguments" TEXT,
-  "turn_id" TEXT,
   PRIMARY KEY ("turn_id",
   "tool_call_id")
 );

@@ -996,62 +996,18 @@ class TestTurnInputBoundary:
         assert len(merged_log_rows(store, tool_names=["t"])) == 1
         assert merged_log_rows(store, tool_names=["other"]) == []
 
-    def test_m030_backfill_finds_results_behind_a_user_prompt(self, store, mock_model):
-        # A turn whose input ends [tool result, user prompt] keeps its
-        # provenance row through the m030 backfill - the result lives
-        # in the parent's parent, and a wrong-direction traversal used
-        # to delete these rows as unmatched.
-        class Notes(llm.Toolbox):
-            def __init__(self, path: str):
-                self.path = path
 
-        mock_model.enqueue(["ok"])
-        response = mock_model.prompt(
-            "next question",
-            messages=[llm.user("orig"), llm.assistant("first answer")],
-            tool_results=[
-                llm.ToolResult(
-                    name="Notes_read",
-                    output="RESULT",
-                    tool_call_id="c9",
-                    instance=Notes("/tmp/n"),
-                )
-            ],
-        )
-        response.text()
-        response.log_to_db(store.db)
-        db = store.db
-        turn_id = next(iter(db["turns"].rows))["id"]
-        # Rewind the table to its pre-m030 shape
-        db["tool_instantiations"].transform(pk="tool_call_id", drop={"turn_id"})
-        db.execute(
-            "delete from _llm_migrations"
-            " where name = 'm030_tool_instantiations_turn_scope'"
-        )
-        migrate(db)
-        rows = list(db["tool_instantiations"].rows)
-        assert [row["turn_id"] for row in rows] == [turn_id]
-
-
-class TestMigrationRetrySafety:
-    def test_m027_retry_does_not_erase_migrated_text(self, store, mock_model):
-        # Simulate an interrupted m027: rows already in the new format
-        # but the migration not recorded as applied. Retrying must not
-        # blank the text column back out.
-        mock_model.enqueue(["Hello there"])
-        response = mock_model.prompt("Hi")
-        response.text()
-        response.log_to_db(store.db)
-        before = {row["id"]: row["text"] for row in store.db["parts"].rows}
-        assert any(before.values())
-        with store.db.conn:
-            store.db.execute(
-                "delete from _llm_migrations where name = 'm027_parts_text_column'"
-            )
-        migrate(store.db)
-        after = {row["id"]: row["text"] for row in store.db["parts"].rows}
-        assert after == before
-        assert store.verify() == []
+class TestUnsupportedBranchDatabases:
+    def test_existing_message_store_tables_fail_loudly(self, tmp_path):
+        # The message store migration creates its tables in final form
+        # and assumes they do not exist - a database carrying tables
+        # from unreleased development revisions is an unsupported
+        # state, and the migration fails loudly rather than dropping
+        # or adapting whatever is there.
+        db = sqlite_utils.Database(str(tmp_path / "old-branch.db"))
+        db["messages"].create({"hash": str}, pk="hash")
+        with pytest.raises(sqlite3.OperationalError):
+            migrate(db)
 
 
 class TestAttachmentHashing:
@@ -1203,132 +1159,6 @@ class TestAttachmentHashing:
         )
         path.unlink()
         assert store.verify() == [tip]
-
-    def test_m032_reruns_the_rehash(self, store, tmp_path):
-        path = tmp_path / "x.png"
-        path.write_bytes(b"PNG BYTES")
-        messages = [
-            Message(
-                role="user",
-                parts=[
-                    AttachmentPart(
-                        attachment=Attachment(type="image/png", path=str(path))
-                    )
-                ],
-            ),
-            llm.assistant("A fine image"),
-        ]
-        tip = store.ensure_chain(messages)
-        db = store.db
-        real = [row["hash"] for row in db.query("select hash from messages")]
-        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
-        with db.conn:
-            for old, fake in fakes.items():
-                db.execute("update messages set hash = ? where hash = ?", [fake, old])
-                db.execute(
-                    "update messages set parent_hash = ? where parent_hash = ?",
-                    [fake, old],
-                )
-                db.execute(
-                    "update parts set message_hash = ? where message_hash = ?",
-                    [fake, old],
-                )
-        db.execute(
-            "delete from _llm_migrations where name = 'm032_rehash_for_attachment_types'"
-        )
-        assert store.verify() != []
-        migrate(db)
-        assert store.verify() == []
-        assert store.load_chain(tip) == messages
-
-    def test_m029_survives_foreign_key_enforcement(self, tmp_path):
-        # Rekeying messages.hash while parts and turns still reference
-        # it would fail immediately on a connection running with
-        # PRAGMA foreign_keys = ON - the migration defers enforcement
-        # to commit, inside a real transaction.
-        db = sqlite_utils.Database(str(tmp_path / "fk.db"))
-        db.conn.execute("PRAGMA foreign_keys = ON")
-        store = LogStore(db)
-        path = tmp_path / "x.png"
-        path.write_bytes(b"PNG BYTES")
-        messages = [
-            Message(
-                role="user",
-                parts=[
-                    AttachmentPart(
-                        attachment=Attachment(type="image/png", path=str(path))
-                    )
-                ],
-            ),
-            llm.assistant("A fine image"),
-        ]
-        tip = store.ensure_chain(messages)
-        real = [row["hash"] for row in db.query("select hash from messages")]
-        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
-        db.conn.execute("PRAGMA foreign_keys = OFF")
-        for old, fake in fakes.items():
-            db.execute("update messages set hash = ? where hash = ?", [fake, old])
-            db.execute(
-                "update messages set parent_hash = ? where parent_hash = ?",
-                [fake, old],
-            )
-            db.execute(
-                "update parts set message_hash = ? where message_hash = ?",
-                [fake, old],
-            )
-        db.execute("delete from _llm_migrations where name = 'm029_rehash_messages'")
-        db.conn.execute("PRAGMA foreign_keys = ON")
-        migrate(db)
-        assert store.verify() == []
-        assert store.load_chain(tip) == messages
-        assert db.conn.execute("PRAGMA foreign_key_check").fetchall() == []
-
-    def test_m029_recomputes_stale_hashes(self, store, tmp_path):
-        # Build a real chain, then rewrite its hashes to bogus values -
-        # simulating rows written by the old path-based algorithm - and
-        # check the migration recomputes everything from content.
-        path = tmp_path / "x.png"
-        path.write_bytes(b"PNG BYTES")
-        messages = [
-            Message(
-                role="user",
-                parts=[
-                    AttachmentPart(
-                        attachment=Attachment(type="image/png", path=str(path))
-                    )
-                ],
-            ),
-            llm.assistant("A fine image"),
-        ]
-        tip = store.ensure_chain(messages)
-        thread_id = store.create_thread(name="t", tip=tip)
-        db = store.db
-        real = [row["hash"] for row in db.query("select hash from messages")]
-        fakes = {h: "b2:" + format(i, "032x") for i, h in enumerate(real)}
-        with db.conn:
-            for old, fake in fakes.items():
-                db.execute("update messages set hash = ? where hash = ?", [fake, old])
-                db.execute(
-                    "update messages set parent_hash = ? where parent_hash = ?",
-                    [fake, old],
-                )
-                db.execute(
-                    "update parts set message_hash = ? where message_hash = ?",
-                    [fake, old],
-                )
-                db.execute(
-                    "update threads set tip_message_hash = ? "
-                    "where tip_message_hash = ?",
-                    [fake, old],
-                )
-            db.execute(
-                "delete from _llm_migrations where name = 'm029_rehash_messages'"
-            )
-        assert store.verify() != []
-        migrate(db)
-        assert store.verify() == []
-        assert store.thread_tip(thread_id) == tip
-        assert store.load_chain(tip) == messages
 
 
 class TestRepeatedAttachments:
