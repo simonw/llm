@@ -63,7 +63,7 @@ def m004_store_content_hash(db):
     db.conn.create_function("temp_md5", 1, md5)
     db.conn.create_function("temp_random_md5", 0, random_md5)
 
-    with db.conn:
+    with db.atomic():
         db.execute("""
             update embeddings
             set content_hash = temp_md5(content)

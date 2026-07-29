@@ -134,8 +134,7 @@ def m007_finish_logs_table(db):
         rename={"timestamp_utc": "datetime_utc"},
         drop_foreign_keys=("chat_id",),
     )
-    with db.conn:
-        db.execute("alter table log rename to logs")
+    db.execute("alter table log rename to logs")
 
 
 @migration
