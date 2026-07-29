@@ -37,7 +37,6 @@ from .utils import (
     ensure_tool,
     make_schema_id,
     monotonic_ulid,
-    sqlite_transaction,
 )
 
 __all__ = [
@@ -202,7 +201,7 @@ class LogStore:
             # Already stored - and because the hash covers the parent,
             # everything below it is stored too.
             return hash
-        with sqlite_transaction(self.db):
+        with self.db.atomic():
             # Another writer can store the same hash between the check
             # above and this insert. Insert-or-ignore settles who won,
             # and only the winner writes the parts.
@@ -455,7 +454,7 @@ class LogStore:
         timings, usage, which model answered - goes on the turn, because
         message rows are shared and so cannot carry provenance.
         """
-        with sqlite_transaction(self.db):
+        with self.db.atomic():
             return self._log_in_transaction(response, thread_id)
 
     def _log_in_transaction(self, response, thread_id: str | None) -> str:

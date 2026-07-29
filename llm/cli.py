@@ -86,7 +86,6 @@ from .utils import (
     resolve_schema_input,
     schema_dsl,
     schema_summary,
-    sqlite_transaction,
     token_usage_string,
     truncate_string,
 )
@@ -2944,7 +2943,7 @@ def fragments_set(alias, fragment):
     on conflict(alias) do update set
         fragment_id = excluded.fragment_id;
     """
-    with sqlite_transaction(db):
+    with db.atomic():
         fragment_id = ensure_fragment(db, resolved)
         db.execute(alias_sql, {"alias": alias, "fragment_id": fragment_id})
 
