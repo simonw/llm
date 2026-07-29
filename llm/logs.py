@@ -35,6 +35,7 @@ from .parts import (
 from .utils import (
     ensure_fragment,
     ensure_tool,
+    ensure_tool_instance,
     make_schema_id,
     monotonic_ulid,
 )
@@ -515,8 +516,26 @@ class LogStore:
             replace=True,
         )
         for tool in response.prompt.tools:
+            # A toolbox-derived tool's implementation is a method bound
+            # to the configured instance - record which one, as a
+            # reference into the shared tool_instances table.
+            instance = getattr(tool.implementation, "__self__", None)
+            config = getattr(instance, "_config", None)
             self.db["turn_tools"].insert(
-                {"turn_id": turn_id, "tool_id": ensure_tool(self.db, tool)},
+                {
+                    "turn_id": turn_id,
+                    "tool_id": ensure_tool(self.db, tool),
+                    "instance_id": (
+                        ensure_tool_instance(
+                            self.db,
+                            tool.name.split("_")[0],
+                            tool.plugin,
+                            json.dumps(config),
+                        )
+                        if config is not None
+                        else None
+                    ),
+                },
                 replace=True,
             )
         # Which fragments this call was given - provenance, so it belongs
@@ -550,16 +569,19 @@ class LogStore:
                 {
                     "turn_id": turn_id,
                     "tool_call_id": tool_result.tool_call_id,
-                    "name": tool_result.name.split("_")[0],
-                    "plugin": next(
-                        (
-                            tool.plugin
-                            for tool in response.prompt.tools
-                            if tool.name == tool_result.name
+                    "instance_id": ensure_tool_instance(
+                        self.db,
+                        tool_result.name.split("_")[0],
+                        next(
+                            (
+                                tool.plugin
+                                for tool in response.prompt.tools
+                                if tool.name == tool_result.name
+                            ),
+                            None,
                         ),
-                        None,
+                        json.dumps(config),
                     ),
-                    "arguments": json.dumps(config),
                 },
                 replace=True,
             )
@@ -1109,12 +1131,29 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
     # input_schema is rendered as a dict, so decode it here rather than
     # handing the caller the raw JSON text out of the column.
     tools = [
-        {**tool_row, "input_schema": json.loads(tool_row["input_schema"] or "{}")}
+        {
+            "id": tool_row["id"],
+            "hash": tool_row["hash"],
+            "name": tool_row["name"],
+            "description": tool_row["description"],
+            "input_schema": json.loads(tool_row["input_schema"] or "{}"),
+            "instance": (
+                {
+                    "name": tool_row["instance_name"],
+                    "arguments": tool_row["instance_arguments"],
+                }
+                if tool_row["instance_name"]
+                else None
+            ),
+        }
         for tool_row in store.db.query(
             """
             select tools.id, tools.hash, tools.name, tools.description,
-                   tools.input_schema
+                   tools.input_schema, tool_instances.name as instance_name,
+                   tool_instances.arguments as instance_arguments
             from tools join turn_tools on turn_tools.tool_id = tools.id
+            left join tool_instances
+                on tool_instances.id = turn_tools.instance_id
             where turn_tools.turn_id = ?
             """,
             [row["id"]],
@@ -1235,9 +1274,13 @@ def _instances_by_tool_call_id(
         }
         for row in store.db.query(
             f"""
-            select tool_call_id, name, plugin, arguments
+            select tool_instantiations.tool_call_id, tool_instances.name,
+                   tool_instances.plugin, tool_instances.arguments
             from tool_instantiations
-            where turn_id = ? and tool_call_id in ({placeholders})
+            join tool_instances
+                on tool_instances.id = tool_instantiations.instance_id
+            where tool_instantiations.turn_id = ?
+            and tool_instantiations.tool_call_id in ({placeholders})
             """,
             [turn_id] + tool_call_ids,
         )
@@ -1461,7 +1504,8 @@ select responses.id,
             'hash', t.hash,
             'name', t.name,
             'description', t.description,
-            'input_schema', json(t.input_schema)
+            'input_schema', json(t.input_schema),
+            'instance', null
         ))
         from tools t
         join tool_responses tr on t.id = tr.tool_id

@@ -2115,16 +2115,27 @@ def logs_list(
             if row["tools"]:
                 click.echo("\n### Tools\n")
                 for tool in row["tools"]:
+                    instance = tool.get("instance")
+                    instance_bit = ""
+                    if instance:
+                        arguments = instance["arguments"]
+                        instance_bit = " - instance `{}({})`".format(
+                            instance["name"],
+                            arguments if arguments and arguments != "{}" else "",
+                        )
                     if tool["hash"] in seen_tool_hashes:
                         click.echo(
-                            "- **{}**: `{}`".format(tool["name"], tool["hash"][:7])
+                            "- **{}**: `{}`{}".format(
+                                tool["name"], tool["hash"][:7], instance_bit
+                            )
                         )
                     else:
                         seen_tool_hashes.add(tool["hash"])
                         click.echo(
-                            "- **{}**: `{}`<br>\n{}<br>\n    Arguments: `{}`".format(
+                            "- **{}**: `{}`{}<br>\n{}<br>\n    Arguments: `{}`".format(
                                 tool["name"],
                                 tool["hash"],
+                                instance_bit,
                                 textwrap.indent(
                                     (tool["description"] or "").rstrip(), "    "
                                 ),

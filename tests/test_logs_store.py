@@ -800,15 +800,41 @@ class TestLibraryLogging:
         response.text()
         response.log_to_db(store.db)
         turn_id = next(iter(store.db["turns"].rows))["id"]
-        assert list(store.db["tool_instantiations"].rows) == [
-            {
-                "tool_call_id": "tc_1",
-                "name": "Notes",
-                "plugin": None,
-                "arguments": '{"path": "/tmp/notes"}',
-                "turn_id": turn_id,
-            }
-        ]
+        link = next(iter(store.db["tool_instantiations"].rows))
+        assert link["turn_id"] == turn_id
+        assert link["tool_call_id"] == "tc_1"
+        instance = store.db["tool_instances"].get(link["instance_id"])
+        assert instance["name"] == "Notes"
+        assert instance["plugin"] is None
+        assert instance["arguments"] == '{"path": "/tmp/notes"}'
+
+    def test_turn_tools_reference_the_configured_instance(self, store, mock_model):
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+            def read(self) -> str:
+                "Read the notes"
+                return "hi"
+
+        for prompt in ("first", "second"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(prompt, tools=[Notes("/tmp/x")])
+            response.text()
+            response.log_to_db(store.db)
+
+        # One instance row however many turns it serves
+        assert store.db["tool_instances"].count == 1
+        instance_ids = {row["instance_id"] for row in store.db["turn_tools"].rows}
+        assert len(instance_ids) == 1
+
+        # And the tools list in the display carries it
+        rows = merged_log_rows(store)
+        tools = log_row_extras(store, rows[0])["tools"]
+        assert tools[0]["instance"] == {
+            "name": "Notes",
+            "arguments": '{"path": "/tmp/x"}',
+        }
 
     def test_tool_instantiations_are_scoped_by_turn(self, store, mock_model):
         # Providers with per-request counters can reuse a tool_call_id
@@ -832,14 +858,12 @@ class TestLibraryLogging:
             )
             response.text()
             response.log_to_db(store.db)
-        arguments = {
-            row["turn_id"]: row["arguments"]
-            for row in store.db["tool_instantiations"].rows
-        }
-        assert sorted(arguments.values()) == [
-            '{"path": "/tmp/one"}',
-            '{"path": "/tmp/two"}',
-        ]
+        arguments = sorted(row["arguments"] for row in store.db.query("""
+                select tool_instances.arguments from tool_instantiations
+                join tool_instances
+                    on tool_instances.id = tool_instantiations.instance_id
+                """))
+        assert arguments == ['{"path": "/tmp/one"}', '{"path": "/tmp/two"}']
 
     def test_successive_library_turns_extend_the_thread(self, store, mock_model):
         conversation = mock_model.conversation()

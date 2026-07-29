@@ -541,10 +541,10 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 - `part_attachments` and `part_fragments` - junction tables recording which rows in `attachments` and `fragments` a part's payload references, in order.
 - `threads` - one row per conversation. `id` is the conversation id, `tip_message_hash` points at the current head of the conversation and `forked_from` records the thread a fork came from.
 - `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
-- `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table.
+- `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table. For toolbox-derived tools, `instance_id` references the `tool_instances` row recording which configured instance provided them - so the tools list in `llm logs` shows that `SQLite_query` came from `SQLite("mydb.db")` before any call has run.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
 - `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
-- `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call: the toolbox name, its plugin and its constructor arguments, keyed by `(turn_id, tool_call_id)` - call ids supplied by providers are not guaranteed unique across turns. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it, and is what lets `llm logs` show that a `SQLite_query` call ran against `SQLite("mydb.db")`.
+- `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call, as a reference into the shared `tool_instances` table (each distinct configuration is stored once), keyed by `(turn_id, tool_call_id)` - call ids supplied by providers are not guaranteed unique across turns. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it.
 
 (logging-message-store-queries)=
 
@@ -857,6 +857,7 @@ CREATE TABLE "turns" (
 CREATE TABLE "turn_tools" (
   "turn_id" TEXT REFERENCES "turns"("id"),
   "tool_id" INTEGER REFERENCES "tools"("id"),
+  "instance_id" INTEGER REFERENCES "tool_instances"("id"),
   PRIMARY KEY ("turn_id",
   "tool_id")
 );
@@ -884,9 +885,7 @@ CREATE VIRTUAL TABLE "turn_search_fts" USING FTS5 (
 CREATE TABLE "tool_instantiations" (
   "turn_id" TEXT REFERENCES "turns"("id"),
   "tool_call_id" TEXT,
-  "name" TEXT,
-  "plugin" TEXT,
-  "arguments" TEXT,
+  "instance_id" INTEGER REFERENCES "tool_instances"("id"),
   PRIMARY KEY ("turn_id",
   "tool_call_id")
 );

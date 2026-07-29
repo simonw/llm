@@ -607,3 +607,30 @@ def m023_message_store(db):
         pk=("turn_id", "tool_call_id"),
         foreign_keys=(("turn_id", "turns", "id"),),
     )
+
+
+@migration
+def m024_tool_instance_references(db):
+    # Tool instance configurations - e.g. Datasette("https://...") -
+    # are stored once in the shared tool_instances table and referenced
+    # by id, instead of being copied onto every row that mentions them:
+    # tool_instantiations gains instance_id in place of its
+    # name/plugin/arguments copies, and turn_tools gains instance_id so
+    # the tools list can show which configured instance provided each
+    # tool.
+    from .utils import ensure_tool_instance
+
+    db["turn_tools"].add_column("instance_id", int, fk="tool_instances", fk_col="id")
+    db["tool_instantiations"].add_column(
+        "instance_id", int, fk="tool_instances", fk_col="id"
+    )
+    for row in list(db["tool_instantiations"].rows):
+        db["tool_instantiations"].update(
+            (row["turn_id"], row["tool_call_id"]),
+            {
+                "instance_id": ensure_tool_instance(
+                    db, row["name"], row["plugin"], row["arguments"]
+                )
+            },
+        )
+    db["tool_instantiations"].transform(drop={"name", "plugin", "arguments"})

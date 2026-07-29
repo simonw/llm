@@ -513,6 +513,24 @@ def ensure_tool(db, tool):
     ).fetchone()[0]
 
 
+def ensure_tool_instance(db, name, plugin, arguments) -> int:
+    """Row id in tool_instances for this configuration, storing each
+    distinct (plugin, name, arguments) once however many turns and
+    calls it serves."""
+    match = db.execute(
+        "select id from tool_instances where name is ? "
+        "and plugin is ? and arguments is ?",
+        [name, plugin, arguments],
+    ).fetchone()
+    if match:
+        return match[0]
+    return (
+        db["tool_instances"]
+        .insert({"name": name, "plugin": plugin, "arguments": arguments})
+        .last_pk
+    )
+
+
 def maybe_fenced_code(content: str) -> str:
     "Return the content as a fenced code block if it looks like code"
     is_code = False
