@@ -2114,34 +2114,46 @@ def logs_list(
             # Show tool calls and results
             if row["tools"]:
                 click.echo("\n### Tools\n")
-                for tool in row["tools"]:
-                    instance = tool.get("instance")
-                    instance_bit = ""
-                    if instance:
-                        arguments = instance["arguments"]
-                        instance_bit = " - instance `{}({})`".format(
-                            instance["name"],
-                            arguments if arguments and arguments != "{}" else "",
-                        )
+
+                def echo_tool(tool, indent=""):
                     if tool["hash"] in seen_tool_hashes:
-                        click.echo(
-                            "- **{}**: `{}`{}".format(
-                                tool["name"], tool["hash"][:7], instance_bit
-                            )
-                        )
+                        block = "- **{}**: `{}`".format(tool["name"], tool["hash"][:7])
                     else:
                         seen_tool_hashes.add(tool["hash"])
-                        click.echo(
-                            "- **{}**: `{}`{}<br>\n{}<br>\n    Arguments: `{}`".format(
+                        block = (
+                            "- **{}**: `{}`<br>\n{}<br>\n    Arguments: `{}`".format(
                                 tool["name"],
                                 tool["hash"],
-                                instance_bit,
                                 textwrap.indent(
                                     (tool["description"] or "").rstrip(), "    "
                                 ),
                                 json.dumps(tool["input_schema"]["properties"]),
                             )
                         )
+                    click.echo(textwrap.indent(block, indent))
+
+                # Tools provided by the same configured toolbox instance
+                # nest beneath one instance line rather than repeating it
+                plain_tools = []
+                by_instance: dict = {}
+                for tool in row["tools"]:
+                    instance = tool.get("instance")
+                    if instance:
+                        key = (instance["name"], instance["arguments"])
+                        by_instance.setdefault(key, []).append(tool)
+                    else:
+                        plain_tools.append(tool)
+                for tool in plain_tools:
+                    echo_tool(tool)
+                for (name, arguments), instance_tools in by_instance.items():
+                    click.echo(
+                        "- `{}({})`:".format(
+                            name,
+                            arguments if arguments and arguments != "{}" else "",
+                        )
+                    )
+                    for tool in instance_tools:
+                        echo_tool(tool, "    ")
             if row["tool_results"]:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
