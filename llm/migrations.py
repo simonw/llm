@@ -634,3 +634,27 @@ def m024_tool_instance_references(db):
             },
         )
     db["tool_instantiations"].transform(drop={"name", "plugin", "arguments"})
+
+
+@migration
+def m025_turn_tools_instance_backfill(db):
+    # turn_tools rows written before instance_id existed have NULL
+    # there, so the tools list shows nothing for them. The instance
+    # that served calls in the same thread, matched by toolbox name
+    # prefix, is the right value for these development-era rows.
+    with db.atomic():
+        db.execute("""
+            update turn_tools set instance_id = (
+                select ti.instance_id from tool_instantiations ti
+                join turns turn_a on turn_a.id = ti.turn_id
+                join turns turn_b on turn_b.id = turn_tools.turn_id
+                    and turn_b.thread_id = turn_a.thread_id
+                join tool_instances instance
+                    on instance.id = ti.instance_id
+                join tools on tools.id = turn_tools.tool_id
+                where tools.name = instance.name
+                    or tools.name like instance.name || '\\_%' escape '\\'
+                limit 1
+            )
+            where instance_id is null
+            """)
