@@ -493,12 +493,7 @@ select turns.id,
 
 @migration
 def m023_message_store(db):
-    # The content-addressed message store, created in its final form.
-    # Nothing here is dropped, migrated or backfilled: these tables
-    # have never existed in any released version of LLM, so a database
-    # either gains them fresh or is in an unsupported development state
-    # - in which case the creates below fail loudly rather than
-    # touching whatever is there.
+    # The content-addressed message store
     db["messages"].create(
         {
             "hash": str,
