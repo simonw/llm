@@ -927,9 +927,7 @@ class TestAtomicWrites:
         response = mock_model.prompt("Hi")
         response.text()
         # Fail at the search refresh, one of the last steps of log()
-        monkeypatch.setattr(
-            "llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql {turn_filter}"
-        )
+        monkeypatch.setattr("llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql")
         with pytest.raises(sqlite3.OperationalError):
             store.log(response)
         monkeypatch.undo()

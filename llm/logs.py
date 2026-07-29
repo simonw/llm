@@ -21,7 +21,7 @@ import hashlib
 import json
 from typing import Any
 
-from .migrations import TURN_SEARCH_INSERT_SQL, migrate
+from .migrations import migrate
 from .models import Attachment, _conversation_name
 from .parts import (
     AttachmentPart,
@@ -569,10 +569,7 @@ class LogStore:
         # payloads, not from load_chain - resolving references would put
         # fragment content back into the searchable text.
         self.db["turn_search"].delete_where("turn_id = ?", [turn_id])
-        self.db.execute(
-            TURN_SEARCH_INSERT_SQL.format(turn_filter="and turns.id = :turn_id"),
-            {"turn_id": turn_id},
-        )
+        self.db.execute(TURN_SEARCH_INSERT_SQL, {"turn_id": turn_id})
         if thread_id is not None:
             self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return turn_id
@@ -795,6 +792,69 @@ left join schemas on turns.schema_id = schemas.id{join}
 {where}
 order by {order_by}{limit}
 """
+
+# Literal text of one parts row: the text column when the part's text
+# is pure literal, otherwise the literal segments of a text_ref payload
+# - fragment content is deliberately not searchable.
+TURN_SEARCH_LITERAL = """coalesce(
+  parts.text,
+  (select group_concat(json_extract(je.value, '$.literal'), '')
+     from json_each(parts.payload, '$.text_ref') je
+    where json_extract(je.value, '$.literal') is not null)
+)"""
+
+# Derives the searchable prompt and response text for turns. Serves both
+# the migration backfill (turn_filter="") and the per-turn refresh in
+# LogStore.log (turn_filter="and turns.id = :turn_id" - the slot appears
+# in three places so the filtered form touches only that turn's chain).
+TURN_SEARCH_INSERT_SQL = """
+with recursive output_messages(turn_id, hash) as (
+    select turns.id, turns.tip_message_hash
+      from turns
+     where turns.tip_message_hash is not null
+       and (turns.parent_message_hash is null
+            or turns.tip_message_hash != turns.parent_message_hash)
+       and turns.id = :turn_id
+    union all
+    select om.turn_id, messages.parent_hash
+      from output_messages om
+      join messages on messages.hash = om.hash
+      join turns on turns.id = om.turn_id
+     where messages.parent_hash is not null
+       and (turns.parent_message_hash is null
+            or messages.parent_hash != turns.parent_message_hash)
+),
+prompt_text as (
+    select turns.id as turn_id,
+           (select group_concat({LITERAL}, '')
+              from parts
+             where parts.message_hash = turns.parent_message_hash
+               and parts.type = 'text'
+             order by parts.position) as text
+      from turns
+      join messages on messages.hash = turns.parent_message_hash
+     where messages.role = 'user' and turns.id = :turn_id
+),
+response_text as (
+    select om.turn_id, group_concat(part_text.text, '') as text
+      from output_messages om
+      join messages on messages.hash = om.hash and messages.role = 'assistant'
+      join (
+          select parts.message_hash, parts.position, {LITERAL} as text
+            from parts where parts.type = 'text'
+      ) part_text on part_text.message_hash = om.hash
+     group by om.turn_id
+)
+insert into turn_search (turn_id, prompt, response)
+select turns.id,
+       coalesce(prompt_text.text, ''),
+       coalesce(response_text.text, '')
+  from turns
+  left join prompt_text on prompt_text.turn_id = turns.id
+  left join response_text on response_text.turn_id = turns.id
+ where (coalesce(prompt_text.text, '') != ''
+        or coalesce(response_text.text, '') != '') and turns.id = :turn_id
+""".replace("{LITERAL}", TURN_SEARCH_LITERAL)
 
 # Relevance ranking for -q. bm25 scores are negative-better, ascending
 # order is best-first. The prompt column is weighted well above the
