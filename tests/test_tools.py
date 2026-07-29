@@ -656,10 +656,10 @@ def test_tool_errors(async_):
     assert log_text_result.exit_code == 0
     normalized_log_text = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", log_text_result.output)
     assert (
-        "- **trigger_error**: `tc_TCID`<br>\n"
+        "- **trigger_error**: `tc_TCID`  \n"
         "    ```\n"
         "    Error: Error!\n"
-        "    ```<br>\n"
+        "    ```  \n"
         "    **Error**: Exception: Error!\n"
     ) in normalized_log_text
 

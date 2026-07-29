@@ -1100,7 +1100,7 @@ def test_logs_tools(logs_db):
     assert (
         "### Tool results\n"
         "\n"
-        "- **demo**: `tc_TCID`<br>\n"
+        "- **demo**: `tc_TCID`  \n"
         "    ```\n"
         "    one\n"
         "    two\n"
@@ -1176,7 +1176,7 @@ def test_logs_tool_call_argument_formatting(logs_db):
     assert (
         "### Tool calls\n"
         "\n"
-        "- **demo**: `tc_TCID`<br>\n"
+        "- **demo**: `tc_TCID`  \n"
         "    timeout: `120`\n"
         '    options: ``["`tick`"]``\n'
     ) in normalized_output

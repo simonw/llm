@@ -2120,15 +2120,13 @@ def logs_list(
                         block = "- **{}**: `{}`".format(tool["name"], tool["hash"][:7])
                     else:
                         seen_tool_hashes.add(tool["hash"])
-                        block = (
-                            "- **{}**: `{}`<br>\n{}<br>\n    Arguments: `{}`".format(
-                                tool["name"],
-                                tool["hash"],
-                                textwrap.indent(
-                                    (tool["description"] or "").rstrip(), "    "
-                                ),
-                                json.dumps(tool["input_schema"]["properties"]),
-                            )
+                        block = "- **{}**: `{}`  \n{}  \n    Arguments: `{}`".format(
+                            tool["name"],
+                            tool["hash"],
+                            textwrap.indent(
+                                (tool["description"] or "").rstrip(), "    "
+                            ),
+                            json.dumps(tool["input_schema"]["properties"]),
                         )
                     click.echo(textwrap.indent(block, indent))
 
@@ -2169,22 +2167,13 @@ def logs_list(
                         elif attachment.get("content"):
                             desc += f"<{attachment['content_length']:,} bytes>"
                         attachments += f"\n    - {desc}"
-                    instance = tool_result.get("instance")
-                    instance_bit = ""
-                    if instance:
-                        arguments = instance["arguments"]
-                        instance_bit = " - instance `{}({})`".format(
-                            instance["name"],
-                            arguments if arguments and arguments != "{}" else "",
-                        )
                     click.echo(
-                        "- **{}**: `{}`{}<br>\n{}{}{}".format(
+                        "- **{}**: `{}`  \n{}{}{}".format(
                             tool_result["name"],
                             tool_result["tool_call_id"],
-                            instance_bit,
                             _fenced_block(tool_result["output"]),
                             (
-                                "<br>\n    **Error**: {}\n".format(
+                                "  \n    **Error**: {}\n".format(
                                     tool_result["exception"]
                                 )
                                 if tool_result["exception"]
@@ -2232,7 +2221,7 @@ def logs_list(
                 click.echo("### Tool calls\n")
                 for tool_call in row["tool_calls"]:
                     click.echo(
-                        "- **{}**: `{}`<br>\n{}".format(
+                        "- **{}**: `{}`  \n{}".format(
                             tool_call["name"],
                             tool_call["tool_call_id"],
                             _format_tool_call_arguments(tool_call["arguments"]),
