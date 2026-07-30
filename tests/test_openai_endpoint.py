@@ -1,10 +1,12 @@
 import base64
 import json
 
+import sqlite_utils
 from click.testing import CliRunner
 from pytest_httpx import IteratorStream
 
 from llm.cli import cli
+from llm.migrations import migrate
 
 
 def _add_chat_response(httpx_mock, url, text):
@@ -250,6 +252,13 @@ system: You are $persona
 prompt: "Question: $input"
 options:
   temperature: 0.4
+schema_object:
+  type: object
+  properties:
+    answer:
+      type: string
+  required:
+  - answer
 attachment_types:
 - type: image/jpeg
   value: https://images.example.test/template.jpg
@@ -266,6 +275,8 @@ attachment_types:
             "Where?",
             "--template",
             "endpoint",
+            "--schema",
+            '{"type": "object"}',
             "--param",
             "persona",
             "concise",
@@ -294,9 +305,116 @@ attachment_types:
             },
         ],
         "model": "template-model",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "output",
+                "schema": {
+                    "type": "object",
+                    "properties": {"answer": {"type": "string"}},
+                    "required": ["answer"],
+                },
+            },
+        },
         "stream": False,
         "temperature": 0.4,
     }
+
+
+def test_endpoint_schema(httpx_mock, user_path):
+    base_url = "https://schema.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, '{"name": "Cleo", "age": 10}')
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Invent a dog",
+            "-m",
+            "test-model",
+            "--schema",
+            "name, age int",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert not (user_path / "logs.db").exists()
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "output",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+                "required": ["name", "age"],
+            },
+        },
+    }
+
+
+def test_endpoint_schema_by_id_from_existing_logs_database(httpx_mock, user_path):
+    base_url = "https://schema-id.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, '{"name": "Cleo"}')
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    migrate(db)
+    db["schemas"].insert({"id": "dog-schema", "content": json.dumps(schema)})
+    assert (user_path / "logs.db").exists()
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Invent a dog",
+            "-m",
+            "test-model",
+            "--schema",
+            "dog-schema",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["response_format"]["json_schema"]["schema"] == schema
+    assert db["responses"].count == 0
+
+
+def test_endpoint_invalid_schema_id_does_not_create_logs_database(user_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            "https://schema-id.example.test/v1",
+            "Invent a dog",
+            "-m",
+            "test-model",
+            "--schema",
+            "missing-schema",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid schema" in result.output
+    assert not (user_path / "logs.db").exists()
 
 
 def test_endpoint_static_template_runs_once_on_terminal(
@@ -613,6 +731,59 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
             ],
         }
     ]
+
+
+def test_endpoint_responses_api_schema_multi(httpx_mock, user_path):
+    base_url = "https://responses-schema.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_payload('{"items": [{"name": "Cleo", "age": 10}]}'),
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Invent a dog",
+            "-m",
+            "test-model",
+            "--responses",
+            "--schema-multi",
+            "name, age int",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert not (user_path / "logs.db").exists()
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["text"]["format"] == {
+        "type": "json_schema",
+        "name": "output",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer"},
+                        },
+                        "required": ["name", "age"],
+                    },
+                }
+            },
+            "required": ["items"],
+        },
+        "strict": False,
+    }
 
 
 def test_endpoint_responses_api_tools(httpx_mock, user_path):

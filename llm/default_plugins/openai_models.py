@@ -9,6 +9,7 @@ from typing import Any
 import click
 import httpx
 import openai
+import sqlite_utils
 import yaml
 from pydantic import Field, ValidationError, create_model, field_validator
 
@@ -402,7 +403,12 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 
 @hookimpl
 def register_commands(cli):
-    from llm.cli import AttachmentType, attachment_types_callback, tool_options
+    from llm.cli import (
+        AttachmentType,
+        attachment_types_callback,
+        schema_option,
+        tool_options,
+    )
 
     @cli.group(name="openai")
     def openai_():
@@ -434,6 +440,11 @@ def register_commands(cli):
         type=(str, str),
         multiple=True,
         help="key/value options for the model",
+    )
+    @schema_option
+    @click.option(
+        "--schema-multi",
+        help="JSON schema to use for multiple results",
     )
     @click.option(
         "attachments",
@@ -490,6 +501,8 @@ def register_commands(cli):
         template,
         param,
         options,
+        schema_input,
+        schema_multi,
         attachments,
         attachment_types,
         tools,
@@ -524,7 +537,11 @@ def register_commands(cli):
             _tool_chain_kwargs,
             display_stream_events,
             load_template,
+            logs_db_path,
+            migrate,
+            multi_schema,
             render_errors,
+            resolve_schema_input,
         )
 
         if list_models and prompt is not None:
@@ -533,8 +550,27 @@ def register_commands(cli):
             raise click.ClickException("--models cannot be used with --template")
         if list_models and (tools or python_tools):
             raise click.ClickException("--models cannot be used with tools")
+        if list_models and (schema_input or schema_multi):
+            raise click.ClickException("--models cannot be used with schemas")
         if force_chat and prompt is not None:
             raise click.ClickException("--chat cannot be used with a prompt")
+
+        if schema_multi:
+            schema_input = schema_multi
+        schema = None
+        if schema_input:
+            # Never create logs.db for this unlogged command. An existing
+            # database can resolve stored schema IDs; all other schema input
+            # is resolved using a temporary in-memory database.
+            log_path = logs_db_path()
+            if log_path.exists():
+                schema_db = sqlite_utils.Database(log_path)
+            else:
+                schema_db = sqlite_utils.Database(memory=True)
+            migrate(schema_db)
+            schema = resolve_schema_input(schema_db, schema_input, load_template)
+            if schema_multi:
+                schema = multi_schema(schema)
 
         template_obj = None
         params = dict(param)
@@ -548,6 +584,8 @@ def register_commands(cli):
                 raise click.ClickException(str(ex))
             if not model_id and template_obj.model:
                 model_id = template_obj.model
+            if template_obj.schema_object:
+                schema = template_obj.schema_object
             if template_obj.options:
                 options = _merge_template_options(template_obj, options)
             tools, python_tools = _merge_template_tools(
@@ -572,6 +610,7 @@ def register_commands(cli):
             "reasoning": True,
             "verbosity": True,
             "image_detail_original": True,
+            "supports_schema": True,
             "supports_tools": True,
         }
         if use_responses:
@@ -595,6 +634,7 @@ def register_commands(cli):
 
         prompt_kwargs = {
             "options": validated_options,
+            "schema": schema,
             "stream": not no_stream,
             "hide_reasoning": hide_reasoning,
         }
@@ -661,6 +701,7 @@ def register_commands(cli):
             elif (
                 prompt is None
                 and not resolved_attachments
+                and not schema
                 and (template_obj is None or "input" in template_obj.vars())
             ):
                 # Match `llm prompt`: wait for stdin until EOF instead of
@@ -668,7 +709,7 @@ def register_commands(cli):
                 prompt = sys.stdin.read()
             if template_obj:
                 prompt, system = _apply_template(template_obj, prompt, params, system)
-            if prompt is None:
+            if prompt is None and not (resolved_attachments or schema):
                 raise click.ClickException(
                     "A prompt is required when stdin is not interactive"
                 )

@@ -1095,6 +1095,8 @@ Options:
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   -o, --option <TEXT TEXT>...     key/value options for the model
+  --schema TEXT                   JSON schema, filepath or ID
+  --schema-multi TEXT             JSON schema to use for multiple results
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
                                   Attachment with explicit mimetype,

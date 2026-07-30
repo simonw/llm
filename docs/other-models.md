@@ -77,7 +77,7 @@ llm openai endpoint https://example.com/v1 \
 
 Use `--at path-or-url mimetype` when the attachment type cannot be inferred. Attachments provided when starting an interactive chat are included with the first message.
 
-Use `-t` or `--template` to apply an existing LLM template. Template prompts, system prompts, defaults, model options, model IDs, and attachments are supported. Pass template variables using `-p` or `--param`:
+Use `-t` or `--template` to apply an existing LLM template. Template prompts, system prompts, defaults, model options, model IDs, schemas, and attachments are supported. Pass template variables using `-p` or `--param`:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -87,6 +87,15 @@ llm openai endpoint https://example.com/v1 \
 ```
 
 The `-m` option can be omitted if the template specifies a model. In an interactive chat started using `--chat`, the template is applied to each turn. Without `--chat`, a template that provides its own prompt runs once even when no prompt argument is supplied.
+
+Use `--schema` to request structured JSON output or `--schema-multi` to request an array of matching items. These accept the same inline JSON, file paths, stored schema IDs, template references and {ref}`concise schema syntax <schemas-dsl>` as `llm prompt`:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  --schema 'name, age int' \
+  "Invent a dog"
+```
 
 Reasoning-capable endpoints can be given a reasoning effort using `-o reasoning_effort`, with a value of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`:
 
