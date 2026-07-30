@@ -30,8 +30,7 @@ Projects such as [LocalAI](https://localai.io/) offer a REST API that imitates t
 
 ### Run against an endpoint without configuring it
 
-Use `llm openai endpoint` to run a prompt directly against an
-OpenAI-compatible base URL:
+Use `llm openai endpoint` to run a prompt directly against an OpenAI-compatible base URL:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -39,10 +38,7 @@ llm openai endpoint https://example.com/v1 \
   "What is the capital of France?"
 ```
 
-This command does not register the model and does not log the prompt or
-response. It also does not send your configured OpenAI API key to the endpoint.
-Use `--key` to explicitly provide a key or the alias of a key saved using
-`llm keys set`:
+This command does not register the model and does not log the prompt or response. It also does not send your configured OpenAI API key to the endpoint. Use `--key` to explicitly provide a key or the alias of a key saved using `llm keys set`:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -51,9 +47,7 @@ llm openai endpoint https://example.com/v1 \
   "What is the capital of France?"
 ```
 
-List the model IDs advertised by the endpoint using `--models`. This requests
-the `models` resource relative to the base URL, so a base URL ending in `/v1`
-will request `/v1/models`:
+List the model IDs advertised by the endpoint using `--models`. This requests the `models` resource relative to the base URL, so a base URL ending in `/v1` will request `/v1/models`:
 
 ```bash
 llm openai endpoint https://example.com/v1 --models
@@ -71,8 +65,7 @@ Use `--chat` to start an interactive chat:
 llm openai endpoint https://example.com/v1 -m model-id --chat
 ```
 
-Use `-a` or `--attachment` to attach an image or PDF. Chat Completions
-endpoints can also receive WAV or MP3 audio attachments:
+Use `-a` or `--attachment` to attach an image or PDF. Chat Completions endpoints can also receive WAV or MP3 audio attachments:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -81,13 +74,9 @@ llm openai endpoint https://example.com/v1 \
   "Describe this image"
 ```
 
-Use `--at path-or-url mimetype` when the attachment type cannot be inferred.
-Attachments provided when starting an interactive chat are included with the
-first message.
+Use `--at path-or-url mimetype` when the attachment type cannot be inferred. Attachments provided when starting an interactive chat are included with the first message.
 
-Use `-t` or `--template` to apply an existing LLM template. Template prompts,
-system prompts, defaults, model options, model IDs, and attachments are
-supported. Pass template variables using `-p` or `--param`:
+Use `-t` or `--template` to apply an existing LLM template. Template prompts, system prompts, defaults, model options, model IDs, and attachments are supported. Pass template variables using `-p` or `--param`:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -96,10 +85,7 @@ llm openai endpoint https://example.com/v1 \
   "Text to summarize"
 ```
 
-The `-m` option can be omitted if the template specifies a model. In an
-interactive chat started using `--chat`, the template is applied to each turn.
-Without `--chat`, a template that provides its own prompt runs once even when
-no prompt argument is supplied.
+The `-m` option can be omitted if the template specifies a model. In an interactive chat started using `--chat`, the template is applied to each turn. Without `--chat`, a template that provides its own prompt runs once even when no prompt argument is supplied.
 
 Reasoning-capable endpoints can be given a reasoning effort using `-o reasoning_effort`, with a value of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`:
 
@@ -112,8 +98,7 @@ llm openai endpoint https://example.com/v1 \
 
 The command does not send reasoning-specific request fields by default and does not request a reasoning summary. Those fields are only added when `reasoning_effort` is used. An endpoint that does not support the option will return its own API error.
 
-Use `-T` or `--tool` to make an installed LLM tool available to the model, or
-`--functions` to load Python functions from an inline code block or file:
+Use `-T` or `--tool` to make an installed LLM tool available to the model, or `--functions` to load Python functions from an inline code block or file:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
@@ -123,14 +108,9 @@ llm openai endpoint https://example.com/v1 \
   "What time is it?"
 ```
 
-Tool calls are executed locally and their results are sent back to the endpoint
-until it returns a final answer. `--chain-limit` controls the maximum number of
-responses, `--tools-debug` shows tool execution details, and `--tools-approve`
-asks for confirmation before each call. Tools and trusted Python functions
-declared by local templates are supported too.
+Tool calls are executed locally and their results are sent back to the endpoint until it returns a final answer. `--chain-limit` controls the maximum number of responses, `--tools-debug` shows tool execution details, and `--tools-approve` asks for confirmation before each call. Tools and trusted Python functions declared by local templates are supported too.
 
-The command uses the Chat Completions API by default. Add `--responses` for an
-endpoint that implements the Responses API:
+The command uses the Chat Completions API by default. Add `--responses` for an endpoint that implements the Responses API:
 
 ```bash
 llm openai endpoint https://example.com/v1 \
