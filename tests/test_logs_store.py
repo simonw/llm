@@ -1680,7 +1680,9 @@ class TestMessageTreeView:
         assert row["message"] == novel[:60]
 
     def test_text_is_flattened_and_truncated(self, store):
-        store.append(store.create_thread(), [llm.user("line one\nline two " + "x" * 100)])
+        store.append(
+            store.create_thread(), [llm.user("line one\nline two " + "x" * 100)]
+        )
         (row,) = self.rows(store)
         assert row["message"] == ("line one line two " + "x" * 100)[:60]
 
