@@ -657,6 +657,34 @@ def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     assert not (user_path / "logs.db").exists()
 
 
+def test_endpoint_without_prompt_waits_for_stdin(httpx_mock, user_path, monkeypatch):
+    base_url = "https://terminal-stdin.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "From awaited stdin")
+    monkeypatch.setattr("click.testing._NamedTextIOWrapper.isatty", lambda self: True)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "-m",
+            "test-model",
+            "--no-stream",
+        ],
+        input="Hello after waiting for stdin",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "From awaited stdin\n"
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["messages"] == [
+        {"role": "user", "content": "Hello after waiting for stdin"}
+    ]
+    assert not (user_path / "logs.db").exists()
+
+
 def test_endpoint_interactive_chat_preserves_history(
     httpx_mock, user_path, templates_path
 ):

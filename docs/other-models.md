@@ -59,14 +59,17 @@ will request `/v1/models`:
 llm openai endpoint https://example.com/v1 --models
 ```
 
-Omit the prompt to start an interactive chat:
+Omit the prompt to read it from stdin. In an interactive terminal the command waits for input until EOF, matching `llm prompt`:
 
 ```bash
 llm openai endpoint https://example.com/v1 -m model-id
 ```
 
-Piped stdin is treated as a one-off prompt. Use `--chat` to explicitly start
-an interactive chat when stdin is not a terminal.
+Use `--chat` to start an interactive chat:
+
+```bash
+llm openai endpoint https://example.com/v1 -m model-id --chat
+```
 
 Use `-a` or `--attachment` to attach an image or PDF. Chat Completions
 endpoints can also receive WAV or MP3 audio attachments:

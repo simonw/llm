@@ -1083,11 +1083,10 @@ Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
 
   Run against an OpenAI-compatible endpoint without logging.
 
-  If PROMPT is provided, execute it once. If PROMPT is omitted in an interactive
-  terminal, start a chat unless --template is provided. Templates run once by
-  default; use --chat to apply one interactively. Piped stdin is treated as a
-  one-off prompt. Use --models to list the available model IDs without running a
-  prompt.
+  PROMPT or stdin is executed once. If neither is provided, wait for input on
+  stdin. Use --chat to start an interactive chat. Templates run once by default;
+  use --chat to apply one interactively. Use --models to list the available
+  model IDs without running a prompt.
 
 Options:
   -m, --model TEXT                Model ID (required unless --models or provided
@@ -1111,8 +1110,7 @@ Options:
   -H, --header <TEXT TEXT>...     Additional HTTP header
   --responses                     Use the Responses API instead of Chat
                                   Completions
-  --chat                          Start an interactive chat, even when stdin is
-                                  not a terminal
+  --chat                          Start an interactive chat
   --models                        List model IDs from the endpoint and exit
   --no-stream                     Do not stream output
   -R, --hide-reasoning            Hide reasoning output

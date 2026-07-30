@@ -472,7 +472,7 @@ def register_commands(cli):
         "force_chat",
         "--chat",
         is_flag=True,
-        help="Start an interactive chat, even when stdin is not a terminal",
+        help="Start an interactive chat",
     )
     @click.option(
         "list_models",
@@ -508,11 +508,10 @@ def register_commands(cli):
         """
         Run against an OpenAI-compatible endpoint without logging.
 
-        If PROMPT is provided, execute it once. If PROMPT is omitted in an
-        interactive terminal, start a chat unless --template is provided.
-        Templates run once by default; use --chat to apply one interactively.
-        Piped stdin is treated as a one-off prompt. Use --models to list the
-        available model IDs without running a prompt.
+        PROMPT or stdin is executed once. If neither is provided, wait for
+        input on stdin. Use --chat to start an interactive chat. Templates run
+        once by default; use --chat to apply one interactively. Use --models
+        to list the available model IDs without running a prompt.
         """
         from llm.cli import (
             AttachmentError,
@@ -598,16 +597,13 @@ def register_commands(cli):
             tools, python_tools, tools_debug, tools_approve, chain_limit
         )
         resolved_attachments = [*attachments, *attachment_types]
-        is_chat = force_chat or (
-            prompt is None and template_obj is None and sys.stdin.isatty()
-        )
         try:
             if list_models:
                 for available_model in model.get_client(key).models.list():
                     click.echo(available_model.id)
                 return
 
-            if is_chat:
+            if force_chat:
                 conversation = model.conversation()
 
                 def transform_chat_prompt(chat_prompt):
@@ -648,6 +644,14 @@ def register_commands(cli):
                     prompt = " ".join(
                         part for part in (stdin_prompt, prompt) if part is not None
                     )
+            elif (
+                prompt is None
+                and not resolved_attachments
+                and (template_obj is None or "input" in template_obj.vars())
+            ):
+                # Match `llm prompt`: wait for stdin until EOF instead of
+                # implicitly starting an interactive chat.
+                prompt = sys.stdin.read()
             if template_obj:
                 prompt, system = _apply_template(template_obj, prompt, params, system)
             if prompt is None:
