@@ -641,7 +641,11 @@ class LogStore:
         chain = self.load_chain(tip)
         if not chain:
             return []
-        return [part for part in chain[-1].parts if isinstance(part, ToolCallPart)]
+        return [
+            part
+            for part in chain[-1].parts
+            if isinstance(part, ToolCallPart) and not part.server_executed
+        ]
 
 
 def ensure_attachment(db, attachment) -> str:
