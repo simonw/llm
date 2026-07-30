@@ -391,6 +391,8 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
 
         # Process field name and type
         field_parts = field_info.strip().split()
+        if not field_parts:
+            continue
         field_name = field_parts[0].strip()
 
         # Default type is string
