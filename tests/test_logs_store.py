@@ -475,6 +475,22 @@ class TestPendingToolCalls:
         tip = store.ensure_chain([llm.user("Hi"), llm.assistant("Hello")])
         assert store.pending_tool_calls(tip) == []
 
+    def test_server_executed_tool_calls_are_not_pending(self, store):
+        tip = store.ensure_chain(
+            [
+                llm.user("Search"),
+                llm.assistant(
+                    ToolCallPart(
+                        name="web_search",
+                        arguments={"q": "pelicans"},
+                        tool_call_id="tc1",
+                        server_executed=True,
+                    )
+                ),
+            ]
+        )
+        assert store.pending_tool_calls(tip) == []
+
 
 # ---- logging a response ----------------------------------------------
 
