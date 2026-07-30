@@ -263,6 +263,56 @@ def mocked_openai_chat(httpx_mock):
 
 
 @pytest.fixture
+def mock_openai_responses(httpx_mock):
+    def add_response(
+        text="Bob, Alice, Eve",
+        model="gpt-5.6-luna",
+        response_id="resp_test",
+        message_id="msg_test",
+    ):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json={
+                "id": response_id,
+                "object": "response",
+                "created_at": 1,
+                "model": model,
+                "output": [
+                    {
+                        "type": "message",
+                        "id": message_id,
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": text,
+                                "annotations": [],
+                            }
+                        ],
+                    }
+                ],
+                "usage": {
+                    "input_tokens": 5,
+                    "output_tokens": 3,
+                    "total_tokens": 8,
+                },
+                "status": "completed",
+            },
+            headers={"Content-Type": "application/json"},
+        )
+
+    return add_response
+
+
+@pytest.fixture
+def mocked_openai_responses(httpx_mock, mock_openai_responses):
+    mock_openai_responses()
+    return httpx_mock
+
+
+@pytest.fixture
 def mocked_openai_chat_returning_fenced_code(httpx_mock):
     httpx_mock.add_response(
         method="POST",
@@ -337,6 +387,7 @@ def mocked_openai_completion(httpx_mock):
             "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
         },
         headers={"Content-Type": "application/json"},
+        is_reusable=True,
     )
     return httpx_mock
 

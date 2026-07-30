@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 import llm
 from llm.cli import cli
+from llm.logs import LogStore
 
 
 @pytest.fixture
@@ -442,6 +443,8 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     # Confirm it was correctly logged
     assert log_db.exists()
     db = sqlite_utils.Database(str(log_db))
-    assert db["responses"].count == 1
-    row = next(db["responses"].rows)
-    assert row["response"] == "Ho ho ho"
+    assert db["turns"].count == 1
+    turn = next(db["turns"].rows)
+    store = LogStore(db)
+    chain = store.load_chain(turn["tip_message_hash"])
+    assert chain[-1].parts[0].text == "Ho ho ho"

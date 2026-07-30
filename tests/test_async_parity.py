@@ -95,15 +95,28 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
 
     from llm.migrations import migrate
 
-    model = llm.get_async_model("echo")
-    r = model.prompt("hello")
-    await r.text()
-
     db = sqlite_utils.Database(str(tmp_path / "logs.db"))
     migrate(db)
-    # to_sync_response is what log_to_db uses for async.
-    sync_r = await r.to_sync_response()
-    sync_r.log_to_db(db)
+    # log_to_db no longer writes the legacy tables, so seed a row the
+    # way an older version of llm would have recorded it - from_row is
+    # the reader for exactly that history.
+    db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "model": "echo",
+            "prompt": "hello",
+            "system": None,
+            "prompt_json": None,
+            "options_json": "{}",
+            "response": "echoed text",
+            "response_json": None,
+            "conversation_id": None,
+            "duration_ms": 1,
+            "datetime_utc": "2025-01-01T00:00:00",
+            "schema_id": None,
+        },
+        alter=True,
+    )
 
     row = next(db["responses"].rows)
     rehydrated = llm.AsyncResponse.from_row(db, row)

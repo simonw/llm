@@ -75,7 +75,7 @@ If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you ca
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt (with the default gpt-4o-mini model)
+# Run a prompt (with the default gpt-5.6-luna model)
 llm "Ten fun names for a pet pelican"
 
 # Extract text from an image
@@ -91,12 +91,12 @@ Run prompts against [Gemini](https://aistudio.google.com/apikey) or [Anthropic](
 llm install llm-gemini
 llm keys set gemini
 # Paste Gemini API key here
-llm -m gemini-2.0-flash 'Tell me fun facts about Mountain View'
+llm -m gemini-3.5-flash 'Tell me fun facts about Mountain View'
 
 llm install llm-anthropic
 llm keys set anthropic
 # Paste Anthropic API key here
-llm -m claude-4-opus 'Impress me with wild facts about turnips'
+llm -m claude-5-opus 'Impress me with wild facts about turnips'
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):
@@ -163,6 +163,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [System prompts](https://llm.datasette.io/en/stable/usage.html#system-prompts)
     * [Tools](https://llm.datasette.io/en/stable/usage.html#tools)
     * [Extracting fenced code blocks](https://llm.datasette.io/en/stable/usage.html#extracting-fenced-code-blocks)
+    * [JSON output](https://llm.datasette.io/en/stable/usage.html#json-output)
     * [Schemas](https://llm.datasette.io/en/stable/usage.html#schemas)
     * [Fragments](https://llm.datasette.io/en/stable/usage.html#fragments)
     * [Continuing a conversation](https://llm.datasette.io/en/stable/usage.html#continuing-a-conversation)
@@ -334,6 +335,15 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Browsing data collected using schemas](https://llm.datasette.io/en/stable/logging.html#browsing-data-collected-using-schemas)
   * [Browsing logs using Datasette](https://llm.datasette.io/en/stable/logging.html#browsing-logs-using-datasette)
   * [Backing up your database](https://llm.datasette.io/en/stable/logging.html#backing-up-your-database)
+  * [The message store](https://llm.datasette.io/en/stable/logging.html#the-message-store)
+    * [Threads, turns, messages and parts](https://llm.datasette.io/en/stable/logging.html#threads-turns-messages-and-parts)
+    * [A worked example](https://llm.datasette.io/en/stable/logging.html#a-worked-example)
+    * [Content addressing as a contract](https://llm.datasette.io/en/stable/logging.html#content-addressing-as-a-contract)
+    * [Forking and shared history](https://llm.datasette.io/en/stable/logging.html#forking-and-shared-history)
+    * [Storage by reference](https://llm.datasette.io/en/stable/logging.html#storage-by-reference)
+    * [Table by table](https://llm.datasette.io/en/stable/logging.html#table-by-table)
+    * [Querying the message store](https://llm.datasette.io/en/stable/logging.html#querying-the-message-store)
+    * [Logging from Python](https://llm.datasette.io/en/stable/logging.html#logging-from-python)
   * [SQL schema](https://llm.datasette.io/en/stable/logging.html#sql-schema)
 * [Related tools](https://llm.datasette.io/en/stable/related-tools.html)
   * [strip-tags](https://llm.datasette.io/en/stable/related-tools.html#strip-tags)

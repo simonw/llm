@@ -134,8 +134,7 @@ def m007_finish_logs_table(db):
         rename={"timestamp_utc": "datetime_utc"},
         drop_foreign_keys=("chat_id",),
     )
-    with db.conn:
-        db.execute("alter table log rename to logs")
+    db.execute("alter table log rename to logs")
 
 
 @migration
@@ -429,159 +428,8 @@ def m022_response_reasoning(db):
 
 
 @migration
-def m023_content_addressed_messages(db):
-    # The content-addressed message tree. A message's hash covers its own
-    # content *and* its parent's hash, so conversations sharing a prefix
-    # share the rows storing it. Nothing here replaces the older tables -
-    # they stay exactly as they are so existing logs need no backfill.
-    db["messages"].create(
-        {
-            "hash": str,
-            "parent_hash": str,
-            "role": str,
-            "provider_metadata": str,
-        },
-        pk="hash",
-        foreign_keys=(("parent_hash", "messages", "hash"),),
-    )
-    db["messages"].create_index(["parent_hash"])
-
-    # Parts are plain child rows rather than content-addressed in their
-    # own right: prefix sharing already dedupes at the message level, and
-    # the genuinely large payloads (attachments, fragments) live in
-    # tables that are content-addressed already.
-    db["parts"].create(
-        {
-            "id": int,
-            "message_hash": str,
-            "position": int,
-            "type": str,
-            # text / reasoning
-            "text": str,
-            "fragment_id": int,
-            "redacted": int,
-            # tool_call / tool_result
-            "name": str,
-            "arguments": str,
-            "output": str,
-            "tool_call_id": str,
-            "server_executed": int,
-            "exception": str,
-            "tool_id": int,
-            "instance_id": int,
-            "provider_metadata": str,
-        },
-        pk="id",
-        foreign_keys=(
-            ("message_hash", "messages", "hash"),
-            ("fragment_id", "fragments", "id"),
-            ("tool_id", "tools", "id"),
-            ("instance_id", "tool_instances", "id"),
-        ),
-    )
-    db["parts"].create_index(["message_hash", "position"], unique=True)
-
-    # Covers both AttachmentPart and the attachments a tool result can
-    # carry, so there is one mechanism instead of two.
-    db["part_attachments"].create(
-        {
-            "part_id": int,
-            "attachment_id": str,
-            "order": int,
-        },
-        pk=("part_id", "attachment_id"),
-        foreign_keys=(
-            ("part_id", "parts", "id"),
-            ("attachment_id", "attachments", "id"),
-        ),
-    )
-
-    # A turn is one call to a model. Provenance lives here rather than on
-    # the message rows, which are shared and so cannot carry it.
-    db["turns"].create(
-        {
-            "id": str,
-            "thread_id": str,
-            "parent_message_hash": str,
-            "tip_message_hash": str,
-            "model": str,
-            "resolved_model": str,
-            "options_json": str,
-            "schema_id": str,
-            "input_tokens": int,
-            "output_tokens": int,
-            "token_details": str,
-            "duration_ms": int,
-            "datetime_utc": str,
-            "response_json": str,
-            "error": str,
-        },
-        pk="id",
-        foreign_keys=(
-            ("parent_message_hash", "messages", "hash"),
-            ("tip_message_hash", "messages", "hash"),
-            ("schema_id", "schemas", "id"),
-        ),
-    )
-
-    db["turn_tools"].create(
-        {
-            "turn_id": str,
-            "tool_id": int,
-        },
-        pk=("turn_id", "tool_id"),
-        foreign_keys=(
-            ("turn_id", "turns", "id"),
-            ("tool_id", "tools", "id"),
-        ),
-    )
-
-    # A thread is a named, mutable pointer at a message - the only
-    # mutable thing in the new schema. Forking is a second pointer at an
-    # interior message.
-    db["threads"].create(
-        {
-            "id": str,
-            "name": str,
-            "tip_message_hash": str,
-            "forked_from": str,
-            "datetime_utc": str,
-        },
-        pk="id",
-        foreign_keys=(
-            ("tip_message_hash", "messages", "hash"),
-            ("forked_from", "threads", "id"),
-        ),
-    )
-
-
-@migration
-def m024_message_store_payloads(db):
-    # Reshape the m023 tables. Parts now carry the wire form of the part
-    # as a payload rather than a column per field, so a new part type or
-    # field needs no schema change and reading is Part.from_dict().
-    #
-    # The payload stores large content by reference - fragment ids for
-    # text, attachment ids for binary - which is the whole point of the
-    # fragments feature: a novel is stored once and pointed at from every
-    # prompt about it. Hashing is unaffected either way, because identity
-    # is computed over the resolved content before anything is written.
-    #
-    # m023 shipped only in alphas and its tables are a mirror of data the
-    # legacy tables still hold in full, so this drops and recreates
-    # rather than carrying a data migration for a schema nobody has.
-    for table in (
-        "turn_tools",
-        "turn_fragments",
-        "turns",
-        "threads",
-        "part_attachments",
-        "part_fragments",
-        "parts",
-        "messages",
-    ):
-        db[table].drop(ignore=True)
-
+def m023_message_store(db):
+    # The content-addressed message store
     db["messages"].create(
         {
             "hash": str,
@@ -605,10 +453,14 @@ def m024_message_store_payloads(db):
             "type": str,
             # Tool name for tool_call and tool_result parts, else NULL.
             "tool_name": str,
-            # Part.to_dict(), with large content replaced by references.
-            # Authoritative: reading is Part.from_dict(resolved payload).
-            # type and tool_name above are write-time projections for
-            # querying; the read path ignores them.
+            # The part's literal text, for text and reasoning parts whose
+            # text borrows no fragments. Raw and unescaped - this column
+            # is never parsed as anything.
+            "text": str,
+            # The part's remaining structure as JSON, with large content
+            # replaced by references (fragment ids for text, attachment
+            # ids for binary) and the type key left to the column above.
+            # NULL when the text column carries everything.
             "payload": str,
         },
         pk="id",
@@ -627,7 +479,7 @@ def m024_message_store_payloads(db):
             "attachment_id": str,
             "order": int,
         },
-        pk=("part_id", "attachment_id"),
+        pk=("part_id", "attachment_id", "order"),
         foreign_keys=(
             ("part_id", "parts", "id"),
             ("attachment_id", "attachments", "id"),
@@ -710,10 +562,161 @@ def m024_message_store_payloads(db):
             "order": int,
             "kind": str,  # 'prompt' | 'system'
         },
-        pk=("turn_id", "fragment_id", "kind"),
+        pk=("turn_id", "fragment_id", "kind", "order"),
         foreign_keys=(
             ("turn_id", "turns", "id"),
             ("fragment_id", "fragments", "id"),
         ),
     )
     db["turn_fragments"].create_index(["fragment_id"])
+
+    # Searchable text per turn: the user's typed prompt (fragment
+    # content excluded) and the assistant's text output, kept fresh by
+    # LogStore.log. An explicit id primary key because external-content
+    # FTS is keyed by rowid, and implicit rowids are not stable across
+    # VACUUM.
+    db["turn_search"].create(
+        {
+            "id": int,
+            "turn_id": str,
+            "prompt": str,
+            "response": str,
+        },
+        pk="id",
+        foreign_keys=(("turn_id", "turns", "id"),),
+    )
+    db["turn_search"].create_index(["turn_id"], unique=True)
+    db["turn_search"].enable_fts(["prompt", "response"], create_triggers=True)
+
+    # Which configured toolbox instance served a tool call: the toolbox
+    # name, its plugin and its constructor arguments. Local execution
+    # provenance, so it lives outside the hashed message tree, joined
+    # to the chain by tool_call_id - and keyed by (turn_id,
+    # tool_call_id), because provider-supplied call ids are not
+    # guaranteed unique across turns. Deliberately the seed of a fuller
+    # execution-events table: duration or exception details would be
+    # additive columns here.
+    db["tool_instantiations"].create(
+        {
+            "turn_id": str,
+            "tool_call_id": str,
+            "name": str,
+            "plugin": str,
+            "arguments": str,
+        },
+        pk=("turn_id", "tool_call_id"),
+        foreign_keys=(("turn_id", "turns", "id"),),
+    )
+
+
+@migration
+def m024_tool_instance_references(db):
+    # Tool instance configurations - e.g. Datasette("https://...") -
+    # are stored once in the shared tool_instances table and referenced
+    # by id, instead of being copied onto every row that mentions them:
+    # tool_instantiations gains instance_id in place of its
+    # name/plugin/arguments copies, and turn_tools gains instance_id so
+    # the tools list can show which configured instance provided each
+    # tool.
+    from .utils import ensure_tool_instance
+
+    db["turn_tools"].add_column("instance_id", int, fk="tool_instances", fk_col="id")
+    db["tool_instantiations"].add_column(
+        "instance_id", int, fk="tool_instances", fk_col="id"
+    )
+    for row in list(db["tool_instantiations"].rows):
+        db["tool_instantiations"].update(
+            (row["turn_id"], row["tool_call_id"]),
+            {
+                "instance_id": ensure_tool_instance(
+                    db, row["name"], row["plugin"], row["arguments"]
+                )
+            },
+        )
+    db["tool_instantiations"].transform(drop={"name", "plugin", "arguments"})
+
+
+@migration
+def m025_turn_tools_instance_backfill(db):
+    # turn_tools rows written before instance_id existed have NULL
+    # there, so the tools list shows nothing for them. The instance
+    # that served calls in the same thread, matched by toolbox name
+    # prefix, is the right value for these development-era rows.
+    with db.atomic():
+        db.execute("""
+            update turn_tools set instance_id = (
+                select ti.instance_id from tool_instantiations ti
+                join turns turn_a on turn_a.id = ti.turn_id
+                join turns turn_b on turn_b.id = turn_tools.turn_id
+                    and turn_b.thread_id = turn_a.thread_id
+                join tool_instances instance
+                    on instance.id = ti.instance_id
+                join tools on tools.id = turn_tools.tool_id
+                where tools.name = instance.name
+                    or tools.name like instance.name || '\\_%' escape '\\'
+                limit 1
+            )
+            where instance_id is null
+            """)
+
+
+MESSAGE_TREE_SQL = """
+with recursive msg as (
+  select m.hash, m.parent_hash, m.role, m.rowid as rid,
+    replace(coalesce(
+      nullif(p.text, ''),
+      (select f.content from part_fragments pf
+       join fragments f on f.id = pf.fragment_id
+       where pf.part_id = p.id
+       order by pf."order" limit 1),
+      '[' || coalesce(p.type, 'empty') || ']'
+    ), char(10), ' ') as text,
+    (select group_concat(p2.tool_name, ', ') from parts p2
+     where p2.message_hash = m.hash and p2.type = 'tool_result'
+       and p2.tool_name is not null) as tools
+  from messages m
+  left join parts p on p.message_hash = m.hash and p.position = 0
+),
+tree as (
+  select hash, text, tools, 0 as depth,
+    printf('%012d', rid) as path, hash as root_hash
+  from msg where parent_hash is null
+  union all
+  select msg.hash, msg.text, msg.tools, t.depth + 1,
+    t.path || '/' || printf('%012d', msg.rid),
+    t.root_hash
+  from msg join tree t on msg.parent_hash = t.hash
+),
+turn_chain as (
+  select t.id as turn_id, t.datetime_utc, m.hash, m.parent_hash
+  from turns t join messages m on m.hash = t.tip_message_hash
+  union all
+  select tc.turn_id, tc.datetime_utc, m.hash, m.parent_hash
+  from turn_chain tc join messages m on m.hash = tc.parent_hash
+)
+select
+  t.root_hash,
+  strftime('%Y-%m-%d %H:%M:%S',
+    (select min(tc.datetime_utc) from turn_chain tc where tc.hash = t.hash)
+  ) as datetime,
+  replace(hex(zeroblob(t.depth)), '00', '    ') || substr(t.text, 1, 60)
+    as message,
+  coalesce(t.tools, '') as tools,
+  t.hash as message_hash,
+  t.path
+from tree t
+order by t.path
+""".strip()
+
+
+@migration
+def m026_message_tree_view(db):
+    # A readable rendering of the message store: every conversation
+    # tree as indented text, one row per message, depth-first with
+    # siblings in insertion order. root_hash identifies a tree - filter
+    # on it to isolate one conversation and its forks. datetime is the
+    # earliest turn that recorded the message, since shared message
+    # rows carry no timestamp of their own. Kept ordered by including
+    # path in the output - selecting from the view preserves tree order
+    # only while sorted by path.
+    db.create_view("message_tree", MESSAGE_TREE_SQL)

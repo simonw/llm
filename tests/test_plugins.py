@@ -460,7 +460,13 @@ def test_register_tools(tmpdir, logs_db):
             (
                 log_row["prompt"],
                 re.sub(
-                    r"tc_[0-9a-z]{26}", "tc_TCID", json.dumps(log_row["tool_results"])
+                    r'"id": \d+',
+                    '"id": ID',
+                    re.sub(
+                        r"tc_[0-9a-z]{26}",
+                        "tc_TCID",
+                        json.dumps(log_row["tool_results"]),
+                    ),
                 ),
             )
             for log_row in log_rows
@@ -469,12 +475,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -482,7 +488,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -783,23 +789,33 @@ def test_register_toolbox(tmpdir, logs_db):
             }
         ]
 
-        # Should show an error if you attempt to llm -c with configured toolboxes
+        # The stored instance configuration comes back as a -T style spec
+        conversation = cli.load_conversation(None)
+        assert conversation.loaded_tools == [
+            "Filesystem({})".format(json.dumps({"path": str(my_dir2)}))
+        ]
+
+        # llm -c should reconstruct the configured toolbox from the log
         result5 = runner.invoke(
             cli.cli,
-            ["-c", "list them again"],
+            ["-c", json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]})],
         )
-        assert result5.exit_code == 1
-        assert (
-            "Error: Tool(s) Filesystem_list_files not found. Available tools:"
-            in result5.output
+        assert result5.exit_code == 0
+        tool_results = json.loads(
+            "["
+            + result5.output.rsplit('"tool_results": [', 1)[1].rsplit("]", 1)[0]
+            + "]"
         )
+        assert tool_results == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(other_path)]),
+                "tool_call_id": ANY,
+            }
+        ]
 
         # Test the logging worked
-        rows = list(logs_db.query(TOOL_RESULTS_SQL))
-        # JSON decode things in rows
-        for row in rows:
-            row["tool_calls"] = json.loads(row["tool_calls"])
-            row["tool_results"] = json.loads(row["tool_results"])
+        rows = tool_activity_rows(logs_db)
         assert rows == [
             {
                 "model": "echo",
@@ -836,6 +852,27 @@ def test_register_toolbox(tmpdir, logs_db):
                     },
                 ],
             },
+            {
+                "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Filesystem_list_files",
+                        "output": json.dumps([str(other_path)]),
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": json.dumps({"path": str(my_dir2)}),
+                        },
+                    }
+                ],
+            },
+            # The llm -c continuation, using the reconstructed toolbox
             {
                 "model": "echo",
                 "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
@@ -929,11 +966,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
         plugins.pm.unregister(name="ToolboxPlugin")
 
     # Check the database
-    rows = list(logs_db.query(TOOL_RESULTS_SQL))
-    # JSON decode things in rows
-    for row in rows:
-        row["tool_calls"] = json.loads(row["tool_calls"])
-        row["tool_results"] = json.loads(row["tool_results"])
+    rows = tool_activity_rows(logs_db)
     assert rows == [
         {
             "model": "echo",
@@ -952,7 +985,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_set",
                     "output": "null",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -961,7 +994,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_get",
                     "output": "two",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -1005,57 +1038,32 @@ def test_plugins_command():
     ]
 
 
-TOOL_RESULTS_SQL = """
--- First, create ordered subqueries for tool_calls and tool_results
-with ordered_tool_calls as (
-    select
-        tc.response_id,
-        json_group_array(
-            json_object(
-                'name', tc.name,
-                'arguments', tc.arguments
-            )
-        ) as tool_calls_json
-    from (
-        select * from tool_calls order by id
-    ) tc
-    where tc.id is not null
-    group by tc.response_id
-),
-ordered_tool_results as (
-    select
-        tr.response_id,
-        json_group_array(
-            json_object(
-                'name', tr.name,
-                'output', tr.output,
-                'instance', case
-                    when ti.id is not null then json_object(
-                        'name', ti.name,
-                        'plugin', ti.plugin,
-                        'arguments', ti.arguments
-                    )
-                    else null
-                end
-            )
-        ) as tool_results_json
-    from (
-        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
-               ti.plugin, ti.arguments as ti_arguments
-        from tool_results tr
-        left join tool_instances ti on tr.instance_id = ti.id
-        order by tr.id
-    ) tr
-    left join tool_instances ti on tr.instance_id = ti.id
-    where tr.id is not null
-    group by tr.response_id
-)
-select
-    r.model,
-    coalesce(otc.tool_calls_json, '[]') as tool_calls,
-    coalesce(otr.tool_results_json, '[]') as tool_results
-from responses r
-left join ordered_tool_calls otc on r.id = otc.response_id
-left join ordered_tool_results otr on r.id = otr.response_id
-group by r.id, r.model
-order by r.id"""
+def tool_activity_rows(db):
+    """Per-turn tool calls and results from the message store, in the
+    shape the old TOOL_RESULTS_SQL produced from the legacy tables."""
+    from llm.logs import LogStore, log_row_extras, merged_log_rows
+
+    store = LogStore(db)
+    rows = merged_log_rows(store)
+    rows.reverse()
+    out = []
+    for row in rows:
+        extras = log_row_extras(store, row)
+        out.append(
+            {
+                "model": row["model"],
+                "tool_calls": [
+                    {"name": call["name"], "arguments": json.dumps(call["arguments"])}
+                    for call in extras["tool_calls"]
+                ],
+                "tool_results": [
+                    {
+                        "name": result["name"],
+                        "output": result["output"],
+                        "instance": result["instance"],
+                    }
+                    for result in extras["tool_results"]
+                ],
+            }
+        )
+    return out

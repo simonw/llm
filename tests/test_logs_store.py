@@ -6,13 +6,23 @@ prefixes are stored once, so forking a conversation and re-sending a
 history from a stateless client both write only what is new.
 """
 
+import json
+import sqlite3
+
 import pytest
 import sqlite_utils
 from click.testing import CliRunner
 
 import llm
 from llm.cli import cli
-from llm.logs import LogStore, canonical_json, message_hash
+from llm.logs import (
+    LogStore,
+    canonical_json,
+    log_row_extras,
+    merged_log_rows,
+    message_hash,
+)
+from llm.migrations import migrate
 from llm.models import Attachment
 from llm.parts import (
     AttachmentPart,
@@ -542,14 +552,17 @@ class TestConversationThreads:
             message.parts[0].text for message in store.thread_messages(conversation.id)
         ] == ["Hi", "Hello", "Hi", "Hello again"]
 
-    def test_a_response_without_a_conversation_creates_no_thread(
+    def test_a_response_without_a_conversation_gets_its_own_thread(
         self, store, mock_model
     ):
+        # Parity with the legacy tables, which recorded a conversation
+        # for every response - without this, a response logged through
+        # the library API could never be continued with `llm -c`.
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("Hi")
         response.text()
         store.log(response)
-        assert store.db["threads"].count == 0
+        assert store.db["threads"].count == 1
 
     def test_an_explicit_thread_id_wins(self, store, mock_model):
         thread_id = store.create_thread(name="Mine")
@@ -577,14 +590,15 @@ def run(*args):
     return result
 
 
-class TestCliDualWrite:
+class TestCliWrites:
     def test_a_prompt_writes_a_turn(self, cli_store):
         run("-m", "echo", "Hi")
         assert cli_store.db["turns"].count == 1
 
-    def test_a_prompt_still_writes_the_legacy_tables(self, cli_store):
+    def test_a_prompt_does_not_write_the_legacy_tables(self, cli_store):
         run("-m", "echo", "Hi")
-        assert cli_store.db["responses"].count == 1
+        assert cli_store.db["responses"].count == 0
+        assert cli_store.db["conversations"].count == 0
 
     def test_the_turn_points_at_the_stored_chain(self, cli_store):
         run("-m", "echo", "Hi")
@@ -592,9 +606,9 @@ class TestCliDualWrite:
         chain = cli_store.load_chain(turn["tip_message_hash"])
         assert [message.role for message in chain] == ["user", "assistant"]
 
-    def test_the_thread_matches_the_conversation(self, cli_store):
+    def test_the_thread_has_a_tip(self, cli_store):
         run("-m", "echo", "Hi")
-        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        conversation_id = next(iter(cli_store.db["threads"].rows))["id"]
         assert cli_store.thread_tip(conversation_id) is not None
 
     def test_no_log_writes_nothing(self, cli_store):
@@ -608,19 +622,14 @@ class TestCliContinuation:
         run("-m", "echo", "First")
         run("-m", "echo", "Second", "-c")
         assert cli_store.db["threads"].count == 1
-        conversation_id = next(iter(cli_store.db["conversations"].rows))["id"]
+        conversation_id = next(iter(cli_store.db["threads"].rows))["id"]
         assert len(cli_store.thread_messages(conversation_id)) == 4
 
     def test_history_comes_from_the_new_tables(self, user_path):
-        # Delete the legacy rows the old continuation path reads from. If
-        # `-c` still sends the full history, it can only have come from
-        # the content-addressed tables.
         run("-m", "echo", "First")
 
         db = sqlite_utils.Database(str(user_path / "logs.db"))
-        conversation_id = next(iter(db["conversations"].rows))["id"]
-        with db.conn:
-            db.execute("delete from responses")
+        conversation_id = next(iter(db["threads"].rows))["id"]
         db.close()
 
         run("-m", "echo", "Second", "-c")
@@ -679,15 +688,31 @@ class TestLegacyConversations:
     def test_continuing_a_conversation_with_no_thread_still_works(self, user_path):
         # Conversations logged before this schema existed have no thread,
         # so `-c` has to fall back to rebuilding from the legacy rows.
-        run("-m", "echo", "First")
-
+        # Nothing writes those rows any more - seed them the way an
+        # older version of llm would have.
         path = str(user_path / "logs.db")
         db = sqlite_utils.Database(path)
-        with db.conn:
-            db.execute("delete from threads")
-            db.execute("delete from turns")
-            db.execute("delete from parts")
-            db.execute("delete from messages")
+        migrate(db)
+        db["conversations"].insert(
+            {"id": "01aaaaaaaaaaaaaaaaaaaaaaaa", "name": "First", "model": "echo"}
+        )
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaab",
+                "model": "echo",
+                "prompt": "First",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "First response",
+                "response_json": None,
+                "conversation_id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+            },
+            alter=True,
+        )
         db.close()
 
         result = run("-m", "echo", "Second", "-c")
@@ -710,12 +735,27 @@ class TestLibraryLogging:
         assert store.db["turns"].count == 1
         assert store.db["messages"].count == 2
 
-    def test_log_to_db_still_writes_the_legacy_tables(self, store, mock_model):
+    def test_log_to_db_leaves_the_legacy_tables_alone(self, store, mock_model):
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("Hi")
         response.text()
         response.log_to_db(store.db)
-        assert store.db["responses"].count == 1
+        assert store.db["responses"].count == 0
+        assert store.db["conversations"].count == 0
+
+    def test_log_to_db_without_conversation_still_gets_a_thread(
+        self, store, mock_model
+    ):
+        # The legacy path recorded a conversation for every response;
+        # the store keeps that guarantee with a thread, so `llm -c` can
+        # continue a response logged through the library API.
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        assert store.db["threads"].count == 1
+        turn = next(iter(store.db["turns"].rows))
+        assert turn["thread_id"] is not None
 
     def test_a_chain_writes_the_store_too(self, store, mock_model):
         conversation = mock_model.conversation()
@@ -725,6 +765,105 @@ class TestLibraryLogging:
         chain.log_to_db(store.db)
         assert store.db["turns"].count == 1
         assert len(store.thread_messages(conversation.id)) == 2
+
+    def test_messages_plus_prompt_both_reach_the_chain(self, store, mock_model):
+        """prompt= alongside messages= used to vanish from the logged
+        chain: Prompt.messages returned the explicit list verbatim, so
+        the text the model answered was absent from the store."""
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        response.log_to_db(store.db)
+        turn = next(iter(store.db["turns"].rows))
+        chain = store.load_chain(turn["tip_message_hash"])
+        texts = [part.text for message in chain for part in message.parts]
+        assert texts == ["original", "follow-up", "Hello"]
+        assert store.verify() == []
+
+    def test_log_to_db_records_tool_instantiations(self, store, mock_model):
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next",
+            tool_results=[
+                llm.ToolResult(
+                    name="Notes_read",
+                    output="hello",
+                    tool_call_id="tc_1",
+                    instance=Notes("/tmp/notes"),
+                )
+            ],
+        )
+        response.text()
+        response.log_to_db(store.db)
+        turn_id = next(iter(store.db["turns"].rows))["id"]
+        link = next(iter(store.db["tool_instantiations"].rows))
+        assert link["turn_id"] == turn_id
+        assert link["tool_call_id"] == "tc_1"
+        instance = store.db["tool_instances"].get(link["instance_id"])
+        assert instance["name"] == "Notes"
+        assert instance["plugin"] is None
+        assert instance["arguments"] == '{"path": "/tmp/notes"}'
+
+    def test_turn_tools_reference_the_configured_instance(self, store, mock_model):
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+            def read(self) -> str:
+                "Read the notes"
+                return "hi"
+
+        for prompt in ("first", "second"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(prompt, tools=[Notes("/tmp/x")])
+            response.text()
+            response.log_to_db(store.db)
+
+        # One instance row however many turns it serves
+        assert store.db["tool_instances"].count == 1
+        instance_ids = {row["instance_id"] for row in store.db["turn_tools"].rows}
+        assert len(instance_ids) == 1
+
+        # And the tools list in the display carries it
+        rows = merged_log_rows(store)
+        tools = log_row_extras(store, rows[0])["tools"]
+        assert tools[0]["instance"] == {
+            "name": "Notes",
+            "arguments": '{"path": "/tmp/x"}',
+        }
+
+    def test_tool_instantiations_are_scoped_by_turn(self, store, mock_model):
+        # Providers with per-request counters can reuse a tool_call_id
+        # across turns - each turn keeps its own provenance row.
+        class Notes(llm.Toolbox):
+            def __init__(self, path: str):
+                self.path = path
+
+        for path in ("/tmp/one", "/tmp/two"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(
+                "next",
+                tool_results=[
+                    llm.ToolResult(
+                        name="Notes_read",
+                        output="hello",
+                        tool_call_id="call_0",
+                        instance=Notes(path),
+                    )
+                ],
+            )
+            response.text()
+            response.log_to_db(store.db)
+        arguments = sorted(row["arguments"] for row in store.db.query("""
+                select tool_instances.arguments from tool_instantiations
+                join tool_instances
+                    on tool_instances.id = tool_instantiations.instance_id
+                """))
+        assert arguments == ['{"path": "/tmp/one"}', '{"path": "/tmp/two"}']
 
     def test_successive_library_turns_extend_the_thread(self, store, mock_model):
         conversation = mock_model.conversation()
@@ -737,6 +876,389 @@ class TestLibraryLogging:
 
 
 # ---- storage by reference --------------------------------------------
+
+
+class TestPerTurnToolResolution:
+    def test_same_name_different_definitions_resolve_per_turn(self, store, mock_model):
+        # Two turns using tools that share a name but differ in
+        # definition - each turn's extras must report its own tool_id.
+        def make_tool(description):
+            return llm.Tool(name="lookup", description=description, input_schema={})
+
+        for description in ("first definition", "second definition"):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi", tools=[make_tool(description)])
+            response.text()
+            response.log_to_db(store.db)
+
+        rows = merged_log_rows(store)
+        rows.reverse()
+        for row in rows:
+            extras = log_row_extras(store, row)
+            assert len(extras["tools"]) == 1
+        descriptions_to_ids = {
+            log_row_extras(store, row)["tools"][0]["description"]: log_row_extras(
+                store, row
+            )["tools"][0]["id"]
+            for row in rows
+        }
+        assert len(descriptions_to_ids) == 2
+        assert len(set(descriptions_to_ids.values())) == 2
+
+
+class TestRepeatedFragments:
+    def test_passing_the_same_fragment_twice_keeps_both_rows(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("hi", fragments=["CONTEXT", "CONTEXT"])
+        response.text()
+        response.log_to_db(store.db)
+        rows = list(
+            store.db["turn_fragments"].rows_where("kind = 'prompt'", order_by='"order"')
+        )
+        assert [row["order"] for row in rows] == [0, 1]
+        assert rows[0]["fragment_id"] == rows[1]["fragment_id"]
+
+
+class TestAtomicWrites:
+    """sqlite-utils runs in autocommit, so `with db.conn` was never a
+    transaction - a crash mid-write could strand a message without its
+    parts, and the dedup check would then skip it forever."""
+
+    def test_failed_part_write_rolls_back_the_message(self, store, monkeypatch):
+        message = Message(role="user", parts=[TextPart(text="a"), TextPart(text="b")])
+        original = LogStore._write_part
+
+        def flaky(self, hash_, position, part, fragment_map):
+            if position == 1:
+                raise RuntimeError("disk full")
+            return original(self, hash_, position, part, fragment_map)
+
+        monkeypatch.setattr(LogStore, "_write_part", flaky)
+        with pytest.raises(RuntimeError):
+            store.ensure_chain([message])
+        monkeypatch.undo()
+        assert store.db["messages"].count == 0
+        assert store.db["parts"].count == 0
+        # A retry can now write the whole message
+        tip = store.ensure_chain([message])
+        assert store.load_chain(tip) == [message]
+        assert store.verify() == []
+
+    def test_failed_turn_write_rolls_back_the_whole_turn(
+        self, store, mock_model, monkeypatch
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        # Fail at the search refresh, one of the last steps of log()
+        monkeypatch.setattr("llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql")
+        with pytest.raises(sqlite3.OperationalError):
+            store.log(response)
+        monkeypatch.undo()
+        assert store.db["turns"].count == 0
+        assert store.db["messages"].count == 0
+        assert store.db["threads"].count == 0
+        # And the retry writes everything
+        store.log(response)
+        assert store.db["turns"].count == 1
+        assert store.verify() == []
+
+
+class TestConcurrentWriters:
+    def test_losing_the_insert_race_neither_raises_nor_duplicates(
+        self, tmp_path, monkeypatch
+    ):
+        # Two connections to the same database. B checks for the hash
+        # while it is absent - simulated by disabling its fast-path
+        # check - then A wins the insert. B's own insert must quietly
+        # lose: no UNIQUE error, no second set of parts.
+        path = str(tmp_path / "logs.db")
+        store_a = LogStore(sqlite_utils.Database(path))
+        store_b = LogStore(sqlite_utils.Database(path))
+        message = llm.user("Hi")
+        tip = store_a.ensure_chain([message])
+        monkeypatch.setattr(
+            sqlite_utils.db.Table, "count_where", lambda *args, **kwargs: 0
+        )
+        assert store_b.ensure_chain([message]) == tip
+        monkeypatch.undo()
+        assert store_a.db["messages"].count == 1
+        assert store_a.db["parts"].count == 1
+        assert store_a.verify() == []
+
+
+class TestTurnInputBoundary:
+    """A turn whose input ends [tool results, user prompt] owns both -
+    the tool results must not vanish from display or the -T filter just
+    because a user message follows them."""
+
+    def _log_turn_with_results_and_prompt(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next question",
+            messages=[llm.user("orig"), llm.assistant("first answer")],
+            tool_results=[llm.ToolResult(name="t", output="RESULT", tool_call_id="c9")],
+        )
+        response.text()
+        response.log_to_db(store.db)
+
+    def test_tool_results_and_prompt_both_display(self, store, mock_model):
+        self._log_turn_with_results_and_prompt(store, mock_model)
+        row = merged_log_rows(store)[0]
+        assert row["prompt"] == "next question"
+        extras = log_row_extras(store, row)
+        assert [result["output"] for result in extras["tool_results"]] == ["RESULT"]
+        # The parts row id resolves even though the result sits one
+        # message above the parent.
+        assert extras["tool_results"][0]["id"] is not None
+
+    def test_tool_filters_match(self, store, mock_model):
+        self._log_turn_with_results_and_prompt(store, mock_model)
+        assert len(merged_log_rows(store, any_tools=True)) == 1
+        assert len(merged_log_rows(store, tool_names=["t"])) == 1
+        assert merged_log_rows(store, tool_names=["other"]) == []
+
+
+class TestUnsupportedBranchDatabases:
+    def test_existing_message_store_tables_fail_loudly(self, tmp_path):
+        # The message store migration creates its tables in final form
+        # and assumes they do not exist - a database carrying tables
+        # from unreleased development revisions is an unsupported
+        # state, and the migration fails loudly rather than dropping
+        # or adapting whatever is there.
+        db = sqlite_utils.Database(str(tmp_path / "old-branch.db"))
+        db["messages"].create({"hash": str}, pk="hash")
+        with pytest.raises(sqlite3.OperationalError):
+            migrate(db)
+
+
+class TestAttachmentHashing:
+    """Message identity covers attachment content, never the filesystem
+    path the bytes were loaded from."""
+
+    def test_same_bytes_at_two_paths_are_one_identity(self, tmp_path):
+        path_a = tmp_path / "a.png"
+        path_b = tmp_path / "b.png"
+        path_a.write_bytes(b"SAME BYTES")
+        path_b.write_bytes(b"SAME BYTES")
+        hashes = [
+            message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(p))
+                        )
+                    ],
+                ),
+                None,
+            )
+            for p in (path_a, path_b)
+        ]
+        assert hashes[0] == hashes[1]
+
+    def test_changed_bytes_at_the_same_path_change_the_hash(self, tmp_path):
+        path = tmp_path / "x.png"
+
+        def hash_now():
+            return message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                ),
+                None,
+            )
+
+        path.write_bytes(b"first version")
+        first = hash_now()
+        path.write_bytes(b"second version")
+        assert hash_now() != first
+
+    def test_same_bytes_at_two_paths_share_the_stored_row(self, store, tmp_path):
+        for name in ("a.png", "b.png"):
+            path = tmp_path / name
+            path.write_bytes(b"SAME BYTES")
+            store.ensure_chain(
+                [
+                    Message(
+                        role="user",
+                        parts=[
+                            AttachmentPart(
+                                attachment=Attachment(type="image/png", path=str(path))
+                            )
+                        ],
+                    )
+                ]
+            )
+        assert store.db["messages"].count == 1
+
+    def test_attachment_chain_verifies(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"PNG BYTES")
+        store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                ),
+                llm.assistant("A fine image"),
+            ]
+        )
+        assert store.verify() == []
+
+    def test_media_type_participates_in_identity(self, tmp_path):
+        path = tmp_path / "x.bin"
+        path.write_bytes(b"SAME BYTES")
+
+        def hash_as(type_):
+            return message_hash(
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type=type_, path=str(path))
+                        )
+                    ],
+                ),
+                None,
+            )
+
+        # The model sees the media type: identical bytes sent as
+        # different types are different requests.
+        assert hash_as("image/png") != hash_as("text/plain")
+
+    def test_cached_attachment_id_is_not_trusted(self, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"first")
+        attachment = Attachment(type="image/png", path=str(path))
+        attachment.id()  # caches _id from the current bytes
+        message = Message(role="user", parts=[AttachmentPart(attachment=attachment)])
+        first = message_hash(message, None)
+        path.write_bytes(b"second")
+        assert message_hash(message, None) != first
+
+    def test_editing_the_file_after_logging_breaks_verify(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"ORIGINAL")
+        tip = store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                )
+            ]
+        )
+        assert store.verify() == []
+        path.write_bytes(b"TAMPERED")
+        assert store.verify() == [tip]
+
+    def test_deleting_the_file_is_detected_not_fatal(self, store, tmp_path):
+        path = tmp_path / "x.png"
+        path.write_bytes(b"ORIGINAL")
+        tip = store.ensure_chain(
+            [
+                Message(
+                    role="user",
+                    parts=[
+                        AttachmentPart(
+                            attachment=Attachment(type="image/png", path=str(path))
+                        )
+                    ],
+                )
+            ]
+        )
+        path.unlink()
+        assert store.verify() == [tip]
+
+
+class TestRepeatedAttachments:
+    def test_a_tool_result_can_carry_the_same_attachment_twice(self, store):
+        attachment = Attachment(type="image/png", content=b"PNG BYTES")
+        message = Message(
+            role="tool",
+            parts=[
+                ToolResultPart(
+                    name="t",
+                    output="ok",
+                    tool_call_id="c1",
+                    attachments=[attachment, attachment],
+                )
+            ],
+        )
+        tip = store.ensure_chain([message])
+        assert store.db["part_attachments"].count == 2
+        loaded = store.load_chain(tip)
+        assert len(loaded[0].parts[0].attachments) == 2
+        assert store.verify() == []
+
+
+class TestPartStorageFormat:
+    """Literal text is stored raw in its own column - never escaped,
+    never parsed - and the JSON payload holds only structure, with the
+    type key left to the type column."""
+
+    def test_plain_text_stores_raw_text_and_no_payload(self, store):
+        text = '{"looks": "like json", "but": "is text"}'
+        store.ensure_chain([llm.user(text)])
+        row = next(iter(store.db["parts"].rows))
+        assert row["type"] == "text"
+        assert row["text"] == text
+        assert row["payload"] is None
+
+    def test_redacted_reasoning_splits_text_from_structure(self, store):
+        message = Message(
+            role="assistant",
+            parts=[ReasoningPart(text="thinking", redacted=True)],
+        )
+        tip = store.ensure_chain([message])
+        row = next(iter(store.db["parts"].rows))
+        assert row["text"] == "thinking"
+        assert json.loads(row["payload"]) == {"redacted": True}
+        assert store.load_chain(tip) == [message]
+
+    def test_no_stored_payload_contains_a_type_key(self, store):
+        messages = [
+            llm.user("hi"),
+            Message(
+                role="assistant",
+                parts=[
+                    ReasoningPart(text="thinking", redacted=True),
+                    ToolCallPart(name="t", arguments={"a": 1}, tool_call_id="c1"),
+                ],
+            ),
+            Message(
+                role="tool",
+                parts=[ToolResultPart(name="t", output="ok", tool_call_id="c1")],
+            ),
+        ]
+        tip = store.ensure_chain(messages)
+        for row in store.db["parts"].rows:
+            if row["payload"] is not None:
+                assert "type" not in json.loads(row["payload"])
+        assert store.load_chain(tip) == messages
+        assert store.verify() == []
+
+    def test_fragment_referencing_text_stays_structured(self, store):
+        novel = "CALL ME ISHMAEL. " * 20
+        ensure_fragment(store.db, novel)
+        store.ensure_chain([llm.user(f"{novel}\nwho?")], fragments=[novel])
+        row = next(iter(store.db["parts"].rows))
+        assert row["text"] is None
+        assert json.loads(row["payload"]) == {
+            "text_ref": [{"fragment": 1}, {"literal": "\nwho?"}]
+        }
 
 
 class TestFragmentReferences:
@@ -867,12 +1389,10 @@ class TestVerify:
         )
         assert store.verify() == []
 
-    def test_a_corrupted_payload_is_caught(self, store):
+    def test_a_corrupted_part_is_caught(self, store):
         tip = store.ensure_chain([llm.user("Hi")])
         with store.db.conn:
-            store.db.execute(
-                "update parts set payload = ?", ['{"type":"text","text":"tampered"}']
-            )
+            store.db.execute("update parts set text = 'tampered'")
         assert store.verify() == [tip]
 
     def test_a_missing_fragment_is_caught(self, store):
@@ -966,3 +1486,220 @@ class TestAsyncLogging:
         ]
         assert parts[0].provider_metadata == {"anthropic": {"signature": "SIG"}}
         assert store.verify() == []
+
+
+# ---- llm logs against the new tables ---------------------------------
+
+
+def forget_legacy(user_path):
+    """Empty the table the old `llm logs` reads from.
+
+    Every test below runs this first, so a passing assertion can only
+    have been served by the content-addressed tables. Without it these
+    tests pass against the legacy path and prove nothing.
+    """
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    with db.conn:
+        db.execute("delete from responses")
+    db.close()
+
+
+class TestLogsCommand:
+    """`llm logs` reads the content-addressed tables only. Conversations
+    logged before this schema existed are deliberately not shown yet."""
+
+    def test_shows_a_logged_prompt(self, user_path):
+        run("-m", "echo", "hello there")
+        forget_legacy(user_path)
+        assert "hello there" in run("logs", "-n", "1").output
+
+    def test_json_output_carries_the_turn(self, user_path):
+        run("-m", "echo", "hello there")
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "-n", "1", "--json").output)
+        assert len(rows) == 1
+        assert rows[0]["model"] == "echo"
+        assert rows[0]["prompt"] == "hello there"
+        assert "hello there" in rows[0]["response"]
+
+    def test_count_limits_results(self, user_path):
+        for word in ("one", "two", "three"):
+            run("-m", "echo", word)
+        forget_legacy(user_path)
+        assert len(json.loads(run("logs", "-n", "2", "--json").output)) == 2
+
+    def test_results_are_chronological(self, user_path):
+        for word in ("one", "two", "three"):
+            run("-m", "echo", word)
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "-n", "0", "--json").output)
+        assert [r["prompt"] for r in rows] == ["one", "two", "three"]
+
+    def test_filters_by_model(self, user_path):
+        run("-m", "echo", "hello")
+        forget_legacy(user_path)
+        assert json.loads(run("logs", "-m", "echo", "--json").output)
+        assert json.loads(run("logs", "-m", "gpt-4o", "--json").output) == []
+
+    def test_filters_to_a_conversation(self, user_path):
+        run("-m", "echo", "first")
+        run("-c", "second")
+        run("-m", "echo", "unrelated")
+        forget_legacy(user_path)
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        thread_id = next(
+            iter(db.query("select thread_id from turns order by id limit 1"))
+        )["thread_id"]
+        rows = json.loads(run("logs", "--cid", thread_id, "--json").output)
+        assert [r["prompt"] for r in rows] == ["first", "second"]
+
+    def test_filters_by_fragment(self, user_path, tmpdir):
+        path = tmpdir / "frag.txt"
+        path.write_text("FRAGMENT BODY", "utf-8")
+        run("-m", "echo", "with fragment", "-f", str(path))
+        run("-m", "echo", "without fragment")
+        forget_legacy(user_path)
+
+        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        fragment_hash = next(iter(db["fragments"].rows))["hash"]
+        rows = json.loads(run("logs", "-f", fragment_hash, "--json").output)
+        # The stored prompt is the resolved text the model was sent.
+        assert [r["prompt"] for r in rows] == ["FRAGMENT BODY\nwith fragment"]
+
+    def test_filters_by_tool(self, user_path):
+        run(
+            "-m",
+            "echo",
+            '{"tool_calls": [{"name": "llm_version"}]}',
+            "-T",
+            "llm_version",
+        )
+        run("-m", "echo", "no tools here")
+        forget_legacy(user_path)
+        assert len(json.loads(run("logs", "-T", "llm_version", "--json").output)) == 1
+
+    def test_usage_is_reported(self, user_path):
+        run("-m", "echo", "hello")
+        forget_legacy(user_path)
+        rows = json.loads(run("logs", "--json").output)
+        assert "input_tokens" in rows[0]
+        assert "datetime_utc" in rows[0]
+
+
+class TestPayloadOrdering:
+    def test_tool_call_argument_order_is_preserved(self, store):
+        # canonical_json sorts keys - that is for hashing, not storage.
+        # Arguments come back in the order the model produced them.
+        messages = [
+            llm.assistant(
+                ToolCallPart(
+                    name="demo",
+                    arguments={"timeout": 120, "options": ["tick"]},
+                    tool_call_id="tc1",
+                )
+            )
+        ]
+        tip = store.ensure_chain(messages)
+        assert list(store.load_chain(tip)[0].parts[0].arguments) == [
+            "timeout",
+            "options",
+        ]
+
+    def test_hashing_still_ignores_key_order(self, store):
+        one = store.ensure_chain(
+            [llm.assistant(ToolCallPart(name="d", arguments={"a": 1, "b": 2}))]
+        )
+        two = store.ensure_chain(
+            [llm.assistant(ToolCallPart(name="d", arguments={"b": 2, "a": 1}))]
+        )
+        assert one == two
+        assert store.db["messages"].count == 1
+
+
+# ---- the message_tree view -------------------------------------------
+
+
+class TestMessageTreeView:
+    def rows(self, store):
+        return list(store.db.query("select * from message_tree order by path"))
+
+    def test_forks_render_as_indented_siblings(self, store):
+        thread = store.create_thread()
+        fork_point = store.append(
+            thread, [llm.user("Question"), llm.assistant("Answer")]
+        )
+        store.append(thread, [llm.user("Follow-up A")])
+        forked = store.fork(fork_point)
+        store.append(forked, [llm.user("Follow-up B")])
+
+        assert [row["message"] for row in self.rows(store)] == [
+            "Question",
+            "    Answer",
+            "        Follow-up A",
+            "        Follow-up B",
+        ]
+
+    def test_every_message_carries_its_tree_root_hash(self, store):
+        store.append(store.create_thread(), [llm.user("One"), llm.assistant("1")])
+        store.append(store.create_thread(), [llm.user("Two")])
+
+        rows = self.rows(store)
+        assert [row["message"] for row in rows] == ["One", "    1", "Two"]
+        one, reply, two = rows
+        # A root is its own root; descendants inherit it; separate
+        # conversations get separate roots.
+        assert one["root_hash"] == one["message_hash"]
+        assert reply["root_hash"] == one["message_hash"]
+        assert two["root_hash"] == two["message_hash"]
+
+    def test_tool_results_show_their_tool_names(self, store):
+        store.append(
+            store.create_thread(),
+            [
+                llm.user("Search"),
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(name="lookup", output="42", tool_call_id="c1"),
+                        ToolResultPart(name="fetch", output="x", tool_call_id="c2"),
+                    ],
+                ),
+            ],
+        )
+        prompt, tool = self.rows(store)
+        assert prompt["tools"] == ""
+        assert tool["message"].strip() == "[tool_result]"
+        assert sorted(tool["tools"].split(", ")) == ["fetch", "lookup"]
+
+    def test_fragment_referenced_text_is_resolved(self, store):
+        novel = "Call me Ishmael, but keep this fragment out of the parts table."
+        store.ensure_chain([llm.user(f"{novel}\nwho?")], fragments=[novel])
+        (row,) = self.rows(store)
+        # The stored part holds a text_ref, not the text itself; the view
+        # displays the fragment's content in its place.
+        assert row["message"] == novel[:60]
+
+    def test_text_is_flattened_and_truncated(self, store):
+        store.append(
+            store.create_thread(), [llm.user("line one\nline two " + "x" * 100)]
+        )
+        (row,) = self.rows(store)
+        assert row["message"] == ("line one line two " + "x" * 100)[:60]
+
+    def test_datetime_comes_from_the_turn_that_logged_the_message(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        store.log(response)
+        rows = self.rows(store)
+        # Both messages were recorded by the same turn, so they share
+        # its timestamp.
+        assert len({row["datetime"] for row in rows}) == 1
+        assert rows[0]["datetime"] is not None
+
+    def test_messages_no_turn_has_recorded_have_no_datetime(self, store):
+        store.append(store.create_thread(), [llm.user("Hi")])
+        (row,) = self.rows(store)
+        assert row["datetime"] is None

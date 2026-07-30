@@ -380,6 +380,39 @@ response.add_tool_call(
 )
 ```
 
+(advanced-model-plugins-execute-tool-call)=
+### Provider-managed local tool calls
+
+Some provider SDKs orchestrate the tool loop themselves: they call a local callback with generated arguments, wait for that callback to return a result, and then continue the same model response. Plugins for those providers can delegate the actual invocation to LLM using `response.execute_tool_call()`:
+
+```python
+tool_result = response.execute_tool_call(
+    llm.ToolCall(
+        tool_call_id=tool_id,
+        name=tool_name,
+        arguments=parsed_args,
+    )
+)
+return tool_result.output
+```
+
+Async model plugins should use the awaitable equivalent method on `AsyncResponse`:
+
+```python
+tool_result = await response.execute_tool_call(
+    llm.ToolCall(
+        tool_call_id=tool_id,
+        name=tool_name,
+        arguments=parsed_args,
+    )
+)
+return tool_result.output
+```
+
+This uses LLM's normal tool executor, including toolbox preparation, error handling, `llm_tool_call` injection and the `before_call` and `after_call` lifecycle callbacks. If `tool_call_id` is omitted LLM generates one.
+
+Do **not** also call `response.add_tool_call()` for a provider-managed call. That would cause the normal chain loop to execute the same tool a second time after the provider has already received its result.
+
 ### Server-side tool calls
 
 For tools the API executes internally, set `server_executed=True` on the events. Anthropic web search is an example: the API returns a `server_tool_use` block for the search request, followed by a `web_search_tool_result` block containing the result payload.

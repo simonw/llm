@@ -4,7 +4,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 import click
 import httpx
@@ -2177,12 +2177,21 @@ class Completion(Chat):
             raise NotImplementedError(
                 "System prompts are not supported for OpenAI completion models"
             )
+        from llm.parts import TextPart
+
+        # prompt.messages carries the full history - including history
+        # reloaded from storage, which conversation.responses does not.
         messages = []
-        if conversation is not None:
-            for prev_response in conversation.responses:
-                messages.append(prev_response.prompt.prompt)
-                messages.append(cast(Response, prev_response).text())
-        messages.append(prompt.prompt)
+        for message in prompt.messages:
+            if message.role not in ("user", "assistant"):
+                continue
+            text = "".join(
+                part.text
+                for part in message.parts
+                if isinstance(part, TextPart) and part.text
+            )
+            if text:
+                messages.append(text)
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
         if stream:

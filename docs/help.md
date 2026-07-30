@@ -101,7 +101,7 @@ Usage: llm prompt [OPTIONS] [PROMPT]
   Examples:
 
       llm 'Capital of France?'
-      llm 'Capital of France?' -m gpt-4o
+      llm 'Capital of France?' -m gpt-5.5
       llm 'Capital of France?' -s 'answer in Spanish'
 
   Multi-modal models can be called with attachments like this:
@@ -154,6 +154,8 @@ Options:
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
+  --json                          Output the response as JSON, same format as
+                                  llm logs --json
   -h, --help                      Show this message and exit.
 ```
 
@@ -457,7 +459,7 @@ Usage: llm models options show [OPTIONS] MODEL
 
   Example usage:
 
-      llm models options show gpt-4o
+      llm models options show gpt-4.1
 
 Options:
   -h, --help  Show this message and exit.
@@ -472,7 +474,7 @@ Usage: llm models options set [OPTIONS] MODEL KEY VALUE
 
   Example usage:
 
-      llm models options set gpt-4o temperature 0.5
+      llm models options set gpt-4.1 temperature 0.5
 
 Options:
   -h, --help  Show this message and exit.
@@ -487,9 +489,9 @@ Usage: llm models options clear [OPTIONS] MODEL [KEY]
 
   Example usage:
 
-      llm models options clear gpt-4o
+      llm models options clear gpt-4.1
       # Or for a single option
-      llm models options clear gpt-4o temperature
+      llm models options clear gpt-4.1 temperature
 
 Options:
   -h, --help  Show this message and exit.
@@ -692,12 +694,12 @@ Usage: llm aliases set [OPTIONS] ALIAS [MODEL_ID]
 
   Example usage:
 
-      llm aliases set mini gpt-4o-mini
+      llm aliases set luna gpt-5.6-luna
 
   Alternatively you can omit the model ID and specify one or more -q options.
   The first model matching all of those query strings will be used.
 
-      llm aliases set mini -q 4o -q mini
+      llm aliases set luna -q gpt -q luna
 
 Options:
   -q, --query TEXT  Set alias for model matching these strings

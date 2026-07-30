@@ -214,7 +214,7 @@ class Collection:
             embeddings = list(
                 self.model().embed_multi(item[1] for item in filtered_batch)
             )
-            with self.db.conn:
+            with self.db.atomic():
                 cast(Table, self.db["embeddings"]).insert_all(
                     (
                         {
@@ -358,7 +358,7 @@ class Collection:
         """
         Delete the collection and its embeddings from the database
         """
-        with self.db.conn:
+        with self.db.atomic():
             self.db.execute("delete from embeddings where collection_id = ?", [self.id])
             self.db.execute("delete from collections where id = ?", [self.id])
 

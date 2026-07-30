@@ -940,9 +940,11 @@ class TestPromptMessagesExplicit:
         assert p.messages == explicit
 
     def test_explicit_messages_ignores_prompt_kwarg(self, mock_model):
-        """Explicit messages= is authoritative. A prompt= string passed
-        alongside is no longer auto-appended — the invariant is that
-        prompt.messages equals exactly what the model was sent."""
+        """Prompt stores messages= verbatim. Folding prompt= into the
+        chain happens in model.prompt() / _build_full_chain before the
+        Prompt is constructed — internal callers pass chains that
+        already contain the prompt text, so Prompt itself must not
+        append it a second time."""
         from llm.models import Prompt
 
         explicit = [llm.system("x"), llm.user("prior"), llm.user("follow-up")]
@@ -1001,6 +1003,90 @@ class TestModelPromptMessagesKwarg:
         assert response.prompt.messages == [llm.user("q")]
 
 
+class TestModelPromptMessagesPlusNewInput:
+    """messages= is the authoritative history; prompt=, fragments=,
+    attachments= and tool_results= passed alongside are this turn's new
+    input, folded into the chain so prompt.messages still equals exactly
+    what the model sees. Previously the prompt text was silently absent
+    from the chain — and so from the log."""
+
+    def test_prompt_text_appends_user_message(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+    def test_fragments_join_the_prompt_text(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "question", fragments=["context"], messages=[llm.user("original")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("context\nquestion"),
+        ]
+
+    def test_attachments_join_the_user_message(self, mock_model):
+        att = llm.Attachment(type="image/png", url="http://example.com/a.png")
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "look", attachments=[att], messages=[llm.user("original")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.Message(
+                role="user",
+                parts=[
+                    llm.parts.TextPart(text="look"),
+                    llm.parts.AttachmentPart(attachment=att),
+                ],
+            ),
+        ]
+
+    def test_tool_results_append_tool_message_before_user(self, mock_model):
+        tr = llm.ToolResult(name="t", output="ok", tool_call_id="c1")
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next", messages=[llm.user("original")], tool_results=[tr]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(name="t", output="ok", tool_call_id="c1")
+                ],
+            ),
+            llm.user("next"),
+        ]
+
+    def test_conversation_prompt_folds_too(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        response = conv.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_prompt_folds_too(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        response = async_mock_model.prompt("follow-up", messages=[llm.user("original")])
+        await response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+
 # Invariant: response.prompt.messages == exactly what the model was
 # sent for this turn, regardless of whether the caller used
 # model.prompt(messages=[...]), conversation.prompt("text"), or
@@ -1008,17 +1094,21 @@ class TestModelPromptMessagesKwarg:
 
 
 class TestConversationFullChainInvariant:
-    def test_explicit_messages_is_authoritative_no_prompt_combine(self, mock_model):
-        """Explicit messages= is the whole list. If prompt= is ALSO
-        passed, it's ignored for messages-building — the caller asked
-        for exact control."""
+    def test_explicit_messages_plus_prompt_appends_user_message(self, mock_model):
+        """Explicit messages= is the authoritative history. A prompt=
+        passed alongside is this turn's new input and is folded in as a
+        trailing user message — the model sees it, so the chain (and
+        therefore the log) must contain it."""
         mock_model.enqueue(["ok"])
         response = mock_model.prompt(
-            "this prompt argument is ignored",
+            "the new question",
             messages=[llm.user("q")],
         )
         response.text()
-        assert response.prompt.messages == [llm.user("q")]
+        assert response.prompt.messages == [
+            llm.user("q"),
+            llm.user("the new question"),
+        ]
 
     def test_conversation_second_turn_prompt_messages_has_full_chain(self, mock_model):
         mock_model.enqueue(["a1"])
@@ -1125,13 +1215,28 @@ class TestSqliteRehydrateMessages:
 
         from llm.migrations import migrate
 
-        mock_model.enqueue(["answer text"])
-        r1 = mock_model.prompt("q1")
-        r1.text()
-
         db = sqlite_utils.Database(str(tmp_path / "logs.db"))
         migrate(db)
-        r1.log_to_db(db)
+        # log_to_db no longer writes the legacy tables - seed the row
+        # the way an older version of llm recorded it, since from_row
+        # is the reader for exactly that history.
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "model": "mock",
+                "prompt": "q1",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "answer text",
+                "response_json": None,
+                "conversation_id": None,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+            },
+            alter=True,
+        )
 
         # Rehydrate the response
         row = next(db["responses"].rows)
@@ -1815,17 +1920,20 @@ class TestChainMessagesKwarg:
         r1 = chain._responses[0]
         assert r1.prompt.messages == [llm.user("explicit")]
 
-    def test_chain_messages_is_authoritative_over_prompt_kwarg(self, mock_model):
-        """Parity with prompt(): when both are passed, messages= wins
-        and the prompt= string is not folded into the chain."""
+    def test_chain_messages_plus_prompt_folds_user_message(self, mock_model):
+        """Parity with prompt(): messages= is the history and a prompt=
+        passed alongside is appended as this turn's user message."""
         mock_model.enqueue(["ok"])
         chain = mock_model.chain(
-            "ignored text",
+            "the new question",
             messages=[llm.user("explicit")],
         )
         chain.text()
         r1 = chain._responses[0]
-        assert r1.prompt.messages == [llm.user("explicit")]
+        assert r1.prompt.messages == [
+            llm.user("explicit"),
+            llm.user("the new question"),
+        ]
 
     def test_chain_with_messages_and_prior_conversation(self, mock_model):
         """Explicit messages= on chain() replaces history reconstruction;
