@@ -39,6 +39,18 @@ Or with [uv](https://docs.astral.sh/uv/guides/tools/)
 ```bash
 uv tool install llm
 ```
+Use LLM to run prompts or start chats against an arbitrary OpenAI-compatible Chat Completions endpoint, such as [LM Studio](https://lmstudio.ai). With `uvx`, you can do this without installing LLM first:
+```bash
+uvx llm openai endpoint http://localhost:1234/v1 \
+  -m google/gemma-4-12b \
+  "What is the capital of France?"
+
+uvx llm openai endpoint http://localhost:1234/v1 \
+  -m google/gemma-4-12b \
+  --chat
+```
+Add `--key your-api-key` if the endpoint requires authentication. See {ref}`Run against an endpoint without configuring it <openai-endpoint>` for more options.
+
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 ```bash
 # Paste your OpenAI API key into this
