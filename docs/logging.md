@@ -550,56 +550,73 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 
 ### Querying the message store
 
-These queries can be pasted into [Datasette](https://datasette.io/) or `sqlite3` against your `logs.db`. This one renders every conversation tree as indented text, resolving `text_ref` payloads back to their full text and stepping the indentation in at each fork:
+These queries can be pasted into [Datasette](https://datasette.io/) or `sqlite3` against your `logs.db`.
+
+The database includes a `message_tree` view that renders every conversation tree as indented text, one row per message, depth-first with forks shown as siblings:
 
 ```sql
-with recursive
-siblings as (
-  select
-    hash,
-    parent_hash,
-    count(*) over (partition by parent_hash) as branches
-  from messages
+select * from message_tree
+```
+
+Its columns:
+
+- `root_hash` - the hash of the tree's root message, shared by every message in the tree. Filter or facet on this to isolate a single conversation and its forks.
+- `datetime` - when the message was first logged, derived from the earliest turn that recorded it (shared message rows carry no timestamp of their own).
+- `message` - the message's text, indented to show its depth in the tree. Text stored as fragment references is resolved back to the fragment content, and messages with no text show a placeholder such as `[tool_result]`.
+- `tools` - names of any tools that were executed at that message, comma-separated.
+- `message_hash` and `path` - the message's own hash, and the sort key that produces the tree ordering. The rows only read as trees while sorted by `path`, so re-sorting by another column will scramble the indentation.
+
+<details><summary>The SQL query behind the <code>message_tree</code> view</summary>
+
+```sql
+with recursive msg as (
+  select m.hash, m.parent_hash, m.role, m.rowid as rid,
+    replace(coalesce(
+      nullif(p.text, ''),
+      (select f.content from part_fragments pf
+       join fragments f on f.id = pf.fragment_id
+       where pf.part_id = p.id
+       order by pf."order" limit 1),
+      '[' || coalesce(p.type, 'empty') || ']'
+    ), char(10), ' ') as text,
+    (select group_concat(p2.tool_name, ', ') from parts p2
+     where p2.message_hash = m.hash and p2.type = 'tool_result'
+       and p2.tool_name is not null) as tools
+  from messages m
+  left join parts p on p.message_hash = m.hash and p.position = 0
 ),
-walk as (
-  select
-    messages.hash,
-    0 as indent,
-    printf('%08d', messages.rowid) as sort_key
-  from messages
-  where messages.parent_hash is null
+tree as (
+  select hash, text, tools, 0 as depth,
+    printf('%012d', rid) as path, hash as root_hash
+  from msg where parent_hash is null
   union all
-  select
-    siblings.hash,
-    walk.indent + (siblings.branches > 1),
-    walk.sort_key || '/' || printf('%08d', messages.rowid)
-  from siblings
-  join messages on messages.hash = siblings.hash
-  join walk on siblings.parent_hash = walk.hash
+  select msg.hash, msg.text, msg.tools, t.depth + 1,
+    t.path || '/' || printf('%012d', msg.rid),
+    t.root_hash
+  from msg join tree t on msg.parent_hash = t.hash
+),
+turn_chain as (
+  select t.id as turn_id, t.datetime_utc, m.hash, m.parent_hash
+  from turns t join messages m on m.hash = t.tip_message_hash
+  union all
+  select tc.turn_id, tc.datetime_utc, m.hash, m.parent_hash
+  from turn_chain tc join messages m on m.hash = tc.parent_hash
 )
 select
-  substr('                                        ', 1, walk.indent * 4)
-    || messages.role || ': '
-    || coalesce(
-         parts.text,
-         (
-           select group_concat(
-             coalesce(
-               json_extract(piece.value, '$.literal'),
-               (select content from fragments
-                 where id = json_extract(piece.value, '$.fragment'))
-             ),
-             '' order by piece.key
-           )
-           from json_each(json_extract(parts.payload, '$.text_ref')) as piece
-         ),
-         parts.type
-       ) as entry
-from walk
-join messages on messages.hash = walk.hash
-left join parts on parts.message_hash = messages.hash
-order by walk.sort_key, parts.position;
+  t.root_hash,
+  strftime('%Y-%m-%d %H:%M:%S',
+    (select min(tc.datetime_utc) from turn_chain tc where tc.hash = t.hash)
+  ) as datetime,
+  replace(hex(zeroblob(t.depth)), '00', '    ') || substr(t.text, 1, 60)
+    as message,
+  coalesce(t.tools, '') as tools,
+  t.hash as message_hash,
+  t.path
+from tree t
+order by t.path
 ```
+
+</details>
 
 Every turn that was given a specific fragment, via the `turn_fragments` provenance table - set `:fragment_hash` to a hash from `llm fragments`:
 

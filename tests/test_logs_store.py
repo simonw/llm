@@ -1614,3 +1614,90 @@ class TestPayloadOrdering:
         )
         assert one == two
         assert store.db["messages"].count == 1
+
+
+# ---- the message_tree view -------------------------------------------
+
+
+class TestMessageTreeView:
+    def rows(self, store):
+        return list(store.db.query("select * from message_tree order by path"))
+
+    def test_forks_render_as_indented_siblings(self, store):
+        thread = store.create_thread()
+        fork_point = store.append(
+            thread, [llm.user("Question"), llm.assistant("Answer")]
+        )
+        store.append(thread, [llm.user("Follow-up A")])
+        forked = store.fork(fork_point)
+        store.append(forked, [llm.user("Follow-up B")])
+
+        assert [row["message"] for row in self.rows(store)] == [
+            "Question",
+            "    Answer",
+            "        Follow-up A",
+            "        Follow-up B",
+        ]
+
+    def test_every_message_carries_its_tree_root_hash(self, store):
+        store.append(store.create_thread(), [llm.user("One"), llm.assistant("1")])
+        store.append(store.create_thread(), [llm.user("Two")])
+
+        rows = self.rows(store)
+        assert [row["message"] for row in rows] == ["One", "    1", "Two"]
+        one, reply, two = rows
+        # A root is its own root; descendants inherit it; separate
+        # conversations get separate roots.
+        assert one["root_hash"] == one["message_hash"]
+        assert reply["root_hash"] == one["message_hash"]
+        assert two["root_hash"] == two["message_hash"]
+
+    def test_tool_results_show_their_tool_names(self, store):
+        store.append(
+            store.create_thread(),
+            [
+                llm.user("Search"),
+                Message(
+                    role="tool",
+                    parts=[
+                        ToolResultPart(name="lookup", output="42", tool_call_id="c1"),
+                        ToolResultPart(name="fetch", output="x", tool_call_id="c2"),
+                    ],
+                ),
+            ],
+        )
+        prompt, tool = self.rows(store)
+        assert prompt["tools"] == ""
+        assert tool["message"].strip() == "[tool_result]"
+        assert sorted(tool["tools"].split(", ")) == ["fetch", "lookup"]
+
+    def test_fragment_referenced_text_is_resolved(self, store):
+        novel = "Call me Ishmael, but keep this fragment out of the parts table."
+        store.ensure_chain([llm.user(f"{novel}\nwho?")], fragments=[novel])
+        (row,) = self.rows(store)
+        # The stored part holds a text_ref, not the text itself; the view
+        # displays the fragment's content in its place.
+        assert row["message"] == novel[:60]
+
+    def test_text_is_flattened_and_truncated(self, store):
+        store.append(store.create_thread(), [llm.user("line one\nline two " + "x" * 100)])
+        (row,) = self.rows(store)
+        assert row["message"] == ("line one line two " + "x" * 100)[:60]
+
+    def test_datetime_comes_from_the_turn_that_logged_the_message(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        store.log(response)
+        rows = self.rows(store)
+        # Both messages were recorded by the same turn, so they share
+        # its timestamp.
+        assert len({row["datetime"] for row in rows}) == 1
+        assert rows[0]["datetime"] is not None
+
+    def test_messages_no_turn_has_recorded_have_no_datetime(self, store):
+        store.append(store.create_thread(), [llm.user("Hi")])
+        (row,) = self.rows(store)
+        assert row["datetime"] is None

@@ -658,3 +658,65 @@ def m025_turn_tools_instance_backfill(db):
             )
             where instance_id is null
             """)
+
+
+MESSAGE_TREE_SQL = """
+with recursive msg as (
+  select m.hash, m.parent_hash, m.role, m.rowid as rid,
+    replace(coalesce(
+      nullif(p.text, ''),
+      (select f.content from part_fragments pf
+       join fragments f on f.id = pf.fragment_id
+       where pf.part_id = p.id
+       order by pf."order" limit 1),
+      '[' || coalesce(p.type, 'empty') || ']'
+    ), char(10), ' ') as text,
+    (select group_concat(p2.tool_name, ', ') from parts p2
+     where p2.message_hash = m.hash and p2.type = 'tool_result'
+       and p2.tool_name is not null) as tools
+  from messages m
+  left join parts p on p.message_hash = m.hash and p.position = 0
+),
+tree as (
+  select hash, text, tools, 0 as depth,
+    printf('%012d', rid) as path, hash as root_hash
+  from msg where parent_hash is null
+  union all
+  select msg.hash, msg.text, msg.tools, t.depth + 1,
+    t.path || '/' || printf('%012d', msg.rid),
+    t.root_hash
+  from msg join tree t on msg.parent_hash = t.hash
+),
+turn_chain as (
+  select t.id as turn_id, t.datetime_utc, m.hash, m.parent_hash
+  from turns t join messages m on m.hash = t.tip_message_hash
+  union all
+  select tc.turn_id, tc.datetime_utc, m.hash, m.parent_hash
+  from turn_chain tc join messages m on m.hash = tc.parent_hash
+)
+select
+  t.root_hash,
+  strftime('%Y-%m-%d %H:%M:%S',
+    (select min(tc.datetime_utc) from turn_chain tc where tc.hash = t.hash)
+  ) as datetime,
+  replace(hex(zeroblob(t.depth)), '00', '    ') || substr(t.text, 1, 60)
+    as message,
+  coalesce(t.tools, '') as tools,
+  t.hash as message_hash,
+  t.path
+from tree t
+order by t.path
+""".strip()
+
+
+@migration
+def m026_message_tree_view(db):
+    # A readable rendering of the message store: every conversation
+    # tree as indented text, one row per message, depth-first with
+    # siblings in insertion order. root_hash identifies a tree - filter
+    # on it to isolate one conversation and its forks. datetime is the
+    # earliest turn that recorded the message, since shared message
+    # rows carry no timestamp of their own. Kept ordered by including
+    # path in the output - selecting from the view preserves tree order
+    # only while sorted by path.
+    db.create_view("message_tree", MESSAGE_TREE_SQL)
