@@ -1,5 +1,6 @@
 # Changelog
 
+(v0_32_rc1)=
 ## 0.32rc1
 
 This release candidate for 0.32 introduces a new database schema for logging prompts and responses that captures full details of the interaction with the underlying LLM, and de-duplicates those records using a **content-addressed message store**.
