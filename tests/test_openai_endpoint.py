@@ -174,6 +174,9 @@ def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
             "-H",
             "X-Test",
             "one",
+            "-o",
+            "reasoning_effort",
+            "low",
         ],
         catch_exceptions=False,
     )
@@ -188,6 +191,7 @@ def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
     assert json.loads(request.content) == {
         "messages": [{"role": "user", "content": "Hello"}],
         "model": "test-model",
+        "reasoning_effort": "low",
         "stream": False,
     }
 
@@ -519,6 +523,9 @@ def test_endpoint_responses_api(httpx_mock, user_path):
             "-o",
             "verbosity",
             "low",
+            "-o",
+            "reasoning_effort",
+            "low",
         ],
         catch_exceptions=False,
     )
@@ -528,7 +535,9 @@ def test_endpoint_responses_api(httpx_mock, user_path):
     assert not (user_path / "logs.db").exists()
     assert json.loads(httpx_mock.get_requests()[0].content) == {
         "input": [{"role": "user", "content": "Hello"}],
+        "include": ["reasoning.encrypted_content"],
         "model": "test-model",
+        "reasoning": {"effort": "low"},
         "store": False,
         "stream": False,
         "text": {"verbosity": "low"},
@@ -568,7 +577,10 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
     assert result.exit_code == 0
     assert result.output == "A remote image\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content)["input"] == [
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert "include" not in request_body
+    assert "reasoning" not in request_body
+    assert request_body["input"] == [
         {
             "role": "user",
             "content": [

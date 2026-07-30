@@ -560,19 +560,23 @@ def register_commands(cli):
             )
 
         model_class = Responses if use_responses else Chat
-        model = model_class(
-            model_id=model_id or "",
-            model_name=model_id or "",
-            api_base=url,
-            headers=dict(headers),
-            vision=True,
-            audio=not use_responses,
+        model_kwargs = {
+            "model_id": model_id or "",
+            "model_name": model_id or "",
+            "api_base": url,
+            "headers": dict(headers),
+            "vision": True,
+            "audio": not use_responses,
             # Optimistically expose capabilities that have no effect until
             # the user explicitly exercises them.
-            verbosity=True,
-            image_detail_original=True,
-            supports_tools=True,
-        )
+            "reasoning": True,
+            "verbosity": True,
+            "image_detail_original": True,
+            "supports_tools": True,
+        }
+        if use_responses:
+            model_kwargs["reasoning_summary"] = False
+        model = model_class(**model_kwargs)
 
         # A configured api_base never receives the user's default OpenAI key.
         # Match that safety property here: only send credentials when --key
@@ -1600,7 +1604,7 @@ class _SharedResponses(_Shared):
             kwargs["seed"] = seed
         if self._reasoning:
             reasoning = {}
-            if not getattr(prompt, "hide_reasoning", False):
+            if self._reasoning_summary and not getattr(prompt, "hide_reasoning", False):
                 reasoning["summary"] = "auto"
             if reasoning_effort:
                 reasoning["effort"] = reasoning_effort
@@ -1726,6 +1730,7 @@ class Responses(_SharedResponses, KeyModel):
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        reasoning_summary=True,
     ):
         super().__init__(
             model_id,
@@ -1747,6 +1752,7 @@ class Responses(_SharedResponses, KeyModel):
             allows_system_prompt=allows_system_prompt,
         )
         self._reasoning = reasoning
+        self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
         # Override the Options class so that ``-o chat_completions 1`` is
@@ -1784,7 +1790,9 @@ class Responses(_SharedResponses, KeyModel):
         if instructions is not None:
             kwargs["instructions"] = instructions
         kwargs["store"] = False
-        if self._reasoning:
+        if self._reasoning and (
+            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
+        ):
             kwargs["include"] = ["reasoning.encrypted_content"]
 
         client = self.get_client(key)
@@ -1955,6 +1963,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        reasoning_summary=True,
     ):
         super().__init__(
             model_id,
@@ -1976,6 +1985,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             allows_system_prompt=allows_system_prompt,
         )
         self._reasoning = reasoning
+        self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
         self.Options = build_options_class(
@@ -2014,7 +2024,9 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         if instructions is not None:
             kwargs["instructions"] = instructions
         kwargs["store"] = False
-        if self._reasoning:
+        if self._reasoning and (
+            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
+        ):
             kwargs["include"] = ["reasoning.encrypted_content"]
 
         client = self.get_client(key, async_=True)

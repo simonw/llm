@@ -101,6 +101,17 @@ interactive chat started using `--chat`, the template is applied to each turn.
 Without `--chat`, a template that provides its own prompt runs once even when
 no prompt argument is supplied.
 
+Reasoning-capable endpoints can be given a reasoning effort using `-o reasoning_effort`, with a value of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  -m model-id \
+  -o reasoning_effort high \
+  "Solve this problem"
+```
+
+The command does not send reasoning-specific request fields by default and does not request a reasoning summary. Those fields are only added when `reasoning_effort` is used. An endpoint that does not support the option will return its own API error.
+
 Use `-T` or `--tool` to make an installed LLM tool available to the model, or
 `--functions` to load Python functions from an inline code block or file:
 
