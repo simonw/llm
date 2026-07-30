@@ -132,6 +132,92 @@ async def display_async_stream_events(events, *, show_reasoning=True):
             click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
 
 
+def _run_chat(
+    model_label,
+    prompt_callback,
+    *,
+    db=None,
+    initial_fragments=None,
+    initial_attachments=None,
+    transform_prompt=None,
+    after_response=None,
+    show_reasoning=True,
+):
+    """Run the terminal chat loop shared by managed and transient models."""
+    click.echo(f"Chatting with {model_label}")
+    click.echo("Type 'exit' or 'quit' to exit")
+    click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
+    click.echo("Type '!edit' to open your default editor and modify the prompt")
+    if db is not None:
+        click.echo(
+            "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+        )
+
+    argument_fragments = list(initial_fragments or [])
+    argument_attachments = list(initial_attachments or [])
+    in_multi = False
+    accumulated = []
+    accumulated_fragments = []
+    accumulated_attachments = []
+    end_token = "!end"
+
+    while True:
+        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        fragments = []
+        attachments = []
+        if argument_fragments:
+            fragments += argument_fragments
+            # Fragments from command options are added to the first message only.
+            argument_fragments = []
+        if argument_attachments:
+            attachments = argument_attachments
+            argument_attachments = []
+        if prompt.strip().startswith("!multi"):
+            in_multi = True
+            bits = prompt.strip().split()
+            if len(bits) > 1:
+                end_token = "!end {}".format(" ".join(bits[1:]))
+            continue
+        if prompt.strip() == "!edit":
+            edited_prompt = click.edit()
+            if edited_prompt is None:
+                click.echo("Editor closed without saving.", err=True)
+                continue
+            prompt = edited_prompt.strip()
+        if db is not None and prompt.strip().startswith("!fragment "):
+            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+
+        if in_multi:
+            if prompt.strip() == end_token:
+                prompt = "\n".join(accumulated)
+                fragments = accumulated_fragments
+                attachments = accumulated_attachments
+                in_multi = False
+                accumulated = []
+                accumulated_fragments = []
+                accumulated_attachments = []
+            else:
+                if prompt:
+                    accumulated.append(prompt)
+                accumulated_fragments += fragments
+                accumulated_attachments += attachments
+                continue
+
+        if prompt.strip() in ("exit", "quit"):
+            break
+        if transform_prompt is not None:
+            prompt = transform_prompt(prompt)
+
+        response = prompt_callback(prompt, fragments, attachments)
+        display_stream_events(
+            response.stream_events(),
+            show_reasoning=show_reasoning,
+        )
+        if after_response is not None:
+            after_response(response)
+        print()
+
+
 def validate_fragment_alias(ctx, param, value):
     if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise click.BadParameter("Fragment alias must be alphanumeric")
@@ -321,6 +407,57 @@ def attachment_types_callback(ctx, param, values) -> list[Attachment]:
     return collected
 
 
+def _apply_template(template, prompt, params, system):
+    """Apply a loaded template to a prompt and system prompt."""
+    try:
+        uses_input = "input" in template.vars()
+        input_ = prompt if uses_input else ""
+        template_prompt, template_system = template.evaluate(input_, params)
+    except Template.MissingVariables as ex:
+        raise click.ClickException(str(ex))
+    if template_system and not system:
+        system = template_system
+    if template_prompt:
+        if prompt and not uses_input:
+            prompt = f"{template_prompt}\n{prompt}"
+        else:
+            prompt = template_prompt
+    return prompt, system
+
+
+def _merge_template_options(template, options):
+    """Add template options unless the same option was provided explicitly."""
+    merged_options = list(options)
+    specified_options = dict(merged_options)
+    for option_name, option_value in (template.options or {}).items():
+        if option_name not in specified_options:
+            merged_options.append((option_name, option_value))
+    return merged_options
+
+
+def _merge_template_attachments(template, attachments, attachment_types):
+    """Resolve and prepend attachments declared by a loaded template."""
+    if template.attachments:
+        attachments = [
+            resolve_attachment(value) for value in template.attachments
+        ] + list(attachments)
+    if template.attachment_types:
+        attachment_types = [
+            resolve_attachment_with_type(item.value, item.type)
+            for item in template.attachment_types
+        ] + list(attachment_types)
+    return attachments, attachment_types
+
+
+def _merge_template_tools(template, tools, python_tools):
+    """Prepend trusted tool definitions declared by a loaded template."""
+    if template.tools:
+        tools = [*template.tools, *tools]
+    if template.functions and template._functions_is_trusted:
+        python_tools = [template.functions, *python_tools]
+    return tools, python_tools
+
+
 def json_validator(object_name):
     def validator(ctx, param, value):
         if value is None:
@@ -342,6 +479,54 @@ def schema_option(fn):
         "--schema",
         help="JSON schema, filepath or ID",
     )(fn)
+    return fn
+
+
+def tool_options(fn):
+    """Add the shared CLI options for selecting and executing tools."""
+    decorators = (
+        click.option(
+            "tools",
+            "-T",
+            "--tool",
+            multiple=True,
+            help="Name of a tool to make available to the model",
+        ),
+        click.option(
+            "python_tools",
+            "--functions",
+            multiple=True,
+            help="Python code block or file path defining functions to register as tools",
+        ),
+        click.option(
+            "tools_debug",
+            "--td",
+            "--tools-debug",
+            is_flag=True,
+            help="Show full details of tool executions",
+            envvar="LLM_TOOLS_DEBUG",
+        ),
+        click.option(
+            "tools_approve",
+            "--ta",
+            "--tools-approve",
+            is_flag=True,
+            help="Manually approve every tool execution",
+        ),
+        click.option(
+            "chain_limit",
+            "--cl",
+            "--chain-limit",
+            type=int,
+            default=5,
+            help=(
+                "How many chained tool responses to allow, "
+                "default 5, set 0 for unlimited"
+            ),
+        ),
+    )
+    for decorator in reversed(decorators):
+        fn = decorator(fn)
     return fn
 
 
@@ -413,42 +598,7 @@ def cli():
     callback=attachment_types_callback,
     help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
 )
-@click.option(
-    "tools",
-    "-T",
-    "--tool",
-    multiple=True,
-    help="Name of a tool to make available to the model",
-)
-@click.option(
-    "python_tools",
-    "--functions",
-    help="Python code block or file path defining functions to register as tools",
-    multiple=True,
-)
-@click.option(
-    "tools_debug",
-    "--td",
-    "--tools-debug",
-    is_flag=True,
-    help="Show full details of tool executions",
-    envvar="LLM_TOOLS_DEBUG",
-)
-@click.option(
-    "tools_approve",
-    "--ta",
-    "--tools-approve",
-    is_flag=True,
-    help="Manually approve every tool execution",
-)
-@click.option(
-    "chain_limit",
-    "--cl",
-    "--chain-limit",
-    type=int,
-    default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
-)
+@tool_options
 @click.option(
     "options",
     "-o",
@@ -752,45 +902,17 @@ def prompt(
             system_fragments = [*template_obj.system_fragments, *system_fragments]
         if template_obj.schema_object:
             schema = template_obj.schema_object
-        if template_obj.tools:
-            tools = [*template_obj.tools, *tools]
-        if template_obj.functions and template_obj._functions_is_trusted:
-            python_tools = [template_obj.functions, *python_tools]
-        input_ = ""
+        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
         if template_obj.options:
-            # Make options mutable (they start as a tuple)
-            options = list(options)
-            # Load any options, provided they were not set using -o already
-            specified_options = dict(options)
-            for option_name, option_value in template_obj.options.items():
-                if option_name not in specified_options:
-                    options.append((option_name, option_value))
+            options = _merge_template_options(template_obj, options)
         if "input" in template_obj.vars():
-            input_ = read_prompt()
-        try:
-            template_prompt, template_system = template_obj.evaluate(input_, params)
-            if template_prompt:
-                # Combine with user prompt
-                if prompt and "input" not in template_obj.vars():
-                    prompt = template_prompt + "\n" + prompt
-                else:
-                    prompt = template_prompt
-            if template_system and not system:
-                system = template_system
-        except Template.MissingVariables as ex:
-            raise click.ClickException(str(ex))
+            prompt = read_prompt()
+        prompt, system = _apply_template(template_obj, prompt, params, system)
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-        # Merge in any attachments
-        if template_obj.attachments:
-            attachments = [
-                resolve_attachment(a) for a in template_obj.attachments
-            ] + list(attachments)
-        if template_obj.attachment_types:
-            attachment_types = [
-                resolve_attachment_with_type(at.value, at.type)
-                for at in template_obj.attachment_types
-            ] + list(attachment_types)
+        attachments, attachment_types = _merge_template_attachments(
+            template_obj, attachments, attachment_types
+        )
     if extract or extract_last or json_output:
         no_stream = True
 
@@ -893,17 +1015,13 @@ def prompt(
     if conversation:
         prompt_method = conversation.prompt
 
-    tool_implementations = _gather_tools(tools, python_tools)
-
-    if tool_implementations:
+    tool_kwargs = _tool_chain_kwargs(
+        tools, python_tools, tools_debug, tools_approve, chain_limit
+    )
+    if tool_kwargs:
         prompt_method = conversation.chain
         kwargs["options"] = validated_options
-        kwargs["chain_limit"] = chain_limit
-        if tools_debug:
-            kwargs["after_call"] = _debug_tool_call
-        if tools_approve:
-            kwargs["before_call"] = _approve_tool_call
-        kwargs["tools"] = tool_implementations
+        kwargs.update(tool_kwargs)
     else:
         # Merge in options for the .prompt() methods
         kwargs.update(validated_options)
@@ -1079,42 +1197,7 @@ def prompt(
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option("--key", help="API key to use")
-@click.option(
-    "tools",
-    "-T",
-    "--tool",
-    multiple=True,
-    help="Name of a tool to make available to the model",
-)
-@click.option(
-    "python_tools",
-    "--functions",
-    help="Python code block or file path defining functions to register as tools",
-    multiple=True,
-)
-@click.option(
-    "tools_debug",
-    "--td",
-    "--tools-debug",
-    is_flag=True,
-    help="Show full details of tool executions",
-    envvar="LLM_TOOLS_DEBUG",
-)
-@click.option(
-    "tools_approve",
-    "--ta",
-    "--tools-approve",
-    is_flag=True,
-    help="Manually approve every tool execution",
-)
-@click.option(
-    "chain_limit",
-    "--cl",
-    "--chain-limit",
-    type=int,
-    default=5,
-    help="How many chained tool responses to allow, default 5, set 0 for unlimited",
-)
+@tool_options
 def chat(
     system,
     model_id,
@@ -1170,10 +1253,7 @@ def chat(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
-        if template_obj.tools:
-            tools = [*template_obj.tools, *tools]
-        if template_obj.functions and template_obj._functions_is_trusted:
-            python_tools = [template_obj.functions, *python_tools]
+        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
 
     # Figure out which model we are using
     if model_id is None:
@@ -1195,11 +1275,6 @@ def chat(
         # Ensure it can see the API key
         conversation.model = model
 
-    if tools_debug:
-        conversation.after_call = _debug_tool_call
-    if tools_approve:
-        conversation.before_call = _approve_tool_call
-
     # Validate options
     validated_options = get_model_options(model.model_id)
     if options:
@@ -1216,11 +1291,9 @@ def chat(
     if validated_options:
         kwargs["options"] = validated_options
 
-    tool_functions = _gather_tools(tools, python_tools)
-
-    if tool_functions:
-        kwargs["chain_limit"] = chain_limit
-        kwargs["tools"] = tool_functions
+    kwargs.update(
+        _tool_chain_kwargs(tools, python_tools, tools_debug, tools_approve, chain_limit)
+    )
 
     should_stream = model.can_stream and not no_stream
     if not should_stream:
@@ -1249,78 +1322,14 @@ def chat(
     except FragmentNotFound as ex:
         raise click.ClickException(str(ex))
 
-    click.echo(f"Chatting with {model.model_id}")
-    click.echo("Type 'exit' or 'quit' to exit")
-    click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
-    click.echo("Type '!edit' to open your default editor and modify the prompt")
-    click.echo(
-        "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
-    )
-    in_multi = False
-
-    accumulated = []
-    accumulated_fragments = []
-    accumulated_attachments = []
-    end_token = "!end"
-    while True:
-        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
-        fragments = []
-        attachments = []
-        if argument_fragments:
-            fragments += argument_fragments
-            # fragments from --fragments will get added to the first message only
-            argument_fragments = []
-        if argument_attachments:
-            attachments = argument_attachments
-            argument_attachments = []
-        if prompt.strip().startswith("!multi"):
-            in_multi = True
-            bits = prompt.strip().split()
-            if len(bits) > 1:
-                end_token = "!end {}".format(" ".join(bits[1:]))
-            continue
-        if prompt.strip() == "!edit":
-            edited_prompt = click.edit()
-            if edited_prompt is None:
-                click.echo("Editor closed without saving.", err=True)
-                continue
-            prompt = edited_prompt.strip()
-        if prompt.strip().startswith("!fragment "):
-            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
-
-        if in_multi:
-            if prompt.strip() == end_token:
-                prompt = "\n".join(accumulated)
-                fragments = accumulated_fragments
-                attachments = accumulated_attachments
-                in_multi = False
-                accumulated = []
-                accumulated_fragments = []
-                accumulated_attachments = []
-            else:
-                if prompt:
-                    accumulated.append(prompt)
-                accumulated_fragments += fragments
-                accumulated_attachments += attachments
-                continue
+    def transform_chat_prompt(prompt):
+        nonlocal system
         if template_obj:
-            try:
-                # Mirror prompt() logic: only pass input if template uses it
-                uses_input = "input" in template_obj.vars()
-                input_ = prompt if uses_input else ""
-                template_prompt, template_system = template_obj.evaluate(input_, params)
-            except Template.MissingVariables as ex:
-                raise click.ClickException(str(ex))
-            if template_system and not system:
-                system = template_system
-            if template_prompt:
-                if prompt and not uses_input:
-                    prompt = f"{template_prompt}\n{prompt}"
-                else:
-                    prompt = template_prompt
-        if prompt.strip() in ("exit", "quit"):
-            break
+            prompt, system = _apply_template(template_obj, prompt, params, system)
+        return prompt
 
+    def execute_chat_prompt(prompt, fragments, attachments):
+        nonlocal system, argument_system_fragments
         response = conversation.chain(
             prompt,
             fragments=fragments,
@@ -1333,12 +1342,18 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        display_stream_events(
-            response.stream_events(),
-            show_reasoning=not hide_reasoning,
-        )
-        response.log_to_db(db)
-        print()
+        return response
+
+    _run_chat(
+        model.model_id,
+        execute_chat_prompt,
+        db=db,
+        initial_fragments=argument_fragments,
+        initial_attachments=argument_attachments,
+        transform_prompt=transform_chat_prompt,
+        after_response=lambda response: response.log_to_db(db),
+        show_reasoning=not hide_reasoning,
+    )
 
 
 def load_conversation(
@@ -4118,6 +4133,24 @@ def _gather_tools(
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
     return tools
+
+
+def _tool_chain_kwargs(
+    tool_specs, python_tools, tools_debug, tools_approve, chain_limit
+):
+    """Build Conversation.chain() keyword arguments for CLI-selected tools."""
+    tool_implementations = _gather_tools(tool_specs, python_tools)
+    if not tool_implementations:
+        return {}
+    kwargs = {
+        "tools": tool_implementations,
+        "chain_limit": chain_limit,
+    }
+    if tools_debug:
+        kwargs["after_call"] = _debug_tool_call
+    if tools_approve:
+        kwargs["before_call"] = _approve_tool_call
+    return kwargs
 
 
 def _get_conversation_tools(conversation, tools):

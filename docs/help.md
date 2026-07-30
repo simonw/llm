@@ -80,7 +80,7 @@ Commands:
   keys          Manage stored API keys for different models
   logs          Tools for exploring logged prompts and responses
   models        Manage available models
-  openai        Commands for working directly with the OpenAI API
+  openai        Commands for working with OpenAI and OpenAI-compatible APIs
   plugins       List installed plugins
   schemas       Manage stored schemas
   similar       Return top N similar IDs from a collection using cosine...
@@ -1066,13 +1066,57 @@ Options:
 ```
 Usage: llm openai [OPTIONS] COMMAND [ARGS]...
 
-  Commands for working directly with the OpenAI API
+  Commands for working with OpenAI and OpenAI-compatible APIs
 
 Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  models  List models available to you from the OpenAI API
+  endpoint  Run against an OpenAI-compatible endpoint without logging.
+  models    List models available to you from the OpenAI API
+```
+
+(help-openai-endpoint)=
+#### llm openai endpoint --help
+```
+Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
+
+  Run against an OpenAI-compatible endpoint without logging.
+
+  PROMPT or stdin is executed once. If neither is provided, wait for input on
+  stdin. Use --chat to start an interactive chat. Templates run once by default;
+  use --chat to apply one interactively. Use --models to list the available
+  model IDs without running a prompt.
+
+Options:
+  -m, --model TEXT                Model ID (required unless --models or provided
+                                  by template)
+  -s, --system TEXT               System prompt to use
+  -t, --template TEXT             Template to use
+  -p, --param <TEXT TEXT>...      Parameters for template
+  -o, --option <TEXT TEXT>...     key/value options for the model
+  --schema TEXT                   JSON schema, filepath or ID
+  --schema-multi TEXT             JSON schema to use for multiple results
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  -T, --tool TEXT                 Name of a tool to make available to the model
+  --functions TEXT                Python code block or file path defining
+                                  functions to register as tools
+  --td, --tools-debug             Show full details of tool executions
+  --ta, --tools-approve           Manually approve every tool execution
+  --cl, --chain-limit INTEGER     How many chained tool responses to allow,
+                                  default 5, set 0 for unlimited
+  --key TEXT                      API key or stored key alias to send
+  -H, --header <TEXT TEXT>...     Additional HTTP header
+  --responses                     Use the Responses API instead of Chat
+                                  Completions
+  --chat                          Start an interactive chat
+  --models                        List model IDs from the endpoint and exit
+  --no-stream                     Do not stream output
+  -R, --hide-reasoning            Hide reasoning output
+  -h, --help                      Show this message and exit.
 ```
 
 (help-openai-models)=

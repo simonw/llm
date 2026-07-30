@@ -182,6 +182,8 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 * [Other models](https://llm.datasette.io/en/stable/other-models.html)
   * [Installing and using a local model](https://llm.datasette.io/en/stable/other-models.html#installing-and-using-a-local-model)
   * [OpenAI-compatible models](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models)
+    * [Run against an endpoint without configuring it](https://llm.datasette.io/en/stable/other-models.html#run-against-an-endpoint-without-configuring-it)
+    * [Configure an OpenAI-compatible model](https://llm.datasette.io/en/stable/other-models.html#configure-an-openai-compatible-model)
     * [Extra HTTP headers](https://llm.datasette.io/en/stable/other-models.html#extra-http-headers)
 * [Tools](https://llm.datasette.io/en/stable/tools.html)
   * [How tools work](https://llm.datasette.io/en/stable/tools.html#how-tools-work)

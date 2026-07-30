@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
 from typing import Any
@@ -8,8 +9,9 @@ from typing import Any
 import click
 import httpx
 import openai
+import sqlite_utils
 import yaml
-from pydantic import Field, create_model, field_validator
+from pydantic import Field, ValidationError, create_model, field_validator
 
 import llm
 from llm import (
@@ -401,9 +403,346 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 
 @hookimpl
 def register_commands(cli):
+    from llm.cli import (
+        AttachmentType,
+        attachment_types_callback,
+        schema_option,
+        tool_options,
+    )
+
     @cli.group(name="openai")
     def openai_():
-        "Commands for working directly with the OpenAI API"
+        "Commands for working with OpenAI and OpenAI-compatible APIs"
+
+    @openai_.command()
+    @click.argument("url")
+    @click.argument("prompt", required=False)
+    @click.option(
+        "model_id",
+        "-m",
+        "--model",
+        help="Model ID (required unless --models or provided by template)",
+    )
+    @click.option("-s", "--system", help="System prompt to use")
+    @click.option("-t", "--template", help="Template to use")
+    @click.option(
+        "param",
+        "-p",
+        "--param",
+        multiple=True,
+        type=(str, str),
+        help="Parameters for template",
+    )
+    @click.option(
+        "options",
+        "-o",
+        "--option",
+        type=(str, str),
+        multiple=True,
+        help="key/value options for the model",
+    )
+    @schema_option
+    @click.option(
+        "--schema-multi",
+        help="JSON schema to use for multiple results",
+    )
+    @click.option(
+        "attachments",
+        "-a",
+        "--attachment",
+        type=AttachmentType(),
+        multiple=True,
+        help="Attachment path or URL or -",
+    )
+    @click.option(
+        "attachment_types",
+        "--at",
+        "--attachment-type",
+        type=(str, str),
+        multiple=True,
+        callback=attachment_types_callback,
+        help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+    )
+    @tool_options
+    @click.option("--key", help="API key or stored key alias to send")
+    @click.option(
+        "headers",
+        "-H",
+        "--header",
+        type=(str, str),
+        multiple=True,
+        help="Additional HTTP header",
+    )
+    @click.option(
+        "use_responses",
+        "--responses",
+        is_flag=True,
+        help="Use the Responses API instead of Chat Completions",
+    )
+    @click.option(
+        "force_chat",
+        "--chat",
+        is_flag=True,
+        help="Start an interactive chat",
+    )
+    @click.option(
+        "list_models",
+        "--models",
+        is_flag=True,
+        help="List model IDs from the endpoint and exit",
+    )
+    @click.option("--no-stream", is_flag=True, help="Do not stream output")
+    @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
+    def endpoint(
+        url,
+        prompt,
+        model_id,
+        system,
+        template,
+        param,
+        options,
+        schema_input,
+        schema_multi,
+        attachments,
+        attachment_types,
+        tools,
+        python_tools,
+        tools_debug,
+        tools_approve,
+        chain_limit,
+        key,
+        headers,
+        use_responses,
+        force_chat,
+        list_models,
+        no_stream,
+        hide_reasoning,
+    ):
+        """
+        Run against an OpenAI-compatible endpoint without logging.
+
+        PROMPT or stdin is executed once. If neither is provided, wait for
+        input on stdin. Use --chat to start an interactive chat. Templates run
+        once by default; use --chat to apply one interactively. Use --models
+        to list the available model IDs without running a prompt.
+        """
+        from llm.cli import (
+            AttachmentError,
+            LoadTemplateError,
+            _apply_template,
+            _merge_template_attachments,
+            _merge_template_options,
+            _merge_template_tools,
+            _run_chat,
+            _tool_chain_kwargs,
+            display_stream_events,
+            load_template,
+            logs_db_path,
+            migrate,
+            multi_schema,
+            render_errors,
+            resolve_schema_input,
+        )
+
+        if list_models and prompt is not None:
+            raise click.ClickException("--models cannot be used with a prompt")
+        if list_models and template:
+            raise click.ClickException("--models cannot be used with --template")
+        if list_models and (tools or python_tools):
+            raise click.ClickException("--models cannot be used with tools")
+        if list_models and (schema_input or schema_multi):
+            raise click.ClickException("--models cannot be used with schemas")
+        if force_chat and prompt is not None:
+            raise click.ClickException("--chat cannot be used with a prompt")
+
+        if schema_multi:
+            schema_input = schema_multi
+        schema = None
+        if schema_input:
+            # Never create logs.db for this unlogged command. An existing
+            # database can resolve stored schema IDs; all other schema input
+            # is resolved using a temporary in-memory database.
+            log_path = logs_db_path()
+            if log_path.exists():
+                schema_db = sqlite_utils.Database(log_path)
+            else:
+                schema_db = sqlite_utils.Database(memory=True)
+            migrate(schema_db)
+            schema = resolve_schema_input(schema_db, schema_input, load_template)
+            if schema_multi:
+                schema = multi_schema(schema)
+
+        template_obj = None
+        params = dict(param)
+        if template:
+            try:
+                template_obj = load_template(template)
+                attachments, attachment_types = _merge_template_attachments(
+                    template_obj, attachments, attachment_types
+                )
+            except (AttachmentError, LoadTemplateError) as ex:
+                raise click.ClickException(str(ex))
+            if not model_id and template_obj.model:
+                model_id = template_obj.model
+            if template_obj.schema_object:
+                schema = template_obj.schema_object
+            if template_obj.options:
+                options = _merge_template_options(template_obj, options)
+            tools, python_tools = _merge_template_tools(
+                template_obj, tools, python_tools
+            )
+
+        if not list_models and not model_id:
+            raise click.ClickException(
+                "--model is required unless --models or a template model is used"
+            )
+
+        model_class = Responses if use_responses else Chat
+        model_kwargs = {
+            "model_id": model_id or "",
+            "model_name": model_id or "",
+            "api_base": url,
+            "headers": dict(headers),
+            "vision": True,
+            "audio": not use_responses,
+            # Optimistically expose capabilities that have no effect until
+            # the user explicitly exercises them.
+            "reasoning": True,
+            "verbosity": True,
+            "image_detail_original": True,
+            "supports_schema": True,
+            "supports_tools": True,
+        }
+        if use_responses:
+            model_kwargs["reasoning_summary"] = False
+        model = model_class(**model_kwargs)
+
+        # A configured api_base never receives the user's default OpenAI key.
+        # Match that safety property here: only send credentials when --key
+        # was explicitly provided for this invocation.
+        if not key:
+            model.needs_key = None
+
+        try:
+            validated_options = {
+                option_name: option_value
+                for option_name, option_value in model.Options(**dict(options))
+                if option_value is not None
+            }
+        except ValidationError as ex:
+            raise click.ClickException(render_errors(ex.errors()))
+
+        prompt_kwargs = {
+            "options": validated_options,
+            "schema": schema,
+            "stream": not no_stream,
+            "hide_reasoning": hide_reasoning,
+        }
+        if key:
+            prompt_kwargs["key"] = key
+
+        tool_kwargs = _tool_chain_kwargs(
+            tools, python_tools, tools_debug, tools_approve, chain_limit
+        )
+        resolved_attachments = [*attachments, *attachment_types]
+        try:
+            if list_models:
+                available_models = model.get_client(key).models.list()
+                error = getattr(available_models, "error", None)
+                if error:
+                    if isinstance(error, dict):
+                        error = error.get("message") or json.dumps(error)
+                    raise click.ClickException(str(error))
+                for available_model in available_models:
+                    click.echo(available_model.id)
+                return
+
+            if force_chat:
+                conversation = model.conversation()
+
+                def transform_chat_prompt(chat_prompt):
+                    nonlocal system
+                    if template_obj:
+                        chat_prompt, system = _apply_template(
+                            template_obj, chat_prompt, params, system
+                        )
+                    return chat_prompt
+
+                def execute_chat_prompt(chat_prompt, _fragments, turn_attachments):
+                    nonlocal system
+                    prompt_method = (
+                        conversation.chain if tool_kwargs else conversation.prompt
+                    )
+                    response = prompt_method(
+                        chat_prompt,
+                        system=system,
+                        attachments=turn_attachments,
+                        **prompt_kwargs,
+                        **tool_kwargs,
+                    )
+                    system = None
+                    return response
+
+                _run_chat(
+                    f"{model_id} at {url}",
+                    execute_chat_prompt,
+                    initial_attachments=resolved_attachments,
+                    transform_prompt=transform_chat_prompt,
+                    show_reasoning=not hide_reasoning,
+                )
+                return
+
+            if not sys.stdin.isatty():
+                stdin_prompt = sys.stdin.read()
+                if stdin_prompt:
+                    prompt = " ".join(
+                        part for part in (stdin_prompt, prompt) if part is not None
+                    )
+            elif (
+                prompt is None
+                and not resolved_attachments
+                and not schema
+                and (template_obj is None or "input" in template_obj.vars())
+            ):
+                # Match `llm prompt`: wait for stdin until EOF instead of
+                # implicitly starting an interactive chat.
+                prompt = sys.stdin.read()
+            if template_obj:
+                prompt, system = _apply_template(template_obj, prompt, params, system)
+            if prompt is None and not (resolved_attachments or schema):
+                raise click.ClickException(
+                    "A prompt is required when stdin is not interactive"
+                )
+            if tool_kwargs:
+                response = model.conversation().chain(
+                    prompt,
+                    system=system,
+                    attachments=resolved_attachments,
+                    **prompt_kwargs,
+                    **tool_kwargs,
+                )
+            else:
+                response = model.prompt(
+                    prompt,
+                    system=system,
+                    attachments=resolved_attachments,
+                    **prompt_kwargs,
+                )
+            display_stream_events(
+                response.stream_events(),
+                show_reasoning=not hide_reasoning,
+            )
+            click.echo()
+        except (click.Abort, click.ClickException):
+            raise
+        except (ValueError, NotImplementedError) as ex:
+            raise click.ClickException(str(ex))
+        except Exception as ex:
+            if getattr(sys, "_called_from_test", False) or os.environ.get(
+                "LLM_RAISE_ERRORS"
+            ):
+                raise
+            raise click.ClickException(str(ex))
 
     @openai_.command()
     @click.option("json_", "--json", is_flag=True, help="Output as JSON")
@@ -1312,7 +1651,7 @@ class _SharedResponses(_Shared):
             kwargs["seed"] = seed
         if self._reasoning:
             reasoning = {}
-            if not getattr(prompt, "hide_reasoning", False):
+            if self._reasoning_summary and not getattr(prompt, "hide_reasoning", False):
                 reasoning["summary"] = "auto"
             if reasoning_effort:
                 reasoning["effort"] = reasoning_effort
@@ -1438,6 +1777,7 @@ class Responses(_SharedResponses, KeyModel):
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        reasoning_summary=True,
     ):
         super().__init__(
             model_id,
@@ -1459,6 +1799,7 @@ class Responses(_SharedResponses, KeyModel):
             allows_system_prompt=allows_system_prompt,
         )
         self._reasoning = reasoning
+        self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
         # Override the Options class so that ``-o chat_completions 1`` is
@@ -1496,7 +1837,9 @@ class Responses(_SharedResponses, KeyModel):
         if instructions is not None:
             kwargs["instructions"] = instructions
         kwargs["store"] = False
-        if self._reasoning:
+        if self._reasoning and (
+            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
+        ):
             kwargs["include"] = ["reasoning.encrypted_content"]
 
         client = self.get_client(key)
@@ -1667,6 +2010,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        reasoning_summary=True,
     ):
         super().__init__(
             model_id,
@@ -1688,6 +2032,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             allows_system_prompt=allows_system_prompt,
         )
         self._reasoning = reasoning
+        self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
         self.Options = build_options_class(
@@ -1726,7 +2071,9 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         if instructions is not None:
             kwargs["instructions"] = instructions
         kwargs["store"] = False
-        if self._reasoning:
+        if self._reasoning and (
+            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
+        ):
             kwargs["include"] = ["reasoning.encrypted_content"]
 
         client = self.get_client(key, async_=True)
