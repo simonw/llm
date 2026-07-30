@@ -6,6 +6,7 @@
 - New {ref}`llm openai endpoint <openai-endpoint>` command for running prompts, chats and model listings against arbitrary OpenAI-compatible endpoints without first configuring a model. These calls are not logged. [#1565](https://github.com/simonw/llm/issues/1565)
 - No longer depends on [sqlite-migrate](https://github.com/simonw/sqlite-migrate), since that functionality is now handled by [sqlite-utils 4.0](https://sqlite-utils.datasette.io/en/stable/changelog.html#v4-0). [#1577](https://github.com/simonw/llm/issues/1577)
 - Fixed a bug where server-executed tool calls were incorrectly reported as pending by `LogStore.pending_tool_calls()`. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1574](https://github.com/simonw/llm/issues/1574)
+- `schema_dsl()` now raises a descriptive `ValueError` instead of an `IndexError` for malformed fields with no name before the colon. [#1466](https://github.com/simonw/llm/issues/1466)
 
 (v0_32_rc1)=
 ## 0.32rc1

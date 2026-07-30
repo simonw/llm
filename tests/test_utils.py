@@ -255,6 +255,21 @@ def test_schema_dsl_multi():
 
 
 @pytest.mark.parametrize(
+    ("schema", "invalid_field"),
+    (
+        (":just a description", ":just a description"),
+        ("name, :description", ":description"),
+    ),
+)
+def test_schema_dsl_missing_field_name(schema, invalid_field):
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(schema)
+    assert str(ex.value) == (
+        f"Invalid schema DSL: field {invalid_field!r} is missing a name before ':'"
+    )
+
+
+@pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [
         # Basic truncation tests
