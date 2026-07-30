@@ -516,6 +516,9 @@ def test_endpoint_responses_api(httpx_mock, user_path):
             "test-model",
             "--responses",
             "--no-stream",
+            "-o",
+            "verbosity",
+            "low",
         ],
         catch_exceptions=False,
     )
@@ -528,6 +531,7 @@ def test_endpoint_responses_api(httpx_mock, user_path):
         "model": "test-model",
         "store": False,
         "stream": False,
+        "text": {"verbosity": "low"},
     }
 
 
@@ -554,6 +558,9 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
             "--at",
             "https://images.example.test/test.jpg",
             "image/jpeg",
+            "-o",
+            "image_detail",
+            "original",
         ],
         catch_exceptions=False,
     )
@@ -569,6 +576,7 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
                 {
                     "type": "input_image",
                     "image_url": "https://images.example.test/test.jpg",
+                    "detail": "original",
                 },
             ],
         }

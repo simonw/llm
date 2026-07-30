@@ -567,6 +567,10 @@ def register_commands(cli):
             headers=dict(headers),
             vision=True,
             audio=not use_responses,
+            # Optimistically expose capabilities that have no effect until
+            # the user explicitly exercises them.
+            verbosity=True,
+            image_detail_original=True,
             supports_tools=True,
         )
 
