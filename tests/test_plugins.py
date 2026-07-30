@@ -789,16 +789,30 @@ def test_register_toolbox(tmpdir, logs_db):
             }
         ]
 
-        # Should show an error if you attempt to llm -c with configured toolboxes
+        # The stored instance configuration comes back as a -T style spec
+        conversation = cli.load_conversation(None)
+        assert conversation.loaded_tools == [
+            "Filesystem({})".format(json.dumps({"path": str(my_dir2)}))
+        ]
+
+        # llm -c should reconstruct the configured toolbox from the log
         result5 = runner.invoke(
             cli.cli,
-            ["-c", "list them again"],
+            ["-c", json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]})],
         )
-        assert result5.exit_code == 1
-        assert (
-            "Error: Tool(s) Filesystem_list_files not found. Available tools:"
-            in result5.output
+        assert result5.exit_code == 0
+        tool_results = json.loads(
+            "["
+            + result5.output.rsplit('"tool_results": [', 1)[1].rsplit("]", 1)[0]
+            + "]"
         )
+        assert tool_results == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(other_path)]),
+                "tool_call_id": ANY,
+            }
+        ]
 
         # Test the logging worked
         rows = tool_activity_rows(logs_db)
@@ -838,6 +852,27 @@ def test_register_toolbox(tmpdir, logs_db):
                     },
                 ],
             },
+            {
+                "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Filesystem_list_files",
+                        "output": json.dumps([str(other_path)]),
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": json.dumps({"path": str(my_dir2)}),
+                        },
+                    }
+                ],
+            },
+            # The llm -c continuation, using the reconstructed toolbox
             {
                 "model": "echo",
                 "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
