@@ -28,6 +28,7 @@ Check the {ref}`plugin directory <plugin-directory>` for the latest list of avai
 
 Projects such as [LocalAI](https://localai.io/) offer a REST API that imitates the OpenAI API but can be used to run other models, including models that can be installed on your own machine. These can be added using the same configuration mechanism.
 
+(openai-endpoint)=
 ### Run against an endpoint without configuring it
 
 Use `llm openai endpoint` to run a prompt directly against an OpenAI-compatible base URL:
