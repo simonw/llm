@@ -570,7 +570,7 @@ def prompt(
 
     \b
         llm 'Capital of France?'
-        llm 'Capital of France?' -m gpt-4o
+        llm 'Capital of France?' -m gpt-5.5
         llm 'Capital of France?' -s 'answer in Spanish'
 
     Multi-modal models can be called with attachments like this:
@@ -2812,13 +2812,13 @@ def aliases_set(alias, model_id, query):
     Example usage:
 
     \b
-        llm aliases set mini gpt-4o-mini
+        llm aliases set luna gpt-5.6-luna
 
     Alternatively you can omit the model ID and specify one or more -q options.
     The first model matching all of those query strings will be used.
 
     \b
-        llm aliases set mini -q 4o -q mini
+        llm aliases set luna -q gpt -q luna
     """
     if not model_id:
         if not query:
@@ -3704,7 +3704,7 @@ def options_show(model):
     Example usage:
 
     \b
-        llm models options show gpt-4o
+        llm models options show gpt-4.1
     """
     import llm
 
@@ -3736,7 +3736,7 @@ def options_set(model, key, value):
     Example usage:
 
     \b
-        llm models options set gpt-4o temperature 0.5
+        llm models options set gpt-4.1 temperature 0.5
     """
     import llm
 
@@ -3771,9 +3771,9 @@ def options_clear(model, key):
     Example usage:
 
     \b
-        llm models options clear gpt-4o
+        llm models options clear gpt-4.1
         # Or for a single option
-        llm models options clear gpt-4o temperature
+        llm models options clear gpt-4.1 temperature
     """
     import llm
 

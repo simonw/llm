@@ -75,7 +75,7 @@ If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you ca
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt (with the default gpt-4o-mini model)
+# Run a prompt (with the default gpt-5.6-luna model)
 llm "Ten fun names for a pet pelican"
 
 # Extract text from an image
@@ -91,12 +91,12 @@ Run prompts against [Gemini](https://aistudio.google.com/apikey) or [Anthropic](
 llm install llm-gemini
 llm keys set gemini
 # Paste Gemini API key here
-llm -m gemini-2.0-flash 'Tell me fun facts about Mountain View'
+llm -m gemini-3.5-flash 'Tell me fun facts about Mountain View'
 
 llm install llm-anthropic
 llm keys set anthropic
 # Paste Anthropic API key here
-llm -m claude-4-opus 'Impress me with wild facts about turnips'
+llm -m claude-5-opus 'Impress me with wild facts about turnips'
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):

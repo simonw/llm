@@ -66,15 +66,15 @@ Example output:
 The `llm aliases set <alias> <model-id>` command can be used to add a new alias:
 
 ```bash
-llm aliases set mini gpt-4o-mini
+llm aliases set luna gpt-5.6-luna
 ```
 You can also pass one or more `-q search` options to set an alias on the first model matching those search terms:
 ```bash
-llm aliases set mini -q 4o -q mini
+llm aliases set luna -q gpt -q luna
 ```
-Now you can run the `gpt-4o-mini` model using the `mini` alias like this:
+Now you can run the `gpt-5.6-luna` model using the `luna` alias like this:
 ```bash
-llm -m mini 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
+llm -m luna 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
 ```
 Aliases can be set for both regular models and {ref}`embedding models <embeddings>` using the same command. To set an alias of `oai` for the OpenAI `ada-002` embedding model use this:
 ```bash

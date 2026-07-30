@@ -24,7 +24,7 @@ def test_version():
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
-    mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
+    mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
 ):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
@@ -60,7 +60,7 @@ def test_llm_prompt_creates_log_database(
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai_chat, use_stdin, user_path, logs_off, logs_args, should_log
+    mocked_openai_responses, use_stdin, user_path, logs_off, logs_args, should_log
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
@@ -96,7 +96,7 @@ def test_llm_default_prompt(
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    last_request = mocked_openai_chat.get_requests()[-1]
+    last_request = mocked_openai_responses.get_requests()[-1]
     assert last_request.headers["Authorization"] == "Bearer X"
 
     # Was it logged? The legacy tables are read-only now, so the turn
@@ -110,7 +110,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-4o-mini"
+    assert row["model"] == "gpt-5.6-luna"
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
 
@@ -124,7 +124,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-4o-mini",
+            "model": "gpt-5.6-luna",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             # prompt_json and response_json are no longer recorded: the
@@ -134,33 +134,23 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-4o-mini",
+            "conversation_model": "gpt-5.6-luna",
         }.items()
     )
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx_mock, user_path, async_):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
-        },
-        headers={"Content-Type": "application/json"},
+def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async_):
+    mock_openai_responses(
+        text="Bob, Alice, Eve",
+        response_id="resp_first",
+        message_id="msg_first",
     )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Terry"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Terry",
+        response_id="resp_second",
+        message_id="msg_second",
     )
 
     log_path = user_path / "logs.db"
@@ -571,8 +561,8 @@ def test_model_defaults(tmpdir, monkeypatch):
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
-    assert llm.get_default_model() == "gpt-4o-mini"
-    assert llm.get_model().model_id == "gpt-4o-mini"
+    assert llm.get_default_model() == "gpt-5.6-luna"
+    assert llm.get_model().model_id == "gpt-5.6-luna"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
@@ -821,27 +811,22 @@ def test_schemas_dsl():
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
-    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+    tmpdir,
+    monkeypatch,
+    httpx_mock,
+    mock_openai_responses,
+    user_path,
+    custom_database_path,
 ):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Bob, Alice, Eve",
+        response_id="resp_first",
+        message_id="msg_first",
     )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Terry"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Terry",
+        response_id="resp_second",
+        message_id="msg_second",
     )
 
     user_path = tmpdir / "user"

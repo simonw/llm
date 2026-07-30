@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The default model for users who have not set their own default is now [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). It was previously [GPT-4o mini](https://developers.openai.com/api/docs/models/gpt-4o-mini). Luna is a much better and more recent model, albeit slightly more expensive - $0.20 per million input tokens and $1.20 per million output tokens, compared to $0.15/$0.60 for 4o mini. You can switch back to 4o mini using `llm models default gpt-4o-mini`, or switch to [GPT-5 nano](https://developers.openai.com/api/docs/models/gpt-5-nano), an even cheaper default model ($0.05/$0.40), using `llm models default gpt-5-nano`.
+
 (v0_32_rc1)=
 ## 0.32rc1
 

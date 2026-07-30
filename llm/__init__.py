@@ -86,7 +86,7 @@ __all__ = [
     "user",
     "user_dir",
 ]
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.6-luna"
 
 
 def get_plugins(all=False):
