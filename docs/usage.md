@@ -208,7 +208,9 @@ Toolboxes always start with a capital letter. They can be configured by passing 
 - Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
 - Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
 
-Toolboxes are not currently supported with the `llm -c` option, but they work well with `llm chat`. Try chatting with the Datasette content database like this:
+Continuing a conversation with `llm -c` or `llm chat -c` reconstructs any toolboxes from the configuration recorded in the logs, so you don't need to repeat the `-T` option. Each instance is rebuilt fresh, which means any in-memory state a toolbox accumulated during the earlier prompt does not carry over.
+
+Toolboxes work well with `llm chat`. Try chatting with the Datasette content database like this:
 
 ```bash
 llm chat -T 'Datasette("https://datasette.io/content")' --td

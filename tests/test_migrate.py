@@ -50,6 +50,9 @@ def test_migrate_blank():
         "responses_ai",
         "responses_ad",
         "responses_au",
+        "turn_search_ai",
+        "turn_search_ad",
+        "turn_search_au",
     }
 
 
@@ -90,6 +93,9 @@ def test_migrate_from_original_schema(has_record):
         "responses_ai",
         "responses_ad",
         "responses_au",
+        "turn_search_ai",
+        "turn_search_ad",
+        "turn_search_au",
     }
 
 

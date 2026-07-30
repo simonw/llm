@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 import llm
 from llm import CancelToolCall, cli
+from llm.logs import LogStore
 from llm.migrations import migrate
 from llm.tools import llm_time
 
@@ -44,13 +45,10 @@ def test_tool_use_basic(vcr):
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset(
-        {"tools", "tool_responses", "tool_calls", "tool_results"}
-    )
 
-    responses = list(db["responses"].rows)
-    assert len(responses) == 2
-    first_response, second_response = responses
+    turns = list(db["turns"].rows)
+    assert len(turns) == 2
+    first_turn, second_turn = turns
 
     tools = list(db["tools"].rows)
     assert len(tools) == 1
@@ -58,18 +56,30 @@ def test_tool_use_basic(vcr):
     assert tools[0]["description"] == "Multiply two numbers."
     assert tools[0]["plugin"] is None
 
-    tool_results = list(db["tool_results"].rows)
-    tool_calls = list(db["tool_calls"].rows)
-
+    # The tool call is in the first turn's output parts; the result is
+    # among the second turn's inputs.
+    store = LogStore(db)
+    first_chain = store.load_chain(first_turn["tip_message_hash"])
+    tool_calls = [
+        part
+        for message in first_chain
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolCallPart)
+    ]
     assert len(tool_calls) == 1
-    assert tool_calls[0]["response_id"] == first_response["id"]
-    assert tool_calls[0]["name"] == "multiply"
-    assert tool_calls[0]["arguments"] == '{"a": 1231, "b": 2331}'
+    assert tool_calls[0].name == "multiply"
+    assert tool_calls[0].arguments == {"a": 1231, "b": 2331}
 
-    assert len(tool_results) == 1
-    assert tool_results[0]["response_id"] == second_response["id"]
-    assert tool_results[0]["output"] == "2869461"
-    assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+    second_inputs = store.load_chain(second_turn["parent_message_hash"])
+    tool_results_parts = [
+        part
+        for message in second_inputs
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolResultPart)
+    ]
+    assert len(tool_results_parts) == 1
+    assert tool_results_parts[0].output == "2869461"
+    assert tool_results_parts[0].tool_call_id == tool_calls[0].tool_call_id
 
 
 @pytest.mark.vcr
@@ -104,6 +114,31 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
+def test_chain_round_separator_is_display_only():
+    """The space between chain rounds is synthesized at the chain level
+    for display - it must never become a stored whitespace part."""
+
+    def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    events = list(chain_response.stream_events())
+    text = "".join(e.chunk for e in events if e.type == "text")
+    # The separator reached the streamed output...
+    assert "\n} {\n" in text
+
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    chain_response.log_to_db(db)
+    # ...but no whitespace-only text part was stored.
+    for row in db["parts"].rows:
+        if row["type"] == "text" and row["text"] is not None:
+            assert row["text"].strip(), row
+
+
 def test_tool_use_async_tool_function():
     async def hello():
         return "world"
@@ -113,8 +148,8 @@ def test_tool_use_async_tool_function():
         json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
     )
     output = chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     tool_call_id = objects[1]["tool_results"][0]["tool_call_id"]
@@ -157,8 +192,8 @@ async def test_async_tools_run_tools_in_parallel():
         tools=[hello, hello2],
     )
     output = await chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     ids = [r["tool_call_id"] for r in objects[1]["tool_results"]]
@@ -621,10 +656,10 @@ def test_tool_errors(async_):
     assert log_text_result.exit_code == 0
     normalized_log_text = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", log_text_result.output)
     assert (
-        "- **trigger_error**: `tc_TCID`<br>\n"
+        "- **trigger_error**: `tc_TCID`  \n"
         "    ```\n"
         "    Error: Error!\n"
-        "    ```<br>\n"
+        "    ```  \n"
         "    **Error**: Exception: Error!\n"
     ) in normalized_log_text
 
