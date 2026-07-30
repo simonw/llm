@@ -500,6 +500,26 @@ def test_endpoint_lists_models_without_model_or_logging(
     assert request.headers["X-Test"] == "one"
 
 
+def test_endpoint_models_surfaces_error_from_successful_response(httpx_mock, user_path):
+    base_url = "https://models-error.example.test"
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{base_url}/models",
+        json={"error": "Unexpected endpoint or method. (GET /models)"},
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["openai", "endpoint", base_url, "--models"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 1
+    assert result.output == "Error: Unexpected endpoint or method. (GET /models)\n"
+    assert not (user_path / "logs.db").exists()
+
+
 def test_endpoint_responses_api(httpx_mock, user_path):
     base_url = "https://responses.example.test/v1"
     httpx_mock.add_response(

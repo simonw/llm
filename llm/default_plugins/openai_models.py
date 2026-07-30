@@ -607,7 +607,13 @@ def register_commands(cli):
         resolved_attachments = [*attachments, *attachment_types]
         try:
             if list_models:
-                for available_model in model.get_client(key).models.list():
+                available_models = model.get_client(key).models.list()
+                error = getattr(available_models, "error", None)
+                if error:
+                    if isinstance(error, dict):
+                        error = error.get("message") or json.dumps(error)
+                    raise click.ClickException(str(error))
+                for available_model in available_models:
                     click.echo(available_model.id)
                 return
 
