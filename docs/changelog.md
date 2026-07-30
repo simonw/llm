@@ -7,6 +7,10 @@ This release candidate for 0.32 introduces a new database schema for logging pro
 
 Upgrading to this RC will create those new tables and start logging to them. Existing data in the `responses` table will be left unaffected, and the `logs` command will read from both old and new tables. New interactions will only be written to the new tables.
 
+You can create a backup of your logs database prior to upgrading using:
+
+    llm logs backup logs-backup.db
+
 ### Changes to SQLite logging
 
 - See {ref}`the message store documentation <logging-message-store>` for details of the new logging schema.
