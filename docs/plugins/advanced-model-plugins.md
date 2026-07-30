@@ -380,6 +380,7 @@ response.add_tool_call(
 )
 ```
 
+(advanced-model-plugins-execute-tool-call)=
 ### Provider-managed local tool calls
 
 Some provider SDKs orchestrate the tool loop themselves: they call a local callback with generated arguments, wait for that callback to return a result, and then continue the same model response. Plugins for those providers can delegate the actual invocation to LLM using `response.execute_tool_call()`:

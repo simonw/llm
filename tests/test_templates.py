@@ -201,7 +201,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "'Summarize this: $input'",
             "Input text",
-            [],
+            ["-m", "gpt-4o-mini"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,
@@ -229,7 +229,7 @@ def test_templates_error_on_missing_schema(templates_path):
         pytest.param(
             "boo",
             "Input text",
-            ["-s", "custom system"],
+            ["-m", "gpt-4o-mini", "-s", "custom system"],
             "gpt-4o-mini",
             [
                 {"role": "system", "content": "custom system"},
@@ -253,7 +253,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Say $hello'",
             "Input text",
-            ["-p", "hello", "Blah"],
+            ["-m", "gpt-4o-mini", "-p", "hello", "Blah"],
             "gpt-4o-mini",
             "Say Blah\nInput text",
             None,
@@ -262,7 +262,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Say pelican'",
             "",
-            [],
+            ["-m", "gpt-4o-mini"],
             "gpt-4o-mini",
             "Say pelican",
             None,
@@ -272,7 +272,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "system: 'Summarize this'",
             "Input text",
-            [],
+            ["-m", "gpt-4o-mini"],
             "gpt-4o-mini",
             [
                 {"content": "Summarize this", "role": "system"},
@@ -285,7 +285,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
             "Input text",
-            [],
+            ["-m", "gpt-4o-mini"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,
@@ -295,7 +295,7 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
             "Input text",
-            ["-o", "temperature", "0.7"],
+            ["-m", "gpt-4o-mini", "-o", "temperature", "0.7"],
             "gpt-4o-mini",
             "Summarize this: Input text",
             None,

@@ -12,3 +12,4 @@ build/
 .vscode/
 uv.lock
 *.db
+backups-do-not-delete/

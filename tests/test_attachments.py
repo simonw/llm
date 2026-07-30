@@ -44,12 +44,11 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     )
 
     # Check it was logged correctly
-    conversations = list(logs_db["conversations"].rows)
-    assert len(conversations) == 1
-    conversation = conversations[0]
-    assert conversation["model"] == "mock"
-    assert conversation["name"] == "describe file"
-    response = next(iter(logs_db["responses"].rows))
+    threads = list(logs_db["threads"].rows)
+    assert len(threads) == 1
+    assert threads[0]["name"] == "describe file"
+    turn = next(iter(logs_db["turns"].rows))
+    assert turn["model"] == "mock"
     attachment = next(iter(logs_db["attachments"].rows))
     assert attachment == {
         "id": ANY,
@@ -58,9 +57,9 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
         "url": None,
         "content": attachment_content,
     }
-    prompt_attachment = next(iter(logs_db["prompt_attachments"].rows))
-    assert prompt_attachment["attachment_id"] == attachment["id"]
-    assert prompt_attachment["response_id"] == response["id"]
+    # The attachment hangs off a part of the stored user message
+    part_attachment = next(iter(logs_db["part_attachments"].rows))
+    assert part_attachment["attachment_id"] == attachment["id"]
 
 
 def _count_open_fds():

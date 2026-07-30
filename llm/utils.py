@@ -391,6 +391,10 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
 
         # Process field name and type
         field_parts = field_info.strip().split()
+        if not field_parts:
+            raise ValueError(
+                f"Invalid schema DSL: field {field!r} is missing a name before ':'"
+            )
         field_name = field_parts[0].strip()
 
         # Default type is string
@@ -484,15 +488,10 @@ def ensure_fragment(db, content):
     source = None
     if isinstance(content, Fragment):
         source = content.source
-    with db.conn:
-        db.execute(sql, {"hash": hash_id, "content": content, "source": source})
-        return next(
-            iter(
-                db.query(
-                    "select id from fragments where hash = :hash", {"hash": hash_id}
-                )
-            )
-        )["id"]
+    db.execute(sql, {"hash": hash_id, "content": content, "source": source})
+    return db.execute(
+        "select id from fragments where hash = :hash", {"hash": hash_id}
+    ).fetchone()[0]
 
 
 def ensure_tool(db, tool):
@@ -501,24 +500,39 @@ def ensure_tool(db, tool):
     values (:hash, :name, :description, :input_schema, :plugin)
     on conflict(hash) do nothing
     """
-    with db.conn:
-        db.execute(
-            sql,
-            {
-                "hash": tool.hash(),
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": json.dumps(tool.input_schema),
-                "plugin": tool.plugin,
-            },
-        )
-        return next(
-            iter(
-                db.query(
-                    "select id from tools where hash = :hash", {"hash": tool.hash()}
-                )
-            )
-        )["id"]
+    # No `with db.conn:` here - its exit commit would also commit any
+    # open outer transaction, such as the one wrapping a turn write.
+    db.execute(
+        sql,
+        {
+            "hash": tool.hash(),
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": json.dumps(tool.input_schema),
+            "plugin": tool.plugin,
+        },
+    )
+    return db.execute(
+        "select id from tools where hash = :hash", {"hash": tool.hash()}
+    ).fetchone()[0]
+
+
+def ensure_tool_instance(db, name, plugin, arguments) -> int:
+    """Row id in tool_instances for this configuration, storing each
+    distinct (plugin, name, arguments) once however many turns and
+    calls it serves."""
+    match = db.execute(
+        "select id from tool_instances where name is ? "
+        "and plugin is ? and arguments is ?",
+        [name, plugin, arguments],
+    ).fetchone()
+    if match:
+        return match[0]
+    return (
+        db["tool_instances"]
+        .insert({"name": name, "plugin": plugin, "arguments": arguments})
+        .last_pk
+    )
 
 
 def maybe_fenced_code(content: str) -> str:

@@ -72,9 +72,7 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 
-`gpt-4o-mini` (aliased to `4o-mini`) is the least expensive model, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
-
-[o1-pro](https://platform.openai.com/docs/models/o1-pro) is not available  through the Chat Completions API used by LLM's default OpenAI plugin. You can install the new [llm-openai-plugin](https://github.com/simonw/llm-openai-plugin) plugin to access that model.
+`gpt-5.6-luna` is one of the less expensive models, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
 
 ## Model features
 
@@ -122,8 +120,6 @@ The vector size of the supported OpenAI embedding models are as follows:
 ## OpenAI completion models
 
 The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
-
-Completion models can be called with the `-o logprobs 3` option (not supported by chat models) which will cause LLM to store 3 log probabilities for each returned token in the SQLite database. Consult [this issue](https://github.com/simonw/llm/issues/284#issuecomment-1724772704) for details on how to read these values.
 
 (openai-extra-models)=
 
