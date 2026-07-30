@@ -1,7 +1,7 @@
 import hashlib
 import time
 
-from sqlite_migrate import Migrations
+from sqlite_utils import Migrations
 
 embeddings_migrations = Migrations("llm.embeddings")
 
