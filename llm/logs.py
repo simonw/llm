@@ -1380,17 +1380,20 @@ def legacy_log_rows(
 
     for index, fragment_hash in enumerate(fragment_hashes):
         key = f"fragment_{index}"
-        where.append(f"""exists (
-                select 1 from prompt_fragments
-                where prompt_fragments.response_id = responses.id
-                and prompt_fragments.fragment_id in (
-                    select fragments.id from fragments where hash = :{key}
+        where.append(f"""(
+                exists (
+                    select 1 from prompt_fragments
+                    where prompt_fragments.response_id = responses.id
+                    and prompt_fragments.fragment_id in (
+                        select fragments.id from fragments where hash = :{key}
+                    )
                 )
-                union
-                select 1 from system_fragments
-                where system_fragments.response_id = responses.id
-                and system_fragments.fragment_id in (
-                    select fragments.id from fragments where hash = :{key}
+                or exists (
+                    select 1 from system_fragments
+                    where system_fragments.response_id = responses.id
+                    and system_fragments.fragment_id in (
+                        select fragments.id from fragments where hash = :{key}
+                    )
                 )
             )""")
         params[key] = fragment_hash
