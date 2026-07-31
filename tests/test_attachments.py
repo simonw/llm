@@ -97,3 +97,33 @@ def test_attachment_no_file_descriptor_leak(tmp_path):
 
     # File descriptor count should not have grown significantly
     assert _count_open_fds() <= baseline + 5
+
+
+def test_attachment_content_bytes_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        url="https://example.com/actual.png",
+        content=TINY_PNG,
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.content_bytes() == TINY_PNG
+
+
+def test_attachment_resolve_type_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/actual.png",
+        headers={"content-type": "image/png"},
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.resolve_type() == "image/png"
