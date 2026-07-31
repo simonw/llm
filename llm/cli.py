@@ -3360,14 +3360,15 @@ def embed_multi(
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
 
+    effective_model_id = model or get_default_embedding_model()
     try:
-        collection_obj = Collection(
-            collection, db=db, model_id=model or get_default_embedding_model()
-        )
-    except ValueError:
-        raise click.ClickException(
-            "You need to specify an embedding model (no default model is set)"
-        )
+        collection_obj = Collection(collection, db=db, model_id=effective_model_id)
+    except ValueError as e:
+        if effective_model_id is None:
+            raise click.ClickException(
+                "You need to specify an embedding model (no default model is set)"
+            )
+        raise
 
     expected_length = None
     if files:

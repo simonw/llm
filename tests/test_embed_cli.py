@@ -1,7 +1,7 @@
 import json
 import pathlib
 import sys
-from unittest.mock import ANY
+from unittest.mock import ANY, patch
 
 import pytest
 import sqlite_utils
@@ -715,3 +715,25 @@ def test_duplicate_content_embedded_only_once(embed_demo):
     # Should have only embedded one more thing
     assert db["embeddings"].count == 4
     assert len(embed_demo.embedded_content) == 4
+
+
+def test_embed_multi_non_model_valueerror_is_not_masked(user_path):
+    # A ValueError raised by Collection() for a reason other than a missing model
+    # must not be swallowed and replaced with the "no default model" message.
+    runner = CliRunner()
+    sentinel = ValueError("DB migration failed unexpectedly")
+
+    def raise_sentinel(*args, **kwargs):
+        raise sentinel
+
+    with patch("llm.cli.Collection", side_effect=raise_sentinel):
+        result = runner.invoke(
+            cli,
+            ["embed-multi", "test", "-", "-m", "embed-demo"],
+            input="id,text\n1,hello",
+        )
+
+    # The original ValueError must propagate, not be converted to a ClickException
+    # about missing embedding models.
+    assert result.exception is sentinel
+    assert "no default model" not in (result.output or "")
