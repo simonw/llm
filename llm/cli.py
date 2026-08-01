@@ -2764,8 +2764,11 @@ def tools_list(tool_defs, json_, python_tools):
             if tool.description:
                 click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
         for toolbox in toolbox_objects:
+            toolbox_method_tools = list(toolbox.method_tools())
+            if not toolbox_method_tools:
+                continue
             click.echo(toolbox.name + ":\n")
-            for tool in toolbox.method_tools():
+            for tool in toolbox_method_tools:
                 sig = (
                     str(inspect.signature(tool.implementation))
                     .replace("(self, ", "(")

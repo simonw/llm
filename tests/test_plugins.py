@@ -1038,6 +1038,39 @@ def test_plugins_command():
     ]
 
 
+def test_tools_list_skips_empty_toolboxes():
+    # Toolboxes with no public methods (e.g. dynamic toolboxes that require
+    # constructor arguments to yield tools, like an MCP client) must not
+    # appear in the text output of `llm tools` – showing "MCP:\n" with nothing
+    # beneath it looks broken (issue #1580).
+    class EmptyBox(llm.Toolbox):
+        pass
+
+    class EmptyBoxPlugin:
+        __name__ = "EmptyBoxPlugin"
+
+        @hookimpl
+        def register_tools(self, register):
+            register(EmptyBox)
+
+    try:
+        plugins.pm.register(EmptyBoxPlugin(), name="EmptyBoxPlugin")
+
+        runner = CliRunner()
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert "EmptyBox" not in result.output
+
+        # JSON output still lists the toolbox (with an empty tools array) so
+        # programmatic consumers can discover it.
+        result_json = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result_json.exit_code == 0
+        data = json.loads(result_json.output)
+        assert any(tb["name"] == "EmptyBox" for tb in data["toolboxes"])
+    finally:
+        plugins.pm.unregister(name="EmptyBoxPlugin")
+
+
 def tool_activity_rows(db):
     """Per-turn tool calls and results from the message store, in the
     shape the old TOOL_RESULTS_SQL produced from the legacy tables."""
