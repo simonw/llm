@@ -190,6 +190,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Configuration](https://llm.datasette.io/en/stable/openai-models.html#configuration)
   * [OpenAI language models](https://llm.datasette.io/en/stable/openai-models.html#openai-language-models)
   * [Model features](https://llm.datasette.io/en/stable/openai-models.html#model-features)
+  * [Fast mode and service tiers](https://llm.datasette.io/en/stable/openai-models.html#fast-mode-and-service-tiers)
   * [OpenAI embedding models](https://llm.datasette.io/en/stable/openai-models.html#openai-embedding-models)
   * [OpenAI completion models](https://llm.datasette.io/en/stable/openai-models.html#openai-completion-models)
   * [Adding more OpenAI models](https://llm.datasette.io/en/stable/openai-models.html#adding-more-openai-models)
