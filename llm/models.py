@@ -2,6 +2,7 @@ import asyncio
 import base64
 import dataclasses
 import datetime
+import functools
 import hashlib
 import re
 import time
@@ -246,6 +247,7 @@ class Toolbox:
 
         original_init = cls.__init__
 
+        @functools.wraps(original_init)
         def wrapped_init(self, *args, **kwargs):
             # Track args/kwargs passed to constructor in self._config
             # so we can serialize them to a database entry later on

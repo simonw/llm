@@ -207,6 +207,40 @@ Toolboxes always start with a capital letter. They can be configured by passing 
 - Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
 - Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
 
+The `llm tools` command lists toolboxes along with the tools they provide. Some toolboxes cannot know their list of tools until they have been configured - [llm-mcp-client](https://github.com/simonw/llm-mcp-client) for example fetches its tools from whichever MCP server it is pointed at. These dynamic toolboxes are listed with their constructor signature and documentation instead:
+
+```
+MCP(server, mode='auto', prefix='') (plugin: mcp_client)
+
+  Expose the tools from an MCP server as LLM tools.
+
+  Usage:
+
+      MCP("https://example.com/mcp")
+      MCP("https://example.com/mcp", mode="legacy", prefix="demo_")
+```
+
+Pass a full toolbox specification to `llm tools` to see the tools provided by a configured instance:
+
+```bash
+llm tools 'MCP("https://datasette.simonwillison.net/-/mcp")'
+```
+```
+MCP("https://datasette.simonwillison.net/-/mcp"):
+
+  list_databases(**kwargs)
+
+    List the databases available in this Datasette instance.
+
+  get_database_schema(**kwargs)
+
+    Return the complete SQL schema for a database.
+
+  execute_sql(**kwargs)
+
+    Execute one read-only SQL statement and return its tabular results.
+```
+
 Continuing a conversation with `llm -c` or `llm chat -c` reconstructs any toolboxes from the configuration recorded in the logs, so you don't need to repeat the `-T` option. Each instance is rebuilt fresh, which means any in-memory state a toolbox accumulated during the earlier prompt does not carry over.
 
 Toolboxes work well with `llm chat`. Try chatting with the Datasette content database like this:

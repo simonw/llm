@@ -2685,9 +2685,18 @@ def tools():
 def tools_list(tool_defs, json_, python_tools):
     "List available tools that have been provided by plugins"
 
-    def introspect_tools(toolbox_class):
+    def introspect_tools(toolbox):
+        # Instances report their tools(), which may be generated dynamically.
+        # Classes can only report tools for their introspectable methods.
+        if isinstance(toolbox, Toolbox):
+            if not toolbox._prepared:
+                toolbox.prepare()
+                toolbox._prepared = True
+            tool_iter = toolbox.tools()
+        else:
+            tool_iter = toolbox.method_tools()
         methods = []
-        for tool in toolbox_class.method_tools():
+        for tool in tool_iter:
             methods.append(
                 {
                     "name": tool.name,
@@ -2698,13 +2707,19 @@ def tools_list(tool_defs, json_, python_tools):
             )
         return methods
 
+    toolbox_specs: dict[int, str] = {}
     if tool_defs:
         tools = {}
-        for tool in _gather_tools(tool_defs, python_tools):
+        gathered = _gather_tools(tool_defs, python_tools)
+        # _gather_tools returns --functions tools first, then one per spec
+        specs = [None] * (len(gathered) - len(tool_defs)) + list(tool_defs)
+        for spec, tool in zip(specs, gathered):
             if hasattr(tool, "name"):
                 tools[tool.name] = tool
             else:
                 tools[tool.__class__.__name__] = tool
+            if spec is not None and isinstance(tool, Toolbox):
+                toolbox_specs[id(tool)] = spec
     else:
         tools = get_tools()
         if python_tools:
@@ -2715,7 +2730,7 @@ def tools_list(tool_defs, json_, python_tools):
     output_tools = []
     output_toolboxes = []
     tool_objects = []
-    toolbox_objects = []
+    toolbox_infos = []
     for name, tool in sorted(tools.items()):
         if isinstance(tool, Tool):
             tool_objects.append(tool)
@@ -2728,17 +2743,26 @@ def tools_list(tool_defs, json_, python_tools):
                 }
             )
         else:
-            toolbox_objects.append(tool)
+            toolbox_class = tool if isinstance(tool, type) else tool.__class__
+            # Overriding tools() or prepare() means the toolbox generates
+            # tools at runtime
+            is_dynamic = any(
+                getattr(toolbox_class, method) is not getattr(Toolbox, method)
+                for method in ("tools", "prepare", "prepare_async")
+            )
+            introspected = introspect_tools(tool)
+            toolbox_infos.append((name, tool, toolbox_class, is_dynamic, introspected))
             output_toolboxes.append(
                 {
                     "name": name,
+                    "dynamic": is_dynamic,
                     "tools": [
                         {
-                            "name": tool["name"],
-                            "description": tool["description"],
-                            "arguments": tool["arguments"],
+                            "name": tool_info["name"],
+                            "description": tool_info["description"],
+                            "arguments": tool_info["arguments"],
                         }
-                        for tool in introspect_tools(tool)
+                        for tool_info in introspected
                     ],
                 }
             )
@@ -2763,17 +2787,40 @@ def tools_list(tool_defs, json_, python_tools):
             )
             if tool.description:
                 click.echo(textwrap.indent(tool.description.strip(), "  ") + "\n")
-        for toolbox in toolbox_objects:
-            click.echo(toolbox.name + ":\n")
-            for tool in toolbox.method_tools():
-                sig = (
-                    str(inspect.signature(tool.implementation))
-                    .replace("(self, ", "(")
-                    .replace("(self)", "()")
+        for name, toolbox, toolbox_class, is_dynamic, introspected in toolbox_infos:
+            if is_dynamic and isinstance(toolbox, type):
+                # A dynamic toolbox class has no tools until it is
+                # instantiated - show its constructor and docstring instead
+                try:
+                    constructor_sig = str(inspect.signature(toolbox_class))
+                except (ValueError, TypeError):
+                    constructor_sig = "(...)"
+                plugin = getattr(toolbox_class, "plugin", None)
+                click.echo(
+                    "{}{}{}\n".format(
+                        name,
+                        constructor_sig,
+                        f" (plugin: {plugin})" if plugin else "",
+                    )
                 )
-                click.echo(f"  {tool.name}{sig}\n")
-                if tool.description:
-                    click.echo(textwrap.indent(tool.description.strip(), "    ") + "\n")
+                doc = toolbox_class.__doc__
+                if doc:
+                    click.echo(textwrap.indent(inspect.cleandoc(doc), "  ") + "\n")
+            else:
+                click.echo(toolbox_specs.get(id(toolbox), name) + ":\n")
+            for tool_info in introspected:
+                sig = "()"
+                if tool_info["implementation"]:
+                    sig = (
+                        str(inspect.signature(tool_info["implementation"]))
+                        .replace("(self, ", "(")
+                        .replace("(self)", "()")
+                    )
+                click.echo(f"  {tool_info['name']}{sig}\n")
+                if tool_info["description"]:
+                    click.echo(
+                        textwrap.indent(tool_info["description"].strip(), "    ") + "\n"
+                    )
 
 
 @cli.group(

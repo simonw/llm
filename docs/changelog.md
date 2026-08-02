@@ -1,5 +1,10 @@
 # Changelog
 
+(unreleased)=
+## Unreleased
+
+- `llm tools` now provides improved output for dynamic toolboxes - toolbox classes such as `MCP` from [llm-mcp-client](https://github.com/simonw/llm-mcp-client) that generate their tools at runtime. These were previously listed as just their name. They are now listed with their constructor signature and class docstring. Passing one or more specifications such as `llm tools 'MCP("https://datasette.simonwillison.net/-/mcp")'` instantiates each toolbox and lists the tools that configured instance provides. `llm tools --json` output now includes a `"dynamic"` boolean key for each toolbox. [#1580](https://github.com/simonw/llm/issues/1580)
+
 (v0_32_rc2)=
 ## 0.32rc2 (2026-07-30)
 

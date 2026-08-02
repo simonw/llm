@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import json
 import pathlib
 import re
@@ -655,6 +656,7 @@ def test_register_toolbox(tmpdir, logs_db):
             "toolboxes": [
                 {
                     "name": "Filesystem",
+                    "dynamic": False,
                     "tools": [
                         {
                             "name": "Filesystem_list_files",
@@ -665,6 +667,7 @@ def test_register_toolbox(tmpdir, logs_db):
                 },
                 {
                     "name": "Memory",
+                    "dynamic": False,
                     "tools": [
                         {
                             "name": "Memory_append",
@@ -897,6 +900,159 @@ def test_register_toolbox(tmpdir, logs_db):
 
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
+
+
+class Discovery(llm.Toolbox):
+    """
+    Tools discovered at runtime from a configured source.
+
+    Usage:
+
+        Discovery("demo")
+    """
+
+    def __init__(self, source: str, prefix: str = ""):
+        self.source = source
+        self.prefix = prefix
+
+    def tools(self):
+        def greet(name: str) -> str:
+            "Greet someone by name"
+            return f"hello {name} from {self.source}"
+
+        yield llm.Tool.function(greet, name=self.prefix + "greet")
+
+
+class Counter(llm.Toolbox):
+    """
+    Registers a counting tool during prepare().
+    """
+
+    def __init__(self, start: int = 0):
+        self.value = start
+
+    def prepare(self):
+        def increment() -> int:
+            "Increment the counter"
+            self.value += 1
+            return self.value
+
+        self.add_tool(increment)
+
+
+class DynamicToolboxPlugin:
+    __name__ = "DynamicToolboxPlugin"
+
+    @hookimpl
+    def register_tools(self, register):
+        register(Discovery)
+        register(Counter)
+
+
+def test_toolbox_constructor_signature_preserved():
+    # Toolbox.__init_subclass__ wraps __init__ - that wrapper should not
+    # obscure the constructor signature
+    assert str(inspect.signature(Discovery)) == "(source: str, prefix: str = '')"
+    assert str(inspect.signature(Filesystem)) == "(path: str)"
+
+
+def test_tools_list_dynamic_toolbox():
+    # https://github.com/simonw/llm/issues/1580
+    runner = CliRunner()
+    try:
+        plugins.pm.register(DynamicToolboxPlugin(), name="DynamicToolboxPlugin")
+
+        # Plain listing shows constructor signature and docstring instead of
+        # a bare "Discovery:" header with nothing underneath it
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert "Discovery:" not in result.output
+        assert (
+            "Discovery(source: str, prefix: str = '') (plugin: DynamicToolboxPlugin)\n"
+            "\n"
+            "  Tools discovered at runtime from a configured source.\n"
+            "\n"
+            "  Usage:\n"
+            "\n"
+            '      Discovery("demo")\n'
+        ) in result.output
+
+        # --json marks the toolbox as dynamic
+        result2 = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result2.exit_code == 0
+        toolboxes = {
+            toolbox["name"]: toolbox
+            for toolbox in json.loads(result2.output)["toolboxes"]
+        }
+        assert toolboxes["Discovery"]["dynamic"] is True
+        assert toolboxes["Discovery"]["tools"] == []
+
+        # Passing a constructor spec lists the tools the instance provides,
+        # with the spec itself as the heading
+        result3 = runner.invoke(cli.cli, ["tools", 'Discovery("demo")'])
+        assert result3.exit_code == 0
+        assert result3.output == (
+            'Discovery("demo"):\n\n'
+            "  greet(name: str) -> str\n\n"
+            "    Greet someone by name\n\n"
+        )
+
+        # And --json with the spec includes the discovered tools
+        result4 = runner.invoke(cli.cli, ["tools", 'Discovery("demo")', "--json"])
+        assert result4.exit_code == 0
+        assert json.loads(result4.output)["toolboxes"] == [
+            {
+                "name": "Discovery",
+                "dynamic": True,
+                "tools": [
+                    {
+                        "name": "greet",
+                        "description": "Greet someone by name",
+                        "arguments": {
+                            "properties": {"name": {"type": "string"}},
+                            "required": ["name"],
+                            "type": "object",
+                        },
+                    }
+                ],
+            }
+        ]
+    finally:
+        plugins.pm.unregister(name="DynamicToolboxPlugin")
+
+
+def test_tools_list_prepare_toolbox():
+    # Toolboxes that discover their tools in prepare() are dynamic too
+    runner = CliRunner()
+    try:
+        plugins.pm.register(DynamicToolboxPlugin(), name="DynamicToolboxPlugin")
+
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert "Counter:" not in result.output
+        assert (
+            "Counter(start: int = 0) (plugin: DynamicToolboxPlugin)\n"
+            "\n"
+            "  Registers a counting tool during prepare().\n"
+        ) in result.output
+
+        result2 = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result2.exit_code == 0
+        toolboxes = {
+            toolbox["name"]: toolbox
+            for toolbox in json.loads(result2.output)["toolboxes"]
+        }
+        assert toolboxes["Counter"]["dynamic"] is True
+        assert toolboxes["Counter"]["tools"] == []
+
+        # A constructor spec runs prepare() and lists the registered tools
+        result3 = runner.invoke(cli.cli, ["tools", "Counter(5)"])
+        assert result3.exit_code == 0
+        assert result3.output == (
+            "Counter(5):\n\n  increment() -> int\n\n    Increment the counter\n\n"
+        )
+    finally:
+        plugins.pm.unregister(name="DynamicToolboxPlugin")
 
 
 def test_register_toolbox_fails_on_bad_class():
