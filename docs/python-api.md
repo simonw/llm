@@ -401,6 +401,8 @@ In asynchronous contexts the alternative method `await toolbox.prepare_async()` 
 
 If you want to prepare the class in this way such that it can be used in both synchronous and asynchronous contexts, implement both `prepare()` and `prepare_async()` methods.
 
+Toolbox classes that override `tools()`, `prepare()` or `prepare_async()` are treated as dynamic by the `llm tools` command. Since their full list of tools cannot be determined until an instance has been configured, `llm tools` displays their constructor signature and class docstring instead of a list of tools - so give your dynamic toolbox a descriptive docstring that shows how to configure it. Users can then pass a full specification such as `llm tools 'MCP("https://example.com/mcp")'` to instantiate the toolbox - running `prepare()` if it is implemented - and list the tools that instance provides. See {ref}`the tools usage documentation <usage-tools>` for details.
+
 (python-api-schemas)=
 
 ### Schemas
