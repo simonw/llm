@@ -561,3 +561,34 @@ def test_tools_in_templates(
     finally:
         after()
         pm.unregister(name="greetings-plugin")
+
+
+def test_cli_schema_takes_precedence_over_template_schema_object(
+    templates_path, mock_model, logs_db
+):
+    # https://github.com/simonw/llm/issues/1583
+    # --schema on the CLI should override a template's schema_object,
+    # consistent with how --system, -o (options), and -m (model) behave.
+    (templates_path / "withschema.yaml").write_text(
+        "schema_object:\n  type: object\n  properties:\n    name:\n      type: string\n",
+        "utf-8",
+    )
+    cli_schema = {"type": "object", "properties": {"city": {"type": "string"}}}
+    mock_model.enqueue(["response"])
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-stream",
+            "-m",
+            "mock",
+            "-t",
+            "withschema",
+            "--schema",
+            '{"type": "object", "properties": {"city": {"type": "string"}}}',
+            "hello",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_model.history[0][0].schema == cli_schema

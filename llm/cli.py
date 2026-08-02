@@ -900,7 +900,7 @@ def prompt(
             fragments = [*template_obj.fragments, *fragments]
         if template_obj.system_fragments:
             system_fragments = [*template_obj.system_fragments, *system_fragments]
-        if template_obj.schema_object:
+        if template_obj.schema_object and not schema:
             schema = template_obj.schema_object
         tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
         if template_obj.options:
