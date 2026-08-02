@@ -1,7 +1,7 @@
 # Changelog
 
 (v0_32_rc2)=
-## 0.32rc2
+## 0.32rc2 (2026-07-30)
 
 - The default model for users who have not set their own default is now [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). It was previously [GPT-4o mini](https://developers.openai.com/api/docs/models/gpt-4o-mini). Luna is a much better and more recent model, albeit slightly more expensive - $0.20 per million input tokens and $1.20 per million output tokens, compared to $0.15/$0.60 for 4o mini. You can switch back to 4o mini using `llm models default gpt-4o-mini`, or switch to [GPT-5 nano](https://developers.openai.com/api/docs/models/gpt-5-nano), an even cheaper default model ($0.05/$0.40), using `llm models default gpt-5-nano`. [#1576](https://github.com/simonw/llm/issues/1576)
 - New {ref}`llm openai endpoint <openai-endpoint>` command for running prompts, chats and model listings against arbitrary OpenAI-compatible endpoints without first configuring a model. These calls are not logged. [#1565](https://github.com/simonw/llm/issues/1565)
@@ -10,7 +10,7 @@
 - `schema_dsl()` now raises a descriptive `ValueError` instead of an `IndexError` for malformed fields with no name before the colon. [#1466](https://github.com/simonw/llm/issues/1466)
 
 (v0_32_rc1)=
-## 0.32rc1
+## 0.32rc1 (2026-07-30)
 
 This release candidate for 0.32 introduces a new database schema for logging prompts and responses that captures full details of the interaction with the underlying LLM, and de-duplicates those records using a **content-addressed message store**.
 
