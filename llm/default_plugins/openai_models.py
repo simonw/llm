@@ -250,6 +250,8 @@ def register_models(register):
 
     # GPT-5.6
     for model_id in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
+        # gpt-5.6-sol supports service_tier for Fast mode
+        service_tier = model_id == "gpt-5.6-sol"
         register(
             Responses(
                 model_id,
@@ -257,6 +259,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=service_tier,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -266,6 +269,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=service_tier,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -304,6 +308,8 @@ def register_models(register):
             kwargs["vision"] = True
         if extra_model.get("audio") is True:
             kwargs["audio"] = True
+        if extra_model.get("service_tier") is True:
+            kwargs["service_tier"] = True
         if extra_model.get("completion"):
             klass = Completion
             async_klass = None
@@ -911,6 +917,7 @@ def build_options_class(
     verbosity=False,
     image_detail_original=False,
     chat_completions=False,
+    service_tier=False,
 ):
     fields = {
         "json_object": (
@@ -972,6 +979,19 @@ def build_options_class(
                 default=None,
             ),
         )
+    if service_tier:
+        fields["service_tier"] = (
+            str | None,
+            Field(
+                description=(
+                    "The processing tier to use for this request - for example "
+                    "'fast' for Fast mode (faster responses at a higher price) "
+                    "or 'flex' for slower, cheaper processing on models that "
+                    "support those tiers."
+                ),
+                default=None,
+            ),
+        )
     return create_model("Options", __base__=SharedOptions, **fields)
 
 
@@ -1024,6 +1044,7 @@ class _Shared:
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -1044,11 +1065,12 @@ class _Shared:
 
         self.attachment_types = set()
 
-        if reasoning or verbosity or image_detail_original:
+        if reasoning or verbosity or image_detail_original or service_tier:
             self.Options = build_options_class(
                 reasoning=reasoning,
                 verbosity=verbosity,
                 image_detail_original=image_detail_original,
+                service_tier=service_tier,
             )
 
         if vision:
@@ -1516,6 +1538,7 @@ class _SharedResponses(_Shared):
             "reasoning": self._reasoning,
             "verbosity": self._verbosity,
             "image_detail_original": self._image_detail_original,
+            "service_tier": self._service_tier,
             "supports_schema": self.supports_schema,
             "supports_tools": self.supports_tools,
             "allows_system_prompt": self.allows_system_prompt,
@@ -1774,6 +1797,7 @@ class Responses(_SharedResponses, KeyModel):
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -1794,6 +1818,7 @@ class Responses(_SharedResponses, KeyModel):
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
+            service_tier=service_tier,
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
@@ -1802,6 +1827,7 @@ class Responses(_SharedResponses, KeyModel):
         self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
+        self._service_tier = service_tier
         # Override the Options class so that ``-o chat_completions 1`` is
         # always available on Responses-routed models.
         self.Options = build_options_class(
@@ -1809,6 +1835,7 @@ class Responses(_SharedResponses, KeyModel):
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            service_tier=service_tier,
         )
 
     def execute(
@@ -2007,6 +2034,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -2027,6 +2055,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
+            service_tier=service_tier,
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
@@ -2035,11 +2064,13 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
+        self._service_tier = service_tier
         self.Options = build_options_class(
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            service_tier=service_tier,
         )
 
     async def execute(

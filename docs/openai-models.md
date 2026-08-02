@@ -83,6 +83,35 @@ The following features work with OpenAI models:
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
+(openai-models-service-tier)=
+
+## Fast mode and service tiers
+
+Some OpenAI models can process requests at different speeds and prices using the [service tier](https://developers.openai.com/api/docs/guides/fast-mode) API parameter. `gpt-5.6-sol` supports [Fast mode](https://openai.com/api-fast-mode/), which runs up to 2.5x faster than standard processing at a higher per-token price.
+
+Models that support this expose a `service_tier` option. Use `-o service_tier fast` to enable Fast mode for a prompt:
+
+```bash
+llm -m gpt-5.6-sol -o service_tier fast 'Fast facts about pelicans'
+```
+
+The value is passed straight to the API, so other tiers such as `priority` (the older name for `fast`) and `flex` (slower but cheaper processing, on models that support it) work too:
+
+```bash
+llm -m gpt-5.6-sol -o service_tier flex 'No rush: facts about pelicans'
+```
+
+The requested tier is recorded in the logged options for the prompt, visible in `llm logs -c --json`. The API response also reports the service tier that actually processed the request - OpenAI may fall back to standard processing if Fast mode capacity is unavailable. Using the {ref}`Python API <python-api>` you can check that with:
+
+```python
+import llm
+
+model = llm.get_model("gpt-5.6-sol")
+response = model.prompt("Fast facts about pelicans", service_tier="fast")
+print(response.text())
+print(response.json()["service_tier"])
+```
+
 (openai-models-embedding)=
 
 ## OpenAI embedding models
@@ -154,6 +183,8 @@ If the model should use the OpenAI Responses API rather than Chat Completions, a
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
 For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
+
+If the model supports the `service_tier` parameter - see {ref}`openai-models-service-tier` - add `service_tier: true` to enable the corresponding option.
 
 With this configuration in place, the following command should run a prompt against the new model:
 

@@ -423,6 +423,106 @@ def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
     assert "reasoning" not in kwargs
 
 
+@pytest.mark.parametrize(
+    "model_id,expected",
+    [
+        ("gpt-5.6-sol", True),
+        ("gpt-5.6-terra", False),
+        ("gpt-5.6-luna", False),
+        ("gpt-5.5", False),
+    ],
+)
+def test_service_tier_option_only_on_supported_models(model_id, expected):
+    model = llm.get_model(model_id)
+    assert ("service_tier" in model.Options.model_fields) == expected
+
+
+def test_responses_kwargs_includes_service_tier():
+    model = llm.get_model("gpt-5.6-sol")
+    options = model.Options(service_tier="fast")
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert kwargs["service_tier"] == "fast"
+
+
+def test_service_tier_sent_to_responses_endpoint(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_test_1",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-sol",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "fast reply",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {
+                "input_tokens": 5,
+                "output_tokens": 3,
+                "total_tokens": 8,
+            },
+            "status": "completed",
+            "service_tier": "priority",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    model = llm.get_model("gpt-5.6-sol")
+    response = model.prompt("hello", stream=False, service_tier="fast", key="test")
+    assert response.text() == "fast reply"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["service_tier"] == "fast"
+    # The response body reports the tier that actually processed the request
+    assert response.json()["service_tier"] == "priority"
+
+
+def test_service_tier_sent_to_chat_completions_fallback(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "id": "chatcmpl-x",
+            "object": "chat.completion",
+            "model": "gpt-5.6-sol",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "fast chat"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    model = llm.get_model("gpt-5.6-sol")
+    response = model.prompt(
+        "hello", stream=False, chat_completions=True, service_tier="fast", key="test"
+    )
+    assert response.text() == "fast chat"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["service_tier"] == "fast"
+
+
 def test_responses_streams_reasoning_summary_text(httpx_mock):
     httpx_mock.add_response(
         method="POST",

@@ -1368,6 +1368,7 @@ OpenAI Responses: gpt-5.6-sol
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
