@@ -21,6 +21,8 @@ import hashlib
 import json
 from typing import Any
 
+from condense_json import UncondenseError, condense_json, uncondense_json
+
 from .migrations import migrate
 from .models import Attachment, _conversation_name
 from .parts import (
@@ -481,7 +483,8 @@ class LogStore:
         )
         # _messages_now() rather than messages(), which is a coroutine on
         # AsyncResponse.
-        tip = self.ensure_chain(response._messages_now(), parent=parent)
+        own_messages = response._messages_now()
+        tip = self.ensure_chain(own_messages, parent=parent)
 
         schema_id = None
         if response.prompt.schema:
@@ -512,6 +515,9 @@ class LogStore:
                 "token_details": _dump(response.token_details),
                 "duration_ms": response.duration_ms(),
                 "datetime_utc": response.datetime_utc(),
+                "response_json": condense_payload(
+                    getattr(response, "response_json", None), own_messages
+                ),
             },
             replace=True,
         )
@@ -595,6 +601,30 @@ class LogStore:
         if thread_id is not None:
             self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return turn_id
+
+    def turn_response_json(self, turn_id: str) -> Any:
+        """The raw provider payload recorded for a turn, resolved.
+
+        Returns ``None`` when the turn is unknown or recorded no
+        payload. Raises ``condense_json.UncondenseError`` when the
+        payload references message content that no longer resolves -
+        the payload was recorded but its context is gone.
+        """
+        row = next(
+            iter(
+                self.db.query(
+                    "select parent_message_hash, tip_message_hash, response_json"
+                    " from turns where id = ?",
+                    [turn_id],
+                )
+            ),
+            None,
+        )
+        if row is None or row["response_json"] is None:
+            return None
+        inputs = self.load_chain(row["parent_message_hash"])
+        outputs = self.load_chain(row["tip_message_hash"])[len(inputs) :]
+        return resolve_payload(row["response_json"], outputs)
 
     # -- verification --------------------------------------------------
 
@@ -789,6 +819,87 @@ def _now() -> str:
     return str(datetime.datetime.now(datetime.timezone.utc))
 
 
+# -- condensed provider payloads ----------------------------------------
+#
+# The raw response.json() payload mostly duplicates content the message
+# tables already hold: the response text, reasoning summaries and their
+# encrypted blobs, long tool arguments. The turn stores it condensed
+# instead - strings that already live in the turn's own messages are
+# swapped for {"$": key} references (condense-json), leaving roughly the
+# provider envelope: ids, usage, fingerprints, settings echoes. The
+# replacement dict is never stored; it is rebuilt from the chain segment
+# on the way out, which is sound because message content is hash-frozen,
+# so the same walk over the same messages produces the same dict on both
+# sides of the round trip.
+
+# Below this a {"$": key} marker costs about as much as the string it
+# replaces.
+_CONDENSE_MIN_LENGTH = 64
+
+
+def _payload_replacements(messages) -> dict[str, str]:
+    """Replacement strings for condensing a turn's provider payload.
+
+    ``messages`` is the turn's own contribution - the chain segment
+    between its parent and tip. Keys are structural (message offset,
+    part position, field path) so the identical dict can be rebuilt
+    from the stored segment at read time.
+    """
+    replacements: dict[str, str] = {}
+
+    def add(key: str, value: Any) -> None:
+        if isinstance(value, str) and len(value) >= _CONDENSE_MIN_LENGTH:
+            replacements[key] = value
+
+    def walk(prefix: str, obj: Any) -> None:
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                walk(f"{prefix}.{key}", value)
+        elif isinstance(obj, list):
+            for index, value in enumerate(obj):
+                walk(f"{prefix}.{index}", value)
+        else:
+            add(prefix, obj)
+
+    for mi, message in enumerate(messages):
+        message_dict = message.to_dict()
+        for pi, part in enumerate(message_dict.get("parts", [])):
+            base = f"{mi}.{pi}"
+            add(f"{base}.text", part.get("text"))
+            add(f"{base}.output", part.get("output"))
+            arguments = part.get("arguments")
+            if arguments:
+                # Providers carry tool arguments as a JSON-encoded
+                # string; OpenAI uses the compact form, so offer both
+                # serializations of the stored dict.
+                compact = json.dumps(arguments, separators=(",", ":"))
+                spaced = json.dumps(arguments)
+                add(f"{base}.args", compact)
+                if spaced != compact:
+                    add(f"{base}.args2", spaced)
+            walk(f"{base}.pm", part.get("provider_metadata") or {})
+        walk(f"{mi}.pm", message_dict.get("provider_metadata") or {})
+    return replacements
+
+
+def condense_payload(payload: Any, messages) -> str | None:
+    "JSON text of ``payload`` with strings from ``messages`` condensed."
+    if payload is None:
+        return None
+    return json.dumps(condense_json(payload, _payload_replacements(messages)))
+
+
+def resolve_payload(condensed: str | None, messages) -> Any:
+    """Reverse of :func:`condense_payload`.
+
+    Raises ``condense_json.UncondenseError`` when the stored payload
+    references content the segment no longer produces.
+    """
+    if condensed is None:
+        return None
+    return uncondense_json(json.loads(condensed), _payload_replacements(messages))
+
+
 # -- llm logs support ---------------------------------------------------
 #
 # Rows shaped like the ones the older `responses` query produced, so the
@@ -809,6 +920,7 @@ select
     turns.token_details,
     turns.parent_message_hash,
     turns.tip_message_hash,
+    turns.response_json,
     threads.name as conversation_name,
     turns.model as conversation_model,
     schemas.content as schema_json{rank_select}
@@ -963,11 +1075,14 @@ class _LogRowBuilder:
                 "system": _text_of(system_parts, TextPart) or None,
                 "response": _text_of(out_parts, TextPart),
                 "reasoning": _text_of(out_parts, ReasoningPart) or None,
-                # Neither is stored any more: the chain holds the
-                # structure, and the raw provider payload was dropped as
-                # redundant with it.
+                # No longer stored: the chain holds the structure.
                 "prompt_json": None,
-                "response_json": None,
+                # Stored condensed against the turn's own messages;
+                # resolved here so the row carries the payload as the
+                # provider sent it. A payload whose references no longer
+                # resolve renders as absent rather than failing the
+                # whole listing.
+                "response_json": self._resolve_response_json(row, outputs),
                 "_input_parts": input_parts,
                 "_output_parts": out_parts,
                 # Internal, stripped before rendering - the enrichment
@@ -980,6 +1095,15 @@ class _LogRowBuilder:
             }
         )
         return built
+
+    def _resolve_response_json(self, row: dict, outputs) -> str | None:
+        condensed = row.get("response_json")
+        if not condensed:
+            return None
+        try:
+            return json.dumps(resolve_payload(condensed, outputs))
+        except UncondenseError:
+            return None
 
     def _input_segment_hashes(self, parent_hash: str | None) -> list[str]:
         """Hashes of the turn's own input messages - the same trailing

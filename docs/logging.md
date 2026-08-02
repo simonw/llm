@@ -530,6 +530,16 @@ Here fragment `1` is an id in the existing `fragments` table. Reading the part c
 
 Attachments work the same way: the binary content lives in the `attachments` table, keyed by a SHA-256 hash of the bytes, and the part payload stores that id in place of the data.
 
+(logging-message-store-response-json)=
+
+### The raw provider payload
+
+The parts of a response are a normalized view of what the provider returned - enough to replay the conversation, but not the whole story. The raw `response.json()` dictionary is also recorded on the turn, in the `turns.response_json` column, so the details that have no part equivalent - usage breakdowns, system fingerprints, logprobs, settings echoes - survive too.
+
+It is stored *condensed*, using [condense-json](https://github.com/simonw/condense-json). Any string of 64 characters or more that also appears in the turn's own messages - the response text, a reasoning summary and its encrypted counterpart, long tool arguments - is replaced with a reference such as `{"$": "0.0.text"}`, keyed by the message offset, part position and field the string came from. The replacement mapping is never stored: it is rebuilt from the stored messages whenever the payload is read, which is sound because message content is frozen by its hash. What remains in the column is roughly the provider envelope, at a fraction of the size of the raw payload and without a second copy of anything the parts already hold.
+
+`llm logs --json` resolves the stored payload back to exactly what the provider sent and includes it as `response_json`. From Python, `LogStore.turn_response_json(turn_id)` returns the same resolved dictionary. Turns logged before this column existed, and models that expose no raw payload, record NULL.
+
 (logging-message-store-tables)=
 
 ### Table by table
@@ -540,7 +550,7 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 - `parts` - the content of each message, ordered by `position`. When a part's text is stored inline in full it lives in the `text` column - raw and never parsed, so `select text from parts` reads as prose. Text that references fragments is stored in `payload` as `text_ref` instead. `payload` holds any remaining structure as JSON (fragment references, tool call fields, provider metadata), or NULL when the text column carries the whole part. `type` and `tool_name` are their own columns for direct filtering; the type never appears inside the payload.
 - `part_attachments` and `part_fragments` - junction tables recording which rows in `attachments` and `fragments` a part's payload references, in order.
 - `threads` - one row per conversation. `id` is the conversation id, `tip_message_hash` points at the current head of the conversation and `forked_from` records the thread a fork came from.
-- `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts and timings. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
+- `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts, timings and the {ref}`condensed raw provider payload <logging-message-store-response-json>` in `response_json`. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
 - `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table. For toolbox-derived tools, `instance_id` references the `tool_instances` row recording which configured instance provided them - so the tools list in `llm logs` shows that `SQLite_query` came from `SQLite("mydb.db")` before any call has run.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
 - `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
@@ -869,7 +879,8 @@ CREATE TABLE "turns" (
   "output_tokens" INTEGER,
   "token_details" TEXT,
   "duration_ms" INTEGER,
-  "datetime_utc" TEXT
+  "datetime_utc" TEXT,
+  "response_json" TEXT
 );
 CREATE TABLE "turn_tools" (
   "turn_id" TEXT REFERENCES "turns"("id"),

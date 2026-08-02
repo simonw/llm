@@ -1752,6 +1752,44 @@ class _SharedResponses(_Shared):
             provider_metadata={"openai": meta} if meta else None,
         )
 
+    def _reasoning_refresh_events(self, response_json, done_events):
+        """Metadata-only reasoning events rebuilt from the final payload.
+
+        While streaming, reasoning metadata is first harvested from the
+        ``response.output_item.done`` event, but the ``response.completed``
+        payload carries a *different* ciphertext of the same reasoning -
+        OpenAI encrypts per event. Re-emitting the metadata from the
+        final payload, aimed at the already-resolved part_index, makes
+        the stored part and ``response_json`` agree on one blob (which
+        also lets the log store condense the payload against the part).
+
+        ``done_events`` maps reasoning item id to the StreamEvent
+        yielded at ``output_item.done``; the framework has resolved
+        ``part_index`` on it by the time the stream ends.
+        """
+        events = []
+        for item in response_json.get("output") or []:
+            if not isinstance(item, dict) or item.get("type") != "reasoning":
+                continue
+            prior = done_events.get(item.get("id"))
+            if prior is None or prior.part_index is None:
+                continue
+            meta = {
+                key: item[key]
+                for key in ("id", "encrypted_content", "summary")
+                if item.get(key)
+            }
+            if meta:
+                events.append(
+                    StreamEvent(
+                        type="reasoning",
+                        chunk="",
+                        part_index=prior.part_index,
+                        provider_metadata={"openai": meta},
+                    )
+                )
+        return events
+
 
 class Responses(_SharedResponses, KeyModel):
     needs_key = "openai"
@@ -1855,6 +1893,7 @@ class Responses(_SharedResponses, KeyModel):
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
+            reasoning_done_events: dict[str, StreamEvent] = {}
             for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
@@ -1905,12 +1944,18 @@ class Responses(_SharedResponses, KeyModel):
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        yield self._reasoning_event(
+                        reasoning_event = self._reasoning_event(
                             item,
                             include_text=(
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        if item_id:
+                            # Retained so the refresh after
+                            # response.completed can target the part
+                            # this event resolved to.
+                            reasoning_done_events[item_id] = reasoning_event
+                        yield reasoning_event
                     elif item.type == "function_call":
                         try:
                             args = json.loads(item.arguments) if item.arguments else {}
@@ -1929,6 +1974,9 @@ class Responses(_SharedResponses, KeyModel):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
+                yield from self._reasoning_refresh_events(
+                    response.response_json, reasoning_done_events
+                )
         else:
             completion = client.responses.create(
                 model=self.model_name or self.model_id,
@@ -2089,6 +2137,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
+            reasoning_done_events: dict[str, StreamEvent] = {}
             async for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
@@ -2139,12 +2188,18 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        yield self._reasoning_event(
+                        reasoning_event = self._reasoning_event(
                             item,
                             include_text=(
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        if item_id:
+                            # Retained so the refresh after
+                            # response.completed can target the part
+                            # this event resolved to.
+                            reasoning_done_events[item_id] = reasoning_event
+                        yield reasoning_event
                     elif item.type == "function_call":
                         try:
                             args = json.loads(item.arguments) if item.arguments else {}
@@ -2163,6 +2218,10 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
+                for refresh in self._reasoning_refresh_events(
+                    response.response_json, reasoning_done_events
+                ):
+                    yield refresh
         else:
             completion = await client.responses.create(
                 model=self.model_name or self.model_id,

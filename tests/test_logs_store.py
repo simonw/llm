@@ -1719,3 +1719,132 @@ class TestMessageTreeView:
         store.append(store.create_thread(), [llm.user("Hi")])
         (row,) = self.rows(store)
         assert row["datetime"] is None
+
+
+# ---- condensed provider payloads -------------------------------------
+
+
+class TestResponseJsonPayload:
+    """The raw response.json() payload is stored on the turn, condensed
+    against the strings the turn's own messages already hold, and
+    resolved again on the way out."""
+
+    LONG = "SQLite stores the whole database in a single file on disk. " * 3
+
+    def logged(self, store, mock_model, payload, text=None):
+        mock_model.enqueue([text if text is not None else self.LONG])
+        response = mock_model.prompt("Tell me about SQLite")
+        response.text()
+        response.response_json = payload
+        return store.log(response)
+
+    def test_payload_is_stored_condensed(self, store, mock_model):
+        turn_id = self.logged(
+            store,
+            mock_model,
+            {"content": self.LONG, "id": "chatcmpl-1", "usage": {"total_tokens": 9}},
+        )
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        # The response text is a reference, not a second copy
+        assert json.loads(stored)["content"] == {"$": "0.0.text"}
+        assert self.LONG not in stored
+
+    def test_turn_response_json_resolves_the_payload(self, store, mock_model):
+        payload = {"content": self.LONG, "id": "chatcmpl-1"}
+        turn_id = self.logged(store, mock_model, payload)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_no_payload_stores_null(self, store, mock_model):
+        turn_id = self.logged(store, mock_model, None)
+        assert store.db["turns"].get(turn_id)["response_json"] is None
+        assert store.turn_response_json(turn_id) is None
+
+    def test_unknown_turn_resolves_to_none(self, store):
+        assert store.turn_response_json("nope") is None
+
+    def test_short_strings_are_stored_verbatim(self, store, mock_model):
+        # Below the length threshold a reference would cost as much as
+        # the string it replaces.
+        turn_id = self.logged(
+            store, mock_model, {"content": "short answer"}, text="short answer"
+        )
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        assert json.loads(stored) == {"content": "short answer"}
+
+    def test_marker_shaped_payload_round_trips(self, store, mock_model):
+        # A payload that already contains {"$": ...} shapes must come
+        # back exactly - condense-json escapes them with $raw.
+        payload = {"tricky": {"$": "not-a-marker"}, "also": {"$r": ["x"]}}
+        turn_id = self.logged(store, mock_model, payload)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_merged_log_rows_carry_the_resolved_payload(self, store, mock_model):
+        payload = {"content": self.LONG, "id": "chatcmpl-1"}
+        self.logged(store, mock_model, payload)
+        (row,) = merged_log_rows(store)
+        assert json.loads(row["response_json"]) == payload
+
+    def test_a_payload_that_no_longer_resolves_is_absent_from_rows(
+        self, store, mock_model
+    ):
+        turn_id = self.logged(store, mock_model, {"content": self.LONG})
+        store.db["turns"].update(
+            turn_id, {"response_json": json.dumps({"content": {"$": "9.9.text"}})}
+        )
+        (row,) = merged_log_rows(store)
+        assert row["response_json"] is None
+        # The API surfaces the failure instead of guessing
+        from condense_json import UncondenseError
+
+        with pytest.raises(UncondenseError):
+            store.turn_response_json(turn_id)
+
+
+class TestPayloadReplacements:
+    """_payload_replacements builds the same dict at write and read time
+    from the turn's chain segment - these pin down what it offers."""
+
+    def test_part_strings_are_keyed_by_position(self):
+        from llm.logs import _payload_replacements
+
+        blob = "b" * 80
+        messages = [
+            llm.assistant(
+                llm.parts.ReasoningPart(
+                    text="r" * 70,
+                    provider_metadata={"openai": {"encrypted_content": blob}},
+                ),
+                "t" * 64,
+            )
+        ]
+        replacements = _payload_replacements(messages)
+        assert replacements == {
+            "0.0.text": "r" * 70,
+            "0.0.pm.openai.encrypted_content": blob,
+            "0.1.text": "t" * 64,
+        }
+
+    def test_tool_arguments_offer_both_serializations(self):
+        from llm.logs import _payload_replacements
+
+        arguments = {"query": "x" * 64}
+        messages = [
+            llm.assistant(llm.parts.ToolCallPart(name="search", arguments=arguments))
+        ]
+        replacements = _payload_replacements(messages)
+        assert replacements["0.0.args"] == json.dumps(arguments, separators=(",", ":"))
+        assert replacements["0.0.args2"] == json.dumps(arguments)
+
+    def test_tool_result_output_is_offered(self):
+        from llm.logs import _payload_replacements
+
+        output = "o" * 64
+        messages = [
+            llm.tool_message(llm.parts.ToolResultPart(name="search", output=output))
+        ]
+        assert _payload_replacements(messages) == {"0.0.output": output}
+
+    def test_short_strings_are_excluded(self):
+        from llm.logs import _payload_replacements
+
+        assert _payload_replacements([llm.assistant("short")]) == {}

@@ -676,3 +676,82 @@ def test_responses_interleaved_reasoning_between_tool_calls(vcr):
                 assert pm.get(
                     "encrypted_content"
                 ), "ReasoningPart missing encrypted_content"
+
+
+def _responses_reasoning_refresh_stream():
+    """Reasoning stream whose final payload carries a different ciphertext.
+
+    OpenAI encrypts reasoning per event, so ``output_item.done`` and the
+    ``response.completed`` payload hold different encrypted_content for
+    the same reasoning item.
+    """
+    yield from _responses_reasoning_summary_stream()
+    yield _responses_sse(
+        "response.completed",
+        {
+            "response": {
+                "id": "resp_1",
+                "object": "response",
+                "created_at": 1700000000,
+                "model": "gpt-5.5",
+                "parallel_tool_calls": True,
+                "tool_choice": "auto",
+                "tools": [],
+                "output": [
+                    {
+                        "id": "rs_1",
+                        "type": "reasoning",
+                        "summary": [{"type": "summary_text", "text": "Thinking aloud"}],
+                        "encrypted_content": "encrypted-final",
+                        "status": "completed",
+                    },
+                    {
+                        "id": "msg_1",
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {"type": "output_text", "text": "done", "annotations": []}
+                        ],
+                    },
+                ],
+                "usage": {
+                    "input_tokens": 1,
+                    "output_tokens": 2,
+                    "total_tokens": 3,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens_details": {"reasoning_tokens": 1},
+                },
+            },
+            "sequence_number": 5,
+        },
+    )
+
+
+def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_responses_reasoning_refresh_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    model = llm.get_model("gpt-5.5")
+    response = model.prompt("hello", key="test")
+    assert response.text() == "done"
+
+    reasoning_parts = [
+        p
+        for m in response.messages()
+        for p in m.parts
+        if isinstance(p, llm.parts.ReasoningPart)
+    ]
+    # One reasoning part - the refresh merged into it rather than
+    # growing a second one - and it carries the final payload's
+    # ciphertext, the same string response_json holds.
+    assert len(reasoning_parts) == 1
+    metadata = reasoning_parts[0].provider_metadata["openai"]
+    assert metadata["encrypted_content"] == "encrypted-final"
+    payload_item = response.response_json["output"][0]
+    assert payload_item["encrypted_content"] == "encrypted-final"
+    assert reasoning_parts[0].text == "Thinking aloud"
