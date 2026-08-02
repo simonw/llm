@@ -355,6 +355,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Content addressing as a contract](https://llm.datasette.io/en/stable/logging.html#content-addressing-as-a-contract)
     * [Forking and shared history](https://llm.datasette.io/en/stable/logging.html#forking-and-shared-history)
     * [Storage by reference](https://llm.datasette.io/en/stable/logging.html#storage-by-reference)
+    * [The raw provider payload](https://llm.datasette.io/en/stable/logging.html#the-raw-provider-payload)
     * [Table by table](https://llm.datasette.io/en/stable/logging.html#table-by-table)
     * [Querying the message store](https://llm.datasette.io/en/stable/logging.html#querying-the-message-store)
     * [Logging from Python](https://llm.datasette.io/en/stable/logging.html#logging-from-python)
