@@ -516,7 +516,9 @@ class LogStore:
                 "duration_ms": response.duration_ms(),
                 "datetime_utc": response.datetime_utc(),
                 "response_json": condense_payload(
-                    getattr(response, "response_json", None), own_messages
+                    getattr(response, "response_json", None),
+                    own_messages,
+                    [(tool.name, tool.description) for tool in response.prompt.tools],
                 ),
             },
             replace=True,
@@ -624,7 +626,15 @@ class LogStore:
             return None
         inputs = self.load_chain(row["parent_message_hash"])
         outputs = self.load_chain(row["tip_message_hash"])[len(inputs) :]
-        return resolve_payload(row["response_json"], outputs)
+        return resolve_payload(
+            row["response_json"], outputs, self._turn_tool_pairs(turn_id)
+        )
+
+    def _turn_tool_pairs(self, turn_id: str) -> list[tuple[str, str]]:
+        return [
+            (row["name"], row["description"])
+            for row in self.db.query(TURN_TOOLS_SQL, [turn_id])
+        ]
 
     # -- verification --------------------------------------------------
 
@@ -821,29 +831,47 @@ def _now() -> str:
 
 # -- condensed provider payloads ----------------------------------------
 #
-# The raw response.json() payload mostly duplicates content the message
-# tables already hold: the response text, reasoning summaries and their
-# encrypted blobs, long tool arguments. The turn stores it condensed
-# instead - strings that already live in the turn's own messages are
-# swapped for {"$": key} references (condense-json), leaving roughly the
-# provider envelope: ids, usage, fingerprints, settings echoes. The
-# replacement dict is never stored; it is rebuilt from the chain segment
-# on the way out, which is sound because message content is hash-frozen,
-# so the same walk over the same messages produces the same dict on both
-# sides of the round trip.
+# The raw response.json() payload mostly duplicates content the store
+# already holds: the response text, reasoning summaries and their
+# encrypted blobs, long tool arguments, and the tool definitions the
+# provider echoes back on every call. The turn stores it condensed
+# instead - strings that already live in the turn's own messages or its
+# tools are swapped for {"$": key} references (condense-json), leaving
+# roughly the provider envelope: ids, usage, fingerprints, settings
+# echoes. The replacement dict is never stored; it is rebuilt on the way
+# out from the chain segment (hash-frozen) and the turn_tools join
+# (per-turn provenance), so the same walk over the same rows produces
+# the same dict on both sides of the round trip.
 
 # Below this a {"$": key} marker costs about as much as the string it
 # replaces.
 _CONDENSE_MIN_LENGTH = 64
 
+# The tools a turn was given, as the (name, description) pairs
+# _payload_replacements expects.
+TURN_TOOLS_SQL = """
+select tools.name, tools.description
+from turn_tools join tools on tools.id = turn_tools.tool_id
+where turn_tools.turn_id = ?
+"""
 
-def _payload_replacements(messages) -> dict[str, str]:
+
+def _payload_replacements(messages, tools=()) -> dict[str, str]:
     """Replacement strings for condensing a turn's provider payload.
 
     ``messages`` is the turn's own contribution - the chain segment
     between its parent and tip. Keys are structural (message offset,
     part position, field path) so the identical dict can be rebuilt
     from the stored segment at read time.
+
+    ``tools`` is the turn's tools as (name, description) pairs -
+    ``response.prompt.tools`` on the way in, the ``turn_tools`` join on
+    the way out. Descriptions are keyed by tool name; a name carrying
+    two different descriptions in one turn is dropped, the same
+    order-independent verdict from either side's view of the pairs.
+    (Parameter schemas are deliberately not offered: providers echo a
+    transformed schema - OpenAI strict mode adds keys - so the stored
+    form would not match.)
     """
     replacements: dict[str, str] = {}
 
@@ -879,17 +907,34 @@ def _payload_replacements(messages) -> dict[str, str]:
                     add(f"{base}.args2", spaced)
             walk(f"{base}.pm", part.get("provider_metadata") or {})
         walk(f"{mi}.pm", message_dict.get("provider_metadata") or {})
+
+    descriptions: dict[str, str] = {}
+    conflicting = set()
+    for name, description in tools:
+        if (
+            not name
+            or not isinstance(description, str)
+            or len(description) < _CONDENSE_MIN_LENGTH
+        ):
+            continue
+        if descriptions.get(name, description) != description:
+            conflicting.add(name)
+            continue
+        descriptions[name] = description
+    for name, description in descriptions.items():
+        if name not in conflicting:
+            replacements[f"tool.{name}.description"] = description
     return replacements
 
 
-def condense_payload(payload: Any, messages) -> str | None:
-    "JSON text of ``payload`` with strings from ``messages`` condensed."
+def condense_payload(payload: Any, messages, tools=()) -> str | None:
+    "JSON text of ``payload`` with strings from ``messages`` and ``tools`` condensed."
     if payload is None:
         return None
-    return json.dumps(condense_json(payload, _payload_replacements(messages)))
+    return json.dumps(condense_json(payload, _payload_replacements(messages, tools)))
 
 
-def resolve_payload(condensed: str | None, messages) -> Any:
+def resolve_payload(condensed: str | None, messages, tools=()) -> Any:
     """Reverse of :func:`condense_payload`.
 
     Raises ``condense_json.UncondenseError`` when the stored payload
@@ -897,7 +942,9 @@ def resolve_payload(condensed: str | None, messages) -> Any:
     """
     if condensed is None:
         return None
-    return uncondense_json(json.loads(condensed), _payload_replacements(messages))
+    return uncondense_json(
+        json.loads(condensed), _payload_replacements(messages, tools)
+    )
 
 
 # -- llm logs support ---------------------------------------------------
@@ -1101,7 +1148,11 @@ class _LogRowBuilder:
         if not condensed:
             return None
         try:
-            return json.dumps(resolve_payload(condensed, outputs))
+            return json.dumps(
+                resolve_payload(
+                    condensed, outputs, self.store._turn_tool_pairs(row["id"])
+                )
+            )
         except UncondenseError:
             return None
 

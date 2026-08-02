@@ -1848,3 +1848,69 @@ class TestPayloadReplacements:
         from llm.logs import _payload_replacements
 
         assert _payload_replacements([llm.assistant("short")]) == {}
+
+    def test_tool_descriptions_are_offered(self):
+        from llm.logs import _payload_replacements
+
+        description = "d" * 64
+        replacements = _payload_replacements([], tools=[("search", description)])
+        assert replacements == {"tool.search.description": description}
+
+    def test_conflicting_tool_descriptions_are_dropped(self):
+        from llm.logs import _payload_replacements
+
+        # Whichever order the pairs arrive in, a name that carries two
+        # different long descriptions is excluded on both sides.
+        pairs = [("search", "a" * 64), ("search", "b" * 64), ("other", "c" * 64)]
+        for ordering in (pairs, list(reversed(pairs))):
+            assert _payload_replacements([], tools=ordering) == {
+                "tool.other.description": "c" * 64
+            }
+
+    def test_short_or_missing_tool_descriptions_are_excluded(self):
+        from llm.logs import _payload_replacements
+
+        assert _payload_replacements([], tools=[("a", "short"), ("b", None)]) == {}
+
+
+class TestResponseJsonToolEcho:
+    """Providers echo the turn's tool definitions back in the payload;
+    long descriptions condense against the tools table."""
+
+    DESCRIPTION = (
+        "Execute JavaScript code using a persistent context. State is "
+        "maintained between calls, allowing variables to persist."
+    )
+
+    def logged(self, store, mock_model):
+        def execute_javascript(javascript: str) -> str:
+            return "ran"
+
+        tool = llm.Tool.function(execute_javascript, description=self.DESCRIPTION)
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("run it", tools=[tool])
+        response.text()
+        response.response_json = {
+            "content": "ok",
+            "tools": [
+                {
+                    "name": "execute_javascript",
+                    "description": self.DESCRIPTION,
+                    "parameters": {"type": "object"},
+                }
+            ],
+        }
+        return store.log(response), response.response_json
+
+    def test_the_echoed_description_is_a_reference(self, store, mock_model):
+        turn_id, _ = self.logged(store, mock_model)
+        stored = json.loads(store.db["turns"].get(turn_id)["response_json"])
+        assert stored["tools"][0]["description"] == {
+            "$": "tool.execute_javascript.description"
+        }
+
+    def test_the_payload_resolves_via_the_turn_tools_join(self, store, mock_model):
+        turn_id, payload = self.logged(store, mock_model)
+        assert store.turn_response_json(turn_id) == payload
+        (row,) = merged_log_rows(store)
+        assert json.loads(row["response_json"]) == payload
