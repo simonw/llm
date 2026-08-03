@@ -584,7 +584,7 @@ def register_commands(cli):
                 raise click.ClickException(str(ex))
             if not model_id and template_obj.model:
                 model_id = template_obj.model
-            if template_obj.schema_object:
+            if template_obj.schema_object and not schema:
                 schema = template_obj.schema_object
             if template_obj.options:
                 options = _merge_template_options(template_obj, options)

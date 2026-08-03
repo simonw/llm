@@ -305,19 +305,64 @@ attachment_types:
             },
         ],
         "model": "template-model",
+        # CLI --schema takes precedence over template schema_object
         "response_format": {
             "type": "json_schema",
             "json_schema": {
                 "name": "output",
-                "schema": {
-                    "type": "object",
-                    "properties": {"answer": {"type": "string"}},
-                    "required": ["answer"],
-                },
+                "schema": {"type": "object"},
             },
         },
         "stream": False,
         "temperature": 0.4,
+    }
+
+
+def test_endpoint_template_schema_object_used_when_no_cli_schema(
+    httpx_mock, user_path, templates_path
+):
+    base_url = "https://templates2.example.test/v1"
+    _add_chat_response(httpx_mock, base_url, "Template response 2")
+    (templates_path / "schemaonly.yaml").write_text(
+        """
+model: schema-model
+schema_object:
+  type: object
+  properties:
+    answer:
+      type: string
+  required:
+  - answer
+""".strip(),
+        "utf-8",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "test question",
+            "--template",
+            "schemaonly",
+            "--no-stream",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "output",
+            "schema": {
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+            },
+        },
     }
 
 
