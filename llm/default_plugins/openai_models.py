@@ -4,7 +4,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 import click
 import httpx
@@ -1008,6 +1008,29 @@ def _attachment(attachment, image_detail=None):
 
 
 class _Shared:
+    # Boilerplate fragments that recur verbatim in this API's response
+    # payloads, offered to the log store's payload condensing as shared
+    # replacements - the same idea as a zstandard custom dictionary.
+    # Dict and list values match payload subtrees structurally, so key
+    # order does not matter.
+    #
+    # NEVER remove or change an existing entry - only ever append new
+    # ones. Stored payloads reference these by key and resolve against
+    # the dictionary at read time, so editing an entry silently breaks
+    # every payload already condensed against it.
+    json_replacements: ClassVar[dict] = {
+        "completion_tokens_details_0": {
+            "accepted_prediction_tokens": 0,
+            "audio_tokens": 0,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": 0,
+        },
+        "prompt_tokens_details_0": {
+            "audio_tokens": 0,
+            "cached_tokens": 0,
+        },
+    }
+
     def __init__(
         self,
         model_id,
@@ -1494,6 +1517,78 @@ def _responses_attachment(attachment, image_detail=None):
 
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
+
+    # Recurring boilerplate in Responses API payloads. Same contract as
+    # _Shared.json_replacements, which this replaces for Responses
+    # models: NEVER remove or change an existing entry - only ever
+    # append new ones, or payloads already stored against these keys
+    # stop resolving.
+    json_replacements: ClassVar[dict] = {
+        "tool_usage_0": {
+            "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0,
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0,
+                },
+                "total_tokens": 0,
+            },
+            "web_search": {"num_requests": 0},
+        },
+        "input_tokens_details_0": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+        },
+        # The reasoning settings echo, in the variants the API emits
+        # depending on reasoning context. New variants get appended as
+        # reasoning_settings_2 and so on - never edited in place.
+        "reasoning_settings_0": {
+            "effort": "medium",
+            "summary": "detailed",
+            "context": "all_turns",
+            "mode": "standard",
+        },
+        "reasoning_settings_1": {
+            "effort": "medium",
+            "summary": "detailed",
+            "context": "current_turn",
+            "mode": "standard",
+        },
+        # The default text block on non-schema replies
+        "text_format_0": {"format": {"type": "text"}, "verbosity": "medium"},
+        # The static envelope of a Responses payload. Dict entries also
+        # act as condense-json merge bases: a payload top-level that
+        # differs from this in a few keys stores as this base plus a
+        # patch, so settings a config changes (top_p, say) simply ride
+        # in the patch.
+        "response_env_0": {
+            "object": "response",
+            "parallel_tool_calls": True,
+            "temperature": 1.0,
+            "tool_choice": "auto",
+            "top_p": 1.0,
+            "background": False,
+            "service_tier": "default",
+            "status": "completed",
+            "top_logprobs": 0,
+            "truncation": "disabled",
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "store": False,
+            "tools": [],
+        },
+        "message_completed": {
+            "role": "assistant",
+            "status": "completed",
+            "type": "message",
+            "phase": "final_answer",
+        },
+    }
 
     def __str__(self) -> str:
         return f"OpenAI Responses: {self.model_id}"
