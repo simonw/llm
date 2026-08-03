@@ -38,39 +38,82 @@ from llm.utils import (
 def register_models(register):
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
+        Chat(
+            "gpt-4o",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "gpt-4o",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         aliases=("4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
+        Chat(
+            "gpt-4o-mini",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         AsyncChat(
-            "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
+            "gpt-4o-mini",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
         aliases=("4o-mini",),
     )
     # GPT-4.1
     for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
         register(
-            Chat(model_id, vision=True, supports_schema=True, supports_tools=True),
-            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True),
+            Chat(
+                model_id,
+                vision=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
             aliases=(model_id.replace("gpt-", ""),),
         )
     # 3.5 and 4
     register(
-        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+        Chat("gpt-3.5-turbo", service_tier=True),
+        AsyncChat("gpt-3.5-turbo", service_tier=True),
+        aliases=("3.5", "chatgpt"),
     )
     register(
-        Chat("gpt-3.5-turbo-16k"),
-        AsyncChat("gpt-3.5-turbo-16k"),
+        Chat("gpt-3.5-turbo-16k", service_tier=True),
+        AsyncChat("gpt-3.5-turbo-16k", service_tier=True),
         aliases=("chatgpt-16k", "3.5-16k"),
     )
-    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
-    # GPT-4 Turbo models
-    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
     register(
-        Chat("gpt-4-turbo"),
-        AsyncChat("gpt-4-turbo"),
+        Chat("gpt-4", service_tier=True),
+        AsyncChat("gpt-4", service_tier=True),
+        aliases=("4", "gpt4"),
+    )
+    # GPT-4 Turbo models
+    register(
+        Chat("gpt-4-turbo-2024-04-09", service_tier=True),
+        AsyncChat("gpt-4-turbo-2024-04-09", service_tier=True),
+    )
+    register(
+        Chat("gpt-4-turbo", service_tier=True),
+        AsyncChat("gpt-4-turbo", service_tier=True),
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
     )
     # o1
@@ -81,6 +124,7 @@ def register_models(register):
                 vision=True,
                 can_stream=False,
                 reasoning=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -89,23 +133,44 @@ def register_models(register):
                 vision=True,
                 can_stream=False,
                 reasoning=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
         )
 
     register(
-        Responses("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        Responses(
+            "o3-mini",
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         AsyncResponses(
-            "o3-mini", reasoning=True, supports_schema=True, supports_tools=True
+            "o3-mini",
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
     )
     register(
         Responses(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3",
+            vision=True,
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
         AsyncResponses(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3",
+            vision=True,
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
     )
     register(
@@ -113,6 +178,7 @@ def register_models(register):
             "o4-mini",
             vision=True,
             reasoning=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -120,6 +186,7 @@ def register_models(register):
             "o4-mini",
             vision=True,
             reasoning=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -139,6 +206,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -147,6 +215,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -158,6 +227,7 @@ def register_models(register):
             vision=True,
             reasoning=True,
             verbosity=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -166,6 +236,7 @@ def register_models(register):
             vision=True,
             reasoning=True,
             verbosity=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -178,6 +249,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -186,6 +258,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -208,6 +281,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -217,6 +291,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -234,6 +309,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -243,6 +319,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -257,6 +334,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -266,6 +344,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -304,6 +383,8 @@ def register_models(register):
             kwargs["vision"] = True
         if extra_model.get("audio") is True:
             kwargs["audio"] = True
+        if extra_model.get("service_tier") is True:
+            kwargs["service_tier"] = True
         if extra_model.get("completion"):
             klass = Completion
             async_klass = None
@@ -911,6 +992,7 @@ def build_options_class(
     verbosity=False,
     image_detail_original=False,
     chat_completions=False,
+    service_tier=False,
 ):
     fields = {
         "json_object": (
@@ -968,6 +1050,19 @@ def build_options_class(
                 description=(
                     "Controls how verbose the model's response should be. Supported "
                     "values are low, medium, and high."
+                ),
+                default=None,
+            ),
+        )
+    if service_tier:
+        fields["service_tier"] = (
+            str | None,
+            Field(
+                description=(
+                    "The processing tier to use for this request - for example "
+                    "'fast' for Fast mode (faster responses at a higher price) "
+                    "or 'flex' for slower, cheaper processing on models that "
+                    "support those tiers."
                 ),
                 default=None,
             ),
@@ -1039,6 +1134,7 @@ class _Shared:
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -1059,11 +1155,12 @@ class _Shared:
 
         self.attachment_types = set()
 
-        if reasoning or verbosity or image_detail_original:
+        if reasoning or verbosity or image_detail_original or service_tier:
             self.Options = build_options_class(
                 reasoning=reasoning,
                 verbosity=verbosity,
                 image_detail_original=image_detail_original,
+                service_tier=service_tier,
             )
 
         if vision:
@@ -1595,6 +1692,7 @@ class _SharedResponses(_Shared):
             "reasoning": self._reasoning,
             "verbosity": self._verbosity,
             "image_detail_original": self._image_detail_original,
+            "service_tier": self._service_tier,
             "supports_schema": self.supports_schema,
             "supports_tools": self.supports_tools,
             "allows_system_prompt": self.allows_system_prompt,
@@ -1891,6 +1989,7 @@ class Responses(_SharedResponses, KeyModel):
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -1911,6 +2010,7 @@ class Responses(_SharedResponses, KeyModel):
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
+            service_tier=service_tier,
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
@@ -1919,6 +2019,7 @@ class Responses(_SharedResponses, KeyModel):
         self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
+        self._service_tier = service_tier
         # Override the Options class so that ``-o chat_completions 1`` is
         # always available on Responses-routed models.
         self.Options = build_options_class(
@@ -1926,6 +2027,7 @@ class Responses(_SharedResponses, KeyModel):
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            service_tier=service_tier,
         )
 
     def execute(
@@ -2134,6 +2236,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
+        service_tier=False,
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
@@ -2154,6 +2257,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
+            service_tier=service_tier,
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
@@ -2162,11 +2266,13 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         self._reasoning_summary = reasoning_summary
         self._verbosity = verbosity
         self._image_detail_original = image_detail_original
+        self._service_tier = service_tier
         self.Options = build_options_class(
             reasoning=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
+            service_tier=service_tier,
         )
 
     async def execute(

@@ -629,6 +629,10 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     image_detail: str
       Controls the detail level for image attachments. Supported values are
       low, high, and auto.
+    service_tier: str
+      The processing tier to use for this request - for example 'fast' for
+      Fast mode (faster responses at a higher price) or 'flex' for slower,
+      cheaper processing on models that support those tiers.
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -651,6 +655,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -673,6 +678,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -695,6 +701,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -717,6 +724,7 @@ OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -739,6 +747,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -757,6 +766,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -775,6 +785,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -793,6 +804,7 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -811,6 +823,7 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -860,6 +873,10 @@ OpenAI Responses: o1
       supported values are low, medium, and high. Reducing reasoning effort
       can result in faster responses and fewer tokens used on reasoning in a
       response.
+    service_tier: str
+      The processing tier to use for this request - for example 'fast' for
+      Fast mode (faster responses at a higher price) or 'flex' for slower,
+      cheaper processing on models that support those tiers.
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -883,6 +900,7 @@ OpenAI Responses: o1-2024-12-17
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -906,6 +924,7 @@ OpenAI Responses: o3-mini
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Features:
   - streaming
   - schemas
@@ -928,6 +947,7 @@ OpenAI Responses: o3
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -952,6 +972,7 @@ OpenAI Responses: o4-mini
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -977,6 +998,7 @@ OpenAI Responses: gpt-5
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1002,6 +1024,7 @@ OpenAI Responses: gpt-5-mini
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1027,6 +1050,7 @@ OpenAI Responses: gpt-5-nano
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1052,6 +1076,7 @@ OpenAI Responses: gpt-5-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1077,6 +1102,7 @@ OpenAI Responses: gpt-5-mini-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1102,6 +1128,7 @@ OpenAI Responses: gpt-5-nano-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1127,6 +1154,7 @@ OpenAI Responses: gpt-5.1
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1152,6 +1180,7 @@ OpenAI Responses: gpt-5.2
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1177,6 +1206,7 @@ OpenAI Responses: gpt-5.2-chat-latest
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1202,6 +1232,7 @@ OpenAI Responses: gpt-5.4
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1227,6 +1258,7 @@ OpenAI Responses: gpt-5.4-2026-03-05
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1252,6 +1284,7 @@ OpenAI Responses: gpt-5.4-mini
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1277,6 +1310,7 @@ OpenAI Responses: gpt-5.4-mini-2026-03-17
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1302,6 +1336,7 @@ OpenAI Responses: gpt-5.4-nano
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1327,6 +1362,7 @@ OpenAI Responses: gpt-5.4-nano-2026-03-17
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1352,6 +1388,7 @@ OpenAI Responses: gpt-5.5
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1377,6 +1414,7 @@ OpenAI Responses: gpt-5.5-2026-04-23
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1402,6 +1440,7 @@ OpenAI Responses: gpt-5.6-sol
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1427,6 +1466,7 @@ OpenAI Responses: gpt-5.6-terra
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1452,6 +1492,7 @@ OpenAI Responses: gpt-5.6-luna
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
