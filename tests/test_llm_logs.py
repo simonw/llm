@@ -1198,6 +1198,23 @@ def test_logs_backup(logs_db):
         assert expected_path.exists()
 
 
+def test_logs_status_counts_threads_and_turns(logs_db):
+    runner = CliRunner()
+    runner.invoke(cli, ["-m", "echo", "simple prompt"])
+    result = runner.invoke(cli, ["logs", "status"])
+    assert result.exit_code == 0
+    assert "Number of threads logged:\t1" in result.output
+    assert "Number of turns logged:\t\t1" in result.output
+    # No legacy rows, so the legacy lines should be hidden
+    assert "legacy" not in result.output
+    # Legacy counts show up once legacy tables have rows
+    logs_db["conversations"].insert({"id": "abc", "name": "test", "model": "echo"})
+    result2 = runner.invoke(cli, ["logs", "status"])
+    assert result2.exit_code == 0
+    assert "Number of legacy conversations:\t1" in result2.output
+    assert "Number of legacy responses:\t0" in result2.output
+
+
 @pytest.mark.parametrize("async_", (False, True))
 def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     mock_model.resolved_model_name = "resolved-mock"

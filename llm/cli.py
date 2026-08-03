@@ -1580,8 +1580,13 @@ def logs_status():
     db = sqlite_utils.Database(path)
     migrate(db)
     click.echo(f"Found log database at {path}")
-    click.echo("Number of conversations logged:\t{}".format(db["conversations"].count))
-    click.echo("Number of responses logged:\t{}".format(db["responses"].count))
+    click.echo("Number of threads logged:\t{}".format(db["threads"].count))
+    click.echo("Number of turns logged:\t\t{}".format(db["turns"].count))
+    legacy_conversations = db["conversations"].count
+    legacy_responses = db["responses"].count
+    if legacy_conversations or legacy_responses:
+        click.echo(f"Number of legacy conversations:\t{legacy_conversations}")
+        click.echo(f"Number of legacy responses:\t{legacy_responses}")
     click.echo(f"Database file size: \t\t{_human_readable_size(path.stat().st_size)}")
 
 

@@ -41,8 +41,8 @@ Example output:
 ```
 Logging is ON for all prompts
 Found log database at /Users/simon/Library/Application Support/io.datasette.llm/logs.db
-Number of conversations logged: 33
-Number of responses logged:     48
+Number of threads logged:       33
+Number of turns logged:         48
 Database file size:             19.96MB
 ```
 
