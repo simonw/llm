@@ -142,17 +142,24 @@ Why don't pelicans like to tip waiters?
 Because they always have a big bill!
 ```
 
-More background on this project:
+## Project news
 
-- [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
-- [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
-- [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
-- [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
-- [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
-- [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
-- [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
+- 29th April 2026: [LLM 0.32a0 is a major backwards-compatible refactor](https://simonwillison.net/2026/Apr/29/llm/)
+- 11th August 2025: [LLM 0.27, the annotated release notes: GPT-5 and improved tool calling](https://simonwillison.net/2025/Aug/11/llm-027/)
+- 27th May 2025: [Large Language Models can run tools in your terminal with LLM 0.26](https://simonwillison.net/2025/May/27/llm-tools/)
+- 5th May 2025: [Feed a video to a vision LLM as a sequence of JPEG frames on the CLI (also LLM 0.25)](https://simonwillison.net/2025/May/5/llm-video-frames/)
+- 7th April 2025: [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
+- 28th February 2025: [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
+- 17th February 2025: [LLM 0.22, the annotated release notes](https://simonwillison.net/2025/Feb/17/llm/)
+- 29th October 2024: [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
+- 26th January 2024: [LLM 0.13: The annotated release notes](https://simonwillison.net/2024/Jan/26/llm/)
+- 12th September 2023: [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
+- 4th September 2023: [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
+- 12th July 2023: [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
+- 18th May 2023: [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
+- 4th April 2023: [The original announcement of the llm CLI tool](https://simonwillison.net/2023/Apr/4/llm/)
 
-See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
+For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 
 ## Contents
 
