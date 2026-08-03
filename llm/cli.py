@@ -137,6 +137,7 @@ def _run_chat(
     prompt_callback,
     *,
     db=None,
+    db_path=None,
     initial_fragments=None,
     initial_attachments=None,
     transform_prompt=None,
@@ -161,8 +162,17 @@ def _run_chat(
     accumulated_attachments = []
     end_token = "!end"
 
+    def ensure_db():
+        nonlocal db
+        if db_path is not None and not db_path.exists():
+            db.close()
+            db = sqlite_utils.Database(db_path)
+            migrate(db)
+        return db
+
     while True:
         prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        db = ensure_db()
         fragments = []
         attachments = []
         if argument_fragments:
@@ -214,7 +224,7 @@ def _run_chat(
             show_reasoning=show_reasoning,
         )
         if after_response is not None:
-            after_response(response)
+            after_response(response, ensure_db())
         print()
 
 
@@ -1348,10 +1358,11 @@ def chat(
         model.model_id,
         execute_chat_prompt,
         db=db,
+        db_path=log_path,
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
+        after_response=lambda response, db: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
     )
 
