@@ -95,21 +95,10 @@ All of the OpenAI models supported by LLM expose a `service_tier` option, with t
 llm -m gpt-5.6-sol -o service_tier fast 'Fast facts about pelicans'
 ```
 
-The value is passed straight to the API, so other tiers such as `priority` (the older name for `fast`) and `flex` work too:
+The value is passed straight to the API, so other tiers such as `priority` (the older name for `fast`) and `flex` ([slower but cheaper processing](https://developers.openai.com/api/docs/guides/flex-processing)) work too:
 
 ```bash
 llm -m gpt-5.4 -o service_tier flex 'No rush: facts about pelicans'
-```
-
-The requested tier is recorded in the logged options for the prompt, visible in `llm logs -c --json`. The API response also reports the service tier that actually processed the request - OpenAI may fall back to standard processing if Fast mode capacity is unavailable. Using the {ref}`Python API <python-api>` you can check that with:
-
-```python
-import llm
-
-model = llm.get_model("gpt-5.6-sol")
-response = model.prompt("Fast facts about pelicans", service_tier="fast")
-print(response.text())
-print(response.json()["service_tier"])
 ```
 
 (openai-models-embedding)=
