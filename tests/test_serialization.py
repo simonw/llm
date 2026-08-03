@@ -191,6 +191,16 @@ class TestResponseDictRoundTrip:
         d = r.to_dict()
         TypeAdapter(ResponseDict).validate_python(d)
 
+    def test_to_dict_forces_unconsumed_response(self, mock_model):
+        mock_model.enqueue(["answer"])
+        r = mock_model.prompt("q")
+        # No text()/messages access first - to_dict() must execute the prompt
+        d = r.to_dict()
+        TypeAdapter(ResponseDict).validate_python(d)
+        assert d["messages"] == [
+            {"role": "assistant", "parts": [{"type": "text", "text": "answer"}]}
+        ]
+
     def test_response_with_reasoning_matches(self, mock_model):
         mock_model.enqueue(
             [

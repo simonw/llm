@@ -1667,6 +1667,7 @@ class Response(_BaseResponse):
 
         Returns :class:`~llm.serialization.ResponseDict`.
         """
+        self._force()
         return _response_to_dict(self)
 
     @classmethod
