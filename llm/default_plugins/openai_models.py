@@ -1008,16 +1008,8 @@ def _attachment(attachment, image_detail=None):
 
 
 class _Shared:
-    # Boilerplate fragments that recur verbatim in this API's response
-    # payloads, offered to the log store's payload condensing as shared
-    # replacements - the same idea as a zstandard custom dictionary.
-    # Dict and list values match payload subtrees structurally, so key
-    # order does not matter.
-    #
     # NEVER remove or change an existing entry - only ever append new
-    # ones. Stored payloads reference these by key and resolve against
-    # the dictionary at read time, so editing an entry silently breaks
-    # every payload already condensed against it.
+    # ones.
     json_replacements: ClassVar[dict] = {
         "completion_tokens_details_0": {
             "accepted_prediction_tokens": 0,
@@ -1521,8 +1513,7 @@ class _SharedResponses(_Shared):
     # Recurring boilerplate in Responses API payloads. Same contract as
     # _Shared.json_replacements, which this replaces for Responses
     # models: NEVER remove or change an existing entry - only ever
-    # append new ones, or payloads already stored against these keys
-    # stop resolving.
+    # append new ones.
     json_replacements: ClassVar[dict] = {
         "tool_usage_0": {
             "image_gen": {
@@ -1544,9 +1535,6 @@ class _SharedResponses(_Shared):
             "cached_tokens": 0,
             "cache_write_tokens": 0,
         },
-        # The reasoning settings echo, in the variants the API emits
-        # depending on reasoning context. New variants get appended as
-        # reasoning_settings_2 and so on - never edited in place.
         "reasoning_settings_0": {
             "effort": "medium",
             "summary": "detailed",
@@ -1561,11 +1549,7 @@ class _SharedResponses(_Shared):
         },
         # The default text block on non-schema replies
         "text_format_0": {"format": {"type": "text"}, "verbosity": "medium"},
-        # The static envelope of a Responses payload. Dict entries also
-        # act as condense-json merge bases: a payload top-level that
-        # differs from this in a few keys stores as this base plus a
-        # patch, so settings a config changes (top_p, say) simply ride
-        # in the patch.
+        # The static envelope of a Responses payload
         "response_env_0": {
             "object": "response",
             "parallel_tool_calls": True,
