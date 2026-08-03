@@ -2,6 +2,7 @@ import os
 import sys
 from unittest.mock import ANY
 
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -97,3 +98,64 @@ def test_attachment_no_file_descriptor_leak(tmp_path):
 
     # File descriptor count should not have grown significantly
     assert _count_open_fds() <= baseline + 5
+
+
+def test_attachment_content_bytes_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        url="https://example.com/actual.png",
+        content=TINY_PNG,
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.content_bytes() == TINY_PNG
+
+
+def test_attachment_content_bytes_limits_redirects(httpx_mock):
+    for redirect in range(4):
+        httpx_mock.add_response(
+            url=f"https://example.com/redirect-{redirect}",
+            status_code=301,
+            headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
+        )
+
+    attachment = llm.Attachment(url="https://example.com/redirect-0")
+    with pytest.raises(httpx.TooManyRedirects):
+        attachment.content_bytes()
+
+    assert len(httpx_mock.get_requests()) == 4
+
+
+def test_attachment_resolve_type_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/actual.png",
+        headers={"content-type": "image/png"},
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.resolve_type() == "image/png"
+
+
+def test_attachment_resolve_type_limits_redirects(httpx_mock):
+    for redirect in range(4):
+        httpx_mock.add_response(
+            method="HEAD",
+            url=f"https://example.com/redirect-{redirect}",
+            status_code=301,
+            headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
+        )
+
+    attachment = llm.Attachment(url="https://example.com/redirect-0")
+    with pytest.raises(httpx.TooManyRedirects):
+        attachment.resolve_type()
+
+    assert len(httpx_mock.get_requests()) == 4

@@ -92,7 +92,8 @@ class Attachment:
         if self.path:
             return mimetype_from_path(self.path)
         if self.url:
-            response = httpx.head(self.url)
+            with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                response = client.head(self.url)
             response.raise_for_status()
             return response.headers.get("content-type")
         if self.content:
@@ -106,7 +107,8 @@ class Attachment:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
-                response = httpx.get(self.url)
+                with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                    response = client.get(self.url)
                 response.raise_for_status()
                 content = response.content
         return content
