@@ -519,6 +519,10 @@ class LogStore:
                     getattr(response, "response_json", None),
                     own_messages,
                     [(tool.name, tool.description) for tool in response.prompt.tools],
+                    schema=response.prompt.schema,
+                    model_replacements=getattr(
+                        response.model, "json_replacements", None
+                    ),
                 ),
             },
             replace=True,
@@ -615,8 +619,12 @@ class LogStore:
         row = next(
             iter(
                 self.db.query(
-                    "select parent_message_hash, tip_message_hash, response_json"
-                    " from turns where id = ?",
+                    "select turns.model, turns.parent_message_hash,"
+                    " turns.tip_message_hash, turns.response_json,"
+                    " schemas.content as schema_json"
+                    " from turns"
+                    " left join schemas on turns.schema_id = schemas.id"
+                    " where turns.id = ?",
                     [turn_id],
                 )
             ),
@@ -627,7 +635,11 @@ class LogStore:
         inputs = self.load_chain(row["parent_message_hash"])
         outputs = self.load_chain(row["tip_message_hash"])[len(inputs) :]
         return resolve_payload(
-            row["response_json"], outputs, self._turn_tool_pairs(turn_id)
+            row["response_json"],
+            outputs,
+            self._turn_tool_pairs(turn_id),
+            schema=_load(row["schema_json"]),
+            model_replacements=_model_json_replacements(row["model"]),
         )
 
     def _turn_tool_pairs(self, turn_id: str) -> list[tuple[str, str]]:
@@ -856,8 +868,10 @@ where turn_tools.turn_id = ?
 """
 
 
-def _payload_replacements(messages, tools=()) -> dict[str, str]:
-    """Replacement strings for condensing a turn's provider payload.
+def _payload_replacements(
+    messages, tools=(), schema=None, model_replacements=None
+) -> dict[str, Any]:
+    """Replacement values for condensing a turn's provider payload.
 
     ``messages`` is the turn's own contribution - the chain segment
     between its parent and tip. Keys are structural (message offset,
@@ -871,19 +885,53 @@ def _payload_replacements(messages, tools=()) -> dict[str, str]:
     order-independent verdict from either side's view of the pairs.
     (Parameter schemas are deliberately not offered: providers echo a
     transformed schema - OpenAI strict mode adds keys - so the stored
-    form would not match.)
+    form would not match even structurally.)
+
+    ``schema`` is the turn's JSON schema dict, when one was used - the
+    provider echoes it back in the payload (OpenAI ``text.format``) and
+    the schemas table already stores it once. It is offered as a
+    structural value, so the echo's key order does not matter.
+
+    ``model_replacements`` is the model class's ``json_replacements``
+    dictionary of common boilerplate - the zstd-custom-dictionary idea:
+    payload fragments the plugin author knows recur in every reply,
+    keyed here under an ``m.`` prefix so they can never collide with
+    the derived keys. These resolve by looking the model up again at
+    read time, so plugins must treat their ``json_replacements`` as
+    append-only: removing or changing an entry breaks every payload
+    already stored against it.
+
+    Values are strings (matched as substrings) and dicts or lists
+    (matched as whole subtrees by condense-json's structural equality).
+    Container values inside provider_metadata are offered as well as
+    their leaf strings - outermost match wins, so a payload that embeds
+    a whole metadata object (a reasoning ``summary`` list, say)
+    condenses to one reference instead of one per string.
     """
-    replacements: dict[str, str] = {}
+    replacements: dict[str, Any] = {}
 
     def add(key: str, value: Any) -> None:
         if isinstance(value, str) and len(value) >= _CONDENSE_MIN_LENGTH:
             replacements[key] = value
 
+    def add_value(key: str, value: Any) -> None:
+        if isinstance(value, (dict, list)) and value:
+            # The same length bar as strings, applied to the canonical
+            # form, so a reference is always a clear win.
+            try:
+                size = len(json.dumps(value, separators=(",", ":")))
+            except (TypeError, ValueError):
+                return
+            if size >= _CONDENSE_MIN_LENGTH:
+                replacements[key] = value
+
     def walk(prefix: str, obj: Any) -> None:
         if isinstance(obj, dict):
+            add_value(prefix, obj)
             for key, value in obj.items():
                 walk(f"{prefix}.{key}", value)
         elif isinstance(obj, list):
+            add_value(prefix, obj)
             for index, value in enumerate(obj):
                 walk(f"{prefix}.{index}", value)
         else:
@@ -897,14 +945,17 @@ def _payload_replacements(messages, tools=()) -> dict[str, str]:
             add(f"{base}.output", part.get("output"))
             arguments = part.get("arguments")
             if arguments:
-                # Providers carry tool arguments as a JSON-encoded
-                # string; OpenAI uses the compact form, so offer both
-                # serializations of the stored dict.
+                # Providers that carry tool arguments as a JSON-encoded
+                # string need a byte-exact serialization - OpenAI uses
+                # the compact form, so offer both. Providers that embed
+                # them as an object (Anthropic, Gemini) match the dict
+                # itself structurally.
                 compact = json.dumps(arguments, separators=(",", ":"))
                 spaced = json.dumps(arguments)
                 add(f"{base}.args", compact)
                 if spaced != compact:
                     add(f"{base}.args2", spaced)
+                add_value(f"{base}.argsv", arguments)
             walk(f"{base}.pm", part.get("provider_metadata") or {})
         walk(f"{mi}.pm", message_dict.get("provider_metadata") or {})
 
@@ -924,17 +975,33 @@ def _payload_replacements(messages, tools=()) -> dict[str, str]:
     for name, description in descriptions.items():
         if name not in conflicting:
             replacements[f"tool.{name}.description"] = description
+
+    add_value("schema", schema)
+
+    # Model-declared boilerplate passes through as curated: the plugin
+    # author chose these entries, so no length threshold applies.
+    for key, value in (model_replacements or {}).items():
+        replacements[f"m.{key}"] = value
     return replacements
 
 
-def condense_payload(payload: Any, messages, tools=()) -> str | None:
-    "JSON text of ``payload`` with strings from ``messages`` and ``tools`` condensed."
+def condense_payload(
+    payload: Any, messages, tools=(), schema=None, model_replacements=None
+) -> str | None:
+    "JSON text of ``payload`` condensed against the turn's stored content."
     if payload is None:
         return None
-    return json.dumps(condense_json(payload, _payload_replacements(messages, tools)))
+    return json.dumps(
+        condense_json(
+            payload,
+            _payload_replacements(messages, tools, schema, model_replacements),
+        )
+    )
 
 
-def resolve_payload(condensed: str | None, messages, tools=()) -> Any:
+def resolve_payload(
+    condensed: str | None, messages, tools=(), schema=None, model_replacements=None
+) -> Any:
     """Reverse of :func:`condense_payload`.
 
     Raises ``condense_json.UncondenseError`` when the stored payload
@@ -943,8 +1010,28 @@ def resolve_payload(condensed: str | None, messages, tools=()) -> Any:
     if condensed is None:
         return None
     return uncondense_json(
-        json.loads(condensed), _payload_replacements(messages, tools)
+        json.loads(condensed),
+        _payload_replacements(messages, tools, schema, model_replacements),
     )
+
+
+def _model_json_replacements(model_id: str | None):
+    """The ``json_replacements`` boilerplate dictionary for a model id.
+
+    Resolved through the registry at read time, so payloads condensed
+    against a model's dictionary need that model's plugin installed to
+    resolve again. An unknown model returns None; any markers that
+    depended on it surface as UncondenseError from resolve_payload.
+    """
+    if not model_id:
+        return None
+    from llm import UnknownModelError, get_model
+
+    try:
+        model = get_model(model_id)
+    except UnknownModelError:
+        return None
+    return getattr(model, "json_replacements", None)
 
 
 # -- llm logs support ---------------------------------------------------
@@ -1150,7 +1237,11 @@ class _LogRowBuilder:
         try:
             return json.dumps(
                 resolve_payload(
-                    condensed, outputs, self.store._turn_tool_pairs(row["id"])
+                    condensed,
+                    outputs,
+                    self.store._turn_tool_pairs(row["id"]),
+                    schema=_load(row.get("schema_json")),
+                    model_replacements=_model_json_replacements(row.get("model")),
                 )
             )
         except UncondenseError:

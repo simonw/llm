@@ -1818,8 +1818,13 @@ class TestPayloadReplacements:
             )
         ]
         replacements = _payload_replacements(messages)
+        # Leaf strings by path, plus each provider_metadata container
+        # offered structurally so a payload embedding the whole object
+        # condenses to one reference.
         assert replacements == {
             "0.0.text": "r" * 70,
+            "0.0.pm": {"openai": {"encrypted_content": blob}},
+            "0.0.pm.openai": {"encrypted_content": blob},
             "0.0.pm.openai.encrypted_content": blob,
             "0.1.text": "t" * 64,
         }
@@ -1914,3 +1919,148 @@ class TestResponseJsonToolEcho:
         assert store.turn_response_json(turn_id) == payload
         (row,) = merged_log_rows(store)
         assert json.loads(row["response_json"]) == payload
+
+
+def _structural_schema():
+    return {
+        "type": "object",
+        "properties": {"name": {"type": "string", "description": "d" * 40}},
+        "required": ["name"],
+    }
+
+
+class TestResponseJsonStructural:
+    """Structural replacement values (condense-json 1.1): payload
+    subtrees that equal stored content condense whole, regardless of
+    key order or serialization."""
+
+    def test_schema_echo_condenses_against_the_schemas_table(self, store, mock_model):
+        schema = _structural_schema()
+        mock_model.enqueue(['{"name": "Cleo"}'])
+        response = mock_model.prompt("Extract", schema=schema)
+        response.text()
+        # The echo reorders keys, as providers do - structural equality
+        # still matches
+        echoed = {
+            "required": ["name"],
+            "properties": {"name": {"type": "string", "description": "d" * 40}},
+            "type": "object",
+        }
+        payload = {"text": {"format": {"type": "json_schema", "schema": echoed}}}
+        response.response_json = payload
+        turn_id = store.log(response)
+        stored = json.loads(store.db["turns"].get(turn_id)["response_json"])
+        assert stored["text"]["format"]["schema"] == {"$": "schema"}
+        # Resolves via the schemas table; the substituted form is the
+        # stored schema's key order, structurally equal to the echo
+        resolved = store.turn_response_json(turn_id)
+        assert resolved["text"]["format"]["schema"] == schema
+        (row,) = merged_log_rows(store)
+        row_payload = json.loads(row["response_json"])
+        assert row_payload["text"]["format"]["schema"] == schema
+
+    def test_object_form_tool_arguments_condense(self, store, mock_model):
+        # Anthropic and Gemini embed tool arguments as objects rather
+        # than JSON-encoded strings
+        arguments = {"javascript": "x" * 64}
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "run",
+            tool_results=[
+                llm.ToolResult(name="execute", output="42", tool_call_id="t1")
+            ],
+            messages=[
+                llm.assistant(
+                    llm.parts.ToolCallPart(
+                        name="execute", arguments=arguments, tool_call_id="t1"
+                    )
+                )
+            ],
+        )
+        response.text()
+        payload = {"content": [{"type": "tool_use", "input": dict(arguments)}]}
+        response.response_json = payload
+        turn_id = store.log(response)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_provider_metadata_container_condenses_whole(self, store, mock_model):
+        summary = [{"type": "summary_text", "text": "s" * 60}]
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking",
+                    provider_metadata={"openai": {"summary": summary}},
+                ),
+                "ok",
+            ]
+        )
+        response = mock_model.prompt("hi")
+        response.text()
+        payload = {"output": [{"type": "reasoning", "summary": summary}]}
+        response.response_json = payload
+        turn_id = store.log(response)
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        # One reference for the whole list, not one per inner string
+        assert '"$": "0.0.pm.openai.summary"' in stored
+        assert store.turn_response_json(turn_id) == payload
+
+
+class TestModelJsonReplacements:
+    """Model classes can declare a json_replacements dictionary of
+    recurring payload boilerplate - like a zstd custom dictionary -
+    resolved by looking the model up again at read time."""
+
+    @staticmethod
+    def boiler():
+        return {
+            "image_gen": {"input_tokens": 0, "output_tokens": 0},
+            "web_search": {"num_requests": 0},
+        }
+
+    def test_model_boilerplate_condenses_and_resolves(self, store, mock_model):
+        mock_model.json_replacements = {"tool_usage_0": self.boiler()}
+        try:
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi")
+            response.text()
+            payload = {
+                "content": "ok",
+                # Key order differs from the declared entry - structural
+                # matching still applies
+                "tool_usage": {
+                    "web_search": {"num_requests": 0},
+                    "image_gen": {"output_tokens": 0, "input_tokens": 0},
+                },
+            }
+            response.response_json = payload
+            turn_id = store.log(response)
+            stored = store.db["turns"].get(turn_id)["response_json"]
+            assert json.loads(stored)["tool_usage"] == {"$": "m.tool_usage_0"}
+            resolved = store.turn_response_json(turn_id)
+            assert resolved["tool_usage"] == self.boiler()
+            (row,) = merged_log_rows(store)
+            assert json.loads(row["response_json"])["tool_usage"] == self.boiler()
+        finally:
+            del mock_model.json_replacements
+
+    def test_unknown_model_fails_closed(self, store, mock_model):
+        mock_model.json_replacements = {"tool_usage_0": self.boiler()}
+        try:
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi")
+            response.text()
+            response.response_json = {"tool_usage": self.boiler()}
+            turn_id = store.log(response)
+        finally:
+            del mock_model.json_replacements
+        # The model is gone (or its plugin uninstalled) at read time
+        store.db.execute(
+            "update turns set model = 'gone-model' where id = ?", [turn_id]
+        )
+        from condense_json import UncondenseError
+
+        with pytest.raises(UncondenseError):
+            store.turn_response_json(turn_id)
+        (row,) = merged_log_rows(store)
+        assert row["response_json"] is None
