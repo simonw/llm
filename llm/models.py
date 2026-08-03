@@ -1585,6 +1585,22 @@ def _response_from_dict(
     # full picture (reasoning, tool calls, signatures) without needing
     # a StreamEvent replay.
     response._loaded_messages = output_messages
+    # Rebuild _tool_calls from the restored parts so tool_calls() and
+    # reply(tools=...) can execute serialized pending calls. Server-
+    # executed calls stay out, matching add_tool_call() during live
+    # streaming.
+    from .parts import ToolCallPart
+
+    response._tool_calls = [
+        ToolCall(
+            name=p.name,
+            arguments=p.arguments or {},
+            tool_call_id=p.tool_call_id,
+        )
+        for m in output_messages
+        for p in m.parts
+        if isinstance(p, ToolCallPart) and not p.server_executed
+    ]
     response._done = True
     # Restore usage if present.
     usage = data.get("usage")
@@ -1626,12 +1642,12 @@ class Response(_BaseResponse):
         from .parts import Message, TextPart, ToolResultPart
 
         self._force()
-        if tool_results is None and self._tool_calls:
-            tool_results = self.execute_tool_calls()
         # Forward original tools so the next turn can call them again
         # (mirrors Conversation.prompt's `tools or self.tools` rule).
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
+        if tool_results is None and self._tool_calls:
+            tool_results = self.execute_tool_calls(tools=kwargs.get("tools"))
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             chain.append(
@@ -1720,15 +1736,20 @@ class Response(_BaseResponse):
         before_call: BeforeCallSync | None = None,
         after_call: AfterCallSync | None = None,
         tool_calls_list: list[ToolCall] | None = None,
+        tools: list[ToolDef] | None = None,
     ) -> list[ToolResult]:
         """Execute tool calls using this response's tools.
 
         By default executes ``self.tool_calls()``; pass
         ``tool_calls_list=`` to execute an explicit list instead (used
         when resuming a chain whose history ends in unresolved calls).
+        Pass ``tools=`` to resolve implementations from an explicit
+        list instead of ``self.prompt.tools`` (used when a rehydrated
+        response has pending calls but no tool implementations).
         """
         tool_results = []
-        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
+        tools_by_name = {tool.name: tool for tool in effective_tools}
         if tool_calls_list is None:
             tool_calls_list = self.tool_calls()
 
@@ -1992,10 +2013,10 @@ class AsyncResponse(_BaseResponse):
             raise ValueError(
                 "Response not yet awaited — call `await response` before reply()"
             )
-        if tool_results is None and self._tool_calls:
-            tool_results = await self.execute_tool_calls()
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
+        if tool_results is None and self._tool_calls:
+            tool_results = await self.execute_tool_calls(tools=kwargs.get("tools"))
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             chain.append(
@@ -2071,16 +2092,21 @@ class AsyncResponse(_BaseResponse):
         before_call: BeforeCallAsync | None = None,
         after_call: AfterCallAsync | None = None,
         tool_calls_list: list[ToolCall] | None = None,
+        tools: list[ToolDef] | None = None,
     ) -> list[ToolResult]:
         """Execute tool calls using this response's tools.
 
         By default executes ``await self.tool_calls()``; pass
         ``tool_calls_list=`` to execute an explicit list instead (used
         when resuming a chain whose history ends in unresolved calls).
+        Pass ``tools=`` to resolve implementations from an explicit
+        list instead of ``self.prompt.tools`` (used when a rehydrated
+        response has pending calls but no tool implementations).
         """
         if tool_calls_list is None:
             tool_calls_list = await self.tool_calls()
-        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
+        tools_by_name = {tool.name: tool for tool in effective_tools}
 
         # Run async prepare_async() on all Toolbox instances that need it
         instances_to_prepare: list[Toolbox] = []

@@ -201,6 +201,57 @@ class TestResponseDictRoundTrip:
             {"role": "assistant", "parts": [{"type": "text", "text": "answer"}]}
         ]
 
+    def test_from_dict_restores_pending_tool_calls(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="search",
+                    part_index=0,
+                    tool_call_id="c1",
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"q": "weather"}',
+                    part_index=0,
+                    tool_call_id="c1",
+                ),
+            ]
+        )
+        r = mock_model.prompt("find weather")
+        r2 = llm.Response.from_dict(r.to_dict(), model=mock_model)
+        assert r2.tool_calls() == [
+            llm.ToolCall(name="search", arguments={"q": "weather"}, tool_call_id="c1")
+        ]
+
+        def search(q: str) -> str:
+            return f"results for {q}"
+
+        mock_model.enqueue(["it is sunny"])
+        r3 = r2.reply(tools=[search])
+        r3.text()
+        tool_message = next(m for m in r3.prompt.messages if m.role == "tool")
+        result_part = tool_message.parts[0]
+        assert result_part.output == "results for weather"
+        assert result_part.exception is None
+
+    def test_from_dict_excludes_server_executed_tool_calls(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="web_search",
+                    part_index=0,
+                    tool_call_id="s1",
+                    server_executed=True,
+                ),
+                llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
+            ]
+        )
+        r = mock_model.prompt("q")
+        r2 = llm.Response.from_dict(r.to_dict(), model=mock_model)
+        assert r2.tool_calls() == []
+
     def test_response_with_reasoning_matches(self, mock_model):
         mock_model.enqueue(
             [
