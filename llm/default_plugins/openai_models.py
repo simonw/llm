@@ -4,7 +4,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 import click
 import httpx
@@ -1008,6 +1008,21 @@ def _attachment(attachment, image_detail=None):
 
 
 class _Shared:
+    # NEVER remove or change an existing entry - only ever append new
+    # ones.
+    json_replacements: ClassVar[dict] = {
+        "completion_tokens_details_0": {
+            "accepted_prediction_tokens": 0,
+            "audio_tokens": 0,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": 0,
+        },
+        "prompt_tokens_details_0": {
+            "audio_tokens": 0,
+            "cached_tokens": 0,
+        },
+    }
+
     def __init__(
         self,
         model_id,
@@ -1495,6 +1510,70 @@ def _responses_attachment(attachment, image_detail=None):
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
 
+    # Recurring boilerplate in Responses API payloads. Same contract as
+    # _Shared.json_replacements, which this replaces for Responses
+    # models: NEVER remove or change an existing entry - only ever
+    # append new ones.
+    json_replacements: ClassVar[dict] = {
+        "tool_usage_0": {
+            "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0,
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0,
+                },
+                "total_tokens": 0,
+            },
+            "web_search": {"num_requests": 0},
+        },
+        "input_tokens_details_0": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+        },
+        "reasoning_settings_0": {
+            "effort": "medium",
+            "summary": "detailed",
+            "context": "all_turns",
+            "mode": "standard",
+        },
+        "reasoning_settings_1": {
+            "effort": "medium",
+            "summary": "detailed",
+            "context": "current_turn",
+            "mode": "standard",
+        },
+        # The default text block on non-schema replies
+        "text_format_0": {"format": {"type": "text"}, "verbosity": "medium"},
+        # The static envelope of a Responses payload
+        "response_env_0": {
+            "object": "response",
+            "parallel_tool_calls": True,
+            "temperature": 1.0,
+            "tool_choice": "auto",
+            "top_p": 1.0,
+            "background": False,
+            "service_tier": "default",
+            "status": "completed",
+            "top_logprobs": 0,
+            "truncation": "disabled",
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "store": False,
+            "tools": [],
+        },
+        "message_completed": {
+            "role": "assistant",
+            "status": "completed",
+            "type": "message",
+            "phase": "final_answer",
+        },
+    }
+
     def __str__(self) -> str:
         return f"OpenAI Responses: {self.model_id}"
 
@@ -1752,6 +1831,44 @@ class _SharedResponses(_Shared):
             provider_metadata={"openai": meta} if meta else None,
         )
 
+    def _reasoning_refresh_events(self, response_json, done_events):
+        """Metadata-only reasoning events rebuilt from the final payload.
+
+        While streaming, reasoning metadata is first harvested from the
+        ``response.output_item.done`` event, but the ``response.completed``
+        payload carries a *different* ciphertext of the same reasoning -
+        OpenAI encrypts per event. Re-emitting the metadata from the
+        final payload, aimed at the already-resolved part_index, makes
+        the stored part and ``response_json`` agree on one blob (which
+        also lets the log store condense the payload against the part).
+
+        ``done_events`` maps reasoning item id to the StreamEvent
+        yielded at ``output_item.done``; the framework has resolved
+        ``part_index`` on it by the time the stream ends.
+        """
+        events = []
+        for item in response_json.get("output") or []:
+            if not isinstance(item, dict) or item.get("type") != "reasoning":
+                continue
+            prior = done_events.get(item.get("id"))
+            if prior is None or prior.part_index is None:
+                continue
+            meta = {
+                key: item[key]
+                for key in ("id", "encrypted_content", "summary")
+                if item.get(key)
+            }
+            if meta:
+                events.append(
+                    StreamEvent(
+                        type="reasoning",
+                        chunk="",
+                        part_index=prior.part_index,
+                        provider_metadata={"openai": meta},
+                    )
+                )
+        return events
+
 
 class Responses(_SharedResponses, KeyModel):
     needs_key = "openai"
@@ -1855,6 +1972,7 @@ class Responses(_SharedResponses, KeyModel):
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
+            reasoning_done_events: dict[str, StreamEvent] = {}
             for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
@@ -1905,12 +2023,18 @@ class Responses(_SharedResponses, KeyModel):
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        yield self._reasoning_event(
+                        reasoning_event = self._reasoning_event(
                             item,
                             include_text=(
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        if item_id:
+                            # Retained so the refresh after
+                            # response.completed can target the part
+                            # this event resolved to.
+                            reasoning_done_events[item_id] = reasoning_event
+                        yield reasoning_event
                     elif item.type == "function_call":
                         try:
                             args = json.loads(item.arguments) if item.arguments else {}
@@ -1929,6 +2053,9 @@ class Responses(_SharedResponses, KeyModel):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
+                yield from self._reasoning_refresh_events(
+                    response.response_json, reasoning_done_events
+                )
         else:
             completion = client.responses.create(
                 model=self.model_name or self.model_id,
@@ -2089,6 +2216,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
+            reasoning_done_events: dict[str, StreamEvent] = {}
             async for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
@@ -2139,12 +2267,18 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        yield self._reasoning_event(
+                        reasoning_event = self._reasoning_event(
                             item,
                             include_text=(
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        if item_id:
+                            # Retained so the refresh after
+                            # response.completed can target the part
+                            # this event resolved to.
+                            reasoning_done_events[item_id] = reasoning_event
+                        yield reasoning_event
                     elif item.type == "function_call":
                         try:
                             args = json.loads(item.arguments) if item.arguments else {}
@@ -2163,6 +2297,10 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
+                for refresh in self._reasoning_refresh_events(
+                    response.response_json, reasoning_done_events
+                ):
+                    yield refresh
         else:
             completion = await client.responses.create(
                 model=self.model_name or self.model_id,

@@ -1719,3 +1719,348 @@ class TestMessageTreeView:
         store.append(store.create_thread(), [llm.user("Hi")])
         (row,) = self.rows(store)
         assert row["datetime"] is None
+
+
+# ---- condensed provider payloads -------------------------------------
+
+
+class TestResponseJsonPayload:
+    """The raw response.json() payload is stored on the turn, condensed
+    against the strings the turn's own messages already hold, and
+    resolved again on the way out."""
+
+    LONG = "SQLite stores the whole database in a single file on disk. " * 3
+
+    def logged(self, store, mock_model, payload, text=None):
+        mock_model.enqueue([text if text is not None else self.LONG])
+        response = mock_model.prompt("Tell me about SQLite")
+        response.text()
+        response.response_json = payload
+        return store.log(response)
+
+    def test_payload_is_stored_condensed(self, store, mock_model):
+        turn_id = self.logged(
+            store,
+            mock_model,
+            {"content": self.LONG, "id": "chatcmpl-1", "usage": {"total_tokens": 9}},
+        )
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        # The response text is a reference, not a second copy
+        assert json.loads(stored)["content"] == {"$": "0.0.text"}
+        assert self.LONG not in stored
+
+    def test_turn_response_json_resolves_the_payload(self, store, mock_model):
+        payload = {"content": self.LONG, "id": "chatcmpl-1"}
+        turn_id = self.logged(store, mock_model, payload)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_no_payload_stores_null(self, store, mock_model):
+        turn_id = self.logged(store, mock_model, None)
+        assert store.db["turns"].get(turn_id)["response_json"] is None
+        assert store.turn_response_json(turn_id) is None
+
+    def test_unknown_turn_resolves_to_none(self, store):
+        assert store.turn_response_json("nope") is None
+
+    def test_short_strings_are_stored_verbatim(self, store, mock_model):
+        # Below the length threshold a reference would cost as much as
+        # the string it replaces.
+        turn_id = self.logged(
+            store, mock_model, {"content": "short answer"}, text="short answer"
+        )
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        assert json.loads(stored) == {"content": "short answer"}
+
+    def test_marker_shaped_payload_round_trips(self, store, mock_model):
+        # A payload that already contains {"$": ...} shapes must come
+        # back exactly - condense-json escapes them with $raw.
+        payload = {"tricky": {"$": "not-a-marker"}, "also": {"$r": ["x"]}}
+        turn_id = self.logged(store, mock_model, payload)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_merged_log_rows_carry_the_resolved_payload(self, store, mock_model):
+        payload = {"content": self.LONG, "id": "chatcmpl-1"}
+        self.logged(store, mock_model, payload)
+        (row,) = merged_log_rows(store)
+        assert json.loads(row["response_json"]) == payload
+
+    def test_a_payload_that_no_longer_resolves_is_absent_from_rows(
+        self, store, mock_model
+    ):
+        turn_id = self.logged(store, mock_model, {"content": self.LONG})
+        store.db["turns"].update(
+            turn_id, {"response_json": json.dumps({"content": {"$": "9.9.text"}})}
+        )
+        (row,) = merged_log_rows(store)
+        assert row["response_json"] is None
+        # The API surfaces the failure instead of guessing
+        from condense_json import UncondenseError
+
+        with pytest.raises(UncondenseError):
+            store.turn_response_json(turn_id)
+
+
+class TestPayloadReplacements:
+    """_payload_replacements builds the same dict at write and read time
+    from the turn's chain segment - these pin down what it offers."""
+
+    def test_part_strings_are_keyed_by_position(self):
+        from llm.logs import _payload_replacements
+
+        blob = "b" * 80
+        messages = [
+            llm.assistant(
+                llm.parts.ReasoningPart(
+                    text="r" * 70,
+                    provider_metadata={"openai": {"encrypted_content": blob}},
+                ),
+                "t" * 64,
+            )
+        ]
+        replacements = _payload_replacements(messages)
+        # Leaf strings by path, plus each provider_metadata container
+        # offered structurally so a payload embedding the whole object
+        # condenses to one reference.
+        assert replacements == {
+            "0.0.text": "r" * 70,
+            "0.0.pm": {"openai": {"encrypted_content": blob}},
+            "0.0.pm.openai": {"encrypted_content": blob},
+            "0.0.pm.openai.encrypted_content": blob,
+            "0.1.text": "t" * 64,
+        }
+
+    def test_tool_arguments_offer_both_serializations(self):
+        from llm.logs import _payload_replacements
+
+        arguments = {"query": "x" * 64}
+        messages = [
+            llm.assistant(llm.parts.ToolCallPart(name="search", arguments=arguments))
+        ]
+        replacements = _payload_replacements(messages)
+        assert replacements["0.0.args"] == json.dumps(arguments, separators=(",", ":"))
+        assert replacements["0.0.args2"] == json.dumps(arguments)
+
+    def test_tool_result_output_is_offered(self):
+        from llm.logs import _payload_replacements
+
+        output = "o" * 64
+        messages = [
+            llm.tool_message(llm.parts.ToolResultPart(name="search", output=output))
+        ]
+        assert _payload_replacements(messages) == {"0.0.output": output}
+
+    def test_short_strings_are_excluded(self):
+        from llm.logs import _payload_replacements
+
+        assert _payload_replacements([llm.assistant("short")]) == {}
+
+    def test_tool_descriptions_are_offered(self):
+        from llm.logs import _payload_replacements
+
+        description = "d" * 64
+        replacements = _payload_replacements([], tools=[("search", description)])
+        assert replacements == {"tool.search.description": description}
+
+    def test_conflicting_tool_descriptions_are_dropped(self):
+        from llm.logs import _payload_replacements
+
+        # Whichever order the pairs arrive in, a name that carries two
+        # different long descriptions is excluded on both sides.
+        pairs = [("search", "a" * 64), ("search", "b" * 64), ("other", "c" * 64)]
+        for ordering in (pairs, list(reversed(pairs))):
+            assert _payload_replacements([], tools=ordering) == {
+                "tool.other.description": "c" * 64
+            }
+
+    def test_short_or_missing_tool_descriptions_are_excluded(self):
+        from llm.logs import _payload_replacements
+
+        assert _payload_replacements([], tools=[("a", "short"), ("b", None)]) == {}
+
+
+class TestResponseJsonToolEcho:
+    """Providers echo the turn's tool definitions back in the payload;
+    long descriptions condense against the tools table."""
+
+    DESCRIPTION = (
+        "Execute JavaScript code using a persistent context. State is "
+        "maintained between calls, allowing variables to persist."
+    )
+
+    def logged(self, store, mock_model):
+        def execute_javascript(javascript: str) -> str:
+            return "ran"
+
+        tool = llm.Tool.function(execute_javascript, description=self.DESCRIPTION)
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("run it", tools=[tool])
+        response.text()
+        response.response_json = {
+            "content": "ok",
+            "tools": [
+                {
+                    "name": "execute_javascript",
+                    "description": self.DESCRIPTION,
+                    "parameters": {"type": "object"},
+                }
+            ],
+        }
+        return store.log(response), response.response_json
+
+    def test_the_echoed_description_is_a_reference(self, store, mock_model):
+        turn_id, _ = self.logged(store, mock_model)
+        stored = json.loads(store.db["turns"].get(turn_id)["response_json"])
+        assert stored["tools"][0]["description"] == {
+            "$": "tool.execute_javascript.description"
+        }
+
+    def test_the_payload_resolves_via_the_turn_tools_join(self, store, mock_model):
+        turn_id, payload = self.logged(store, mock_model)
+        assert store.turn_response_json(turn_id) == payload
+        (row,) = merged_log_rows(store)
+        assert json.loads(row["response_json"]) == payload
+
+
+def _structural_schema():
+    return {
+        "type": "object",
+        "properties": {"name": {"type": "string", "description": "d" * 40}},
+        "required": ["name"],
+    }
+
+
+class TestResponseJsonStructural:
+    """Structural replacement values (condense-json 1.1): payload
+    subtrees that equal stored content condense whole, regardless of
+    key order or serialization."""
+
+    def test_schema_echo_condenses_against_the_schemas_table(self, store, mock_model):
+        schema = _structural_schema()
+        mock_model.enqueue(['{"name": "Cleo"}'])
+        response = mock_model.prompt("Extract", schema=schema)
+        response.text()
+        # The echo reorders keys, as providers do - structural equality
+        # still matches
+        echoed = {
+            "required": ["name"],
+            "properties": {"name": {"type": "string", "description": "d" * 40}},
+            "type": "object",
+        }
+        payload = {"text": {"format": {"type": "json_schema", "schema": echoed}}}
+        response.response_json = payload
+        turn_id = store.log(response)
+        stored = json.loads(store.db["turns"].get(turn_id)["response_json"])
+        assert stored["text"]["format"]["schema"] == {"$": "schema"}
+        # Resolves via the schemas table; the substituted form is the
+        # stored schema's key order, structurally equal to the echo
+        resolved = store.turn_response_json(turn_id)
+        assert resolved["text"]["format"]["schema"] == schema
+        (row,) = merged_log_rows(store)
+        row_payload = json.loads(row["response_json"])
+        assert row_payload["text"]["format"]["schema"] == schema
+
+    def test_object_form_tool_arguments_condense(self, store, mock_model):
+        # Anthropic and Gemini embed tool arguments as objects rather
+        # than JSON-encoded strings
+        arguments = {"javascript": "x" * 64}
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "run",
+            tool_results=[
+                llm.ToolResult(name="execute", output="42", tool_call_id="t1")
+            ],
+            messages=[
+                llm.assistant(
+                    llm.parts.ToolCallPart(
+                        name="execute", arguments=arguments, tool_call_id="t1"
+                    )
+                )
+            ],
+        )
+        response.text()
+        payload = {"content": [{"type": "tool_use", "input": dict(arguments)}]}
+        response.response_json = payload
+        turn_id = store.log(response)
+        assert store.turn_response_json(turn_id) == payload
+
+    def test_provider_metadata_container_condenses_whole(self, store, mock_model):
+        summary = [{"type": "summary_text", "text": "s" * 60}]
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="reasoning",
+                    chunk="thinking",
+                    provider_metadata={"openai": {"summary": summary}},
+                ),
+                "ok",
+            ]
+        )
+        response = mock_model.prompt("hi")
+        response.text()
+        payload = {"output": [{"type": "reasoning", "summary": summary}]}
+        response.response_json = payload
+        turn_id = store.log(response)
+        stored = store.db["turns"].get(turn_id)["response_json"]
+        # One reference for the whole list, not one per inner string
+        assert '"$": "0.0.pm.openai.summary"' in stored
+        assert store.turn_response_json(turn_id) == payload
+
+
+class TestModelJsonReplacements:
+    """Model classes can declare a json_replacements dictionary of
+    recurring payload boilerplate - like a zstd custom dictionary -
+    resolved by looking the model up again at read time."""
+
+    @staticmethod
+    def boiler():
+        return {
+            "image_gen": {"input_tokens": 0, "output_tokens": 0},
+            "web_search": {"num_requests": 0},
+        }
+
+    def test_model_boilerplate_condenses_and_resolves(self, store, mock_model):
+        mock_model.json_replacements = {"tool_usage_0": self.boiler()}
+        try:
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi")
+            response.text()
+            payload = {
+                "content": "ok",
+                # Key order differs from the declared entry - structural
+                # matching still applies
+                "tool_usage": {
+                    "web_search": {"num_requests": 0},
+                    "image_gen": {"output_tokens": 0, "input_tokens": 0},
+                },
+            }
+            response.response_json = payload
+            turn_id = store.log(response)
+            stored = store.db["turns"].get(turn_id)["response_json"]
+            assert json.loads(stored)["tool_usage"] == {"$": "m.tool_usage_0"}
+            resolved = store.turn_response_json(turn_id)
+            assert resolved["tool_usage"] == self.boiler()
+            (row,) = merged_log_rows(store)
+            assert json.loads(row["response_json"])["tool_usage"] == self.boiler()
+        finally:
+            del mock_model.json_replacements
+
+    def test_unknown_model_fails_closed(self, store, mock_model):
+        mock_model.json_replacements = {"tool_usage_0": self.boiler()}
+        try:
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt("hi")
+            response.text()
+            response.response_json = {"tool_usage": self.boiler()}
+            turn_id = store.log(response)
+        finally:
+            del mock_model.json_replacements
+        # The model is gone (or its plugin uninstalled) at read time
+        store.db.execute(
+            "update turns set model = 'gone-model' where id = ?", [turn_id]
+        )
+        from condense_json import UncondenseError
+
+        with pytest.raises(UncondenseError):
+            store.turn_response_json(turn_id)
+        (row,) = merged_log_rows(store)
+        assert row["response_json"] is None

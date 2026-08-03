@@ -720,3 +720,15 @@ def m026_message_tree_view(db):
     # path in the output - selecting from the view preserves tree order
     # only while sorted by path.
     db.create_view("message_tree", MESSAGE_TREE_SQL)
+
+
+@migration
+def m027_turns_response_json(db):
+    # The raw provider payload for the call, stored condensed: strings
+    # that already live in the turn's message parts (response text,
+    # reasoning blobs, long tool arguments) are replaced with references
+    # via condense-json, so the column costs roughly the provider
+    # envelope - ids, usage, fingerprints - not a second copy of the
+    # response. NULL for turns logged before this column existed and
+    # for models that expose no raw payload.
+    db["turns"].add_column("response_json", str)

@@ -512,6 +512,37 @@ else:
             )
 ```
 
+(advanced-model-plugins-json-replacements)=
+
+## Condensing logged payloads with json_replacements
+
+The raw provider payload your plugin assigns to `response.response_json` is {ref}`logged condensed <logging-message-store-response-json>`: content that the log database already stores elsewhere - the response text, reasoning blobs, tool definitions - is replaced with references instead of being written twice.
+
+Your model class can improve on this by declaring a `json_replacements` class attribute: a dictionary of payload fragments that you know recur in every response from your provider. Consult [the default OpenAI plugin](https://github.com/simonw/llm/blob/main/llm/default_plugins/openai_models.py) for an example of this pattern.
+
+```python
+class MyModel(llm.KeyModel):
+    json_replacements = {
+        "tool_usage_0": {
+            "image_gen": {"input_tokens": 0, "output_tokens": 0},
+            "web_search": {"num_requests": 0},
+        },
+        "response_env_0": {
+            "object": "response",
+            "status": "completed",
+            "store": False,
+        },
+    }
+```
+
+Payload content matching an entry is stored as a reference to it. Dict entries match structurally and additionally serve as *merge bases*: a payload object that mostly matches an entry, such as a response envelope where only the id and usage vary per call, is stored as the base plus a patch of its differing keys.
+
+Rules to follow:
+
+- **Entries are append-only. Never remove or change an existing entry - only add new ones.** Stored payloads reference entries by key and resolve against your dictionary when they are read back, so editing an entry silently breaks every payload already logged against it. When a provider changes a boilerplate block, append a new entry with a new suffix and leave the old one in place.
+- Reading these payloads requires your plugin to be installed: resolution looks your model up by id in the registry. If the model is unknown at read time, the payload is reported as unavailable rather than resolved incorrectly.
+- There is no size threshold for dictionary entries - you are trusted to curate them - but an entry smaller than the roughly 20-byte reference that replaces it makes payloads larger, not smaller.
+
 ## Consuming prompt.messages in build_messages
 
 `prompt.messages` is an `list[llm.Message]` that is always **the complete input chain for this turn** — whether the caller supplied it explicitly via `model.prompt(messages=[...])`, or it was synthesized from kwargs (`prompt=`, `system=`, `attachments=`, `tool_results=`), or it was pre-built by a `Conversation` or by `response.reply()`.
