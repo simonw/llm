@@ -299,6 +299,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Supporting tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-tools)
     * [Attachments for multi-modal models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#attachments-for-multi-modal-models)
     * [Structured messages and streaming events](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#structured-messages-and-streaming-events)
+    * [Condensing logged payloads with json_replacements](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#condensing-logged-payloads-with-json-replacements)
     * [Consuming prompt.messages in build_messages](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#consuming-prompt-messages-in-build-messages)
     * [Restoring opaque metadata on subsequent requests](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#restoring-opaque-metadata-on-subsequent-requests)
     * [Tracking token usage](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tracking-token-usage)
