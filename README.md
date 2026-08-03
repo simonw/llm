@@ -110,7 +110,7 @@ llm -m gemini-3.5-flash 'Tell me fun facts about Mountain View'
 llm install llm-anthropic
 llm keys set anthropic
 # Paste Anthropic API key here
-llm -m claude-5-opus 'Impress me with wild facts about turnips'
+llm -m claude-sonnet-5 'Impress me with wild facts about turnips'
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):
