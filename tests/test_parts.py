@@ -1468,6 +1468,84 @@ class TestResponseReply:
             llm.user("q2"),
         ]
 
+    def test_reply_tool_result_attachments_become_user_parts(self, mock_model):
+        """Attachments returned by tools must surface as a user-role
+        AttachmentPart message - adapters only emit ToolResultPart.output,
+        so attachments nested inside the part would be silently lost."""
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+        attachment = llm.Attachment(type="image/png", content=b"fakepng")
+        r2 = r1.reply(
+            "describe it",
+            tool_results=[
+                llm.ToolResult(
+                    name="take_photo",
+                    output="took photo",
+                    attachments=[attachment],
+                    tool_call_id="c1",
+                )
+            ],
+        )
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(
+                        name="take_photo", output="took photo", tool_call_id="c1"
+                    )
+                ],
+            ),
+            llm.Message(
+                role="user",
+                parts=[llm.parts.AttachmentPart(attachment=attachment)],
+            ),
+            llm.user("describe it"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_tool_result_attachments_become_user_parts(
+        self, async_mock_model
+    ):
+        async_mock_model.enqueue(["a1"])
+        async_mock_model.enqueue(["a2"])
+        r1 = async_mock_model.prompt("q1")
+        await r1.text()
+        attachment = llm.Attachment(type="image/png", content=b"fakepng")
+        r2 = await r1.reply(
+            "describe it",
+            tool_results=[
+                llm.ToolResult(
+                    name="take_photo",
+                    output="took photo",
+                    attachments=[attachment],
+                    tool_call_id="c1",
+                )
+            ],
+        )
+        await r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(
+                        name="take_photo", output="took photo", tool_call_id="c1"
+                    )
+                ],
+            ),
+            llm.Message(
+                role="user",
+                parts=[llm.parts.AttachmentPart(attachment=attachment)],
+            ),
+            llm.user("describe it"),
+        ]
+
     @pytest.mark.asyncio
     async def test_async_reply(self, async_mock_model):
         async_mock_model.enqueue(["a1"])

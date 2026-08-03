@@ -1639,7 +1639,7 @@ class Response(_BaseResponse):
         explicit ``tool_results=`` list (e.g. results you mutated, or
         synthetic ones for testing) to skip auto-execution.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         self._force()
         # Forward original tools so the next turn can call them again
@@ -1650,21 +1650,10 @@ class Response(_BaseResponse):
             tool_results = self.execute_tool_calls(tools=kwargs.get("tools"))
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                            exception=_format_tool_exception(tr.exception),
-                            attachments=list(tr.attachments or []),
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
+            tool_attachments: list[Attachment] = []
+            for tr in tool_results:
+                tool_attachments.extend(tr.attachments or [])
+            _append_tool_results_to_chain(chain, tool_results, tool_attachments)
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
@@ -2007,7 +1996,7 @@ class AsyncResponse(_BaseResponse):
         self.execute_tool_calls()``. See ``Response.reply`` for the
         ``tool_results=`` semantics.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         if not self._done:
             raise ValueError(
@@ -2019,21 +2008,10 @@ class AsyncResponse(_BaseResponse):
             tool_results = await self.execute_tool_calls(tools=kwargs.get("tools"))
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                            exception=_format_tool_exception(tr.exception),
-                            attachments=list(tr.attachments or []),
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
+            tool_attachments: list[Attachment] = []
+            for tr in tool_results:
+                tool_attachments.extend(tr.attachments or [])
+            _append_tool_results_to_chain(chain, tool_results, tool_attachments)
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
