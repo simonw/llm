@@ -87,18 +87,18 @@ The following features work with OpenAI models:
 
 ## Fast mode and service tiers
 
-Some OpenAI models can process requests at different speeds and prices using the [service tier](https://developers.openai.com/api/docs/guides/fast-mode) API parameter. `gpt-5.6-sol` supports [Fast mode](https://openai.com/api-fast-mode/), which runs up to 2.5x faster than standard processing at a higher per-token price.
+OpenAI models can process requests at different speeds and prices using the `service_tier` API parameter. [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode) runs up to 2.5x faster than standard processing at a higher per-token price, with the biggest speed increase on `gpt-5.6-sol`. [Flex processing](https://developers.openai.com/api/docs/guides/flex-processing) is slower but cheaper. Each tier works with a different subset of models - the Fast and Flex tables on [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) are the definitive list of which models support which tier.
 
-Models that support this expose a `service_tier` option. Use `-o service_tier fast` to enable Fast mode for a prompt:
+All of the OpenAI models supported by LLM expose a `service_tier` option, with the exception of the legacy `gpt-3.5-turbo-instruct` completion model. Use `-o service_tier fast` to enable Fast mode for a prompt:
 
 ```bash
 llm -m gpt-5.6-sol -o service_tier fast 'Fast facts about pelicans'
 ```
 
-The value is passed straight to the API, so other tiers such as `priority` (the older name for `fast`) and `flex` (slower but cheaper processing, on models that support it) work too:
+The value is passed straight to the API, so other tiers such as `priority` (the older name for `fast`) and `flex` work too:
 
 ```bash
-llm -m gpt-5.6-sol -o service_tier flex 'No rush: facts about pelicans'
+llm -m gpt-5.4 -o service_tier flex 'No rush: facts about pelicans'
 ```
 
 The requested tier is recorded in the logged options for the prompt, visible in `llm logs -c --json`. The API response also reports the service tier that actually processed the request - OpenAI may fall back to standard processing if Fast mode capacity is unavailable. Using the {ref}`Python API <python-api>` you can check that with:

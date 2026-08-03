@@ -38,39 +38,82 @@ from llm.utils import (
 def register_models(register):
     # GPT-4o
     register(
-        Chat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
-        AsyncChat("gpt-4o", vision=True, supports_schema=True, supports_tools=True),
+        Chat(
+            "gpt-4o",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
+        AsyncChat(
+            "gpt-4o",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         aliases=("4o",),
     )
     register(
-        Chat("gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True),
+        Chat(
+            "gpt-4o-mini",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         AsyncChat(
-            "gpt-4o-mini", vision=True, supports_schema=True, supports_tools=True
+            "gpt-4o-mini",
+            vision=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
         aliases=("4o-mini",),
     )
     # GPT-4.1
     for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
         register(
-            Chat(model_id, vision=True, supports_schema=True, supports_tools=True),
-            AsyncChat(model_id, vision=True, supports_schema=True, supports_tools=True),
+            Chat(
+                model_id,
+                vision=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncChat(
+                model_id,
+                vision=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
             aliases=(model_id.replace("gpt-", ""),),
         )
     # 3.5 and 4
     register(
-        Chat("gpt-3.5-turbo"), AsyncChat("gpt-3.5-turbo"), aliases=("3.5", "chatgpt")
+        Chat("gpt-3.5-turbo", service_tier=True),
+        AsyncChat("gpt-3.5-turbo", service_tier=True),
+        aliases=("3.5", "chatgpt"),
     )
     register(
-        Chat("gpt-3.5-turbo-16k"),
-        AsyncChat("gpt-3.5-turbo-16k"),
+        Chat("gpt-3.5-turbo-16k", service_tier=True),
+        AsyncChat("gpt-3.5-turbo-16k", service_tier=True),
         aliases=("chatgpt-16k", "3.5-16k"),
     )
-    register(Chat("gpt-4"), AsyncChat("gpt-4"), aliases=("4", "gpt4"))
-    # GPT-4 Turbo models
-    register(Chat("gpt-4-turbo-2024-04-09"), AsyncChat("gpt-4-turbo-2024-04-09"))
     register(
-        Chat("gpt-4-turbo"),
-        AsyncChat("gpt-4-turbo"),
+        Chat("gpt-4", service_tier=True),
+        AsyncChat("gpt-4", service_tier=True),
+        aliases=("4", "gpt4"),
+    )
+    # GPT-4 Turbo models
+    register(
+        Chat("gpt-4-turbo-2024-04-09", service_tier=True),
+        AsyncChat("gpt-4-turbo-2024-04-09", service_tier=True),
+    )
+    register(
+        Chat("gpt-4-turbo", service_tier=True),
+        AsyncChat("gpt-4-turbo", service_tier=True),
         aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
     )
     # o1
@@ -81,6 +124,7 @@ def register_models(register):
                 vision=True,
                 can_stream=False,
                 reasoning=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -89,23 +133,44 @@ def register_models(register):
                 vision=True,
                 can_stream=False,
                 reasoning=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
         )
 
     register(
-        Responses("o3-mini", reasoning=True, supports_schema=True, supports_tools=True),
+        Responses(
+            "o3-mini",
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
+        ),
         AsyncResponses(
-            "o3-mini", reasoning=True, supports_schema=True, supports_tools=True
+            "o3-mini",
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
     )
     register(
         Responses(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3",
+            vision=True,
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
         AsyncResponses(
-            "o3", vision=True, reasoning=True, supports_schema=True, supports_tools=True
+            "o3",
+            vision=True,
+            reasoning=True,
+            service_tier=True,
+            supports_schema=True,
+            supports_tools=True,
         ),
     )
     register(
@@ -113,6 +178,7 @@ def register_models(register):
             "o4-mini",
             vision=True,
             reasoning=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -120,6 +186,7 @@ def register_models(register):
             "o4-mini",
             vision=True,
             reasoning=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -139,6 +206,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -147,6 +215,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -158,6 +227,7 @@ def register_models(register):
             vision=True,
             reasoning=True,
             verbosity=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -166,6 +236,7 @@ def register_models(register):
             vision=True,
             reasoning=True,
             verbosity=True,
+            service_tier=True,
             supports_schema=True,
             supports_tools=True,
         ),
@@ -178,6 +249,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -186,6 +258,7 @@ def register_models(register):
                 vision=True,
                 reasoning=True,
                 verbosity=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -208,6 +281,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -217,6 +291,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -234,6 +309,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -243,6 +319,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -250,8 +327,6 @@ def register_models(register):
 
     # GPT-5.6
     for model_id in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
-        # gpt-5.6-sol supports service_tier for Fast mode
-        service_tier = model_id == "gpt-5.6-sol"
         register(
             Responses(
                 model_id,
@@ -259,7 +334,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
-                service_tier=service_tier,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),
@@ -269,7 +344,7 @@ def register_models(register):
                 reasoning=True,
                 verbosity=True,
                 image_detail_original=True,
-                service_tier=service_tier,
+                service_tier=True,
                 supports_schema=True,
                 supports_tools=True,
             ),

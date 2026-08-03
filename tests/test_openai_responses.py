@@ -427,12 +427,15 @@ def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
     "model_id,expected",
     [
         ("gpt-5.6-sol", True),
-        ("gpt-5.6-terra", False),
-        ("gpt-5.6-luna", False),
-        ("gpt-5.5", False),
+        ("gpt-5.6-terra", True),
+        ("gpt-5.6-luna", True),
+        ("gpt-5.5", True),
+        ("gpt-4o", True),
+        # The legacy /v1/completions endpoint does not accept service_tier
+        ("gpt-3.5-turbo-instruct", False),
     ],
 )
-def test_service_tier_option_only_on_supported_models(model_id, expected):
+def test_service_tier_option_on_models(model_id, expected):
     model = llm.get_model(model_id)
     assert ("service_tier" in model.Options.model_fields) == expected
 
