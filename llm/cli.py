@@ -1373,19 +1373,20 @@ def load_conversation(
     db = sqlite_utils.Database(log_path)
     migrate(db)
     if conversation_id is None:
-        # Most recent conversation from either generation of tables -
-        # thread ids are conversation ids, so the union dedupes rows
-        # from the dual-write era.
-        matches = list(db.query("""
-                select id from (
-                    select id from threads
-                    union
-                    select id from conversations
+        # Find the thread/conversation whose most recent turn or response has
+        # the highest ID. Ordering by the thread's own creation ID would return
+        # the most recently *created* thread, not the most recently *used* one —
+        # which is wrong after `llm --continue --cid <old-id>` adds a new turn
+        # to an older thread while a newer thread exists.
+        try:
+            conversation_id = next(db.query("""
+                select conversation_id from (
+                    select thread_id as conversation_id, id from turns
+                    union all
+                    select conversation_id, id from responses
                 ) order by id desc limit 1
-                """))
-        if matches:
-            conversation_id = matches[0]["id"]
-        else:
+            """))["conversation_id"]
+        except StopIteration:
             return None
     try:
         row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
