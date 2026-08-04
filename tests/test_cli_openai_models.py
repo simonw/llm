@@ -271,6 +271,64 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
+def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_web_search_cli",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_web_search_cli",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Search complete",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'WebSearch(allowed_domains=["openai.com"], search_context_size="low", include_sources=true)',
+            "--no-stream",
+            "--no-log",
+            "--key",
+            "x",
+            "Search for OpenAI news",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "Search complete\n"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {
+            "type": "web_search",
+            "filters": {"allowed_domains": ["openai.com"]},
+            "search_context_size": "low",
+        }
+    ]
+    assert "web_search_call.action.sources" in request_body["include"]
+
+
 def test_tools_list_for_model_includes_server_side_tools():
     runner = CliRunner()
     result = runner.invoke(cli, ["tools", "-m", "gpt-5.6-luna"])
@@ -281,6 +339,8 @@ def test_tools_list_for_model_includes_server_side_tools():
         in result.output
     )
     assert "CodeInterpreter(" in result.output
+    assert "WebSearch(" in result.output
+    assert "allowed_domains:" in result.output
     assert "memory_limit:" in result.output
     assert "Literal['1g', '4g', '16g', '64g']" in result.output
     assert "Run Python in an OpenAI-managed container." in result.output
@@ -292,13 +352,14 @@ def test_tools_list_for_model_includes_server_side_tools():
     assert json_result.exit_code == 0
     server_side_tools = json.loads(json_result.output)["server_side_tools"]
     assert [tool["name"] for tool in server_side_tools] == [
+        "WebSearch",
         "CodeInterpreter",
         "ServerSideTool",
     ]
     assert all(tool["server_side"] is True for tool in server_side_tools)
-    assert server_side_tools[0]["signature"].startswith("(container:")
+    assert server_side_tools[0]["signature"].startswith("(allowed_domains:")
     assert server_side_tools[0]["description"].startswith(
-        "Run Python in an OpenAI-managed container."
+        "Search the web using OpenAI's hosted search tool."
     )
 
 

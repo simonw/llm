@@ -7,7 +7,7 @@ import pytest
 from pytest_httpx import IteratorStream
 
 import llm
-from llm.default_plugins.openai_models import CodeInterpreter, Responses
+from llm.default_plugins.openai_models import CodeInterpreter, Responses, WebSearch
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
@@ -86,6 +86,158 @@ def test_code_interpreter_prepare_request_is_additive_and_idempotent():
             "code_interpreter_call.outputs",
         ]
     }
+
+
+@pytest.mark.parametrize(
+    ("tool", "expected"),
+    (
+        (WebSearch(), {"type": "web_search"}),
+        (
+            WebSearch(
+                allowed_domains=["openai.com"],
+                blocked_domains=["example.com"],
+                user_location={"country": "GB", "city": "London"},
+                search_context_size="high",
+                external_web_access=False,
+                return_token_budget="unlimited",
+                search_content_types=["image", "text"],
+                image_settings={"max_results": 3, "caption": True},
+            ),
+            {
+                "type": "web_search",
+                "filters": {
+                    "allowed_domains": ["openai.com"],
+                    "blocked_domains": ["example.com"],
+                },
+                "user_location": {
+                    "type": "approximate",
+                    "country": "GB",
+                    "city": "London",
+                },
+                "search_context_size": "high",
+                "external_web_access": False,
+                "return_token_budget": "unlimited",
+                "search_content_types": ["image", "text"],
+                "image_settings": {"max_results": 3, "caption": True},
+            },
+        ),
+    ),
+)
+def test_web_search_tool_spec(tool, expected):
+    assert tool.tool_spec(llm.get_model("gpt-5.6-luna")) == expected
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    (
+        ({"search_context_size": "huge"}, "search_context_size"),
+        ({"return_token_budget": "lots"}, "return_token_budget"),
+        ({"search_content_types": ["video"]}, "search_content_types"),
+        ({"allowed_domains": ["https://openai.com"]}, "scheme"),
+        ({"allowed_domains": [f"example{i}.com" for i in range(101)]}, "100"),
+        ({"user_location": {"type": "exact"}}, "approximate"),
+        ({"external_web_access": "no"}, "external_web_access"),
+        ({"image_settings": {"max_results": 0}}, "max_results"),
+        ({"image_settings": {"caption": "yes"}}, "caption"),
+    ),
+)
+def test_web_search_validates_configuration(kwargs, error):
+    with pytest.raises((TypeError, ValueError), match=error):
+        WebSearch(**kwargs)
+
+
+def test_web_search_prepare_request_is_additive_and_idempotent():
+    tool = WebSearch(include_sources=True, include_results=True)
+    kwargs = {"include": ["reasoning.encrypted_content"]}
+
+    tool.prepare_request(llm.get_model("gpt-5.6-luna"), kwargs)
+    tool.prepare_request(llm.get_model("gpt-5.6-luna"), kwargs)
+
+    assert kwargs == {
+        "include": [
+            "reasoning.encrypted_content",
+            "web_search_call.action.sources",
+            "web_search_call.results",
+        ]
+    }
+    default_kwargs = {}
+    WebSearch().prepare_request(llm.get_model("gpt-5.6-luna"), default_kwargs)
+    assert default_kwargs == {}
+
+
+def test_responses_web_search_request_and_result_capture(httpx_mock):
+    sources = [
+        {"type": "url", "url": "https://openai.com/news/"},
+        {"type": "url", "url": "https://example.com/report"},
+    ]
+    results = [
+        {
+            "type": "image_result",
+            "image_url": "https://example.com/image.jpg",
+            "source_website_url": "https://example.com/report",
+            "thumbnail_url": "https://example.com/thumb.jpg",
+            "caption": "An example image",
+        }
+    ]
+    response_json = _text_response_json(text="A cited answer")
+    response_json["output"].insert(
+        0,
+        {
+            "type": "web_search_call",
+            "id": "ws_123",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "OpenAI news",
+                "queries": ["OpenAI news"],
+                "sources": sources,
+            },
+            "results": results,
+        },
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json=response_json,
+        headers={"Content-Type": "application/json"},
+    )
+
+    response = llm.get_model("gpt-5.6-luna").prompt(
+        "Search for OpenAI news",
+        tools=[
+            WebSearch(
+                allowed_domains=["openai.com"],
+                include_sources=True,
+                include_results=True,
+            )
+        ],
+        stream=False,
+        key="test",
+    )
+
+    assert response.text() == "A cited answer"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {
+            "type": "web_search",
+            "filters": {"allowed_domains": ["openai.com"]},
+        }
+    ]
+    assert request_body["include"] == [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources",
+        "web_search_call.results",
+    ]
+    message = response.messages()[0]
+    assert [type(part).__name__ for part in message.parts] == [
+        "ToolCallPart",
+        "ToolResultPart",
+        "TextPart",
+    ]
+    assert message.parts[0].server_executed
+    assert message.parts[0].arguments["sources"] == sources
+    assert message.parts[1].server_executed
+    assert json.loads(message.parts[1].output) == results
 
 
 def test_server_side_prepare_request_runs_in_list_order_after_baseline():
@@ -179,16 +331,20 @@ def test_responses_raw_server_tool_passthrough_on_custom_endpoint(httpx_mock):
     assert request_body["tools"] == [raw_spec]
 
 
-def test_code_interpreter_rejected_by_chat_and_chat_fallback():
+@pytest.mark.parametrize("tool", (CodeInterpreter(), WebSearch()))
+def test_server_side_tool_rejected_by_chat_and_chat_fallback(tool):
     from llm.default_plugins.openai_models import Chat
 
     chat = Chat("chat-model", supports_tools=True)
     with pytest.raises(ValueError, match="llm tools -m chat-model"):
-        chat.prompt("Calculate", tools=[CodeInterpreter()])
+        chat.prompt("Use a server-side tool", tools=[tool])
 
     responses_model = llm.get_model("gpt-5.6-luna")
     response = responses_model.prompt(
-        "Calculate", tools=[CodeInterpreter()], chat_completions=True, key="test"
+        "Use a server-side tool",
+        tools=[tool],
+        chat_completions=True,
+        key="test",
     )
     with pytest.raises(ValueError, match="llm tools -m gpt-5.6-luna"):
         response.text()
@@ -221,6 +377,32 @@ async def test_async_responses_code_interpreter_request(httpx_mock):
     assert request_body["include"] == [
         "reasoning.encrypted_content",
         "code_interpreter_call.outputs",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_responses_web_search_request(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json=_text_response_json(),
+        headers={"Content-Type": "application/json"},
+    )
+    response = llm.get_async_model("gpt-5.6-luna").prompt(
+        "Search",
+        tools=[WebSearch(external_web_access=False, include_sources=True)],
+        stream=False,
+        key="test",
+    )
+
+    assert await response.text() == "ok"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {"type": "web_search", "external_web_access": False}
+    ]
+    assert request_body["include"] == [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources",
     ]
 
 

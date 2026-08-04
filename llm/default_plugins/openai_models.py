@@ -1605,6 +1605,151 @@ def _responses_attachment(attachment, image_detail=None):
     return {"type": "input_image", "image_url": url}
 
 
+class WebSearch(llm.ServerSideTool):
+    """Search the web using OpenAI's hosted search tool.
+
+    Configure domain filters, approximate location, result context, live web
+    access and image search through constructor arguments. Set
+    ``include_sources`` to retain every consulted URL or ``include_results``
+    to retain raw results such as image search results.
+    """
+
+    name = "web_search"
+    _search_context_sizes = frozenset({"low", "medium", "high"})
+    _return_token_budgets = frozenset({"default", "unlimited"})
+    _search_content_types = frozenset({"text", "image"})
+
+    def __init__(
+        self,
+        allowed_domains: list[str] | None = None,
+        blocked_domains: list[str] | None = None,
+        user_location: dict | None = None,
+        search_context_size: Literal["low", "medium", "high"] | None = None,
+        external_web_access: bool | None = None,
+        return_token_budget: Literal["default", "unlimited"] | None = None,
+        search_content_types: list[Literal["text", "image"]] | None = None,
+        image_settings: dict | None = None,
+        include_sources: bool = False,
+        include_results: bool = False,
+    ):
+        super().__init__()
+        self.allowed_domains = self._validate_domains(
+            "allowed_domains", allowed_domains
+        )
+        self.blocked_domains = self._validate_domains(
+            "blocked_domains", blocked_domains
+        )
+        if (
+            search_context_size is not None
+            and search_context_size not in self._search_context_sizes
+        ):
+            raise ValueError("search_context_size must be one of: low, medium or high")
+        if external_web_access is not None and not isinstance(
+            external_web_access, bool
+        ):
+            raise TypeError("external_web_access must be a boolean")
+        if (
+            return_token_budget is not None
+            and return_token_budget not in self._return_token_budgets
+        ):
+            raise ValueError("return_token_budget must be default or unlimited")
+        if search_content_types is not None:
+            if not isinstance(search_content_types, list):
+                raise TypeError("search_content_types must be a list")
+            invalid_content_types = set(search_content_types).difference(
+                self._search_content_types
+            )
+            if invalid_content_types:
+                raise ValueError("search_content_types must contain text and/or image")
+        if user_location is not None:
+            if not isinstance(user_location, dict):
+                raise TypeError("user_location must be a dictionary")
+            user_location = dict(user_location)
+            user_location.setdefault("type", "approximate")
+            if user_location["type"] != "approximate":
+                raise ValueError("user_location type must be approximate")
+        if image_settings is not None:
+            if not isinstance(image_settings, dict):
+                raise TypeError("image_settings must be a dictionary")
+            image_settings = dict(image_settings)
+            max_results = image_settings.get("max_results")
+            if max_results is not None and (
+                isinstance(max_results, bool)
+                or not isinstance(max_results, int)
+                or max_results < 1
+            ):
+                raise ValueError(
+                    "image_settings max_results must be a positive integer"
+                )
+            caption = image_settings.get("caption")
+            if caption is not None and not isinstance(caption, bool):
+                raise TypeError("image_settings caption must be a boolean")
+        if not isinstance(include_sources, bool):
+            raise TypeError("include_sources must be a boolean")
+        if not isinstance(include_results, bool):
+            raise TypeError("include_results must be a boolean")
+        self.user_location = user_location
+        self.search_context_size = search_context_size
+        self.external_web_access = external_web_access
+        self.return_token_budget = return_token_budget
+        self.search_content_types = (
+            list(search_content_types) if search_content_types is not None else None
+        )
+        self.image_settings = image_settings
+        self.include_sources = include_sources
+        self.include_results = include_results
+
+    @staticmethod
+    def _validate_domains(name, domains):
+        if domains is None:
+            return None
+        if not isinstance(domains, list):
+            raise TypeError(f"{name} must be a list")
+        if len(domains) > 100:
+            raise ValueError(f"{name} cannot contain more than 100 domains")
+        for domain in domains:
+            if not isinstance(domain, str) or not domain:
+                raise TypeError(f"{name} entries must be non-empty strings")
+            if domain.lower().startswith(("http://", "https://")):
+                raise ValueError(f"{name} entries must omit the URL scheme")
+        return list(domains)
+
+    def tool_spec(self, model):
+        spec = {"type": "web_search"}
+        if self.allowed_domains is not None or self.blocked_domains is not None:
+            filters = {}
+            if self.allowed_domains is not None:
+                filters["allowed_domains"] = list(self.allowed_domains)
+            if self.blocked_domains is not None:
+                filters["blocked_domains"] = list(self.blocked_domains)
+            spec["filters"] = filters
+        for key in (
+            "user_location",
+            "search_context_size",
+            "external_web_access",
+            "return_token_budget",
+            "search_content_types",
+            "image_settings",
+        ):
+            value = getattr(self, key)
+            if value is not None:
+                if isinstance(value, dict):
+                    value = dict(value)
+                elif isinstance(value, list):
+                    value = list(value)
+                spec[key] = value
+        return spec
+
+    def prepare_request(self, model, kwargs):
+        if not self.include_sources and not self.include_results:
+            return
+        include = kwargs.setdefault("include", [])
+        if self.include_sources and "web_search_call.action.sources" not in include:
+            include.append("web_search_call.action.sources")
+        if self.include_results and "web_search_call.results" not in include:
+            include.append("web_search_call.results")
+
+
 class CodeInterpreter(llm.ServerSideTool):
     """Run Python in an OpenAI-managed container.
 
@@ -1659,7 +1804,7 @@ class _SharedResponses(_Shared):
 
     @property
     def supported_server_side_tools(self):
-        return (CodeInterpreter, llm.ServerSideTool)
+        return (WebSearch, CodeInterpreter, llm.ServerSideTool)
 
     # Recurring boilerplate in Responses API payloads. Same contract as
     # _Shared.json_replacements, which this replaces for Responses
@@ -2085,13 +2230,19 @@ class _SharedResponses(_Shared):
                     message_index=message_index,
                 )
             )
-            # Search results are not included in the call item - they
-            # surface as citations in the following message - so the
-            # result records completion status only.
+            results = getattr(item, "results", None) or []
+            results = [
+                result.model_dump() if hasattr(result, "model_dump") else result
+                for result in results
+            ]
             events.append(
                 StreamEvent(
                     type="tool_result",
-                    chunk=getattr(item, "status", None) or "completed",
+                    chunk=(
+                        json.dumps(results)
+                        if results
+                        else (getattr(item, "status", None) or "completed")
+                    ),
                     tool_call_id=item_id,
                     server_executed=True,
                     tool_name="web_search",

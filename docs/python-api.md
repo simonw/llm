@@ -316,7 +316,7 @@ def generate_image(prompt: str) -> llm.ToolOutput:
 
 Server-side tools are executed by the model provider during a response. Pass them in the same `tools=` list as function tools, but do not call `execute_tool_calls()` for them: their calls and results arrive in `response.messages()` with `server_executed=True` and are excluded from the local execution loop.
 
-For example, OpenAI Responses models support {ref}`Code Interpreter <openai-models-code-interpreter>`:
+For example, OpenAI Responses models support {ref}`Web Search <openai-models-web-search>` and {ref}`Code Interpreter <openai-models-code-interpreter>`:
 
 ```python
 import llm

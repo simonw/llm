@@ -83,6 +83,56 @@ The following features work with OpenAI models:
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
+(openai-models-web-search)=
+
+## Web Search
+
+Models that use the OpenAI Responses API can search the web using the `WebSearch` server-side tool:
+
+```bash
+llm -m gpt-5.6-luna -T WebSearch 'Search the web for a positive news story from today'
+```
+
+The model decides whether to search based on the prompt. The Python API accepts the same tool:
+
+```python
+import llm
+from llm.default_plugins.openai_models import WebSearch
+
+response = llm.get_model("gpt-5.6-luna").prompt(
+    "Search the web for a positive news story from today",
+    tools=[WebSearch(include_sources=True)],
+)
+print(response.text())
+```
+
+Domain filters accept up to 100 allowed domains and up to 100 blocked domains. Omit `http://` or `https://`; each entry also covers its subdomains:
+
+```python
+WebSearch(
+    allowed_domains=["openai.com", "python.org"],
+    blocked_domains=["example.com"],
+)
+```
+
+Use `search_context_size="low"`, `"medium"` or `"high"` to control how much search-result context is made available to the model. Set `external_web_access=False` for cached/indexed results only. `return_token_budget="unlimited"` removes the standard returned-token limit for longer GPT-5 reasoning searches and can increase latency and cost.
+
+Approximate geographic context can include a two-letter country code, city, region and IANA timezone. LLM adds the required `"type": "approximate"` field when it is omitted:
+
+```python
+WebSearch(
+    user_location={
+        "country": "GB",
+        "city": "London",
+        "timezone": "Europe/London",
+    }
+)
+```
+
+`include_sources=True` requests every URL consulted during search and records them in the server-executed tool call arguments. For image search, use `search_content_types=["image", "text"]` and `image_settings={"max_results": 3, "caption": True}`. Set `include_results=True` to request and record the raw image result objects in the corresponding server-executed tool result.
+
+See [OpenAI's Web Search documentation](https://developers.openai.com/api/docs/guides/tools-web-search) for model behavior, current limitations, citations and pricing details.
+
 (openai-models-code-interpreter)=
 
 ## Code Interpreter
