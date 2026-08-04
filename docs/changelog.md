@@ -35,6 +35,9 @@ These APIs were introduced in {ref}`0.32a0 <v0_32_a0>`, which has a more detaile
 - Async sibling calls finish before a pause or callback failure is propagated, avoiding orphaned work. Missing async tools now produce the same error results as synchronous execution.
 - Conversations that use configured toolboxes can be continued with `llm -c` or `llm chat -c` without repeating the toolbox configuration.
 - `llm tools` now shows constructor signatures and docstrings for dynamic toolboxes. Passing a toolbox specification instantiates it and lists its runtime-generated tools, while `llm tools --json` identifies dynamic toolboxes with a `"dynamic"` boolean. [#1580](https://github.com/simonw/llm/issues/1580)
+- Models can now declare the server-side tools they support using the instance-level `supported_server_side_tools` property and the new `llm.ServerSideTool` base class. OpenAI Responses API models provide `WebSearch` and `CodeInterpreter`, available from the CLI using `-T WebSearch` or `-T 'CodeInterpreter(memory_limit="4g")'`. Server-executed calls and results are captured as structured message parts, and `llm -c` restores configured server-side tools for continued conversations. [#1592](https://github.com/simonw/llm/issues/1592), [#1593](https://github.com/simonw/llm/pull/1593)
+- `llm tools -m MODEL` lists the server-side tools supported by that model. `llm models --json` returns model aliases, capability flags, attachment types and server-side tools, with option schemas included when combined with `--options`.
+- OpenAI-compatible Responses endpoints can use provider-specific server-side tools with `ServerSideTool(spec={...})`, including OpenRouter's web search implementation.
 
 See {ref}`0.32a3 <v0_32_a3>` for more detail on pausing, resuming and inspecting tool calls.
 
