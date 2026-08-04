@@ -532,6 +532,7 @@ class LogStore:
             # toolbox-derived tool instead has an implementation method
             # bound to its configured instance. Record either kind as a
             # reference into the shared tool_instances table.
+            instance: Any | None
             if isinstance(tool, ServerSideTool):
                 instance = tool
                 instance_name = tool.__class__.__name__
