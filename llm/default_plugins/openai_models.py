@@ -1740,6 +1740,12 @@ class _SharedResponses(_Shared):
                         )
                     )
                 elif isinstance(part, ToolCallPart):
+                    if part.server_executed:
+                        # Server-side tool calls (web_search,
+                        # code_interpreter) ran inside OpenAI's
+                        # infrastructure - they must not be replayed as
+                        # client function_call items.
+                        continue
                     tool_call_items.append(
                         {
                             "type": "function_call",
@@ -1749,6 +1755,8 @@ class _SharedResponses(_Shared):
                         }
                     )
                 elif isinstance(part, ToolResultPart):
+                    if part.server_executed:
+                        continue
                     tool_result_items.append(
                         {
                             "type": "function_call_output",
@@ -1963,9 +1971,162 @@ class _SharedResponses(_Shared):
                         chunk="",
                         part_index=prior.part_index,
                         provider_metadata={"openai": meta},
+                        message_index=prior.message_index,
                     )
                 )
         return events
+
+    def _server_tool_events(self, item, message_index):
+        """StreamEvents for a server-side tool call output item
+        (web_search_call / code_interpreter_call), or [] for other
+        item types. The call and its result both carry
+        ``server_executed=True`` so they are recorded in the message
+        parts without entering the locally-executable tool call list.
+        """
+        item_type = getattr(item, "type", None)
+        item_id = getattr(item, "id", None)
+        events: list[StreamEvent] = []
+        if item_type == "web_search_call":
+            action = getattr(item, "action", None)
+            if hasattr(action, "model_dump"):
+                action = action.model_dump()
+            events.append(
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="web_search",
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    message_index=message_index,
+                )
+            )
+            events.append(
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk=json.dumps(action or {}),
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    message_index=message_index,
+                )
+            )
+            # Search results are not included in the call item - they
+            # surface as citations in the following message - so the
+            # result records completion status only.
+            events.append(
+                StreamEvent(
+                    type="tool_result",
+                    chunk=getattr(item, "status", None) or "completed",
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    tool_name="web_search",
+                    message_index=message_index,
+                )
+            )
+        elif item_type == "code_interpreter_call":
+            code = getattr(item, "code", None) or ""
+            events.append(
+                StreamEvent(
+                    type="tool_call_name",
+                    chunk="code_interpreter",
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    message_index=message_index,
+                )
+            )
+            events.append(
+                StreamEvent(
+                    type="tool_call_args",
+                    chunk=json.dumps({"code": code}),
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    message_index=message_index,
+                )
+            )
+            output_bits = []
+            for output in getattr(item, "outputs", None) or []:
+                if hasattr(output, "model_dump"):
+                    output = output.model_dump()
+                if isinstance(output, dict):
+                    text = output.get("logs") or output.get("url")
+                    if text:
+                        output_bits.append(text)
+            events.append(
+                StreamEvent(
+                    type="tool_result",
+                    chunk="\n".join(output_bits)
+                    or (getattr(item, "status", None) or "completed"),
+                    tool_call_id=item_id,
+                    server_executed=True,
+                    tool_name="code_interpreter",
+                    message_index=message_index,
+                )
+            )
+        return events
+
+    def _non_streaming_output_events(self, output, response):
+        """Translate a non-streaming Responses ``output`` item list into
+        StreamEvents. Returns ``(events, had_reasoning)``.
+
+        Each ``message`` item after the first starts a new
+        ``message_index``, so server-side tool execution that
+        interleaves multiple message items assembles into multiple
+        assistant Messages. Items between two message items (tool
+        calls, reasoning) group with the preceding message.
+        """
+        events: list[StreamEvent] = []
+        had_reasoning = False
+        message_index = 0
+        seen_message = False
+        for item in output:
+            if item.type == "message" and seen_message:
+                message_index += 1
+            if item.type == "reasoning":
+                had_reasoning = True
+                event = self._reasoning_event(item)
+                event.message_index = message_index
+                events.append(event)
+            elif item.type == "function_call":
+                try:
+                    args = json.loads(item.arguments) if item.arguments else {}
+                except json.JSONDecodeError:
+                    args = {"_raw": item.arguments}
+                response.add_tool_call(
+                    llm.ToolCall(
+                        tool_call_id=item.call_id,
+                        name=item.name,
+                        arguments=args,
+                    )
+                )
+                events.append(
+                    StreamEvent(
+                        type="tool_call_name",
+                        chunk=item.name or "",
+                        tool_call_id=item.call_id,
+                        message_index=message_index,
+                    )
+                )
+                events.append(
+                    StreamEvent(
+                        type="tool_call_args",
+                        chunk=item.arguments or "",
+                        tool_call_id=item.call_id,
+                        message_index=message_index,
+                    )
+                )
+            elif item.type == "message":
+                seen_message = True
+                for content in item.content or []:
+                    ctype = getattr(content, "type", None)
+                    if ctype == "output_text" and content.text:
+                        events.append(
+                            StreamEvent(
+                                type="text",
+                                chunk=content.text,
+                                message_index=message_index,
+                            )
+                        )
+            else:
+                events.extend(self._server_tool_events(item, message_index))
+        return events, had_reasoning
 
 
 class Responses(_SharedResponses, KeyModel):
@@ -2075,11 +2236,17 @@ class Responses(_SharedResponses, KeyModel):
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             reasoning_done_events: dict[str, StreamEvent] = {}
+            message_index = 0
+            seen_message = False
             for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
                     item = event.item
-                    if item.type == "function_call":
+                    if item.type == "message":
+                        if seen_message:
+                            message_index += 1
+                        seen_message = True
+                    elif item.type == "function_call":
                         tool_call_meta[item.id] = {
                             "id": item.id,
                             "call_id": item.call_id,
@@ -2089,9 +2256,14 @@ class Responses(_SharedResponses, KeyModel):
                             type="tool_call_name",
                             chunk=item.name or "",
                             tool_call_id=item.call_id,
+                            message_index=message_index,
                         )
                 elif etype == "response.output_text.delta":
-                    yield StreamEvent(type="text", chunk=event.delta or "")
+                    yield StreamEvent(
+                        type="text",
+                        chunk=event.delta or "",
+                        message_index=message_index,
+                    )
                 elif etype == "response.function_call_arguments.delta":
                     item_id = getattr(event, "item_id", None)
                     meta = tool_call_meta.get(item_id) if item_id else None
@@ -2100,6 +2272,7 @@ class Responses(_SharedResponses, KeyModel):
                         type="tool_call_args",
                         chunk=event.delta or "",
                         tool_call_id=call_id,
+                        message_index=message_index,
                     )
                 elif etype in (
                     "response.reasoning_summary_text.delta",
@@ -2108,7 +2281,11 @@ class Responses(_SharedResponses, KeyModel):
                     item_id = getattr(event, "item_id", None)
                     if item_id:
                         reasoning_items_with_streamed_text.add(item_id)
-                    yield StreamEvent(type="reasoning", chunk=event.delta or "")
+                    yield StreamEvent(
+                        type="reasoning",
+                        chunk=event.delta or "",
+                        message_index=message_index,
+                    )
                 elif etype in (
                     "response.reasoning_summary_text.done",
                     "response.reasoning_text.done",
@@ -2119,7 +2296,11 @@ class Responses(_SharedResponses, KeyModel):
                         if text:
                             if item_id:
                                 reasoning_items_with_streamed_text.add(item_id)
-                            yield StreamEvent(type="reasoning", chunk=text)
+                            yield StreamEvent(
+                                type="reasoning",
+                                chunk=text,
+                                message_index=message_index,
+                            )
                 elif etype == "response.output_item.done":
                     item = event.item
                     if item.type == "reasoning":
@@ -2131,6 +2312,7 @@ class Responses(_SharedResponses, KeyModel):
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        reasoning_event.message_index = message_index
                         if item_id:
                             # Retained so the refresh after
                             # response.completed can target the part
@@ -2149,6 +2331,8 @@ class Responses(_SharedResponses, KeyModel):
                                 arguments=args,
                             )
                         )
+                    else:
+                        yield from self._server_tool_events(item, message_index)
                 elif etype == "response.completed":
                     final_response_dict = event.response.model_dump()
                     if final_response_dict.get("usage"):
@@ -2168,37 +2352,10 @@ class Responses(_SharedResponses, KeyModel):
             dumped = completion.model_dump()
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
-            for item in completion.output:
-                if item.type == "reasoning":
-                    had_reasoning = True
-                    yield self._reasoning_event(item)
-                elif item.type == "function_call":
-                    try:
-                        args = json.loads(item.arguments) if item.arguments else {}
-                    except json.JSONDecodeError:
-                        args = {"_raw": item.arguments}
-                    response.add_tool_call(
-                        llm.ToolCall(
-                            tool_call_id=item.call_id,
-                            name=item.name,
-                            arguments=args,
-                        )
-                    )
-                    yield StreamEvent(
-                        type="tool_call_name",
-                        chunk=item.name or "",
-                        tool_call_id=item.call_id,
-                    )
-                    yield StreamEvent(
-                        type="tool_call_args",
-                        chunk=item.arguments or "",
-                        tool_call_id=item.call_id,
-                    )
-                elif item.type == "message":
-                    for content in item.content or []:
-                        ctype = getattr(content, "type", None)
-                        if ctype == "output_text" and content.text:
-                            yield StreamEvent(type="text", chunk=content.text)
+            events, had_reasoning = self._non_streaming_output_events(
+                completion.output, response
+            )
+            yield from events
 
         self._set_usage_responses(response, usage)
         # Fallback: usage said reasoning happened but the API gave us no
@@ -2323,11 +2480,17 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             reasoning_done_events: dict[str, StreamEvent] = {}
+            message_index = 0
+            seen_message = False
             async for event in stream_obj:
                 etype = getattr(event, "type", None)
                 if etype == "response.output_item.added":
                     item = event.item
-                    if item.type == "function_call":
+                    if item.type == "message":
+                        if seen_message:
+                            message_index += 1
+                        seen_message = True
+                    elif item.type == "function_call":
                         tool_call_meta[item.id] = {
                             "id": item.id,
                             "call_id": item.call_id,
@@ -2337,9 +2500,14 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                             type="tool_call_name",
                             chunk=item.name or "",
                             tool_call_id=item.call_id,
+                            message_index=message_index,
                         )
                 elif etype == "response.output_text.delta":
-                    yield StreamEvent(type="text", chunk=event.delta or "")
+                    yield StreamEvent(
+                        type="text",
+                        chunk=event.delta or "",
+                        message_index=message_index,
+                    )
                 elif etype == "response.function_call_arguments.delta":
                     item_id = getattr(event, "item_id", None)
                     meta = tool_call_meta.get(item_id) if item_id else None
@@ -2348,6 +2516,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         type="tool_call_args",
                         chunk=event.delta or "",
                         tool_call_id=call_id,
+                        message_index=message_index,
                     )
                 elif etype in (
                     "response.reasoning_summary_text.delta",
@@ -2356,7 +2525,11 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                     item_id = getattr(event, "item_id", None)
                     if item_id:
                         reasoning_items_with_streamed_text.add(item_id)
-                    yield StreamEvent(type="reasoning", chunk=event.delta or "")
+                    yield StreamEvent(
+                        type="reasoning",
+                        chunk=event.delta or "",
+                        message_index=message_index,
+                    )
                 elif etype in (
                     "response.reasoning_summary_text.done",
                     "response.reasoning_text.done",
@@ -2367,7 +2540,11 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         if text:
                             if item_id:
                                 reasoning_items_with_streamed_text.add(item_id)
-                            yield StreamEvent(type="reasoning", chunk=text)
+                            yield StreamEvent(
+                                type="reasoning",
+                                chunk=text,
+                                message_index=message_index,
+                            )
                 elif etype == "response.output_item.done":
                     item = event.item
                     if item.type == "reasoning":
@@ -2379,6 +2556,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                                 item_id not in reasoning_items_with_streamed_text
                             ),
                         )
+                        reasoning_event.message_index = message_index
                         if item_id:
                             # Retained so the refresh after
                             # response.completed can target the part
@@ -2397,6 +2575,11 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                                 arguments=args,
                             )
                         )
+                    else:
+                        for server_event in self._server_tool_events(
+                            item, message_index
+                        ):
+                            yield server_event
                 elif etype == "response.completed":
                     final_response_dict = event.response.model_dump()
                     if final_response_dict.get("usage"):
@@ -2417,37 +2600,11 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             dumped = completion.model_dump()
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
-            for item in completion.output:
-                if item.type == "reasoning":
-                    had_reasoning = True
-                    yield self._reasoning_event(item)
-                elif item.type == "function_call":
-                    try:
-                        args = json.loads(item.arguments) if item.arguments else {}
-                    except json.JSONDecodeError:
-                        args = {"_raw": item.arguments}
-                    response.add_tool_call(
-                        llm.ToolCall(
-                            tool_call_id=item.call_id,
-                            name=item.name,
-                            arguments=args,
-                        )
-                    )
-                    yield StreamEvent(
-                        type="tool_call_name",
-                        chunk=item.name or "",
-                        tool_call_id=item.call_id,
-                    )
-                    yield StreamEvent(
-                        type="tool_call_args",
-                        chunk=item.arguments or "",
-                        tool_call_id=item.call_id,
-                    )
-                elif item.type == "message":
-                    for content in item.content or []:
-                        ctype = getattr(content, "type", None)
-                        if ctype == "output_text" and content.text:
-                            yield StreamEvent(type="text", chunk=content.text)
+            events, had_reasoning = self._non_streaming_output_events(
+                completion.output, response
+            )
+            for event in events:
+                yield event
 
         self._set_usage_responses(response, usage)
         if (

@@ -1049,6 +1049,7 @@ class _BaseResponse:
         self._auto_last_index: int | None = None
         self._auto_last_family: str | None = None
         self._auto_tool_id_to_index: dict[str, int] = {}
+        self._auto_last_message_index: int = 0
         self._done = False
         self._tool_calls: list[ToolCall] = []
         self.response_json: dict[str, Any] | None = None
@@ -1081,10 +1082,10 @@ class _BaseResponse:
         loaded = getattr(self, "_loaded_messages", None)
         if loaded is not None:
             return list(loaded)
-        parts = self._build_parts()
-        if not parts:
-            return []
-        return [Message(role="assistant", parts=parts)]
+        return [
+            Message(role="assistant", parts=parts)
+            for parts in self._build_message_parts()
+        ]
 
     @staticmethod
     def _event_family(event_type: str) -> str:
@@ -1102,6 +1103,13 @@ class _BaseResponse:
         None resolutions avoid collisions.
         """
         fam = self._event_family(event.type)
+
+        # A message_index change always starts a fresh part - text on
+        # either side of a message boundary must not concatenate.
+        if event.message_index != self._auto_last_message_index:
+            self._auto_last_family = None
+            self._auto_last_index = None
+        self._auto_last_message_index = event.message_index
 
         if event.part_index is not None:
             self._auto_index_max = max(self._auto_index_max, event.part_index)
@@ -1191,7 +1199,20 @@ class _BaseResponse:
         return chunk
 
     def _build_parts(self) -> list[Any]:
-        """Assemble Part objects from the accumulated stream events.
+        """All Parts from the accumulated stream events, flattened
+        across message boundaries. See ``_build_message_parts``."""
+        return [part for parts in self._build_message_parts() for part in parts]
+
+    def _build_message_parts(self) -> list[list[Any]]:
+        """Assemble Part objects from the accumulated stream events,
+        grouped into one parts-list per assistant message.
+
+        Most providers emit a single assistant message, so the result
+        is usually a one-element list. Events carrying an explicit
+        ``message_index`` (OpenAI Responses server-side tool execution
+        interleaves multiple ``message`` output items in one response)
+        split into one parts-list per distinct index, in first-seen
+        order.
 
         Events sharing a part_index group into one Part. Mixing
         families (text vs tool_call vs reasoning vs tool_result) at the
@@ -1230,23 +1251,26 @@ class _BaseResponse:
                         tool_call_id=tc.tool_call_id,
                     )
                 )
-            return fallback_parts
+            return [fallback_parts] if fallback_parts else []
 
         # Group events by their (resolved) part_index, preserving the
         # order in which each index was first seen. Then build one Part
         # per group. This handles non-adjacent same-index events (e.g.
         # text → tool_call → text where the plugin pinned both text
-        # bursts to part_index=0) by merging them into one Part.
+        # bursts to part_index=0) by merging them into one Part. Each
+        # group belongs to the message of its first event.
         groups: dict[int, list[Any]] = {}
         order: list[int] = []
+        group_message: dict[int, int] = {}
         for event in self._stream_events:
             pi = event.part_index
             if pi not in groups:
                 groups[pi] = []
                 order.append(pi)
+                group_message[pi] = event.message_index
             groups[pi].append(event)
 
-        parts: list[Any] = []
+        built: list[tuple[int, Any]] = []
         for pi in order:
             evs = groups[pi]
             fam_first = self._event_family(evs[0].type)
@@ -1266,19 +1290,23 @@ class _BaseResponse:
                         merged[k] = v
                     pm_merged = merged
 
+            mi = group_message[pi]
             if fam_first == "text":
                 text = "".join(e.chunk for e in evs)
                 if text:
-                    parts.append(TextPart(text=text, provider_metadata=pm_merged))
+                    built.append((mi, TextPart(text=text, provider_metadata=pm_merged)))
             elif fam_first == "reasoning":
                 text = "".join(e.chunk for e in evs)
                 redacted = any(e.redacted for e in evs)
                 if text or redacted:
-                    parts.append(
-                        ReasoningPart(
-                            text=text,
-                            redacted=redacted,
-                            provider_metadata=pm_merged,
+                    built.append(
+                        (
+                            mi,
+                            ReasoningPart(
+                                text=text,
+                                redacted=redacted,
+                                provider_metadata=pm_merged,
+                            ),
                         )
                     )
             elif fam_first == "tool_call":
@@ -1292,13 +1320,16 @@ class _BaseResponse:
                     (e.tool_call_id for e in evs if e.tool_call_id), None
                 )
                 server_executed = any(e.server_executed for e in evs)
-                parts.append(
-                    ToolCallPart(
-                        name=tool_name,
-                        arguments=arguments,
-                        tool_call_id=tool_call_id,
-                        server_executed=server_executed,
-                        provider_metadata=pm_merged,
+                built.append(
+                    (
+                        mi,
+                        ToolCallPart(
+                            name=tool_name,
+                            arguments=arguments,
+                            tool_call_id=tool_call_id,
+                            server_executed=server_executed,
+                            provider_metadata=pm_merged,
+                        ),
                     )
                 )
             elif fam_first == "tool_result":
@@ -1307,28 +1338,46 @@ class _BaseResponse:
                     (e.tool_call_id for e in evs if e.tool_call_id), None
                 )
                 server_executed = any(e.server_executed for e in evs)
-                parts.append(
-                    ToolResultPart(
-                        name=tool_result_name,
-                        output="".join(e.chunk for e in evs),
-                        tool_call_id=tool_call_id,
-                        server_executed=server_executed,
-                        provider_metadata=pm_merged,
+                built.append(
+                    (
+                        mi,
+                        ToolResultPart(
+                            name=tool_result_name,
+                            output="".join(e.chunk for e in evs),
+                            tool_call_id=tool_call_id,
+                            server_executed=server_executed,
+                            provider_metadata=pm_merged,
+                        ),
                     )
                 )
 
+        # Split into per-message parts lists, message indexes in
+        # first-seen order.
+        message_order: list[int] = []
+        by_message: dict[int, list[Any]] = {}
+        for mi, part in built:
+            if mi not in by_message:
+                by_message[mi] = []
+                message_order.append(mi)
+            by_message[mi].append(part)
+        messages_parts = [by_message[mi] for mi in message_order]
+        if not messages_parts:
+            messages_parts = [[]]
+
         # Merge in any tool calls registered via add_tool_call() that the
         # plugin didn't also emit as StreamEvents. Dedup by tool_call_id so
-        # plugins using both APIs in tandem don't double-count.
+        # plugins using both APIs in tandem don't double-count. They join
+        # the final message - matching the old append-at-end behavior.
         seen_ids = {
             p.tool_call_id
+            for parts in messages_parts
             for p in parts
             if isinstance(p, ToolCallPart) and p.tool_call_id is not None
         }
         for tc in self._tool_calls:
             if tc.tool_call_id is not None and tc.tool_call_id in seen_ids:
                 continue
-            parts.append(
+            messages_parts[-1].append(
                 ToolCallPart(
                     name=tc.name,
                     arguments=tc.arguments or {},
@@ -1336,21 +1385,24 @@ class _BaseResponse:
                 )
             )
 
-        # Hoist redacted reasoning Parts to the start of the assembled
-        # message. Plugins typically emit them late (when usage arrives
-        # in the final chunk), but UIs render reasoning before content,
-        # so the framework reorders. Relative order among redacted
-        # Parts is preserved.
-        redacted_parts = [
-            p for p in parts if isinstance(p, ReasoningPart) and p.redacted
-        ]
-        if redacted_parts:
-            other_parts = [
-                p for p in parts if not (isinstance(p, ReasoningPart) and p.redacted)
+        # Hoist redacted reasoning Parts to the start of their message.
+        # Plugins typically emit them late (when usage arrives in the
+        # final chunk), but UIs render reasoning before content, so the
+        # framework reorders. Relative order among redacted Parts is
+        # preserved.
+        for i, parts in enumerate(messages_parts):
+            redacted_parts = [
+                p for p in parts if isinstance(p, ReasoningPart) and p.redacted
             ]
-            parts = redacted_parts + other_parts
+            if redacted_parts:
+                other_parts = [
+                    p
+                    for p in parts
+                    if not (isinstance(p, ReasoningPart) and p.redacted)
+                ]
+                messages_parts[i] = redacted_parts + other_parts
 
-        return parts
+        return [parts for parts in messages_parts if parts]
 
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(_ensure_tool_call_id(tool_call))

@@ -858,3 +858,111 @@ def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx_mock):
     payload_item = response.response_json["output"][0]
     assert payload_item["encrypted_content"] == "encrypted-final"
     assert reasoning_parts[0].text == "Thinking aloud"
+
+
+def test_code_interpreter_multi_message_response(httpx_mock):
+    """Server-side tool execution interleaving multiple message output
+    items must assemble into multiple assistant Messages."""
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_multi",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.5",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "STEP ONE", "annotations": []}
+                    ],
+                },
+                {
+                    "type": "code_interpreter_call",
+                    "id": "ci_1",
+                    "status": "completed",
+                    "container_id": "cntr_1",
+                    "code": "print(111*111)",
+                    "outputs": [{"type": "logs", "logs": "12321\n"}],
+                },
+                {
+                    "type": "message",
+                    "id": "msg_2",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "DONE 12321", "annotations": []}
+                    ],
+                },
+            ],
+            "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    model = llm.get_model("gpt-5.5")
+    response = model.prompt("count", stream=False, key="test")
+    response.text()
+
+    messages = response.messages()
+    assert len(messages) == 2
+    first, second = messages
+    assert [type(p).__name__ for p in first.parts] == [
+        "TextPart",
+        "ToolCallPart",
+        "ToolResultPart",
+    ]
+    assert first.parts[0].text == "STEP ONE"
+    assert first.parts[1].name == "code_interpreter"
+    assert first.parts[1].arguments == {"code": "print(111*111)"}
+    assert first.parts[1].server_executed
+    assert first.parts[2].output == "12321\n"
+    assert first.parts[2].server_executed
+    assert [type(p).__name__ for p in second.parts] == ["TextPart"]
+    assert second.parts[0].text == "DONE 12321"
+
+    # Server-executed calls are not locally executable
+    assert response.tool_calls() == []
+
+
+def test_server_tool_parts_not_replayed_as_function_calls():
+    from llm.parts import Message, TextPart, ToolCallPart, ToolResultPart
+
+    model = llm.get_model("gpt-5.5")
+
+    class FakePrompt:
+        messages = (
+            Message(role="user", parts=[TextPart(text="count")]),
+            Message(
+                role="assistant",
+                parts=[
+                    TextPart(text="STEP ONE"),
+                    ToolCallPart(
+                        name="code_interpreter",
+                        arguments={"code": "print(1)"},
+                        tool_call_id="ci_1",
+                        server_executed=True,
+                    ),
+                    ToolResultPart(
+                        name="code_interpreter",
+                        output="1\n",
+                        tool_call_id="ci_1",
+                        server_executed=True,
+                    ),
+                ],
+            ),
+            Message(role="assistant", parts=[TextPart(text="DONE")]),
+            Message(role="user", parts=[TextPart(text="thanks")]),
+        )
+
+    items, _instructions = model._build_responses_input(FakePrompt())
+    assert items == [
+        {"role": "user", "content": "count"},
+        {"role": "assistant", "content": "STEP ONE"},
+        {"role": "assistant", "content": "DONE"},
+        {"role": "user", "content": "thanks"},
+    ]
