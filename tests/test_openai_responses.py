@@ -462,6 +462,60 @@ def _code_interpreter_stream():
     )
 
 
+def _web_search_refresh_stream():
+    def image_result(name):
+        return {
+            "type": "image_result",
+            "image_url": f"https://example.com/{name}.jpg",
+            "source_website_url": f"https://example.com/{name}",
+            "thumbnail_url": f"https://example.com/{name}-thumb.jpg",
+            "caption": f"{name.title()} image",
+        }
+
+    def web_search_item(sources, results):
+        return {
+            "id": "ws_stream",
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "example images",
+                "queries": ["example images"],
+                "sources": sources,
+            },
+            "results": results,
+        }
+
+    partial_sources = [{"type": "url", "url": "https://example.com/first"}]
+    final_sources = partial_sources + [
+        {"type": "url", "url": "https://example.com/second"},
+    ]
+    partial_results = [image_result("first")]
+    final_results = partial_results + [image_result("second")]
+    yield _responses_sse(
+        "response.output_item.done",
+        {
+            "output_index": 0,
+            "item": web_search_item(partial_sources, partial_results),
+        },
+    )
+    yield _responses_sse(
+        "response.output_text.delta",
+        {
+            "item_id": "msg_stream",
+            "output_index": 1,
+            "content_index": 0,
+            "delta": "done",
+        },
+    )
+    response_json = _text_response_json(text="done")
+    response_json["output"].insert(0, web_search_item(final_sources, final_results))
+    yield _responses_sse(
+        "response.completed",
+        {"response": response_json},
+    )
+
+
 def _responses_reasoning_summary_stream():
     yield _responses_sse(
         "response.reasoning_summary_text.delta",
@@ -1397,6 +1451,64 @@ def test_code_interpreter_streaming_output_and_request(httpx_mock):
 
     request_body = json.loads(httpx_mock.get_requests()[-1].content)
     assert "code_interpreter_call.outputs" in request_body["include"]
+
+
+def _assert_web_search_streaming_uses_final_payload(response, messages):
+    parts = [part for message in messages for part in message.parts]
+    server_parts = [
+        part
+        for part in parts
+        if isinstance(part, (llm.parts.ToolCallPart, llm.parts.ToolResultPart))
+    ]
+    assert [type(part).__name__ for part in server_parts] == [
+        "ToolCallPart",
+        "ToolResultPart",
+    ]
+    tool_call, tool_result = server_parts
+    final_item = next(
+        item
+        for item in response.response_json["output"]
+        if item["type"] == "web_search_call"
+    )
+    assert len(final_item["action"]["sources"]) == 2
+    assert len(final_item["results"]) == 2
+    assert tool_call.arguments == final_item["action"]
+    assert json.loads(tool_result.output) == final_item["results"]
+
+
+def test_web_search_streaming_refreshes_from_final_payload(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_web_search_refresh_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    response = llm.get_model("gpt-5.6-luna").prompt(
+        "Search",
+        tools=[WebSearch(include_sources=True, include_results=True)],
+        key="test",
+    )
+
+    assert response.text() == "done"
+    _assert_web_search_streaming_uses_final_payload(response, response.messages())
+
+
+@pytest.mark.asyncio
+async def test_async_web_search_streaming_refreshes_from_final_payload(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_web_search_refresh_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    response = llm.get_async_model("gpt-5.6-luna").prompt(
+        "Search",
+        tools=[WebSearch(include_sources=True, include_results=True)],
+        key="test",
+    )
+
+    assert await response.text() == "done"
+    _assert_web_search_streaming_uses_final_payload(response, await response.messages())
 
 
 def test_server_tool_parts_not_replayed_as_function_calls():

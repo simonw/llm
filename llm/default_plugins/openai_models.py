@@ -2292,6 +2292,31 @@ class _SharedResponses(_Shared):
             )
         return events
 
+    def _refresh_server_tool_events(self, output, done_events):
+        """Replace streamed server-tool payloads with their final values.
+
+        OpenAI can return incomplete sources, results or outputs on a
+        ``response.output_item.done`` event and then provide the complete
+        item on ``response.completed``. The response stores yielded
+        StreamEvent objects by reference, so updating their chunks here
+        corrects the assembled Parts without emitting duplicate events.
+        """
+        for item in output or []:
+            item_id = getattr(item, "id", None)
+            prior_events = done_events.get(item_id)
+            if not prior_events:
+                continue
+            final_events = {
+                event.type: event
+                for event in self._server_tool_events(
+                    item, prior_events[0].message_index
+                )
+            }
+            for prior_event in prior_events:
+                final_event = final_events.get(prior_event.type)
+                if final_event is not None:
+                    prior_event.chunk = final_event.chunk
+
     def _non_streaming_output_events(self, output, response):
         """Translate a non-streaming Responses ``output`` item list into
         StreamEvents. Returns ``(events, had_reasoning)``.
@@ -2460,6 +2485,7 @@ class Responses(_SharedResponses, KeyModel):
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             reasoning_done_events: dict[str, StreamEvent] = {}
+            server_tool_done_events: dict[str, list[StreamEvent]] = {}
             message_index = 0
             seen_message = False
             for event in stream_obj:
@@ -2556,8 +2582,15 @@ class Responses(_SharedResponses, KeyModel):
                             )
                         )
                     else:
-                        yield from self._server_tool_events(item, message_index)
+                        server_events = self._server_tool_events(item, message_index)
+                        item_id = getattr(item, "id", None)
+                        if item_id and server_events:
+                            server_tool_done_events[item_id] = server_events
+                        yield from server_events
                 elif etype == "response.completed":
+                    self._refresh_server_tool_events(
+                        event.response.output, server_tool_done_events
+                    )
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
@@ -2698,6 +2731,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             final_response_dict: dict[str, Any] | None = None
             reasoning_items_with_streamed_text = set()
             reasoning_done_events: dict[str, StreamEvent] = {}
+            server_tool_done_events: dict[str, list[StreamEvent]] = {}
             message_index = 0
             seen_message = False
             async for event in stream_obj:
@@ -2794,11 +2828,16 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                             )
                         )
                     else:
-                        for server_event in self._server_tool_events(
-                            item, message_index
-                        ):
+                        server_events = self._server_tool_events(item, message_index)
+                        item_id = getattr(item, "id", None)
+                        if item_id and server_events:
+                            server_tool_done_events[item_id] = server_events
+                        for server_event in server_events:
                             yield server_event
                 elif etype == "response.completed":
+                    self._refresh_server_tool_events(
+                        event.response.output, server_tool_done_events
+                    )
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
