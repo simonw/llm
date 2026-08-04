@@ -187,6 +187,75 @@ class Tool:
         )
 
 
+class ServerSideTool:
+    """A tool executed inside the provider's infrastructure.
+
+    Instances are passed in ``tools=[...]`` alongside function tools. The
+    framework transports and validates them but never executes them. Provider
+    plugins subclass this class for their own tools; the base class can be
+    instantiated directly with a raw provider tool specification.
+    """
+
+    name: ClassVar[str] = "server_side_tool"
+    plugin: ClassVar[str | None] = None
+    implementation: ClassVar[None] = None
+    input_schema: ClassVar[dict] = {}
+
+    def __init__(self, spec: dict | None = None):
+        self.spec = spec
+        self._config = {"spec": spec}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        original_init = cls.__init__
+
+        @functools.wraps(original_init)
+        def wrapped_init(self, *args, **kwargs):
+            signature = inspect.signature(original_init)
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            original_init(self, *args, **kwargs)
+            self._config = {
+                name: value
+                for name, value in bound.arguments.items()
+                if name != "self"
+                and signature.parameters[name].kind
+                not in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                )
+            }
+
+        cls.__init__ = wrapped_init
+
+    @property
+    def description(self) -> str | None:
+        return inspect.getdoc(self.__class__)
+
+    def tool_spec(self, model) -> dict:
+        """Return this tool's provider-specific request specification."""
+        if self.spec is None:
+            raise TypeError(
+                f"{self.__class__.__name__} does not define a raw provider tool spec"
+            )
+        return self.spec
+
+    def prepare_request(self, model, kwargs: dict) -> None:
+        """Add any other values this tool needs to provider request kwargs."""
+
+    def hash(self):
+        """Hash the definition separately from configured instances."""
+        to_hash = {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+            "server_side": True,
+        }
+        if self.plugin:
+            to_hash["plugin"] = self.plugin
+        return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
+
+
 def _get_arguments_input_schema(function, name):
     signature = inspect.signature(function)
     type_hints = get_type_hints(function)
@@ -366,7 +435,7 @@ class ToolOutput:
     attachments: list[Attachment] = field(default_factory=list)
 
 
-ToolDef = Tool | Toolbox | Callable[..., Any]
+ToolDef = Tool | Toolbox | ServerSideTool | Callable[..., Any]
 BeforeCallSync = Callable[[Tool | None, ToolCall], None]
 AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
 BeforeCallAsync = Callable[[Tool | None, ToolCall], None | Awaitable[None]]
@@ -415,7 +484,7 @@ class Prompt:
     system_fragments: list[str | Fragment] | None
     prompt_json: str | None
     schema: dict | type[BaseModel] | None
-    tools: list[Tool]
+    tools: list[Tool | ServerSideTool]
     tool_results: list[ToolResult]
     options: "Options"
     hide_reasoning: bool
@@ -531,10 +600,10 @@ class Prompt:
         return result
 
 
-def _wrap_tools(tools: list[ToolDef]) -> list[Tool]:
+def _wrap_tools(tools: list[ToolDef]) -> list[Tool | ServerSideTool]:
     wrapped_tools = []
     for tool in tools:
-        if isinstance(tool, Tool):
+        if isinstance(tool, (Tool, ServerSideTool)):
             wrapped_tools.append(tool)
         elif isinstance(tool, Toolbox):
             wrapped_tools.extend(tool.tools())
@@ -543,6 +612,35 @@ def _wrap_tools(tools: list[ToolDef]) -> list[Tool]:
         else:
             raise TypeError(f"Invalid tool: {tool}")
     return wrapped_tools
+
+
+def _partition_tools(
+    model: "_BaseModel", tools: Iterable[Tool | ServerSideTool]
+) -> tuple[list[Tool], list[ServerSideTool]]:
+    """Partition tools and reject server-side tools the model did not claim."""
+    function_tools = []
+    server_side_tools = []
+    declared = tuple(getattr(model, "server_side_tools", ()))
+    for tool in tools:
+        if isinstance(tool, ServerSideTool):
+            # Declaring ServerSideTool itself claims only direct raw-spec
+            # instances. Without this exact-type exception it would also
+            # accidentally claim every provider-specific subclass.
+            claimed = any(
+                type(tool) is candidate
+                if candidate is ServerSideTool
+                else isinstance(tool, candidate)
+                for candidate in declared
+            )
+            if not claimed:
+                raise ValueError(
+                    f"Model '{model.model_id}' does not support server-side tool "
+                    f"'{tool.name}'. Run: llm tools -m {model.model_id}"
+                )
+            server_side_tools.append(tool)
+        else:
+            function_tools.append(tool)
+    return function_tools, server_side_tools
 
 
 def _append_turn_input(
@@ -1066,7 +1164,8 @@ class _BaseResponse:
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
 
-        if self.prompt.tools and not self.model.supports_tools:
+        function_tools, _ = _partition_tools(self.model, self.prompt.tools)
+        if function_tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
 
     def _messages_now(self) -> list[Any]:
@@ -1790,7 +1889,9 @@ class Response(_BaseResponse):
         """
         tool_results = []
         effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
-        tools_by_name = {tool.name: tool for tool in effective_tools}
+        tools_by_name = {
+            tool.name: tool for tool in effective_tools if isinstance(tool, Tool)
+        }
         if tool_calls_list is None:
             tool_calls_list = self.tool_calls()
 
@@ -2136,7 +2237,9 @@ class AsyncResponse(_BaseResponse):
         if tool_calls_list is None:
             tool_calls_list = await self.tool_calls()
         effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
-        tools_by_name = {tool.name: tool for tool in effective_tools}
+        tools_by_name = {
+            tool.name: tool for tool in effective_tools if isinstance(tool, Tool)
+        }
 
         # Run async prepare_async() on all Toolbox instances that need it
         instances_to_prepare: list[Toolbox] = []
@@ -3102,6 +3205,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
+    server_side_tools: tuple[type[ServerSideTool], ...] = ()
 
     class Options(_Options):
         pass

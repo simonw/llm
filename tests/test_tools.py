@@ -18,6 +18,140 @@ from llm.tools import llm_time
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
 
+class DemoServerSideTool(llm.ServerSideTool):
+    "A server-side tool used by the core tests."
+
+    name = "demo_server_tool"
+
+    def __init__(self, value="demo"):
+        self.value = value
+        self.prepare_calls = 0
+
+    def tool_spec(self, model):
+        return {"type": self.name, "value": self.value}
+
+    def prepare_request(self, model, kwargs):
+        self.prepare_calls += 1
+
+
+class ServerToolsOnlyModel(llm.Model):
+    model_id = "server-tools-only"
+    server_side_tools = (DemoServerSideTool,)
+
+    def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class AsyncServerToolsOnlyModel(llm.AsyncModel):
+    model_id = "async-server-tools-only"
+    server_side_tools = (DemoServerSideTool,)
+
+    async def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class MixedToolsModel(ServerToolsOnlyModel):
+    model_id = "mixed-tools"
+    supports_tools = True
+
+
+class RawServerToolOnlyModel(ServerToolsOnlyModel):
+    model_id = "raw-server-tool-only"
+    server_side_tools = (llm.ServerSideTool,)
+
+
+def test_server_side_tool_raw_spec_escape_hatch():
+    tool = llm.ServerSideTool({"type": "browser_search"})
+    model = ServerToolsOnlyModel()
+
+    assert tool.tool_spec(model) == {"type": "browser_search"}
+    assert tool.name == "server_side_tool"
+    assert tool._config == {"spec": {"type": "browser_search"}}
+
+    kwargs = {}
+    assert tool.prepare_request(model, kwargs) is None
+    assert kwargs == {}
+
+    with pytest.raises(TypeError, match="raw provider tool spec"):
+        llm.ServerSideTool().tool_spec(model)
+
+
+def test_declared_server_side_tool_does_not_require_function_tool_support():
+    tool = DemoServerSideTool("one")
+    model = ServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert response.text() == "done"
+    assert response.prompt.tools == [tool]
+    # Core transports and validates server-side tools but never invokes
+    # their provider request hook itself.
+    assert tool.prepare_calls == 0
+    assert tool._config == {"value": "one"}
+
+
+def test_unsupported_server_side_tool_fails_before_execution(mock_model):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Model 'mock' does not support server-side tool "
+            "'demo_server_tool'. Run: llm tools -m mock"
+        ),
+    ):
+        mock_model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_declaring_raw_escape_hatch_does_not_claim_every_subclass():
+    model = RawServerToolOnlyModel()
+    assert model.prompt(
+        "hello", tools=[llm.ServerSideTool({"type": "custom"})]
+    ).text() == "done"
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_function_tools_still_require_supports_tools():
+    def local_tool():
+        return "local"
+
+    with pytest.raises(ValueError, match="does not support tools"):
+        ServerToolsOnlyModel().prompt("hello", tools=[local_tool])
+
+
+def test_local_executor_ignores_server_side_tools():
+    def local_tool():
+        return "local"
+
+    tool = DemoServerSideTool()
+    response = MixedToolsModel().prompt(
+        "hello", tools=[tool, llm.Tool.function(local_tool)]
+    )
+    response.text()
+
+    results = response.execute_tool_calls(
+        tool_calls_list=[
+            llm.ToolCall(name="local_tool", arguments={}),
+            llm.ToolCall(name=tool.name, arguments={}),
+        ]
+    )
+    assert [result.output for result in results] == [
+        "local",
+        'Error: tool "demo_server_tool" does not exist',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_declared_server_side_tool_and_executor_partition():
+    tool = DemoServerSideTool()
+    model = AsyncServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert await response.text() == "done"
+    results = await response.execute_tool_calls(
+        tool_calls_list=[llm.ToolCall(name=tool.name, arguments={})]
+    )
+    assert results[0].output == 'Error: tool "demo_server_tool" does not exist'
+
+
 @pytest.mark.vcr
 def test_tool_use_basic(vcr):
     model = llm.get_model("gpt-4o-mini")
