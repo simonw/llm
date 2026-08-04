@@ -271,6 +271,56 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
+def test_tools_list_for_model_includes_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["tools", "-m", "gpt-5.6-luna"])
+
+    assert result.exit_code == 0
+    assert (
+        "Server-side tools for gpt-5.6-luna (executed by the provider):\n"
+        in result.output
+    )
+    assert "CodeInterpreter(" in result.output
+    assert "memory_limit:" in result.output
+    assert "Literal['1g', '4g', '16g', '64g']" in result.output
+    assert "Run Python in an OpenAI-managed container." in result.output
+    assert "ServerSideTool(spec: dict | None = None)" in result.output
+
+    json_result = runner.invoke(
+        cli, ["tools", "-m", "gpt-5.6-luna", "--json"]
+    )
+    assert json_result.exit_code == 0
+    server_side_tools = json.loads(json_result.output)["server_side_tools"]
+    assert [tool["name"] for tool in server_side_tools] == [
+        "CodeInterpreter",
+        "ServerSideTool",
+    ]
+    assert all(tool["server_side"] is True for tool in server_side_tools)
+    assert server_side_tools[0]["signature"].startswith("(container:")
+    assert server_side_tools[0]["description"].startswith(
+        "Run Python in an OpenAI-managed container."
+    )
+
+
+def test_tools_list_for_model_with_no_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["tools", "-m", "chatgpt"])
+
+    assert result.exit_code == 0
+    assert "No server-side tools for gpt-3.5-turbo.\n" in result.output
+
+    json_result = runner.invoke(cli, ["tools", "-m", "chatgpt", "--json"])
+    assert json_result.exit_code == 0
+    assert json.loads(json_result.output)["server_side_tools"] == []
+
+
+def test_tools_list_rejects_unknown_model():
+    result = CliRunner().invoke(cli, ["tools", "-m", "not-a-model"])
+
+    assert result.exit_code == 1
+    assert "Unknown model: not-a-model" in result.output
+
+
 @pytest.mark.parametrize(
     "model_id,expected_description",
     (
