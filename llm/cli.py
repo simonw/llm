@@ -2893,20 +2893,15 @@ def tools_list(tool_defs, json_, model_id, python_tools):
                     click.echo(
                         textwrap.indent(tool_info["description"].strip(), "    ") + "\n"
                     )
-        if model is not None:
-            if server_side_tools:
-                click.echo(
-                    f"Server-side tools for {model.model_id} "
-                    "(executed by the provider):\n"
-                )
-                for tool_info in server_side_tools:
-                    click.echo(f"{tool_info['name']}{tool_info['signature']}\n")
-                    if tool_info["description"]:
-                        click.echo(
-                            textwrap.indent(tool_info["description"], "  ") + "\n"
-                        )
-            else:
-                click.echo(f"No server-side tools for {model.model_id}.")
+        if model is not None and server_side_tools:
+            click.echo(
+                f"Server-side tools for {model.model_id} "
+                "(executed by the provider):\n"
+            )
+            for tool_info in server_side_tools:
+                click.echo(f"{tool_info['name']}{tool_info['signature']}\n")
+                if tool_info["description"]:
+                    click.echo(textwrap.indent(tool_info["description"], "  ") + "\n")
 
 
 @cli.group(

@@ -487,7 +487,6 @@ def test_tools_list_for_model_with_no_server_side_tools():
     result = runner.invoke(cli, ["tools", "-m", "chatgpt"])
 
     assert result.exit_code == 0
-    assert "No server-side tools for gpt-3.5-turbo.\n" in result.output
 
     json_result = runner.invoke(cli, ["tools", "-m", "chatgpt", "--json"])
     assert json_result.exit_code == 0
