@@ -2180,7 +2180,7 @@ def logs_list(
                             textwrap.indent(
                                 (tool["description"] or "").rstrip(), "    "
                             ),
-                            json.dumps(tool["input_schema"]["properties"]),
+                            json.dumps(tool["input_schema"].get("properties", {})),
                         )
                     click.echo(textwrap.indent(block, indent))
 

@@ -150,6 +150,22 @@ def test_server_side_tool_configuration_is_logged():
     assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
 
 
+def test_logs_expanded_server_side_tool(user_path):
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    result = CliRunner().invoke(cli.cli, ["logs", "-cue"], catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert '- `DemoServerSideTool({"value": "configured"})`:' in result.output
+    assert "Arguments: `{}`" in result.output
+
+
 def test_function_tools_still_require_supports_tools():
     def local_tool():
         return "local"
