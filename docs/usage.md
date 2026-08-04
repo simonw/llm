@@ -171,7 +171,15 @@ Run this command to see a list of available tools from plugins:
 ```bash
 llm tools
 ```
-If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+Server-side tools are model-specific. Pass `-m/--model` to include the tools supported by a particular model:
+
+```bash
+llm tools -m gpt-5.6-luna
+```
+
+These are displayed in a separate `Server-side tools` section with their constructor signatures and documentation. Add `--json` to return them in a `server_side_tools` array whose entries have `"server_side": true`.
+
+If you run a prompt that uses tools from plugins or model-specific server-side tools, continuing that conversation using `llm -c` will reuse the tools from the first prompt. Configured constructor arguments such as `CodeInterpreter(memory_limit="4g")` are retained. Running `llm chat -c` will start a chat that continues using those same tools. For example:
 
 ```
 llm -T simple_eval "12345 * 12345" --td
@@ -583,6 +591,13 @@ Use one or more `-m` options to indicate specific models, either by their model 
 ```bash
 llm models -m gpt-5.6-luna -m claude-opus-4.8
 ```
+
+Add `--json` to return an array of model records with aliases, capability flags, attachment types and `server_side_tools`. Combine it with `-m` to inspect one or more specific models; adding `--options` includes each model's option schemas:
+
+```bash
+llm models --json -m gpt-5.6-luna
+```
+
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options

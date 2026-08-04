@@ -37,6 +37,7 @@ from llm import (
     Fragment,
     KeyModel,
     Response,
+    ServerSideTool,
     Template,
     Tool,
     Toolbox,
@@ -1016,7 +1017,7 @@ def prompt(
         prompt_method = conversation.prompt
 
     tool_kwargs = _tool_chain_kwargs(
-        tools, python_tools, tools_debug, tools_approve, chain_limit
+        tools, python_tools, tools_debug, tools_approve, chain_limit, model=model
     )
     if tool_kwargs:
         prompt_method = conversation.chain
@@ -1292,7 +1293,14 @@ def chat(
         kwargs["options"] = validated_options
 
     kwargs.update(
-        _tool_chain_kwargs(tools, python_tools, tools_debug, tools_approve, chain_limit)
+        _tool_chain_kwargs(
+            tools,
+            python_tools,
+            tools_debug,
+            tools_approve,
+            chain_limit,
+            model=model,
+        )
     )
 
     should_stream = model.can_stream and not no_stream
@@ -1437,28 +1445,36 @@ def load_conversation(
     except KeyError:
         pass
 
-    # Plugin tools recorded against the first turn, for the same
-    # reuse-on-continue behaviour the rebuilt responses provide. Tools
-    # that came from a toolbox are collapsed into a single spec string
-    # like Datasette({"url": "..."}) - the same format -T accepts - so
-    # the instance can be reconstructed with its configuration.
+    # Plugin and server-side tools recorded against the first turn, for
+    # the same reuse-on-continue behaviour the rebuilt responses provide.
+    # Configured instances are collapsed into a single spec string like
+    # Datasette({"url": "..."}) - the same format -T accepts - so the
+    # instance can be reconstructed with its configuration.
     loaded_tools = []
     seen_instance_ids = set()
+    supported_server_side_tool_names = {
+        tool_class.__name__
+        for tool_class in conversation.model.supported_server_side_tools
+    }
     for tool_row in db.query(
         """
-        select tools.name, turn_tools.instance_id,
+        select tools.name, tools.plugin, turn_tools.instance_id,
             tool_instances.name as instance_name,
             tool_instances.arguments as instance_arguments
         from tools
         join turn_tools on turn_tools.tool_id = tools.id
         left join tool_instances on tool_instances.id = turn_tools.instance_id
-        where tools.plugin is not null
-        and turn_tools.turn_id = (
+        where turn_tools.turn_id = (
             select id from turns where thread_id = ? order by id limit 1
         )
         """,
         [conversation_id],
     ):
+        if (
+            tool_row["plugin"] is None
+            and tool_row["instance_name"] not in supported_server_side_tool_names
+        ):
+            continue
         if tool_row["instance_id"] is None:
             loaded_tools.append(tool_row["name"])
         elif tool_row["instance_id"] not in seen_instance_ids:
@@ -2164,7 +2180,7 @@ def logs_list(
                             textwrap.indent(
                                 (tool["description"] or "").rstrip(), "    "
                             ),
-                            json.dumps(tool["input_schema"]["properties"]),
+                            json.dumps(tool["input_schema"].get("properties", {})),
                         )
                     click.echo(textwrap.indent(block, indent))
 
@@ -2389,6 +2405,7 @@ def render_model_with_options(model_id, *, async_=False):
 @click.option("async_", "--async", is_flag=True, help="List async models")
 @click.option("--schemas", is_flag=True, help="List models that support schemas")
 @click.option("--tools", is_flag=True, help="List models that support tools")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "-q",
     "--query",
@@ -2396,9 +2413,10 @@ def render_model_with_options(model_id, *, async_=False):
     help="Search for models matching these strings",
 )
 @click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
-def models_list(options, async_, schemas, tools, query, model_ids):
+def models_list(options, async_, schemas, tools, json_, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
+    json_models = []
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
             continue
@@ -2411,6 +2429,30 @@ def models_list(options, async_, schemas, tools, query, model_ids):
             continue
         if tools and not model_with_aliases.model.supports_tools:
             continue
+        if json_:
+            model = (
+                model_with_aliases.async_model if async_ else model_with_aliases.model
+            )
+            model_json = {
+                "model_id": model.model_id,
+                "aliases": model_with_aliases.aliases,
+                "can_stream": model.can_stream,
+                "supports_schema": model.supports_schema,
+                "supports_tools": model.supports_tools,
+                "supports_async": model_with_aliases.async_model is not None,
+                "attachment_types": sorted(model.attachment_types),
+                "server_side_tools": [
+                    {
+                        "name": tool_class.__name__,
+                        "plugin": getattr(tool_class, "plugin", None),
+                    }
+                    for tool_class in model.supported_server_side_tools
+                ],
+            }
+            if options:
+                model_json["options"] = model.Options.model_json_schema()["properties"]
+            json_models.append(model_json)
+            continue
         click.echo(
             render_model_with_aliases(
                 model_with_aliases,
@@ -2419,6 +2461,9 @@ def models_list(options, async_, schemas, tools, query, model_ids):
                 models_that_have_shown_options=models_that_have_shown_options,
             )
         )
+    if json_:
+        click.echo(json.dumps(json_models, indent=2))
+        return
     if not query and not options and not schemas and not model_ids:
         click.echo(f"Default: {get_default_model()}")
 
@@ -2681,14 +2726,38 @@ def tools():
 @tools.command(name="list")
 @click.argument("tool_defs", nargs=-1)
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
+@click.option("model_id", "-m", "--model", help="List tools supported by this model")
 @click.option(
     "python_tools",
     "--functions",
     help="Python code block or file path defining functions to register as tools",
     multiple=True,
 )
-def tools_list(tool_defs, json_, python_tools):
-    "List available tools that have been provided by plugins"
+def tools_list(tool_defs, json_, model_id, python_tools):
+    "List available tools, optionally including tools supported by a model"
+
+    model = None
+    if model_id:
+        try:
+            model = get_model(model_id)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
+
+    server_side_tools = []
+    if model is not None:
+        for tool_class in model.supported_server_side_tools:
+            try:
+                signature = str(inspect.signature(tool_class))
+            except (ValueError, TypeError):
+                signature = "(...)"
+            server_side_tools.append(
+                {
+                    "name": tool_class.__name__,
+                    "description": inspect.getdoc(tool_class),
+                    "signature": signature,
+                    "server_side": True,
+                }
+            )
 
     def introspect_tools(toolbox):
         # Instances report their tools(), which may be generated dynamically.
@@ -2772,12 +2841,10 @@ def tools_list(tool_defs, json_, python_tools):
                 }
             )
     if json_:
-        click.echo(
-            json.dumps(
-                {"tools": output_tools, "toolboxes": output_toolboxes},
-                indent=2,
-            )
-        )
+        output = {"tools": output_tools, "toolboxes": output_toolboxes}
+        if model is not None:
+            output["server_side_tools"] = server_side_tools
+        click.echo(json.dumps(output, indent=2))
     else:
         for tool in tool_objects:
             sig = "()"
@@ -2826,6 +2893,20 @@ def tools_list(tool_defs, json_, python_tools):
                     click.echo(
                         textwrap.indent(tool_info["description"].strip(), "    ") + "\n"
                     )
+        if model is not None:
+            if server_side_tools:
+                click.echo(
+                    f"Server-side tools for {model.model_id} "
+                    "(executed by the provider):\n"
+                )
+                for tool_info in server_side_tools:
+                    click.echo(f"{tool_info['name']}{tool_info['signature']}\n")
+                    if tool_info["description"]:
+                        click.echo(
+                            textwrap.indent(tool_info["description"], "  ") + "\n"
+                        )
+            else:
+                click.echo(f"No server-side tools for {model.model_id}.")
 
 
 @cli.group(
@@ -4158,29 +4239,38 @@ def _approve_tool_call(_, tool_call):
 
 
 def _gather_tools(
-    tool_specs: list[str], python_tools: list[str]
-) -> list[Tool | type[Toolbox]]:
-    tools: list[Tool | type[Toolbox]] = []
+    tool_specs: list[str], python_tools: list[str], model=None
+) -> list[Tool | Toolbox | ServerSideTool]:
+    tools: list[Tool | Toolbox | ServerSideTool] = []
     if python_tools:
         for code_or_path in python_tools:
             tools.extend(_tools_from_code(code_or_path))
     registered_tools = get_tools()
+    server_side_tool_classes = {
+        tool_class.__name__: tool_class
+        for tool_class in (
+            model.supported_server_side_tools if model is not None else ()
+        )
+    }
+    available_tools = {**registered_tools, **server_side_tool_classes}
     registered_classes = {
-        key: value for key, value in registered_tools.items() if inspect.isclass(value)
+        key: value for key, value in available_tools.items() if inspect.isclass(value)
     }
     bad_tools = [
-        tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
+        tool
+        for tool in tool_specs
+        if tool.split("(", 1)[0].strip() not in available_tools
     ]
     if bad_tools:
         raise click.ClickException(
             "Tool(s) {} not found. Available tools: {}".format(
-                ", ".join(bad_tools), ", ".join(registered_tools.keys())
+                ", ".join(bad_tools), ", ".join(available_tools.keys())
             )
         )
     for tool_spec in tool_specs:
         if not tool_spec[0].isupper():
             # It's a function
-            tools.append(registered_tools[tool_spec])
+            tools.append(available_tools[tool_spec])
         else:
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
@@ -4188,10 +4278,10 @@ def _gather_tools(
 
 
 def _tool_chain_kwargs(
-    tool_specs, python_tools, tools_debug, tools_approve, chain_limit
+    tool_specs, python_tools, tools_debug, tools_approve, chain_limit, model=None
 ):
     """Build Conversation.chain() keyword arguments for CLI-selected tools."""
-    tool_implementations = _gather_tools(tool_specs, python_tools)
+    tool_implementations = _gather_tools(tool_specs, python_tools, model=model)
     if not tool_implementations:
         return {}
     kwargs = {

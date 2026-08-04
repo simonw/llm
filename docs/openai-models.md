@@ -83,6 +83,101 @@ The following features work with OpenAI models:
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
+(openai-models-web-search)=
+
+## Web Search
+
+Models that use the OpenAI Responses API can search the web using the `WebSearch` server-side tool:
+
+```bash
+llm -m gpt-5.6-luna -T WebSearch 'Search the web for a positive news story from today'
+```
+
+The model decides whether to search based on the prompt. The Python API accepts the same tool:
+
+```python
+import llm
+from llm.default_plugins.openai_models import WebSearch
+
+response = llm.get_model("gpt-5.6-luna").prompt(
+    "Search the web for a positive news story from today",
+    tools=[WebSearch(include_sources=True)],
+)
+print(response.text())
+```
+
+Domain filters accept up to 100 allowed domains and up to 100 blocked domains. Omit `http://` or `https://`; each entry also covers its subdomains:
+
+```python
+WebSearch(
+    allowed_domains=["openai.com", "python.org"],
+    blocked_domains=["example.com"],
+)
+```
+
+Use `search_context_size="low"`, `"medium"` or `"high"` to control how much search-result context is made available to the model. Set `external_web_access=False` for cached/indexed results only. `return_token_budget="unlimited"` removes the standard returned-token limit for longer GPT-5 reasoning searches and can increase latency and cost.
+
+Approximate geographic context can include a two-letter country code, city, region and IANA timezone. LLM adds the required `"type": "approximate"` field when it is omitted:
+
+```python
+WebSearch(
+    user_location={
+        "country": "GB",
+        "city": "London",
+        "timezone": "Europe/London",
+    }
+)
+```
+
+`include_sources=True` requests every URL consulted during search and records them in the server-executed tool call arguments. For image search, use `search_content_types=["image", "text"]` and `image_settings={"max_results": 3, "caption": True}`. Set `include_results=True` to request and record the raw image result objects in the corresponding server-executed tool result.
+
+See [OpenAI's Web Search documentation](https://developers.openai.com/api/docs/guides/tools-web-search) for model behavior, current limitations, citations and pricing details.
+
+(openai-models-code-interpreter)=
+
+## Code Interpreter
+
+Models that use the OpenAI Responses API can run Python in an OpenAI-managed container using the `CodeInterpreter` server-side tool:
+
+```bash
+llm -m gpt-5.6-luna -T 'CodeInterpreter(memory_limit="4g")' 'Run this calculation'
+```
+
+The same tool can be used from Python:
+
+```python
+import llm
+from llm.default_plugins.openai_models import CodeInterpreter
+
+model = llm.get_model("gpt-5.6-luna")
+response = model.prompt(
+    "Use the python tool to calculate 111111 * 333333",
+    tools=[CodeInterpreter()],
+)
+print(response.text())
+```
+
+OpenAI calls this Code Interpreter, but models know it as the "python tool", so referring to that name in the prompt is the most explicit way to request it.
+
+By default OpenAI automatically creates a 1 GB container, or reuses an active container from the model's context. Configure a larger automatic container or make existing OpenAI files available to it like this:
+
+```python
+CodeInterpreter(
+    memory_limit="4g",
+    file_ids=["file-1", "file-2"],
+)
+```
+
+The accepted memory limits are `1g`, `4g`, `16g` and `64g`. Higher limits cost more. To reuse a container that was created separately, pass its ID:
+
+```python
+CodeInterpreter(container="cntr_abc123")
+```
+
+An explicit container ID cannot be combined with `memory_limit` or `file_ids`. LLM automatically requests the full Code Interpreter output and records returned code and output as server-executed tool parts; it never tries to run that code locally.
+
+OpenAI containers are ephemeral and expire after 20 minutes without activity. See [OpenAI's Code Interpreter documentation](https://developers.openai.com/api/docs/guides/tools-code-interpreter) for container behavior, supported files and current pricing details.
+
 (openai-models-service-tier)=
 
 ## Fast mode and service tiers

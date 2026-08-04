@@ -129,6 +129,20 @@ llm openai endpoint https://example.com/v1 \
   "What is the capital of France?"
 ```
 
+Responses endpoints can define their own server-side tool types. Use `ServerSideTool` to pass an endpoint-specific tool specification through without validation. For example, [OpenRouter's web search server tool](https://openrouter.ai/docs/api/reference/responses/web-search) can be used like this:
+
+```bash
+llm openai endpoint https://openrouter.ai/api/v1 \
+  -m openai/gpt-oss-20b:free \
+  --key openrouter \
+  --responses \
+  -R \
+  -T 'ServerSideTool(spec={"type":"openrouter:web_search","parameters":{"engine":"exa","max_results":2,"max_uses":1}})' \
+  "Search for the OpenRouter documentation URL"
+```
+
+`-R` hides the reasoning text returned by this model so the command displays just its final answer.
+
 ### Configure an OpenAI-compatible model
 
 The `model_id` is the name LLM will use for the model. The `model_name` is the name which needs to be passed to the API - this might differ from the `model_id`, especially if the `model_id` could potentially clash with other installed models.

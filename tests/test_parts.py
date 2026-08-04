@@ -1406,6 +1406,73 @@ class TestAddToolCallWithStreamEvents:
         ]
 
 
+class TestMessageIndexAssembly:
+    def test_message_index_splits_assistant_messages(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(type="text", chunk="STEP ONE", message_index=0),
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="code_interpreter",
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"code": "print(1)"}',
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_result",
+                    chunk="1\n",
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    tool_name="code_interpreter",
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(type="text", chunk="STEP TWO", message_index=1),
+            ]
+        )
+        response = mock_model.prompt("go")
+        response.text()
+        messages = response.messages()
+        assert len(messages) == 2
+        assert all(m.role == "assistant" for m in messages)
+        assert messages[0].parts == [
+            llm.parts.TextPart(text="STEP ONE"),
+            llm.parts.ToolCallPart(
+                name="code_interpreter",
+                arguments={"code": "print(1)"},
+                tool_call_id="ci1",
+                server_executed=True,
+            ),
+            llm.parts.ToolResultPart(
+                name="code_interpreter",
+                output="1\n",
+                tool_call_id="ci1",
+                server_executed=True,
+            ),
+        ]
+        assert messages[1].parts == [llm.parts.TextPart(text="STEP TWO")]
+
+    def test_adjacent_text_across_message_boundary_does_not_merge(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(type="text", chunk="first", message_index=0),
+                llm.parts.StreamEvent(type="text", chunk="second", message_index=1),
+            ]
+        )
+        response = mock_model.prompt("go")
+        response.text()
+        messages = response.messages()
+        assert len(messages) == 2
+        assert messages[0].parts == [llm.parts.TextPart(text="first")]
+        assert messages[1].parts == [llm.parts.TextPart(text="second")]
+
+
 class TestResponseReply:
     def test_reply_builds_next_turn_from_this_response(self, mock_model):
         mock_model.enqueue(["a1"])

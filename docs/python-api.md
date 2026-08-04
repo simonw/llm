@@ -310,6 +310,27 @@ def generate_image(prompt: str) -> llm.ToolOutput:
 .. autoclass:: llm.ToolOutput
 ```
 
+(python-api-server-side-tools)=
+
+#### Server-side tools
+
+Server-side tools are executed by the model provider during a response. Pass them in the same `tools=` list as function tools, but do not call `execute_tool_calls()` for them: their calls and results arrive in `response.messages()` with `server_executed=True` and are excluded from the local execution loop.
+
+For example, OpenAI Responses models support {ref}`Web Search <openai-models-web-search>` and {ref}`Code Interpreter <openai-models-code-interpreter>`:
+
+```python
+import llm
+from llm.default_plugins.openai_models import CodeInterpreter
+
+response = llm.get_model("gpt-5.6-luna").prompt(
+    "Use the python tool to calculate the first 20 Fibonacci numbers",
+    tools=[CodeInterpreter(memory_limit="4g")],
+)
+print(response.text())
+```
+
+Provider plugins define these tools by subclassing {class}`llm.ServerSideTool`. Each model instance returns its supported classes from `supported_server_side_tools`; a model rejects classes it has not explicitly included rather than silently dropping them. See {ref}`advanced-model-plugins-server-side-tools` for the plugin API.
+
 (python-api-toolbox)=
 
 #### Toolbox classes

@@ -24,7 +24,7 @@ from typing import Any
 from condense_json import UncondenseError, condense_json, uncondense_json
 
 from .migrations import migrate
-from .models import Attachment, _conversation_name
+from .models import Attachment, ServerSideTool, _conversation_name
 from .parts import (
     AttachmentPart,
     Message,
@@ -528,10 +528,17 @@ class LogStore:
             replace=True,
         )
         for tool in response.prompt.tools:
-            # A toolbox-derived tool's implementation is a method bound
-            # to the configured instance - record which one, as a
+            # Server-side tools are configured instances themselves. A
+            # toolbox-derived tool instead has an implementation method
+            # bound to its configured instance. Record either kind as a
             # reference into the shared tool_instances table.
-            instance = getattr(tool.implementation, "__self__", None)
+            instance: Any | None
+            if isinstance(tool, ServerSideTool):
+                instance = tool
+                instance_name = tool.__class__.__name__
+            else:
+                instance = getattr(tool.implementation, "__self__", None)
+                instance_name = tool.name.split("_")[0]
             config = getattr(instance, "_config", None)
             self.db["turn_tools"].insert(
                 {
@@ -540,7 +547,7 @@ class LogStore:
                     "instance_id": (
                         ensure_tool_instance(
                             self.db,
-                            tool.name.split("_")[0],
+                            instance_name,
                             tool.plugin,
                             json.dumps(config),
                         )

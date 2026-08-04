@@ -889,6 +889,58 @@ def test_endpoint_responses_api_tools(httpx_mock, user_path):
     ]
 
 
+def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path, recwarn):
+    base_url = "https://raw-tools.example.test/v1"
+    response_payload = _responses_payload("Search complete")
+    response_payload["output"].insert(
+        0,
+        {
+            "id": "st_test",
+            "type": "openrouter:web_search",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "latest news",
+                "sources": [{"type": "url", "url": "https://example.test/news"}],
+            },
+        },
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=response_payload,
+        headers={"Content-Type": "application/json"},
+    )
+    tool_spec = {
+        "type": "openrouter:web_search",
+        "parameters": {"engine": "exa", "max_results": 2, "max_uses": 1},
+    }
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Search for the latest news",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+            "-T",
+            f"ServerSideTool(spec={json.dumps(tool_spec)})",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Search complete\n"
+    assert not (user_path / "logs.db").exists()
+    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    assert request_body["tools"] == [tool_spec]
+    assert not recwarn.list
+
+
 def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     base_url = "https://stdin.example.test/v1"
     _add_chat_response(httpx_mock, base_url, "From stdin")

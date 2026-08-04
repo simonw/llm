@@ -334,8 +334,11 @@ class StreamEvent:
     it onto the finalized Part (last non-None wins per top-level key).
 
     `message_index` is for providers that emit multiple assistant
-    messages in a single response (Anthropic server-side tool
-    execution); most plugins leave it at 0.
+    messages in a single response (OpenAI Responses server-side tool
+    execution interleaves multiple `message` output items with tool
+    calls); most plugins leave it at 0 and get a single assistant
+    Message. Events with distinct indexes assemble into distinct
+    Messages, in first-seen order.
     """
 
     type: str  # "text" / "reasoning" / "tool_call_name" /

@@ -214,6 +214,293 @@ def test_gpt5_verbosity_option_validates_allowed_values():
     assert "Input should be 'low', 'medium' or 'high'" in result.output
 
 
+def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_code_interpreter_cli",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_code_interpreter_cli",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Calculated",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'CodeInterpreter(memory_limit="4g")',
+            "--no-stream",
+            "--no-log",
+            "--key",
+            "x",
+            "Run this calculation",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "Calculated\n"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {
+            "type": "code_interpreter",
+            "container": {"type": "auto", "memory_limit": "4g"},
+        }
+    ]
+    assert "code_interpreter_call.outputs" in request_body["include"]
+
+
+def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
+    def response_payload(response_id, text):
+        return {
+            "id": response_id,
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": f"msg_{response_id}",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": text,
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        }
+
+    first_payload = response_payload("resp_code_interpreter_first", "Calculated")
+    first_payload["output"] = [
+        {
+            "type": "message",
+            "id": "msg_before_code",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "Running Python",
+                    "annotations": [],
+                }
+            ],
+        },
+        {
+            "type": "code_interpreter_call",
+            "id": "ci_continue",
+            "status": "completed",
+            "container_id": "cntr_continue",
+            "code": "print(6 * 7)",
+            "outputs": [{"type": "logs", "logs": "42\n"}],
+        },
+        {
+            "type": "message",
+            "id": "msg_after_code",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "Calculated",
+                    "annotations": [],
+                }
+            ],
+        },
+    ]
+    for payload in (
+        first_payload,
+        response_payload("resp_code_interpreter_second", "Continued"),
+    ):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
+    runner = CliRunner()
+    first = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'CodeInterpreter(memory_limit="4g")',
+            "--no-stream",
+            "--key",
+            "x",
+            "Run this calculation",
+        ],
+        catch_exceptions=False,
+    )
+    second = runner.invoke(
+        cli,
+        ["Continue", "-c", "--no-stream", "--key", "x"],
+        catch_exceptions=False,
+    )
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert second.output == "Continued\n"
+    request_bodies = [
+        json.loads(request.content) for request in httpx_mock.get_requests()
+    ]
+    expected_tool = {
+        "type": "code_interpreter",
+        "container": {"type": "auto", "memory_limit": "4g"},
+    }
+    assert request_bodies[0]["tools"] == [expected_tool]
+    assert request_bodies[1]["tools"] == [expected_tool]
+    assert request_bodies[1]["input"] == [
+        {"role": "user", "content": "Run this calculation"},
+        {"role": "assistant", "content": "Running Python"},
+        {"role": "assistant", "content": "Calculated"},
+        {"role": "user", "content": "Continue"},
+    ]
+
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    instance = next(iter(db["tool_instances"].rows))
+    assert instance["name"] == "CodeInterpreter"
+    assert json.loads(instance["arguments"])["memory_limit"] == "4g"
+    assert {row["instance_id"] for row in db["turn_tools"].rows} == {instance["id"]}
+
+
+def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_web_search_cli",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_web_search_cli",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Search complete",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'WebSearch(allowed_domains=["openai.com"], search_context_size="low", include_sources=true)',
+            "--no-stream",
+            "--no-log",
+            "--key",
+            "x",
+            "Search for OpenAI news",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "Search complete\n"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {
+            "type": "web_search",
+            "filters": {"allowed_domains": ["openai.com"]},
+            "search_context_size": "low",
+        }
+    ]
+    assert "web_search_call.action.sources" in request_body["include"]
+
+
+def test_tools_list_for_model_includes_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["tools", "-m", "gpt-5.6-luna"])
+
+    assert result.exit_code == 0
+    assert (
+        "Server-side tools for gpt-5.6-luna (executed by the provider):\n"
+        in result.output
+    )
+    assert "CodeInterpreter(" in result.output
+    assert "WebSearch(" in result.output
+    assert "allowed_domains:" in result.output
+    assert "memory_limit:" in result.output
+    assert "Literal['1g', '4g', '16g', '64g']" in result.output
+    assert "Run Python in an OpenAI-managed container." in result.output
+    assert "ServerSideTool(spec: dict | None = None)" in result.output
+
+    json_result = runner.invoke(cli, ["tools", "-m", "gpt-5.6-luna", "--json"])
+    assert json_result.exit_code == 0
+    server_side_tools = json.loads(json_result.output)["server_side_tools"]
+    assert [tool["name"] for tool in server_side_tools] == [
+        "WebSearch",
+        "CodeInterpreter",
+        "ServerSideTool",
+    ]
+    assert all(tool["server_side"] is True for tool in server_side_tools)
+    assert server_side_tools[0]["signature"].startswith("(allowed_domains:")
+    assert server_side_tools[0]["description"].startswith(
+        "Search the web using OpenAI's hosted search tool."
+    )
+
+
+def test_tools_list_for_model_with_no_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["tools", "-m", "chatgpt"])
+
+    assert result.exit_code == 0
+    assert "No server-side tools for gpt-3.5-turbo.\n" in result.output
+
+    json_result = runner.invoke(cli, ["tools", "-m", "chatgpt", "--json"])
+    assert json_result.exit_code == 0
+    assert json.loads(json_result.output)["server_side_tools"] == []
+
+
+def test_tools_list_rejects_unknown_model():
+    result = CliRunner().invoke(cli, ["tools", "-m", "not-a-model"])
+
+    assert result.exit_code == 1
+    assert "Unknown model: not-a-model" in result.output
+
+
 @pytest.mark.parametrize(
     "model_id,expected_description",
     (

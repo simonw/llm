@@ -156,6 +156,60 @@ Here are the relevant dataclasses:
 .. autoclass:: llm.ToolResult
 ```
 
+(advanced-model-plugins-server-side-tools)=
+
+## Supporting server-side tools
+
+Server-side tools execute inside the provider's infrastructure rather than in LLM's local tool loop. Provider plugins represent these by subclassing {class}`llm.ServerSideTool`:
+
+```python
+class ProviderSearch(llm.ServerSideTool):
+    "A search tool executed by Example Provider."
+
+    name = "provider_search"
+
+    def __init__(self, allowed_domains=None):
+        self.allowed_domains = allowed_domains
+
+    def tool_spec(self, model):
+        spec = {"type": "provider_search"}
+        if self.allowed_domains:
+            spec["allowed_domains"] = self.allowed_domains
+        return spec
+
+    def prepare_request(self, model, kwargs):
+        # Add any other request fields this tool requires. Merge with existing values instead of replacing them.
+        include = kwargs.setdefault("include", [])
+        if "provider_search.results" not in include:
+            include.append("provider_search.results")
+```
+
+Model instances expose the server-side tool classes they support using the `supported_server_side_tools` property:
+
+```python
+class MyModel(llm.KeyModel):
+    @property
+    def supported_server_side_tools(self):
+        return (ProviderSearch,)
+```
+
+This property is evaluated on the model instance, so it can use `self.model_id` or other instance configuration to vary the available tools. It is independent of `supports_tools`: that flag describes locally executed function tools. A model can support server-side tools, function tools, both or neither.
+
+`prompt.tools` can contain both {class}`llm.Tool` and {class}`llm.ServerSideTool` instances. The adapter should partition that list, put each server-side tool's `tool_spec(model)` result wherever its provider expects it and, after the baseline request is complete, call `tool.prepare_request(model, kwargs)` once for each server-side tool in list order. LLM validates the model declaration before `execute()` runs, but it does not interpret the specification or call either method itself.
+
+Providers with an OpenAI-compatible tools array can optionally support raw specifications by including `llm.ServerSideTool` in this property. This claims direct instances such as:
+
+```python
+llm.ServerSideTool({"type": "browser_search"})
+```
+
+Server-side tool calls returned by the provider should use the `server_executed=True` events described in {ref}`structured-messages-streaming`.
+
+```{eval-rst}
+.. autoclass:: llm.ServerSideTool
+   :members: tool_spec, prepare_request
+```
+
 
 (advanced-model-plugins-attachments)=
 
