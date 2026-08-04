@@ -640,7 +640,7 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  list*  List available tools that have been provided by plugins
+  list*  List available tools, optionally including tools supported by a model
 ```
 
 (help-tools-list)=
@@ -648,10 +648,11 @@ Commands:
 ```
 Usage: llm tools list [OPTIONS] [TOOL_DEFS]...
 
-  List available tools that have been provided by plugins
+  List available tools, optionally including tools supported by a model
 
 Options:
   --json            Output as JSON
+  -m, --model TEXT  List tools supported by this model
   --functions TEXT  Python code block or file path defining functions to
                     register as tools
   -h, --help        Show this message and exit.
