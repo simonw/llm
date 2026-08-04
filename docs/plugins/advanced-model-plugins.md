@@ -58,7 +58,8 @@ The async version of a model subclasses `llm.AsyncModel` instead of `llm.Model`.
 This example shows a subset of the OpenAI default plugin illustrating how this method might work:
 
 ```python
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 import llm
 
 class MyAsyncModel(llm.AsyncModel):
@@ -155,6 +156,60 @@ Here are the relevant dataclasses:
 .. autoclass:: llm.ToolResult
 ```
 
+(advanced-model-plugins-server-side-tools)=
+
+## Supporting server-side tools
+
+Server-side tools execute inside the provider's infrastructure rather than in LLM's local tool loop. Provider plugins represent these by subclassing {class}`llm.ServerSideTool`:
+
+```python
+class ProviderSearch(llm.ServerSideTool):
+    "A search tool executed by Example Provider."
+
+    name = "provider_search"
+
+    def __init__(self, allowed_domains=None):
+        self.allowed_domains = allowed_domains
+
+    def tool_spec(self, model):
+        spec = {"type": "provider_search"}
+        if self.allowed_domains:
+            spec["allowed_domains"] = self.allowed_domains
+        return spec
+
+    def prepare_request(self, model, kwargs):
+        # Add any other request fields this tool requires. Merge with existing values instead of replacing them.
+        include = kwargs.setdefault("include", [])
+        if "provider_search.results" not in include:
+            include.append("provider_search.results")
+```
+
+Model instances expose the server-side tool classes they support using the `supported_server_side_tools` property:
+
+```python
+class MyModel(llm.KeyModel):
+    @property
+    def supported_server_side_tools(self):
+        return (ProviderSearch,)
+```
+
+This property is evaluated on the model instance, so it can use `self.model_id` or other instance configuration to vary the available tools. It is independent of `supports_tools`: that flag describes locally executed function tools. A model can support server-side tools, function tools, both or neither.
+
+`prompt.tools` can contain both {class}`llm.Tool` and {class}`llm.ServerSideTool` instances. The adapter should partition that list, put each server-side tool's `tool_spec(model)` result wherever its provider expects it and, after the baseline request is complete, call `tool.prepare_request(model, kwargs)` once for each server-side tool in list order. LLM validates the model declaration before `execute()` runs, but it does not interpret the specification or call either method itself.
+
+Providers with an OpenAI-compatible tools array can optionally support raw specifications by including `llm.ServerSideTool` in this property. This claims direct instances such as:
+
+```python
+llm.ServerSideTool({"type": "browser_search"})
+```
+
+Server-side tool calls returned by the provider should use the `server_executed=True` events described in {ref}`structured-messages-streaming`.
+
+```{eval-rst}
+.. autoclass:: llm.ServerSideTool
+   :members: tool_spec, prepare_request
+```
+
 
 (advanced-model-plugins-attachments)=
 
@@ -168,17 +223,19 @@ See {ref}`the Python attachments documentation <python-api-attachments>` for det
 
 ### Specifying attachment types
 
-A `Model` subclass can list the types of attachments it accepts by defining a `attachment_types` class attribute:
+A `Model` subclass can list the types of attachments it accepts by defining an `attachment_types` class attribute:
 
 ```python
 class NewModel(llm.Model):
     model_id = "new-model"
-    attachment_types = {
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "image/gif",
-    }
+    attachment_types = frozenset(
+        {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        }
+    )
 ```
 These content types are detected when an attachment is passed to LLM using `llm -a filename`, or can be specified by the user using the `--attachment-type filename image/png` option.
 
@@ -377,6 +434,39 @@ response.add_tool_call(
 )
 ```
 
+(advanced-model-plugins-execute-tool-call)=
+### Provider-managed local tool calls
+
+Some provider SDKs orchestrate the tool loop themselves: they call a local callback with generated arguments, wait for that callback to return a result, and then continue the same model response. Plugins for those providers can delegate the actual invocation to LLM using `response.execute_tool_call()`:
+
+```python
+tool_result = response.execute_tool_call(
+    llm.ToolCall(
+        tool_call_id=tool_id,
+        name=tool_name,
+        arguments=parsed_args,
+    )
+)
+return tool_result.output
+```
+
+Async model plugins should use the awaitable equivalent method on `AsyncResponse`:
+
+```python
+tool_result = await response.execute_tool_call(
+    llm.ToolCall(
+        tool_call_id=tool_id,
+        name=tool_name,
+        arguments=parsed_args,
+    )
+)
+return tool_result.output
+```
+
+This uses LLM's normal tool executor, including toolbox preparation, error handling, `llm_tool_call` injection and the `before_call` and `after_call` lifecycle callbacks. If `tool_call_id` is omitted LLM generates one.
+
+Do **not** also call `response.add_tool_call()` for a provider-managed call. That would cause the normal chain loop to execute the same tool a second time after the provider has already received its result.
+
 ### Server-side tool calls
 
 For tools the API executes internally, set `server_executed=True` on the events. Anthropic web search is an example: the API returns a `server_tool_use` block for the search request, followed by a `web_search_tool_result` block containing the result payload.
@@ -475,6 +565,37 @@ else:
                 tool_call_id=block.id,
             )
 ```
+
+(advanced-model-plugins-json-replacements)=
+
+## Condensing logged payloads with json_replacements
+
+The raw provider payload your plugin assigns to `response.response_json` is {ref}`logged condensed <logging-message-store-response-json>`: content that the log database already stores elsewhere - the response text, reasoning blobs, tool definitions - is replaced with references instead of being written twice.
+
+Your model class can improve on this by declaring a `json_replacements` class attribute: a dictionary of payload fragments that you know recur in every response from your provider. Consult [the default OpenAI plugin](https://github.com/simonw/llm/blob/main/llm/default_plugins/openai_models.py) for an example of this pattern.
+
+```python
+class MyModel(llm.KeyModel):
+    json_replacements = {
+        "tool_usage_0": {
+            "image_gen": {"input_tokens": 0, "output_tokens": 0},
+            "web_search": {"num_requests": 0},
+        },
+        "response_env_0": {
+            "object": "response",
+            "status": "completed",
+            "store": False,
+        },
+    }
+```
+
+Payload content matching an entry is stored as a reference to it. Dict entries match structurally and additionally serve as *merge bases*: a payload object that mostly matches an entry, such as a response envelope where only the id and usage vary per call, is stored as the base plus a patch of its differing keys.
+
+Rules to follow:
+
+- **Entries are append-only. Never remove or change an existing entry - only add new ones.** Stored payloads reference entries by key and resolve against your dictionary when they are read back, so editing an entry silently breaks every payload already logged against it. When a provider changes a boilerplate block, append a new entry with a new suffix and leave the old one in place.
+- Reading these payloads requires your plugin to be installed: resolution looks your model up by id in the registry. If the model is unknown at read time, the payload is reported as unavailable rather than resolved incorrectly.
+- There is no size threshold for dictionary entries - you are trusted to curate them - but an entry smaller than the roughly 20-byte reference that replaces it makes payloads larger, not smaller.
 
 ## Consuming prompt.messages in build_messages
 

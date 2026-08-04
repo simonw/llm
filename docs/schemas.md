@@ -32,7 +32,7 @@ I got back Ziggy:
 ```
 The response matched my schema, with `name` and `one_sentence_bio` string columns and an integer for `age`.
 
-We're using the default LLM model here - `gpt-4o-mini`. Add `-m model` to use another model - for example use `-m o3-mini` to have O3 mini invent some dogs.
+We're using the default LLM model here - `gpt-5.6-luna`. Add `-m model` to use another model - for example use `-m gpt-5.6-sol` to have GPT-5.6 Sol invent some dogs.
 
 For a list of available models that support schemas, run this command:
 ```bash

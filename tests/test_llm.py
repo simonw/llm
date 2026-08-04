@@ -1,14 +1,17 @@
-from click.testing import CliRunner
-import llm
-from llm.cli import cli
-from llm.models import Usage
 import json
 import os
 import pathlib
-from pydantic import BaseModel
+from importlib.metadata import version
+from unittest import mock
+
 import pytest
 import sqlite_utils
-from unittest import mock
+from click.testing import CliRunner
+from pydantic import BaseModel
+
+import llm
+from llm.cli import cli
+from llm.models import Usage
 
 
 def test_version():
@@ -21,7 +24,7 @@ def test_version():
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
-    mocked_openai_chat, tmpdir, monkeypatch, custom_database_path
+    mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
 ):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
@@ -40,7 +43,7 @@ def test_llm_prompt_creates_log_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["responses"].count == 1
+    assert sqlite_utils.Database(db_path)["turns"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -57,12 +60,14 @@ def test_llm_prompt_creates_log_database(
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai_chat, use_stdin, user_path, logs_off, logs_args, should_log
+    mocked_openai_responses, use_stdin, user_path, logs_off, logs_args, should_log
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["responses"].delete_where()
+    if "turns" in log_db.table_names():
+        with log_db.conn:
+            log_db.execute("delete from turns")
 
     logs_off_path = user_path / "logs-off"
     if logs_off:
@@ -91,35 +96,23 @@ def test_llm_default_prompt(
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "Bob, Alice, Eve\n"
-    last_request = mocked_openai_chat.get_requests()[-1]
+    last_request = mocked_openai_responses.get_requests()[-1]
     assert last_request.headers["Authorization"] == "Bearer X"
 
-    # Was it logged?
-    rows = list(log_db["responses"].rows)
+    # Was it logged? The legacy tables are read-only now, so the turn
+    # is the record; its content is asserted below through `llm logs`.
+    rows = list(log_db["turns"].rows)
 
     if not should_log:
         assert len(rows) == 0
+        assert log_db["responses"].count == 0
         return
 
     assert len(rows) == 1
-    expected = {
-        "model": "gpt-4o-mini",
-        "prompt": "three names \nfor a pet pelican",
-        "system": None,
-        "options_json": "{}",
-        "response": "Bob, Alice, Eve",
-    }
     row = rows[0]
-    assert expected.items() <= row.items()
+    assert row["model"] == "gpt-5.6-luna"
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
-    assert json.loads(row["prompt_json"]) == {
-        "messages": [{"role": "user", "content": "three names \nfor a pet pelican"}]
-    }
-    assert json.loads(row["response_json"]) == {
-        "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
-        "model": "gpt-4o-mini",
-    }
 
     # Test "llm logs"
     log_result = runner.invoke(
@@ -131,54 +124,40 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-4o-mini",
+            "model": "gpt-5.6-luna",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
-            "prompt_json": {
-                "messages": [
-                    {"role": "user", "content": "three names \nfor a pet pelican"}
-                ]
-            },
+            # prompt_json and response_json are no longer recorded: the
+            # message chain holds the structure, and the raw provider
+            # payload was dropped as redundant with it.
             "options_json": {},
             "response": "Bob, Alice, Eve",
-            "response_json": {
-                "model": "gpt-4o-mini",
-                "choices": [{"message": {"content": {"$": f"r:{row['id']}"}}}],
-            },
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-4o-mini",
+            "conversation_model": "gpt-5.6-luna",
         }.items()
     )
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx_mock, user_path, async_):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
-        },
-        headers={"Content-Type": "application/json"},
+def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async_):
+    mock_openai_responses(
+        text="Bob, Alice, Eve",
+        response_id="resp_first",
+        message_id="msg_first",
     )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Terry"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Terry",
+        response_id="resp_second",
+        message_id="msg_second",
     )
 
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["responses"].delete_where()
+    if "turns" in log_db.table_names():
+        with log_db.conn:
+            log_db.execute("delete from turns")
 
     # First prompt
     runner = CliRunner()
@@ -190,7 +169,7 @@ def test_llm_prompt_continue(httpx_mock, user_path, async_):
     assert result.output == "Bob, Alice, Eve\n"
 
     # Should be logged
-    rows = list(log_db["responses"].rows)
+    rows = list(log_db["turns"].rows)
     assert len(rows) == 1
 
     # Now ask a follow-up
@@ -199,7 +178,7 @@ def test_llm_prompt_continue(httpx_mock, user_path, async_):
     assert result2.exit_code == 0, result2.output
     assert result2.output == "Terry\n"
 
-    rows = list(log_db["responses"].rows)
+    rows = list(log_db["turns"].rows)
     assert len(rows) == 2
 
 
@@ -240,7 +219,9 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
 def test_openai_completion(mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["responses"].delete_where()
+    if "turns" in log_db.table_names():
+        with log_db.conn:
+            log_db.execute("delete from turns")
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -267,18 +248,40 @@ def test_openai_completion(mocked_openai_completion, user_path):
     }
 
     # Check it was logged
-    rows = list(log_db["responses"].rows)
+    rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    expected = {
-        "model": "gpt-3.5-turbo-instruct",
-        "prompt": "Say this is a test",
-        "system": None,
-        "prompt_json": '{"messages": ["Say this is a test"]}',
-        "options_json": "{}",
-        "response": "\n\nThis is indeed a test",
-    }
-    row = rows[0]
-    assert expected.items() <= row.items()
+    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
+    log_result = runner.invoke(
+        cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
+    )
+    log_json = json.loads(log_result.output)
+    assert (
+        log_json[0].items()
+        >= {
+            "model": "gpt-3.5-turbo-instruct",
+            "prompt": "Say this is a test",
+            "system": None,
+            "response": "\n\nThis is indeed a test",
+        }.items()
+    )
+
+
+def test_openai_completion_continue_includes_history(
+    mocked_openai_completion, user_path
+):
+    # A continued conversation reloaded from storage must send the
+    # prior exchanges, not just the newest prompt - prompt.messages
+    # carries them; conversation.responses does not.
+    runner = CliRunner()
+    base = ["-m", "gpt-3.5-turbo-instruct", "--no-stream", "--key", "x"]
+    result = runner.invoke(cli, base + ["Say this is a test"], catch_exceptions=False)
+    assert result.exit_code == 0
+    result2 = runner.invoke(cli, base + ["Say it again", "-c"], catch_exceptions=False)
+    assert result2.exit_code == 0
+    body = json.loads(mocked_openai_completion.get_requests()[-1].content)
+    assert body["prompt"] == (
+        "Say this is a test\n\n\nThis is indeed a test\nSay it again"
+    )
 
 
 def test_openai_completion_system_prompt_error():
@@ -307,7 +310,9 @@ def test_openai_completion_logprobs_stream(
 ):
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["responses"].delete_where()
+    if "turns" in log_db.table_names():
+        with log_db.conn:
+            log_db.execute("delete from turns")
     runner = CliRunner()
     args = [
         "-m",
@@ -322,22 +327,11 @@ def test_openai_completion_logprobs_stream(
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "\n\nHi.\n"
-    rows = list(log_db["responses"].rows)
+    # Raw provider payloads (which carried the logprobs) are no longer
+    # persisted - the message chain is the record of what happened.
+    rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    row = rows[0]
-    assert json.loads(row["response_json"]) == {
-        "content": {"$": f'r:{row["id"]}'},
-        "logprobs": [
-            {"text": "\n\n", "top_logprobs": [{"\n\n": -0.6, "\n": -1.9}]},
-            {"text": "Hi", "top_logprobs": [{"Hi": -1.1, "Hello": -0.7}]},
-            {"text": ".", "top_logprobs": [{".": -1.1, "!": -0.9}]},
-            {"text": "", "top_logprobs": []},
-        ],
-        "id": "cmpl-80MdSaou7NnPuff5ZyRMysWBmgSPS",
-        "object": "text_completion",
-        "model": "gpt-3.5-turbo-instruct",
-        "created": 1695097702,
-    }
+    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
 
 
 def test_openai_completion_logprobs_nostream(
@@ -345,7 +339,9 @@ def test_openai_completion_logprobs_nostream(
 ):
     log_path = user_path / "logs.db"
     log_db = sqlite_utils.Database(str(log_path))
-    log_db["responses"].delete_where()
+    if "turns" in log_db.table_names():
+        with log_db.conn:
+            log_db.execute("delete from turns")
     runner = CliRunner()
     args = [
         "-m",
@@ -361,33 +357,12 @@ def test_openai_completion_logprobs_nostream(
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     assert result.output == "\n\nHi.\n"
-    rows = list(log_db["responses"].rows)
+    # Raw provider payloads (which carried the logprobs) are no longer
+    # persisted - the message chain is the record of what happened.
+    rows = list(log_db["turns"].rows)
     assert len(rows) == 1
     row = rows[0]
-    assert json.loads(row["response_json"]) == {
-        "choices": [
-            {
-                "finish_reason": "stop",
-                "index": 0,
-                "logprobs": {
-                    "text_offset": [16, 18, 20],
-                    "token_logprobs": [-0.6, -1.1, -0.9],
-                    "tokens": ["\n\n", "Hi", "1"],
-                    "top_logprobs": [
-                        {"\n": -1.9, "\n\n": -0.6},
-                        {"Hello": -0.7, "Hi": -1.1},
-                        {"!": -1.1, ".": -0.9},
-                    ],
-                },
-                "text": {"$": f"r:{row['id']}"},
-            }
-        ],
-        "created": 1695097747,
-        "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
-        "model": "gpt-3.5-turbo-instruct",
-        "object": "text_completion",
-        "usage": {"completion_tokens": 3, "prompt_tokens": 5, "total_tokens": 8},
-    }
+    assert row["model"] == "gpt-3.5-turbo-instruct"
 
 
 EXTRA_MODELS_YAML = """
@@ -542,6 +517,52 @@ def test_llm_models_async(user_path):
     assert "AsyncMockModel (async): mock" in result.output
 
 
+def test_llm_models_json_includes_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "models",
+            "--json",
+            "-m",
+            "gpt-5.6-luna",
+            "-m",
+            "chatgpt",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    models = {model["model_id"]: model for model in json.loads(result.output)}
+    assert set(models) == {"gpt-5.6-luna", "gpt-3.5-turbo"}
+    assert models["gpt-5.6-luna"]["server_side_tools"] == [
+        {"name": "WebSearch", "plugin": None},
+        {"name": "CodeInterpreter", "plugin": None},
+        {"name": "ServerSideTool", "plugin": None},
+    ]
+    assert models["gpt-3.5-turbo"]["server_side_tools"] == []
+    assert models["gpt-5.6-luna"]["supports_schema"] is True
+    assert models["gpt-5.6-luna"]["supports_tools"] is True
+    assert models["gpt-5.6-luna"]["can_stream"] is True
+    assert models["gpt-5.6-luna"]["supports_async"] is True
+    assert "application/pdf" in models["gpt-5.6-luna"]["attachment_types"]
+
+
+def test_llm_models_json_options_and_alias_filter():
+    result = CliRunner().invoke(
+        cli,
+        ["models", "--json", "--options", "-m", "4.1"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    models = json.loads(result.output)
+    assert len(models) == 1
+    assert models[0]["model_id"] == "gpt-4.1"
+    assert "4.1" in models[0]["aliases"]
+    assert "temperature" in models[0]["options"]
+
+
 @pytest.mark.parametrize(
     "args,expected_model_ids,unexpected_model_ids",
     (
@@ -554,8 +575,8 @@ def test_llm_models_async(user_path):
             ["OpenAI Chat: gpt-4o "],
         ),
         (
-            ["-m", "gpt-4o-mini", "-m", "gpt-4.5"],
-            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.5"],
+            ["-m", "gpt-4o-mini", "-m", "4.1"],
+            ["OpenAI Chat: gpt-4o-mini", "OpenAI Chat: gpt-4.1"],
             ["OpenAI Chat: gpt-4o "],
         ),
     ),
@@ -586,8 +607,8 @@ def test_model_defaults(tmpdir, monkeypatch):
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
-    assert llm.get_default_model() == "gpt-4o-mini"
-    assert llm.get_model().model_id == "gpt-4o-mini"
+    assert llm.get_default_model() == "gpt-5.6-luna"
+    assert llm.get_model().model_id == "gpt-5.6-luna"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
@@ -836,27 +857,22 @@ def test_schemas_dsl():
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
-    tmpdir, monkeypatch, httpx_mock, user_path, custom_database_path
+    tmpdir,
+    monkeypatch,
+    httpx_mock,
+    mock_openai_responses,
+    user_path,
+    custom_database_path,
 ):
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Bob, Alice, Eve"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Bob, Alice, Eve",
+        response_id="resp_first",
+        message_id="msg_first",
     )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://api.openai.com/v1/chat/completions",
-        json={
-            "model": "gpt-4o-mini",
-            "usage": {},
-            "choices": [{"message": {"content": "Terry"}}],
-        },
-        headers={"Content-Type": "application/json"},
+    mock_openai_responses(
+        text="Terry",
+        response_id="resp_second",
+        message_id="msg_second",
     )
 
     user_path = tmpdir / "user"
@@ -886,7 +902,83 @@ def test_llm_prompt_continue_with_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["responses"].count == 2
+    assert sqlite_utils.Database(db_path)["turns"].count == 2
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_llm_prompt_json(logs_db, async_):
+    "llm --json should output the same JSON as llm logs --json"
+    runner = CliRunner()
+    args = ["-m", "echo", "hello world", "--json"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["model"] == "echo"
+    assert row["prompt"] == "hello world"
+    assert json.loads(row["response"])["prompt"] == "hello world"
+    assert row["attachments"] == []
+    assert row["tools"] == []
+    assert row["tool_calls"] == []
+    assert row["tool_results"] == []
+    # Should be identical to the output of llm logs --json
+    logs_result = runner.invoke(
+        cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
+    )
+    assert logs_result.exit_code == 0, logs_result.output
+    assert json.loads(logs_result.output) == rows
+
+
+@pytest.mark.parametrize("logs_args", (["--no-log"], ["-n"], []))
+def test_llm_prompt_json_without_logging(logs_db, logs_args):
+    "--json should work even when the response is not logged to the database"
+    runner = CliRunner()
+    if not logs_args:
+        # Turn logging off entirely instead
+        runner.invoke(cli, ["logs", "off"], catch_exceptions=False)
+    result = runner.invoke(
+        cli, ["-m", "echo", "hello world", "--json"] + logs_args, catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    assert rows[0]["prompt"] == "hello world"
+    # But nothing should have been logged
+    assert logs_db["responses"].count == 0
+
+
+def test_llm_prompt_json_with_tools(logs_db):
+    "Each response in a tool chain should be included in the JSON"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+            "--json",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert len(rows) == 2
+    assert [tool["name"] for tool in rows[0]["tools"]] == ["llm_version"]
+    assert [call["name"] for call in rows[0]["tool_calls"]] == ["llm_version"]
+    assert rows[0]["tool_results"] == []
+    assert rows[1]["tool_calls"] == []
+    assert [result_["output"] for result_ in rows[1]["tool_results"]] == [
+        version("llm")
+    ]
+    logs_result = runner.invoke(
+        cli, ["logs", "-n", "2", "--json"], catch_exceptions=False
+    )
+    assert json.loads(logs_result.output) == rows
 
 
 def test_default_exports():

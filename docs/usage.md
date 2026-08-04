@@ -6,7 +6,7 @@ The command to run a prompt is `llm prompt 'your prompt'`. This is the default c
 (usage-executing-prompts)=
 ## Executing a prompt
 
-These examples use the default OpenAI `gpt-4o-mini` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
+These examples use the default OpenAI `gpt-5.6-luna` model, which requires you to first {ref}`set an OpenAI API key <api-keys>`.
 
 You can {ref}`install LLM plugins <installing-plugins>` to use models from other providers, including openly licensed models you can run directly on your own computer.
 
@@ -18,22 +18,21 @@ To disable streaming and only return the response once it has completed:
 ```bash
 llm 'Ten names for cheesecakes' --no-stream
 ```
-To switch from ChatGPT 4o-mini (the default) to GPT-4o:
+To switch from the default model to GPT-5.6 Sol:
 ```bash
-llm 'Ten names for cheesecakes' -m gpt-4o
+llm 'Ten names for cheesecakes' -m gpt-5.6-sol
 ```
-You can use `-m 4o` as an even shorter shortcut.
 
 Pass `--model <model name>` to use a different model. Run `llm models` to see a list of available models.
 
 Or if you know the name is too long to type, use `-q` once or more to provide search terms - the model with the shortest model ID that matches all of those terms (as a lowercase substring) will be used:
 ```bash
-llm 'Ten names for cheesecakes' -q 4o -q mini
+llm 'Ten names for cheesecakes' -q gpt -q sol
 ```
 To change the default model for the current session, set the `LLM_MODEL` environment variable:
 ```bash
-export LLM_MODEL=gpt-4.1-mini
-llm 'Ten names for cheesecakes' # Uses gpt-4.1-mini
+export LLM_MODEL=gpt-4.1
+llm 'Ten names for cheesecakes' # Uses gpt-4.1
 ```
 
 You can send a prompt directly to standard input like this:
@@ -298,6 +297,7 @@ These options are not used with explicit messages:
 - `-s/--system`: use a `system` message.
 - `-a/--attachment` and `--attachment-type`: use an `attachment` part.
 - `-f/--fragment` and `--system-fragment`: expand the fragment yourself and include it as a `text` part.
+- `-t/--template`: expand the template yourself and include its messages directly.
 
 Other prompt options still apply as usual, including `-m/--model`, `-o/--option`, `--schema`, `--no-stream`, `-x/--extract`, `--log`, `--no-log`, `--key`, `--async`, `--usage` and `-R/--hide-reasoning`.
 
@@ -407,7 +407,15 @@ Run this command to see a list of available tools from plugins:
 ```bash
 llm tools
 ```
-If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+Server-side tools are model-specific. Pass `-m/--model` to include the tools supported by a particular model:
+
+```bash
+llm tools -m gpt-5.6-luna
+```
+
+These are displayed in a separate `Server-side tools` section with their constructor signatures and documentation. Add `--json` to return them in a `server_side_tools` array whose entries have `"server_side": true`.
+
+If you run a prompt that uses tools from plugins or model-specific server-side tools, continuing that conversation using `llm -c` will reuse the tools from the first prompt. Configured constructor arguments such as `CodeInterpreter(memory_limit="4g")` are retained. Running `llm chat -c` will start a chat that continues using those same tools. For example:
 
 ```
 llm -T simple_eval "12345 * 12345" --td
@@ -443,7 +451,43 @@ Toolboxes always start with a capital letter. They can be configured by passing 
 - Single JSON value: `ToolboxName("hello")` or `ToolboxName([1,2,3])`
 - Key-value pairs: `ToolboxName(name="test", count=5, items=[1,2])` - treated the same as `{"name": "test", "count": 5, "items": [1, 2]}`, all values must be valid JSON
 
-Toolboxes are not currently supported with the `llm -c` option, but they work well with `llm chat`. Try chatting with the Datasette content database like this:
+The `llm tools` command lists toolboxes along with the tools they provide. Some toolboxes cannot know their list of tools until they have been configured - [llm-mcp-client](https://github.com/simonw/llm-mcp-client) for example fetches its tools from whichever MCP server it is pointed at. These dynamic toolboxes are listed with their constructor signature and documentation instead:
+
+```
+MCP(server, mode='auto', prefix='') (plugin: mcp_client)
+
+  Expose the tools from an MCP server as LLM tools.
+
+  Usage:
+
+      MCP("https://example.com/mcp")
+      MCP("https://example.com/mcp", mode="legacy", prefix="demo_")
+```
+
+Pass a full toolbox specification to `llm tools` to see the tools provided by a configured instance:
+
+```bash
+llm tools 'MCP("https://datasette.simonwillison.net/-/mcp")'
+```
+```
+MCP("https://datasette.simonwillison.net/-/mcp"):
+
+  list_databases(**kwargs)
+
+    List the databases available in this Datasette instance.
+
+  get_database_schema(**kwargs)
+
+    Return the complete SQL schema for a database.
+
+  execute_sql(**kwargs)
+
+    Execute one read-only SQL statement and return its tabular results.
+```
+
+Continuing a conversation with `llm -c` or `llm chat -c` reconstructs any toolboxes from the configuration recorded in the logs, so you don't need to repeat the `-T` option. Each instance is rebuilt fresh, which means any in-memory state a toolbox accumulated during the earlier prompt does not carry over.
+
+Toolboxes work well with `llm chat`. Try chatting with the Datasette content database like this:
 
 ```bash
 llm chat -T 'Datasette("https://datasette.io/content")' --td
@@ -474,6 +518,49 @@ Use `--xl/--extract-last` to return the last fenced code block instead of the fi
 
 The entire response including explanatory text is still logged to the database, and can be viewed using `llm logs -c`.
 
+(usage-json-output)=
+### JSON output
+
+Add `--json` to get back a JSON array describing the prompt and the response, in the same format as {ref}`llm logs --json <logging-view>`:
+
+```bash
+llm 'Five names for a pet pelican' --json
+```
+```json
+[
+  {
+    "id": "01jm8ec74wxsdatyn5pq1fp0s5",
+    "model": "gpt-5.6-luna",
+    "resolved_model": null,
+    "prompt": "Five names for a pet pelican",
+    "system": null,
+    "prompt_json": null,
+    "options_json": {},
+    "response": "1. Captain Beaky\n...",
+    "reasoning": null,
+    "response_json": null,
+    "conversation_id": "01jm8ec74taftdgj2t4zra9z0j",
+    "duration_ms": 1560,
+    "datetime_utc": "2025-02-16T22:34:30.374882+00:00",
+    "input_tokens": 8,
+    "output_tokens": 62,
+    "token_details": null,
+    "conversation_name": "Five names for a pet pelican",
+    "conversation_model": "gpt-5.6-luna",
+    "schema_json": null,
+    "prompt_fragments": [],
+    "system_fragments": [],
+    "tools": [],
+    "tool_calls": [],
+    "tool_results": [],
+    "attachments": []
+  }
+]
+```
+The array will contain more than one object if the prompt triggered {ref}`tool calls <usage-tools>`, since each round-trip with the model is logged as a separate response.
+
+This works even if logging is turned off or you use `-n/--no-log` - in that case the JSON is assembled without writing anything to your logs database.
+
 (usage-schemas)=
 ### Schemas
 
@@ -502,7 +589,7 @@ llm --schema '{
       }
     }
   }
-}' -m gpt-4o-mini 'invent two dogs'
+}' -m gpt-5.6-sol 'invent two dogs'
 ```
 
 Or use LLM's custom {ref}`concise schema syntax <schemas-dsl>` like this:
@@ -643,26 +730,26 @@ llm chat -c
 
 For models that support them, you can pass options using `-o/--option`:
 ```bash
-llm chat -m gpt-4 -o temperature 0.5
+llm chat -m gpt-4.1 -o temperature 0.5
 ```
 
 You can pass a system prompt to be used for your chat conversation:
 
 ```bash
-llm chat -m gpt-4 -s 'You are a sentient cheesecake'
+llm chat -m gpt-5.6-luna -s 'You are a sentient cheesecake'
 ```
 You can also pass {ref}`a template <prompt-templates>` - useful for creating chat personas that you wish to return to.
 
-Here's how to create a template for your GPT-4 powered cheesecake:
+Here's how to create a template for your GPT-5.6 Luna powered cheesecake:
 ```bash
-llm --system 'You are a sentient cheesecake' -m gpt-4 --save cheesecake
+llm --system 'You are a sentient cheesecake' -m gpt-5.6-luna --save cheesecake
 ```
 Now you can start a new chat with your cheesecake any time you like using this:
 ```bash
 llm chat -t cheesecake
 ```
 ```
-Chatting with gpt-4
+Chatting with gpt-5.6-luna
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt
@@ -684,7 +771,7 @@ To do that, type `!multi` to start a multi-line input. Type or paste your text, 
 If your pasted text might itself contain a `!end` line, you can set a custom delimiter using `!multi abc` followed by `!end abc` at the end:
 
 ```
-Chatting with gpt-4
+Chatting with gpt-5.6-luna
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
@@ -704,7 +791,7 @@ urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, 
 You can also use `!edit` to open your default editor and modify the prompt before sending it to the model.
 
 ```
-Chatting with gpt-4
+Chatting with gpt-5.6-luna
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
@@ -723,24 +810,30 @@ llm models
 ```
 Example output:
 ```
-OpenAI Chat: gpt-4o (aliases: 4o)
-OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
-OpenAI Chat: o1-preview
-OpenAI Chat: o1-mini
-GeminiPro: gemini-1.5-pro-002
-GeminiPro: gemini-1.5-flash-002
+OpenAI Responses: gpt-5.5
+OpenAI Responses: gpt-5.5-2026-04-23
+OpenAI Responses: gpt-5.6-sol
+OpenAI Responses: gpt-5.6-terra
+OpenAI Responses: gpt-5.6-luna (aliases: luna)
 ...
 ```
 
 Add one or more `-q term` options to search for models matching all of those search terms:
 ```bash
-llm models -q gpt-4o
-llm models -q 4o -q mini
+llm models -q gpt-5.6
+llm models -q gpt -q sol
 ```
 Use one or more `-m` options to indicate specific models, either by their model ID or one of their aliases:
 ```bash
-llm models -m gpt-4o -m gemini-1.5-pro-002
+llm models -m gpt-5.6-luna -m claude-opus-4.8
 ```
+
+Add `--json` to return an array of model records with aliases, capability flags, attachment types and `server_side_tools`. Combine it with `-m` to inspect one or more specific models; adding `--options` includes each model's option schemas:
+
+```bash
+llm models --json -m gpt-5.6-luna
+```
+
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options
@@ -787,32 +880,16 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     image_detail: str
       Controls the detail level for image attachments. Supported values are
       low, high, and auto.
+    service_tier: str
+      The processing tier to use for this request - for example 'fast' for
+      Fast mode (faster responses at a higher price) or 'flex' for slower,
+      cheaper processing on models that support those tiers.
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
   - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: chatgpt-4o-latest (aliases: chatgpt-4o)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
   - async
   Keys:
     key: openai
@@ -829,112 +906,13 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - streaming
   - schemas
   - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview-2024-12-17
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-audio-preview-2024-10-01
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-mini-audio-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4o-mini-audio-preview-2024-12-17
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    audio/mpeg, audio/wav
-  Features:
-  - streaming
   - async
   Keys:
     key: openai
@@ -951,6 +929,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -973,6 +952,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -995,6 +975,7 @@ OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1017,6 +998,7 @@ OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -1035,6 +1017,7 @@ OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -1053,60 +1036,7 @@ OpenAI Chat: gpt-4 (aliases: 4, gpt4)
     seed: int
     json_object: boolean
     image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-32k (aliases: 4-32k)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-1106-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-0125-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -1125,6 +1055,7 @@ OpenAI Chat: gpt-4-turbo-2024-04-09
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
   - async
@@ -1143,52 +1074,9 @@ OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
     seed: int
     json_object: boolean
     image_detail: str
+    service_tier: str
   Features:
   - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.5-preview-2025-02-27
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.5-preview (aliases: gpt-4.5)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
   - async
   Keys:
     key: openai
@@ -1236,6 +1124,10 @@ OpenAI Responses: o1
       supported values are low, medium, and high. Reducing reasoning effort
       can result in faster responses and fewer tokens used on reasoning in a
       response.
+    service_tier: str
+      The processing tier to use for this request - for example 'fast' for
+      Fast mode (faster responses at a higher price) or 'flex' for slower,
+      cheaper processing on models that support those tiers.
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1259,47 +1151,12 @@ OpenAI Responses: o1-2024-12-17
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
   - schemas
   - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: o1-preview
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: o1-mini
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-  Features:
-  - streaming
   - async
   Keys:
     key: openai
@@ -1318,6 +1175,7 @@ OpenAI Responses: o3-mini
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Features:
   - streaming
   - schemas
@@ -1340,6 +1198,7 @@ OpenAI Responses: o3
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1364,6 +1223,7 @@ OpenAI Responses: o4-mini
     chat_completions: boolean
     image_detail: str
     reasoning_effort: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1389,6 +1249,7 @@ OpenAI Responses: gpt-5
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1414,6 +1275,7 @@ OpenAI Responses: gpt-5-mini
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1439,6 +1301,7 @@ OpenAI Responses: gpt-5-nano
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1464,6 +1327,7 @@ OpenAI Responses: gpt-5-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1489,6 +1353,7 @@ OpenAI Responses: gpt-5-mini-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1514,6 +1379,7 @@ OpenAI Responses: gpt-5-nano-2025-08-07
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1539,31 +1405,7 @@ OpenAI Responses: gpt-5.1
     image_detail: str
     reasoning_effort: str
     verbosity: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5.1-chat-latest
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1589,6 +1431,7 @@ OpenAI Responses: gpt-5.2
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1614,6 +1457,7 @@ OpenAI Responses: gpt-5.2-chat-latest
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1639,6 +1483,7 @@ OpenAI Responses: gpt-5.4
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1664,6 +1509,7 @@ OpenAI Responses: gpt-5.4-2026-03-05
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1689,6 +1535,7 @@ OpenAI Responses: gpt-5.4-mini
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1714,6 +1561,7 @@ OpenAI Responses: gpt-5.4-mini-2026-03-17
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1739,6 +1587,7 @@ OpenAI Responses: gpt-5.4-nano
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1764,6 +1613,7 @@ OpenAI Responses: gpt-5.4-nano-2026-03-17
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1789,6 +1639,7 @@ OpenAI Responses: gpt-5.5
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1814,6 +1665,85 @@ OpenAI Responses: gpt-5.5-2026-04-23
     image_detail: str
     reasoning_effort: str
     verbosity: str
+    service_tier: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-sol
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+    service_tier: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-terra
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+    service_tier: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-5.6-luna
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    verbosity: str
+    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1866,7 +1796,7 @@ OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instru
 
 When running a prompt you can pass the full model name or any of the aliases to the `-m/--model` option:
 ```bash
-llm -m 4o \
+llm -m luna \
   'As many names for cheesecakes as you can think of, with detailed descriptions'
 ```
 
@@ -1876,7 +1806,7 @@ llm -m 4o \
 
 To configure a default option for a specific model, use the `llm models options set` command:
 ```bash
-llm models options set gpt-4o temperature 0.5
+llm models options set gpt-4.1 temperature 0.5
 ```
 This option will then be applied automatically any time you run a prompt through the `gpt-4o` model.
 
@@ -1888,14 +1818,14 @@ llm models options list
 ```
 Or show them for an individual model with `llm models options show <model_id>`:
 ```bash
-llm models options show gpt-4o
+llm models options show gpt-4.1
 ```
 To clear a default option, use the `llm models options clear` command:
 ```bash
-llm models options clear gpt-4o temperature
+llm models options clear gpt-4.1 temperature
 ```
 Or clear all default options for a model like this:
 ```bash
-llm models options clear gpt-4o
+llm models options clear gpt-4.1
 ```
 Default model options are respected by both the `llm prompt` and the `llm chat` commands. They will not be applied when you use LLM as a {ref}`Python library <python-api>`.

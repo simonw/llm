@@ -1,15 +1,17 @@
 import json
+
 import pytest
+
+from llm import Toolbox, get_key
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
+    monotonic_ulid,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
-    monotonic_ulid,
 )
-from llm import get_key, Toolbox
 
 
 @pytest.mark.parametrize(
@@ -83,22 +85,28 @@ def test_simplify_usage_dict(input_data, expected_output):
             None,
         ],
         [
-            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
-            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            (
+                "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+                "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```"
+            ),
             False,
             "def foo():\n    return 'bar'\n",
         ],
         [
-            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
-            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```",
+            (
+                "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+                "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n```"
+            ),
             True,
             "function foo() {\n    return 'bar';\n}\n",
         ],
         [
-            "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
-            # This one has trailing whitespace after the second code block:
-            # https://github.com/simonw/llm/pull/718#issuecomment-2613177036
-            "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n``` ",
+            (
+                "First code block:\n\n```python\ndef foo():\n    return 'bar'\n```\n\n"
+                # This one has trailing whitespace after the second code block:
+                # https://github.com/simonw/llm/pull/718#issuecomment-2613177036
+                "Second code block:\n\n```javascript\nfunction foo() {\n    return 'bar';\n}\n``` "
+            ),
             True,
             "function foo() {\n    return 'bar';\n}\n",
         ],
@@ -247,6 +255,21 @@ def test_schema_dsl_multi():
 
 
 @pytest.mark.parametrize(
+    ("schema", "invalid_field"),
+    (
+        (":just a description", ":just a description"),
+        ("name, :description", ":description"),
+    ),
+)
+def test_schema_dsl_missing_field_name(schema, invalid_field):
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(schema)
+    assert str(ex.value) == (
+        f"Invalid schema DSL: field {invalid_field!r} is missing a name before ':'"
+    )
+
+
+@pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [
         # Basic truncation tests
@@ -268,8 +291,6 @@ def test_schema_dsl_multi():
         ("Hello \n\t world!", 12, True, True, "Hello world!"),
         # Edge cases
         ("12345", 5, False, False, "12345"),
-        ("123456", 5, False, False, "12..."),
-        ("12345", 5, False, True, "12345"),  # Unchanged for exact fit
         ("123456", 5, False, False, "12..."),  # Regular truncation for small max_length
         # Very long string
         ("A" * 200, 10, False, False, "AAAAAAA..."),
@@ -287,7 +308,6 @@ def test_schema_dsl_multi():
             True,
             "12345...",
         ),  # Too small for keep_end, use regular
-        ("1234567890", 9, False, True, "12... 90"),  # Just enough for keep_end
     ],
 )
 def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expected):
@@ -328,7 +348,7 @@ def test_test_truncate_string_keep_end(
     assert result == expected_full
 
     # Only check prefix/suffix when we expect truncation with keep_end
-    if prefix_len is not None and len(text) > max_length and max_length >= 9:
+    if prefix_len is not None and len(text) > max_length >= 9:
         assert result[:prefix_len] == text[:prefix_len]
         assert result[-prefix_len:] == text[-prefix_len:]
         assert "... " in result

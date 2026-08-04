@@ -127,6 +127,37 @@ def test_prompt_messages_dash_reads_stdin_for_messages_not_prompt(mock_model):
     ]
 
 
+def test_prompt_messages_async(async_mock_model):
+    async_mock_model.enqueue(["continued"])
+    messages = [
+        llm.user("Earlier question").to_dict(),
+        llm.assistant("Earlier answer").to_dict(),
+    ]
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "prompt",
+            "-m",
+            "mock",
+            "--async",
+            "--no-stream",
+            "--messages",
+            json.dumps(messages),
+            "Now continue",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "continued\n"
+    assert async_mock_model.history[0][0].messages == [
+        llm.user("Earlier question"),
+        llm.assistant("Earlier answer"),
+        llm.user("Now continue"),
+    ]
+
+
 def test_prompt_messages_cannot_use_system_option():
     result = CliRunner().invoke(
         cli,
@@ -143,3 +174,21 @@ def test_prompt_messages_cannot_use_system_option():
 
     assert result.exit_code == 1
     assert "--messages/--message cannot be used with -s/--system" in result.output
+
+
+def test_prompt_messages_cannot_use_template():
+    result = CliRunner().invoke(
+        cli,
+        [
+            "prompt",
+            "-m",
+            "mock",
+            "--messages",
+            "[]",
+            "--template",
+            "example",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--messages/--message cannot be used with -t/--template" in result.output

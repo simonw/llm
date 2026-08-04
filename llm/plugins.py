@@ -1,8 +1,10 @@
 import importlib
-from importlib import metadata
 import os
-import pluggy
 import sys
+from importlib import metadata
+
+import pluggy
+
 from . import hookspecs
 
 DEFAULT_PLUGINS = (

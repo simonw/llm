@@ -1,18 +1,214 @@
 import asyncio
-import re
-from click.testing import CliRunner
-from importlib.metadata import version
 import json
-import llm
-from llm import cli, CancelToolCall
-from llm.migrations import migrate
-from llm.tools import llm_time
 import os
+import re
+import time
+from importlib.metadata import version
+
 import pytest
 import sqlite_utils
-import time
+from click.testing import CliRunner
+
+import llm
+from llm import CancelToolCall, cli
+from llm.logs import LogStore
+from llm.migrations import migrate
+from llm.tools import llm_time
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
+
+
+class DemoServerSideTool(llm.ServerSideTool):
+    "A server-side tool used by the core tests."
+
+    name = "demo_server_tool"
+
+    def __init__(self, value="demo"):
+        self.value = value
+        self.prepare_calls = 0
+
+    def tool_spec(self, model):
+        return {"type": self.name, "value": self.value}
+
+    def prepare_request(self, model, kwargs):
+        self.prepare_calls += 1
+
+
+class ServerToolsOnlyModel(llm.Model):
+    model_id = "server-tools-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
+
+    def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class AsyncServerToolsOnlyModel(llm.AsyncModel):
+    model_id = "async-server-tools-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
+
+    async def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class MixedToolsModel(ServerToolsOnlyModel):
+    model_id = "mixed-tools"
+    supports_tools = True
+
+
+class RawServerToolOnlyModel(ServerToolsOnlyModel):
+    model_id = "raw-server-tool-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (llm.ServerSideTool,)
+
+
+def test_server_side_tool_raw_spec_escape_hatch():
+    tool = llm.ServerSideTool({"type": "browser_search"})
+    model = ServerToolsOnlyModel()
+
+    assert tool.tool_spec(model) == {"type": "browser_search"}
+    assert tool.name == "server_side_tool"
+    assert tool._config == {"spec": {"type": "browser_search"}}
+
+    kwargs = {}
+    assert tool.prepare_request(model, kwargs) is None
+    assert kwargs == {}
+
+    with pytest.raises(TypeError, match="raw provider tool spec"):
+        llm.ServerSideTool().tool_spec(model)
+
+
+def test_declared_server_side_tool_does_not_require_function_tool_support():
+    tool = DemoServerSideTool("one")
+    model = ServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert response.text() == "done"
+    assert response.prompt.tools == [tool]
+    # Core transports and validates server-side tools but never invokes
+    # their provider request hook itself.
+    assert tool.prepare_calls == 0
+    assert tool._config == {"value": "one"}
+
+
+def test_unsupported_server_side_tool_fails_before_execution(mock_model):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Model 'mock' does not support server-side tool "
+            "'demo_server_tool'. Run: llm tools -m mock"
+        ),
+    ):
+        mock_model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_declaring_raw_escape_hatch_does_not_claim_every_subclass():
+    model = RawServerToolOnlyModel()
+    assert (
+        model.prompt("hello", tools=[llm.ServerSideTool({"type": "custom"})]).text()
+        == "done"
+    )
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_server_side_tool_support_can_vary_by_model_instance():
+    class ConditionalModel(ServerToolsOnlyModel):
+        def __init__(self, enabled):
+            self.enabled = enabled
+
+        @property
+        def supported_server_side_tools(self):
+            return (DemoServerSideTool,) if self.enabled else ()
+
+    assert (
+        ConditionalModel(True).prompt("hello", tools=[DemoServerSideTool()]).text()
+        == "done"
+    )
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_server_side_tool_configuration_is_logged():
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    instance = next(iter(db["tool_instances"].rows))
+    assert instance["name"] == "DemoServerSideTool"
+    assert instance["plugin"] is None
+    assert json.loads(instance["arguments"]) == {"value": "configured"}
+    assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
+
+
+def test_logs_expanded_server_side_tool(user_path):
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    result = CliRunner().invoke(cli.cli, ["logs", "-cue"], catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert '- `DemoServerSideTool({"value": "configured"})`:' in result.output
+    assert "Arguments: `{}`" in result.output
+
+
+def test_function_tools_still_require_supports_tools():
+    def local_tool():
+        return "local"
+
+    with pytest.raises(ValueError, match="does not support tools"):
+        ServerToolsOnlyModel().prompt("hello", tools=[local_tool])
+
+
+def test_local_executor_ignores_server_side_tools():
+    def local_tool():
+        return "local"
+
+    tool = DemoServerSideTool()
+    response = MixedToolsModel().prompt(
+        "hello", tools=[tool, llm.Tool.function(local_tool)]
+    )
+    response.text()
+
+    results = response.execute_tool_calls(
+        tool_calls_list=[
+            llm.ToolCall(name="local_tool", arguments={}),
+            llm.ToolCall(name=tool.name, arguments={}),
+        ]
+    )
+    assert [result.output for result in results] == [
+        "local",
+        'Error: tool "demo_server_tool" does not exist',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_declared_server_side_tool_and_executor_partition():
+    tool = DemoServerSideTool()
+    model = AsyncServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert await response.text() == "done"
+    results = await response.execute_tool_calls(
+        tool_calls_list=[llm.ToolCall(name=tool.name, arguments={})]
+    )
+    assert results[0].output == 'Error: tool "demo_server_tool" does not exist'
 
 
 @pytest.mark.vcr
@@ -42,13 +238,10 @@ def test_tool_use_basic(vcr):
     db = sqlite_utils.Database(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
-    assert set(db.table_names()).issuperset(
-        {"tools", "tool_responses", "tool_calls", "tool_results"}
-    )
 
-    responses = list(db["responses"].rows)
-    assert len(responses) == 2
-    first_response, second_response = responses
+    turns = list(db["turns"].rows)
+    assert len(turns) == 2
+    first_turn, second_turn = turns
 
     tools = list(db["tools"].rows)
     assert len(tools) == 1
@@ -56,18 +249,30 @@ def test_tool_use_basic(vcr):
     assert tools[0]["description"] == "Multiply two numbers."
     assert tools[0]["plugin"] is None
 
-    tool_results = list(db["tool_results"].rows)
-    tool_calls = list(db["tool_calls"].rows)
-
+    # The tool call is in the first turn's output parts; the result is
+    # among the second turn's inputs.
+    store = LogStore(db)
+    first_chain = store.load_chain(first_turn["tip_message_hash"])
+    tool_calls = [
+        part
+        for message in first_chain
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolCallPart)
+    ]
     assert len(tool_calls) == 1
-    assert tool_calls[0]["response_id"] == first_response["id"]
-    assert tool_calls[0]["name"] == "multiply"
-    assert tool_calls[0]["arguments"] == '{"a": 1231, "b": 2331}'
+    assert tool_calls[0].name == "multiply"
+    assert tool_calls[0].arguments == {"a": 1231, "b": 2331}
 
-    assert len(tool_results) == 1
-    assert tool_results[0]["response_id"] == second_response["id"]
-    assert tool_results[0]["output"] == "2869461"
-    assert tool_results[0]["tool_call_id"] == tool_calls[0]["tool_call_id"]
+    second_inputs = store.load_chain(second_turn["parent_message_hash"])
+    tool_results_parts = [
+        part
+        for message in second_inputs
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolResultPart)
+    ]
+    assert len(tool_results_parts) == 1
+    assert tool_results_parts[0].output == "2869461"
+    assert tool_results_parts[0].tool_call_id == tool_calls[0].tool_call_id
 
 
 @pytest.mark.vcr
@@ -102,6 +307,31 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
+def test_chain_round_separator_is_display_only():
+    """The space between chain rounds is synthesized at the chain level
+    for display - it must never become a stored whitespace part."""
+
+    def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    events = list(chain_response.stream_events())
+    text = "".join(e.chunk for e in events if e.type == "text")
+    # The separator reached the streamed output...
+    assert "\n} {\n" in text
+
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    chain_response.log_to_db(db)
+    # ...but no whitespace-only text part was stored.
+    for row in db["parts"].rows:
+        if row["type"] == "text" and row["text"] is not None:
+            assert row["text"].strip(), row
+
+
 def test_tool_use_async_tool_function():
     async def hello():
         return "world"
@@ -111,8 +341,8 @@ def test_tool_use_async_tool_function():
         json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
     )
     output = chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     tool_call_id = objects[1]["tool_results"][0]["tool_call_id"]
@@ -155,8 +385,8 @@ async def test_async_tools_run_tools_in_parallel():
         tools=[hello, hello2],
     )
     output = await chain_response.text()
-    # That's two JSON objects separated by '\n}{\n'
-    bits = output.split("\n}{\n")
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     ids = [r["tool_call_id"] for r in objects[1]["tool_results"]]
@@ -481,6 +711,102 @@ async def test_tool_conversation_settings_async():
     assert len(after_collected) == 2
 
 
+def test_provider_managed_tool_execution_uses_response_context():
+    events = []
+    implementation_call = {}
+
+    def lookup(value: str, llm_tool_call: llm.ToolCall) -> dict:
+        implementation_call["tool_call"] = llm_tool_call
+        return {"value": value.upper()}
+
+    def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class ProviderManagedToolModel(llm.Model):
+        model_id = "provider-managed-tool"
+        supports_tools = True
+
+        def execute(self, prompt, stream, response, conversation=None):
+            tool_result = response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = ProviderManagedToolModel().chain(
+        "pelican",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert chain.text() == '{"value": "PELICAN"}'
+    assert len(chain._responses) == 1
+    tool_call = implementation_call["tool_call"]
+    assert tool_call.tool_call_id.startswith("tc_")
+    assert events == [
+        ("before", "lookup", tool_call.tool_call_id),
+        ("after", "lookup", tool_call.tool_call_id, '{"value": "PELICAN"}'),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_provider_managed_tool_execution_uses_response_context():
+    events = []
+
+    async def lookup(value: str) -> str:
+        await asyncio.sleep(0)
+        return value.upper()
+
+    async def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    async def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class AsyncProviderManagedToolModel(llm.AsyncModel):
+        model_id = "async-provider-managed-tool"
+        supports_tools = True
+
+        async def execute(self, prompt, stream, response, conversation=None):
+            tool_result = await response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = AsyncProviderManagedToolModel().chain(
+        "puffin",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert await chain.text() == "PUFFIN"
+    assert len(chain._responses) == 1
+    assert events[0][0:2] == ("before", "lookup")
+    assert events[0][2].startswith("tc_")
+    assert events == [
+        ("before", "lookup", events[0][2]),
+        ("after", "lookup", events[0][2], "PUFFIN"),
+    ]
+
+
 ERROR_FUNCTION = """
 def trigger_error(msg: str):
     raise Exception(msg)
@@ -523,8 +849,10 @@ def test_tool_errors(async_):
     assert log_text_result.exit_code == 0
     normalized_log_text = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", log_text_result.output)
     assert (
-        "- **trigger_error**: `tc_TCID`<br>\n"
-        "    Error: Error!<br>\n"
+        "- **trigger_error**: `tc_TCID`  \n"
+        "    ```\n"
+        "    Error: Error!\n"
+        "    ```  \n"
         "    **Error**: Exception: Error!\n"
     ) in normalized_log_text
 
@@ -542,7 +870,6 @@ def test_chain_sync_cancel_only_first_of_two():
         if tool.name == "t1":
             raise CancelToolCall("skip1")
         # allow t2
-        return None
 
     calls = [
         {"name": "t1"},
@@ -581,7 +908,6 @@ async def test_chain_async_cancel_only_first_of_two():
     async def before(tool, tool_call):
         if tool.name == "t1":
             raise CancelToolCall("skip1")
-        return None
 
     calls = [
         {"name": "t1"},

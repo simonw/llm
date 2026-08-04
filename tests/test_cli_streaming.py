@@ -11,7 +11,7 @@ from llm.cli import cli
 
 def test_text_goes_to_stdout_not_stderr(mock_model):
     mock_model.enqueue(["Hello world"])
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log"],
@@ -32,7 +32,7 @@ def test_reasoning_goes_to_stderr_not_stdout(mock_model):
             llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log"],
@@ -52,7 +52,7 @@ def test_reasoning_rendered_in_dim_style(mock_model):
             llm.parts.StreamEvent(type="text", chunk="x", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log"],
@@ -74,7 +74,7 @@ def test_hide_reasoning_flag_suppresses_reasoning(mock_model):
             llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log", "--hide-reasoning"],
@@ -94,7 +94,7 @@ def test_hide_reasoning_short_flag_R(mock_model):
             llm.parts.StreamEvent(type="text", chunk="x", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log", "-R"],
@@ -113,7 +113,7 @@ def test_newline_between_reasoning_and_text(mock_model):
             llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log"],
@@ -133,7 +133,7 @@ def test_async_path_reasoning_to_stderr(async_mock_model):
             llm.parts.StreamEvent(type="text", chunk="async answer", part_index=1),
         ]
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--async", "--no-log"],
@@ -148,7 +148,7 @@ def test_plain_str_plugin_still_works(mock_model):
     """A plugin that yields plain strings (legacy) still displays
     correctly — no reasoning branch, everything to stdout."""
     mock_model.enqueue(["plain ", "text"])
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         ["-m", "mock", "hi", "--no-log"],

@@ -348,18 +348,14 @@ The `delay` token will let us simulate a streaming language model, where tokens 
 
 Options are defined using an inner class on the model, called `Options`. It should extend the `llm.Options` class.
 
-First, add this import to the top of your `llm_markov.py` file:
-```python
-from typing import Optional
-```
-Then add this `Options` class to your model:
+Add this `Options` class to your model:
 ```python
 class Markov(Model):
     model_id = "markov"
 
     class Options(llm.Options):
-        length: Optional[int] = None
-        delay: Optional[float] = None
+        length: int | None = None
+        delay: float | None = None
 ```
 Let's add extra validation rules to our options. Length must be at least 2. Duration must be between 0 and 10.
 
@@ -376,11 +372,11 @@ We can now add Pydantic field validators for our two new rules, plus inline docu
 
 ```python
     class Options(llm.Options):
-        length: Optional[int] = Field(
+        length: int | None = Field(
             description="Number of words to generate",
             default=None
         )
-        delay: Optional[float] = Field(
+        delay: float | None = Field(
             description="Seconds to delay between each token",
             default=None
         )

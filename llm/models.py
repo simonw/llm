@@ -1,52 +1,53 @@
 import asyncio
 import base64
-from condense_json import condense_json
 import dataclasses
-from dataclasses import dataclass, field
 import datetime
-from .errors import NeedsKeyException
+import functools
 import hashlib
-import httpx
-from itertools import islice
-from pathlib import Path
 import re
 import time
-from types import MethodType
-from typing import (
-    TYPE_CHECKING,
-    Any,
+from collections.abc import (
     AsyncGenerator,
     AsyncIterator,
     Awaitable,
     Callable,
-    Dict,
     Iterable,
     Iterator,
-    List,
+)
+from dataclasses import dataclass, field
+from itertools import islice
+from pathlib import Path
+from types import MethodType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
     Optional,
-    Set,
     Union,
     cast,
     get_type_hints,
 )
+
+import httpx
+
+from .errors import NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
     from .parts import StreamEvent
-from .utils import (
-    ensure_fragment,
-    ensure_tool,
-    make_schema_id,
-    mimetype_from_path,
-    mimetype_from_string,
-    token_usage_string,
-    monotonic_ulid,
-    Fragment,
-)
-from abc import ABC, abstractmethod
 import inspect
 import json
+from abc import ABC, abstractmethod
+
 from pydantic import BaseModel, ConfigDict, create_model
+
+from .utils import (
+    Fragment,
+    mimetype_from_path,
+    mimetype_from_string,
+    monotonic_ulid,
+    token_usage_string,
+)
 
 CONVERSATION_NAME_LENGTH = 32
 
@@ -55,20 +56,20 @@ CONVERSATION_NAME_LENGTH = 32
 class Usage:
     "Token usage information from a model response."
 
-    input: Optional[int] = None
-    output: Optional[int] = None
-    details: Optional[Dict[str, Any]] = None
+    input: int | None = None
+    output: int | None = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass
 class Attachment:
     "An attachment (image, audio, etc) to include with a prompt."
 
-    type: Optional[str] = None
-    path: Optional[str] = None
-    url: Optional[str] = None
-    content: Optional[bytes] = None
-    _id: Optional[str] = None
+    type: str | None = None
+    path: str | None = None
+    url: str | None = None
+    content: bytes | None = None
+    _id: str | None = None
 
     def id(self):
         # Hash of the binary content, or of '{"url": "https://..."}' for URL attachments
@@ -91,7 +92,8 @@ class Attachment:
         if self.path:
             return mimetype_from_path(self.path)
         if self.url:
-            response = httpx.head(self.url)
+            with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                response = client.head(self.url)
             response.raise_for_status()
             return response.headers.get("content-type")
         if self.content:
@@ -105,7 +107,8 @@ class Attachment:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
-                response = httpx.get(self.url)
+                with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                    response = client.get(self.url)
                 response.raise_for_status()
                 content = response.content
         return content
@@ -142,10 +145,10 @@ class Tool:
     "A tool that can be called by a model."
 
     name: str
-    description: Optional[str] = None
-    input_schema: Dict = field(default_factory=dict)
-    implementation: Optional[Callable] = None
-    plugin: Optional[str] = None  # plugin tool came from, e.g. 'llm_tools_sqlite'
+    description: str | None = None
+    input_schema: dict = field(default_factory=dict)
+    implementation: Callable | None = None
+    plugin: str | None = None  # plugin tool came from, e.g. 'llm_tools_sqlite'
 
     def __post_init__(self):
         # Convert Pydantic model to JSON schema if needed
@@ -182,6 +185,75 @@ class Tool:
             input_schema=_get_arguments_input_schema(function, name),
             implementation=function,
         )
+
+
+class ServerSideTool:
+    """A tool executed inside the provider's infrastructure.
+
+    Instances are passed in ``tools=[...]`` alongside function tools. The
+    framework transports and validates them but never executes them. Provider
+    plugins subclass this class for their own tools; the base class can be
+    instantiated directly with a raw provider tool specification.
+    """
+
+    name: ClassVar[str] = "server_side_tool"
+    plugin: ClassVar[str | None] = None
+    implementation: ClassVar[None] = None
+    input_schema: ClassVar[dict] = {}
+
+    def __init__(self, spec: dict | None = None):
+        self.spec = spec
+        self._config = {"spec": spec}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        original_init = cls.__init__
+
+        @functools.wraps(original_init)
+        def wrapped_init(self, *args, **kwargs):
+            signature = inspect.signature(original_init)
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            original_init(self, *args, **kwargs)
+            self._config = {
+                name: value
+                for name, value in bound.arguments.items()
+                if name != "self"
+                and signature.parameters[name].kind
+                not in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                )
+            }
+
+        cls.__init__ = wrapped_init
+
+    @property
+    def description(self) -> str | None:
+        return inspect.getdoc(self.__class__)
+
+    def tool_spec(self, model) -> dict:
+        """Return this tool's provider-specific request specification."""
+        if self.spec is None:
+            raise TypeError(
+                f"{self.__class__.__name__} does not define a raw provider tool spec"
+            )
+        return self.spec
+
+    def prepare_request(self, model, kwargs: dict) -> None:
+        """Add any other values this tool needs to provider request kwargs."""
+
+    def hash(self):
+        """Hash the definition separately from configured instances."""
+        to_hash = {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+            "server_side": True,
+        }
+        if self.plugin:
+            to_hash["plugin"] = self.plugin
+        return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
 
 def _get_arguments_input_schema(function, name):
@@ -226,8 +298,8 @@ def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
 
 
 class Toolbox:
-    name: Optional[str] = None
-    instance_id: Optional[int] = None
+    name: str | None = None
+    instance_id: int | None = None
     _blocked = (
         "tools",
         "add_tool",
@@ -236,8 +308,8 @@ class Toolbox:
         "prepare",
         "prepare_async",
     )
-    _extra_tools: List[Tool] = []
-    _config: Dict[str, Any] = {}
+    _extra_tools: ClassVar[list[Tool]] = []
+    _config: ClassVar[dict[str, Any]] = {}
     _prepared: bool = False
     _async_prepared: bool = False
 
@@ -246,6 +318,7 @@ class Toolbox:
 
         original_init = cls.__init__
 
+        @functools.wraps(original_init)
         def wrapped_init(self, *args, **kwargs):
             # Track args/kwargs passed to constructor in self._config
             # so we can serialize them to a database entry later on
@@ -267,7 +340,7 @@ class Toolbox:
         cls.__init__ = wrapped_init
 
     @classmethod
-    def method_tools(cls) -> List[Tool]:
+    def method_tools(cls) -> list[Tool]:
         tools = []
         for method_name in dir(cls):
             if method_name.startswith("_") or method_name in cls._blocked:
@@ -276,7 +349,7 @@ class Toolbox:
             if callable(method):
                 tool = Tool.function(
                     method,
-                    name="{}_{}".format(cls.__name__, method_name),
+                    name=f"{cls.__name__}_{method_name}",
                 )
                 tools.append(tool)
         return tools
@@ -295,7 +368,7 @@ class Toolbox:
         yield from self._extra_tools
 
     def add_tool(
-        self, tool_or_function: Union[Tool, Callable[..., Any]], pass_self: bool = False
+        self, tool_or_function: Tool | Callable[..., Any], pass_self: bool = False
     ):
         "Add a tool to this toolbox"
 
@@ -309,20 +382,18 @@ class Toolbox:
         elif callable(tool_or_function):
             self._extra_tools.append(Tool.function(_upgrade(tool_or_function)))
         else:
-            raise ValueError("Tool must be an instance of Tool or a callable function")
+            raise TypeError("Tool must be an instance of Tool or a callable function")
 
     def prepare(self):
         """
         Over-ride this to perform setup (and .add_tool() calls) before the toolbox is used.
         Implement a similar prepare_async() method for async setup.
         """
-        pass
 
     async def prepare_async(self):
         """
         Over-ride this to perform async setup (and .add_tool() calls) before the toolbox is used.
         """
-        pass
 
 
 @dataclass
@@ -331,7 +402,17 @@ class ToolCall:
 
     name: str
     arguments: dict
-    tool_call_id: Optional[str] = None
+    tool_call_id: str | None = None
+
+
+def _ensure_tool_call_id(tool_call: ToolCall) -> ToolCall:
+    # Generate a tool call ID if one has not yet been specified
+    if tool_call.tool_call_id is not None:
+        return tool_call
+    return dataclasses.replace(
+        tool_call,
+        tool_call_id=f"tc_{str(monotonic_ulid()).lower()}",
+    )
 
 
 @dataclass
@@ -340,25 +421,25 @@ class ToolResult:
 
     name: str
     output: str
-    attachments: List[Attachment] = field(default_factory=list)
-    tool_call_id: Optional[str] = None
-    instance: Optional[Toolbox] = None
-    exception: Optional[Exception] = None
+    attachments: list[Attachment] = field(default_factory=list)
+    tool_call_id: str | None = None
+    instance: Toolbox | None = None
+    exception: Exception | None = None
 
 
 @dataclass
 class ToolOutput:
     "Tool functions can return output with extra attachments"
 
-    output: Optional[Union[str, dict, list, bool, int, float]] = None
-    attachments: List[Attachment] = field(default_factory=list)
+    output: str | dict | list | bool | int | float | None = None
+    attachments: list[Attachment] = field(default_factory=list)
 
 
-ToolDef = Union[Tool, Toolbox, Callable[..., Any]]
-BeforeCallSync = Callable[[Optional[Tool], ToolCall], None]
+ToolDef = Tool | Toolbox | ServerSideTool | Callable[..., Any]
+BeforeCallSync = Callable[[Tool | None, ToolCall], None]
 AfterCallSync = Callable[[Tool, ToolCall, ToolResult], None]
-BeforeCallAsync = Callable[[Optional[Tool], ToolCall], Union[None, Awaitable[None]]]
-AfterCallAsync = Callable[[Tool, ToolCall, ToolResult], Union[None, Awaitable[None]]]
+BeforeCallAsync = Callable[[Tool | None, ToolCall], None | Awaitable[None]]
+AfterCallAsync = Callable[[Tool, ToolCall, ToolResult], None | Awaitable[None]]
 
 
 class CancelToolCall(Exception):
@@ -387,24 +468,24 @@ class PauseChain(Exception):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.tool_call: Optional["ToolCall"] = None
-        self.tool_results: List["ToolResult"] = []
+        self.tool_call: ToolCall | None = None
+        self.tool_results: list[ToolResult] = []
 
 
 @dataclass
 class Prompt:
     "The prompt being sent to the model."
 
-    _prompt: Optional[str]
+    _prompt: str | None
     model: "Model"
-    fragments: Optional[List[Union[str, Fragment]]]
-    attachments: Optional[List[Attachment]]
-    _system: Optional[str]
-    system_fragments: Optional[List[Union[str, Fragment]]]
-    prompt_json: Optional[str]
-    schema: Optional[Union[Dict, type[BaseModel]]]
-    tools: List[Tool]
-    tool_results: List[ToolResult]
+    fragments: list[str | Fragment] | None
+    attachments: list[Attachment] | None
+    _system: str | None
+    system_fragments: list[str | Fragment] | None
+    prompt_json: str | None
+    schema: dict | type[BaseModel] | None
+    tools: list[Tool | ServerSideTool]
+    tool_results: list[ToolResult]
     options: "Options"
     hide_reasoning: bool
 
@@ -486,7 +567,7 @@ class Prompt:
         if self._explicit_messages is not None:
             return list(self._explicit_messages)
 
-        result: List["Message"] = []
+        result: list[Message] = []
 
         if self.system:
             result.append(Message(role="system", parts=[TextPart(text=self.system)]))
@@ -500,13 +581,15 @@ class Prompt:
                             name=tr.name,
                             output=tr.output,
                             tool_call_id=tr.tool_call_id,
+                            exception=_format_tool_exception(tr.exception),
+                            attachments=list(tr.attachments or []),
                         )
                         for tr in self.tool_results
                     ],
                 )
             )
 
-        user_parts: List[Any] = []
+        user_parts: list[Any] = []
         if self.prompt:
             user_parts.append(TextPart(text=self.prompt))
         for att in self.attachments:
@@ -517,18 +600,104 @@ class Prompt:
         return result
 
 
-def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
+def _wrap_tools(tools: list[ToolDef]) -> list[Tool | ServerSideTool]:
     wrapped_tools = []
     for tool in tools:
-        if isinstance(tool, Tool):
+        if isinstance(tool, (Tool, ServerSideTool)):
             wrapped_tools.append(tool)
         elif isinstance(tool, Toolbox):
             wrapped_tools.extend(tool.tools())
         elif callable(tool):
             wrapped_tools.append(Tool.function(tool))
         else:
-            raise ValueError(f"Invalid tool: {tool}")
+            raise TypeError(f"Invalid tool: {tool}")
     return wrapped_tools
+
+
+def _partition_tools(
+    model: "_BaseModel", tools: Iterable[Tool | ServerSideTool]
+) -> tuple[list[Tool], list[ServerSideTool]]:
+    """Partition tools and reject server-side tools the model did not claim."""
+    function_tools = []
+    server_side_tools = []
+    declared = tuple(model.supported_server_side_tools)
+    for tool in tools:
+        if isinstance(tool, ServerSideTool):
+            # Declaring ServerSideTool itself claims only direct raw-spec
+            # instances. Without this exact-type exception it would also
+            # accidentally claim every provider-specific subclass.
+            claimed = any(
+                (
+                    type(tool) is candidate
+                    if candidate is ServerSideTool
+                    else isinstance(tool, candidate)
+                )
+                for candidate in declared
+            )
+            if not claimed:
+                raise ValueError(
+                    f"Model '{model.model_id}' does not support server-side tool "
+                    f"'{tool.name}'. Run: llm tools -m {model.model_id}"
+                )
+            server_side_tools.append(tool)
+        else:
+            function_tools.append(tool)
+    return function_tools, server_side_tools
+
+
+def _append_turn_input(
+    chain: list[Any],
+    prompt: str | None,
+    fragments=None,
+    attachments=None,
+    tool_results=None,
+) -> list[Any]:
+    """Append a turn's new input to a message chain.
+
+    A tool-role message for any tool results, then a user-role message
+    built from fragments + prompt text + attachments. This is what makes
+    ``messages=`` mean "authoritative history" without the other prompt
+    arguments being silently dropped from the chain. Mutates and returns
+    ``chain``.
+    """
+    from .parts import (
+        AttachmentPart,
+        Message,
+        TextPart,
+        ToolResultPart,
+    )
+
+    if tool_results:
+        chain.append(
+            Message(
+                role="tool",
+                parts=[
+                    ToolResultPart(
+                        name=tr.name,
+                        output=tr.output,
+                        tool_call_id=tr.tool_call_id,
+                        exception=_format_tool_exception(tr.exception),
+                        attachments=list(tr.attachments or []),
+                    )
+                    for tr in tool_results
+                ],
+            )
+        )
+
+    user_parts: list[Any] = []
+    # Fragments are concatenated into the prompt text before it is
+    # sent, so they have to be in the chain too - prompt.messages is
+    # meant to be exactly what the model sees. Matches Prompt.prompt.
+    prompt_text = "\n".join(
+        [str(fragment) for fragment in fragments or []] + ([prompt] if prompt else [])
+    )
+    if prompt_text:
+        user_parts.append(TextPart(text=prompt_text))
+    for att in attachments or []:
+        user_parts.append(AttachmentPart(attachment=att))
+    if user_parts:
+        chain.append(Message(role="user", parts=user_parts))
+    return chain
 
 
 def _combine_system(system, system_fragments):
@@ -541,14 +710,14 @@ def _combine_system(system, system_fragments):
     return "\n\n".join(bits)
 
 
-def _merge_options(options: Optional[dict], kwargs: dict) -> dict:
+def _merge_options(options: dict | None, kwargs: dict) -> dict:
     if not options:
         return kwargs
     overlap = set(options) & set(kwargs)
     if overlap:
         raise TypeError(
             "Got values for these options both in options= and as keyword "
-            "arguments: {}".format(sorted(overlap))
+            f"arguments: {sorted(overlap)}"
         )
     return {**options, **kwargs}
 
@@ -557,25 +726,45 @@ def _merge_options(options: Optional[dict], kwargs: dict) -> dict:
 class _BaseConversation:
     model: "_BaseModel"
     id: str = field(default_factory=lambda: str(monotonic_ulid()).lower())
-    name: Optional[str] = None
-    responses: List["_BaseResponse"] = field(default_factory=list)
-    tools: Optional[List[ToolDef]] = None
-    chain_limit: Optional[int] = None
+    name: str | None = None
+    responses: list["_BaseResponse"] = field(default_factory=list)
+    tools: list[ToolDef] | None = None
+    chain_limit: int | None = None
+    # History read back from storage, used as the chain for the next turn
+    # when this conversation has not yet produced a response in this
+    # process. Unlike a chain rebuilt from logged responses this is the
+    # exact message list, so reasoning signatures and provider metadata
+    # survive being reloaded.
+    loaded_messages: list[Any] | None = None
+    # Plugin and server-side tool names and configured specs (e.g.
+    # 'Datasette({"url": ...})' or 'CodeInterpreter({"memory_limit":
+    # "4g"})') recorded against this conversation's first turn in storage.
+    # Read when the conversation was loaded from the message store, where
+    # there are no rebuilt responses to copy prompt.tools from.
+    loaded_tools: list[str] | None = None
 
     @classmethod
     @abstractmethod
     def from_row(cls, row: Any) -> "_BaseConversation":
         raise NotImplementedError
 
+    def _record_response(self, response: "_BaseResponse") -> None:
+        "Record a completed response as part of this conversation."
+        self.responses.append(response)
+        # History now comes from the live responses, so anything read
+        # back from storage is superseded.
+        self.loaded_messages = None
+
     def _build_full_chain(
         self,
-        prompt: Optional[str],
+        prompt: str | None,
         attachments,
         tool_results,
         explicit_messages,
         system=None,
         system_fragments=None,
-    ) -> List[Any]:
+        fragments=None,
+    ) -> list[Any]:
         """Build the full message chain for the next turn.
 
         Uses the last response's stored prompt chain to recover prior
@@ -587,20 +776,27 @@ class _BaseConversation:
         exactly what the model sees.
 
         If ``explicit_messages`` is provided, the caller has opted out
-        of history reconstruction and the list is used as-is.
+        of history reconstruction: the list is the authoritative history,
+        and the new turn's input is appended to it.
         """
-        from .parts import (
-            AttachmentPart,
-            Message,
-            TextPart,
-            ToolResultPart,
-        )
+        from .parts import Message, TextPart
 
         if explicit_messages is not None:
-            return list(explicit_messages)
+            return _append_turn_input(
+                list(explicit_messages),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
+            )
 
-        chain: List[Any] = []
-        if self.responses:
+        chain: list[Any] = []
+        if self.loaded_messages:
+            # Storage holds the exact chain, so prefer it over anything
+            # rebuilt from logged responses. Cleared as soon as this
+            # conversation produces a response of its own.
+            chain.extend(self.loaded_messages)
+        elif self.responses:
             last = self.responses[-1]
             # last.prompt.messages already contains the full input chain
             # under the invariant, so use the last response only and then
@@ -615,53 +811,29 @@ class _BaseConversation:
             if system_text:
                 chain.append(Message(role="system", parts=[TextPart(text=system_text)]))
 
-        # Append the new turn's input
-        if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
-
-        user_parts: List[Any] = []
-        if prompt:
-            user_parts.append(TextPart(text=prompt))
-        for att in attachments or []:
-            user_parts.append(AttachmentPart(attachment=att))
-        if user_parts:
-            chain.append(Message(role="user", parts=user_parts))
-
-        return chain
+        return _append_turn_input(chain, prompt, fragments, attachments, tool_results)
 
 
 @dataclass
 class Conversation(_BaseConversation):
-    before_call: Optional[BeforeCallSync] = None
-    after_call: Optional[AfterCallSync] = None
+    before_call: BeforeCallSync | None = None
+    after_call: AfterCallSync | None = None
 
     def prompt(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[Union[str, Fragment]]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[Union[str, Fragment]]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str | Fragment] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        system_fragments: list[str | Fragment] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "Response":
@@ -675,6 +847,7 @@ class Conversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return Response(
             Prompt(
@@ -695,26 +868,28 @@ class Conversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
 
     def chain(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[str]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        system_fragments: list[str] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        chain_limit: Optional[int] = None,
-        before_call: Optional[BeforeCallSync] = None,
-        after_call: Optional[AfterCallSync] = None,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        chain_limit: int | None = None,
+        before_call: BeforeCallSync | None = None,
+        after_call: AfterCallSync | None = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
     ) -> "ChainResponse":
         self.model._validate_attachments(attachments)
@@ -729,6 +904,7 @@ class Conversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return ChainResponse(
             Prompt(
@@ -772,27 +948,27 @@ class Conversation(_BaseConversation):
 
 @dataclass
 class AsyncConversation(_BaseConversation):
-    before_call: Optional[BeforeCallAsync] = None
-    after_call: Optional[AfterCallAsync] = None
+    before_call: BeforeCallAsync | None = None
+    after_call: AfterCallAsync | None = None
 
     def chain(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[str]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        system_fragments: list[str] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        chain_limit: Optional[int] = None,
-        before_call: Optional[BeforeCallAsync] = None,
-        after_call: Optional[AfterCallAsync] = None,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        chain_limit: int | None = None,
+        before_call: BeforeCallAsync | None = None,
+        after_call: AfterCallAsync | None = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
     ) -> "AsyncChainResponse":
         self.model._validate_attachments(attachments)
@@ -803,6 +979,7 @@ class AsyncConversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return AsyncChainResponse(
             Prompt(
@@ -830,19 +1007,19 @@ class AsyncConversation(_BaseConversation):
 
     def prompt(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[str]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[str]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        system_fragments: list[str] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "AsyncResponse":
@@ -854,6 +1031,7 @@ class AsyncConversation(_BaseConversation):
             explicit_messages=messages,
             system=system,
             system_fragments=system_fragments,
+            fragments=fragments,
         )
         return AsyncResponse(
             Prompt(
@@ -874,6 +1052,8 @@ class AsyncConversation(_BaseConversation):
             stream,
             conversation=self,
             key=key,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
 
     def to_sync_conversation(self):
@@ -928,18 +1108,19 @@ class _BaseResponse:
     id: str
     prompt: "Prompt"
     stream: bool
-    resolved_model: Optional[str] = None
+    resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
-    _key: Optional[str] = None
-    _tool_calls: List[ToolCall] = []
+    _key: str | None = None
 
     def __init__(
         self,
         prompt: Prompt,
         model: "_BaseModel",
         stream: bool,
-        conversation: Optional[_BaseConversation] = None,
-        key: Optional[str] = None,
+        conversation: _BaseConversation | None = None,
+        key: str | None = None,
+        before_call: BeforeCallSync | BeforeCallAsync | None = None,
+        after_call: AfterCallSync | AfterCallAsync | None = None,
     ):
         self.id = str(monotonic_ulid()).lower()
         self.prompt = prompt
@@ -947,12 +1128,14 @@ class _BaseResponse:
         self.model = model
         self.stream = stream
         self._key = key
-        self._chunks: List[str] = []
+        self.before_call = before_call
+        self.after_call = after_call
+        self._chunks: list[str] = []
         # Every StreamEvent ever yielded by execute(), in order. Plain
         # str yields are wrapped as text events (with part_index resolved
         # by _resolve_part_index) so this buffer is the single source of
         # truth for replay and for assembling response.messages.
-        self._stream_events: List[Any] = []
+        self._stream_events: list[Any] = []
         # Auto-allocator state for resolving StreamEvent.part_index=None.
         # Plugins yield events with part_index=None (the default) and
         # the framework assigns concrete integers based on context:
@@ -964,29 +1147,31 @@ class _BaseResponse:
         # share an index; _auto_tool_id_to_index maps known tool ids to
         # their assigned index for parallel-tool-call grouping.
         self._auto_index_max: int = -1
-        self._auto_last_index: Optional[int] = None
-        self._auto_last_family: Optional[str] = None
-        self._auto_tool_id_to_index: Dict[str, int] = {}
+        self._auto_last_index: int | None = None
+        self._auto_last_family: str | None = None
+        self._auto_tool_id_to_index: dict[str, int] = {}
+        self._auto_last_message_index: int = 0
         self._done = False
-        self._tool_calls: List[ToolCall] = []
-        self.response_json: Optional[Dict[str, Any]] = None
+        self._tool_calls: list[ToolCall] = []
+        self.response_json: dict[str, Any] | None = None
         self.conversation = conversation
-        self.attachments: List[Attachment] = []
-        self._start: Optional[float] = None
-        self._end: Optional[float] = None
-        self._start_utcnow: Optional[datetime.datetime] = None
-        self.input_tokens: Optional[int] = None
-        self.output_tokens: Optional[int] = None
-        self.token_details: Optional[dict] = None
-        self.done_callbacks: List[Callable] = []
+        self.attachments: list[Attachment] = []
+        self._start: float | None = None
+        self._end: float | None = None
+        self._start_utcnow: datetime.datetime | None = None
+        self.input_tokens: int | None = None
+        self.output_tokens: int | None = None
+        self.token_details: dict | None = None
+        self.done_callbacks: list[Callable] = []
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
 
-        if self.prompt.tools and not self.model.supports_tools:
+        function_tools, _ = _partition_tools(self.model, self.prompt.tools)
+        if function_tools and not self.model.supports_tools:
             raise ValueError(f"{self.model} does not support tools")
 
-    def _messages_now(self) -> List[Any]:
+    def _messages_now(self) -> list[Any]:
         """Assemble messages assuming the response is already drained.
 
         Public ``messages()`` forces / awaits first, then delegates here.
@@ -999,10 +1184,10 @@ class _BaseResponse:
         loaded = getattr(self, "_loaded_messages", None)
         if loaded is not None:
             return list(loaded)
-        parts = self._build_parts()
-        if not parts:
-            return []
-        return [Message(role="assistant", parts=parts)]
+        return [
+            Message(role="assistant", parts=parts)
+            for parts in self._build_message_parts()
+        ]
 
     @staticmethod
     def _event_family(event_type: str) -> str:
@@ -1021,9 +1206,15 @@ class _BaseResponse:
         """
         fam = self._event_family(event.type)
 
+        # A message_index change always starts a fresh part - text on
+        # either side of a message boundary must not concatenate.
+        if event.message_index != self._auto_last_message_index:
+            self._auto_last_family = None
+            self._auto_last_index = None
+        self._auto_last_message_index = event.message_index
+
         if event.part_index is not None:
-            if event.part_index > self._auto_index_max:
-                self._auto_index_max = event.part_index
+            self._auto_index_max = max(self._auto_index_max, event.part_index)
             if (
                 event.type in ("tool_call_name", "tool_call_args")
                 and event.tool_call_id
@@ -1109,8 +1300,21 @@ class _BaseResponse:
         self._chunks.append(chunk)
         return chunk
 
-    def _build_parts(self) -> List[Any]:
-        """Assemble Part objects from the accumulated stream events.
+    def _build_parts(self) -> list[Any]:
+        """All Parts from the accumulated stream events, flattened
+        across message boundaries. See ``_build_message_parts``."""
+        return [part for parts in self._build_message_parts() for part in parts]
+
+    def _build_message_parts(self) -> list[list[Any]]:
+        """Assemble Part objects from the accumulated stream events,
+        grouped into one parts-list per assistant message.
+
+        Most providers emit a single assistant message, so the result
+        is usually a one-element list. Events carrying an explicit
+        ``message_index`` (OpenAI Responses server-side tool execution
+        interleaves multiple ``message`` output items in one response)
+        split into one parts-list per distinct index, in first-seen
+        order.
 
         Events sharing a part_index group into one Part. Mixing
         families (text vs tool_call vs reasoning vs tool_result) at the
@@ -1137,7 +1341,7 @@ class _BaseResponse:
             # _tool_calls so response.messages isn't empty after
             # from_row, and Conversation.prompt-built chains include
             # the assistant turn on follow-up calls.
-            fallback_parts: List[Any] = []
+            fallback_parts: list[Any] = []
             text = "".join(self._chunks)
             if text:
                 fallback_parts.append(TextPart(text=text))
@@ -1149,23 +1353,26 @@ class _BaseResponse:
                         tool_call_id=tc.tool_call_id,
                     )
                 )
-            return fallback_parts
+            return [fallback_parts] if fallback_parts else []
 
         # Group events by their (resolved) part_index, preserving the
         # order in which each index was first seen. Then build one Part
         # per group. This handles non-adjacent same-index events (e.g.
         # text → tool_call → text where the plugin pinned both text
-        # bursts to part_index=0) by merging them into one Part.
-        groups: Dict[int, List[Any]] = {}
-        order: List[int] = []
+        # bursts to part_index=0) by merging them into one Part. Each
+        # group belongs to the message of its first event.
+        groups: dict[int, list[Any]] = {}
+        order: list[int] = []
+        group_message: dict[int, int] = {}
         for event in self._stream_events:
             pi = event.part_index
             if pi not in groups:
                 groups[pi] = []
                 order.append(pi)
+                group_message[pi] = event.message_index
             groups[pi].append(event)
 
-        parts: List[Any] = []
+        built: list[tuple[int, Any]] = []
         for pi in order:
             evs = groups[pi]
             fam_first = self._event_family(evs[0].type)
@@ -1177,7 +1384,7 @@ class _BaseResponse:
                         "Allocate a new part_index for a different content type."
                     )
 
-            pm_merged: Optional[Dict[str, Any]] = None
+            pm_merged: dict[str, Any] | None = None
             for e in evs:
                 if e.provider_metadata:
                     merged = dict(pm_merged) if pm_merged else {}
@@ -1185,19 +1392,23 @@ class _BaseResponse:
                         merged[k] = v
                     pm_merged = merged
 
+            mi = group_message[pi]
             if fam_first == "text":
                 text = "".join(e.chunk for e in evs)
                 if text:
-                    parts.append(TextPart(text=text, provider_metadata=pm_merged))
+                    built.append((mi, TextPart(text=text, provider_metadata=pm_merged)))
             elif fam_first == "reasoning":
                 text = "".join(e.chunk for e in evs)
                 redacted = any(e.redacted for e in evs)
                 if text or redacted:
-                    parts.append(
-                        ReasoningPart(
-                            text=text,
-                            redacted=redacted,
-                            provider_metadata=pm_merged,
+                    built.append(
+                        (
+                            mi,
+                            ReasoningPart(
+                                text=text,
+                                redacted=redacted,
+                                provider_metadata=pm_merged,
+                            ),
                         )
                     )
             elif fam_first == "tool_call":
@@ -1211,13 +1422,16 @@ class _BaseResponse:
                     (e.tool_call_id for e in evs if e.tool_call_id), None
                 )
                 server_executed = any(e.server_executed for e in evs)
-                parts.append(
-                    ToolCallPart(
-                        name=tool_name,
-                        arguments=arguments,
-                        tool_call_id=tool_call_id,
-                        server_executed=server_executed,
-                        provider_metadata=pm_merged,
+                built.append(
+                    (
+                        mi,
+                        ToolCallPart(
+                            name=tool_name,
+                            arguments=arguments,
+                            tool_call_id=tool_call_id,
+                            server_executed=server_executed,
+                            provider_metadata=pm_merged,
+                        ),
                     )
                 )
             elif fam_first == "tool_result":
@@ -1226,28 +1440,46 @@ class _BaseResponse:
                     (e.tool_call_id for e in evs if e.tool_call_id), None
                 )
                 server_executed = any(e.server_executed for e in evs)
-                parts.append(
-                    ToolResultPart(
-                        name=tool_result_name,
-                        output="".join(e.chunk for e in evs),
-                        tool_call_id=tool_call_id,
-                        server_executed=server_executed,
-                        provider_metadata=pm_merged,
+                built.append(
+                    (
+                        mi,
+                        ToolResultPart(
+                            name=tool_result_name,
+                            output="".join(e.chunk for e in evs),
+                            tool_call_id=tool_call_id,
+                            server_executed=server_executed,
+                            provider_metadata=pm_merged,
+                        ),
                     )
                 )
 
+        # Split into per-message parts lists, message indexes in
+        # first-seen order.
+        message_order: list[int] = []
+        by_message: dict[int, list[Any]] = {}
+        for mi, part in built:
+            if mi not in by_message:
+                by_message[mi] = []
+                message_order.append(mi)
+            by_message[mi].append(part)
+        messages_parts = [by_message[mi] for mi in message_order]
+        if not messages_parts:
+            messages_parts = [[]]
+
         # Merge in any tool calls registered via add_tool_call() that the
         # plugin didn't also emit as StreamEvents. Dedup by tool_call_id so
-        # plugins using both APIs in tandem don't double-count.
+        # plugins using both APIs in tandem don't double-count. They join
+        # the final message - matching the old append-at-end behavior.
         seen_ids = {
             p.tool_call_id
+            for parts in messages_parts
             for p in parts
             if isinstance(p, ToolCallPart) and p.tool_call_id is not None
         }
         for tc in self._tool_calls:
             if tc.tool_call_id is not None and tc.tool_call_id in seen_ids:
                 continue
-            parts.append(
+            messages_parts[-1].append(
                 ToolCallPart(
                     name=tc.name,
                     arguments=tc.arguments or {},
@@ -1255,40 +1487,34 @@ class _BaseResponse:
                 )
             )
 
-        # Hoist redacted reasoning Parts to the start of the assembled
-        # message. Plugins typically emit them late (when usage arrives
-        # in the final chunk), but UIs render reasoning before content,
-        # so the framework reorders. Relative order among redacted
-        # Parts is preserved.
-        redacted_parts = [
-            p for p in parts if isinstance(p, ReasoningPart) and p.redacted
-        ]
-        if redacted_parts:
-            other_parts = [
-                p for p in parts if not (isinstance(p, ReasoningPart) and p.redacted)
+        # Hoist redacted reasoning Parts to the start of their message.
+        # Plugins typically emit them late (when usage arrives in the
+        # final chunk), but UIs render reasoning before content, so the
+        # framework reorders. Relative order among redacted Parts is
+        # preserved.
+        for i, parts in enumerate(messages_parts):
+            redacted_parts = [
+                p for p in parts if isinstance(p, ReasoningPart) and p.redacted
             ]
-            parts = redacted_parts + other_parts
+            if redacted_parts:
+                other_parts = [
+                    p
+                    for p in parts
+                    if not (isinstance(p, ReasoningPart) and p.redacted)
+                ]
+                messages_parts[i] = redacted_parts + other_parts
 
-        return parts
+        return [parts for parts in messages_parts if parts]
 
     def add_tool_call(self, tool_call: ToolCall):
-        if tool_call.tool_call_id is None:
-            # Guarantee every locally-executable tool call has a unique id.
-            # Some providers never supply one, which otherwise forces every
-            # consumer correlating calls with results (or keying external
-            # state on a call) to invent fallback matching schemes.
-            tool_call = dataclasses.replace(
-                tool_call,
-                tool_call_id="tc_{}".format(str(monotonic_ulid()).lower()),
-            )
-        self._tool_calls.append(tool_call)
+        self._tool_calls.append(_ensure_tool_call_id(tool_call))
 
     def set_usage(
         self,
         *,
-        input: Optional[int] = None,
-        output: Optional[int] = None,
-        details: Optional[dict] = None,
+        input: int | None = None,
+        output: int | None = None,
+        details: dict | None = None,
     ):
         self.input_tokens = input
         self.output_tokens = output
@@ -1299,7 +1525,7 @@ class _BaseResponse:
 
     @classmethod
     def from_row(cls, db, row, _async=False):
-        from llm import get_model, get_async_model
+        from llm import get_async_model, get_model
 
         if _async:
             model = get_async_model(row["model"])
@@ -1413,206 +1639,15 @@ class _BaseResponse:
         )
 
     def log_to_db(self, db):
-        conversation = self.conversation
-        if not conversation:
-            conversation = Conversation(model=self.model)
-        db["conversations"].insert(
-            {
-                "id": conversation.id,
-                "name": _conversation_name(
-                    self.prompt.prompt or self.prompt.system or ""
-                ),
-                "model": conversation.model.model_id,
-            },
-            ignore=True,
-        )
-        schema_id = None
-        if self.prompt.schema:
-            schema_id, schema_json = make_schema_id(self.prompt.schema)
-            db["schemas"].insert({"id": schema_id, "content": schema_json}, ignore=True)
+        # Everything - thread, turn, messages, parts, fragments,
+        # attachments, tools - is recorded in the content-addressed
+        # tables. The legacy tables are no longer written; they hold
+        # history logged by older versions and are still read.
+        # This lives here rather than in the CLI because log_to_db()
+        # is what plugins call.
+        from .logs import LogStore
 
-        response_id = self.id
-        replacements = {}
-        # Include replacements from previous responses
-        for previous_response in conversation.responses[:-1]:
-            for fragment in (previous_response.prompt.fragments or []) + (
-                previous_response.prompt.system_fragments or []
-            ):
-                fragment_id = ensure_fragment(db, fragment)
-                replacements[f"f:{fragment_id}"] = fragment
-                replacements[f"r:{previous_response.id}"] = (
-                    previous_response.text_or_raise()
-                )
-
-        for i, fragment in enumerate(self.prompt.fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["prompt_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-        for i, fragment in enumerate(self.prompt.system_fragments):
-            fragment_id = ensure_fragment(db, fragment)
-            replacements[f"f{fragment_id}"] = fragment
-            db["system_fragments"].insert(
-                {
-                    "response_id": response_id,
-                    "fragment_id": fragment_id,
-                    "order": i,
-                },
-            )
-
-        response_text = self.text_or_raise()
-        replacements[f"r:{response_id}"] = response_text
-        # Concatenate visible reasoning text from the assembled
-        # ReasoningPart entries; redacted markers contribute nothing.
-        from .parts import ReasoningPart
-
-        reasoning_text = "".join(
-            p.text
-            for m in self._messages_now()
-            for p in m.parts
-            if isinstance(p, ReasoningPart) and p.text
-        )
-        json_data = self.json()
-
-        response = {
-            "id": response_id,
-            "model": self.model.model_id,
-            "prompt": self.prompt._prompt,
-            "system": self.prompt._system,
-            "prompt_json": condense_json(self._prompt_json, replacements),
-            "options_json": {
-                key: value
-                for key, value in dict(self.prompt.options).items()
-                if value is not None
-            },
-            "response": response_text,
-            "reasoning": reasoning_text or None,
-            "response_json": condense_json(json_data, replacements),
-            "conversation_id": conversation.id,
-            "duration_ms": self.duration_ms(),
-            "datetime_utc": self.datetime_utc(),
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "token_details": (
-                json.dumps(self.token_details) if self.token_details else None
-            ),
-            "schema_id": schema_id,
-            "resolved_model": self.resolved_model,
-        }
-        db["responses"].insert(response)
-
-        # Persist any attachments - loop through with index
-        for index, attachment in enumerate(self.prompt.attachments):
-            attachment_id = attachment.id()
-            db["attachments"].insert(
-                {
-                    "id": attachment_id,
-                    "type": attachment.resolve_type(),
-                    "path": attachment.path,
-                    "url": attachment.url,
-                    "content": attachment.content,
-                },
-                replace=True,
-            )
-            db["prompt_attachments"].insert(
-                {
-                    "response_id": response_id,
-                    "attachment_id": attachment_id,
-                    "order": index,
-                },
-            )
-
-        # Persist any tools, tool calls and tool results
-        tool_ids_by_name = {}
-        for tool in self.prompt.tools:
-            tool_id = ensure_tool(db, tool)
-            tool_ids_by_name[tool.name] = tool_id
-            db["tool_responses"].insert(
-                {
-                    "tool_id": tool_id,
-                    "response_id": response_id,
-                }
-            )
-        for tool_call in self.tool_calls():  # TODO Should  be _or_raise()
-            db["tool_calls"].insert(
-                {
-                    "response_id": response_id,
-                    "tool_id": tool_ids_by_name.get(tool_call.name) or None,
-                    "name": tool_call.name,
-                    "arguments": json.dumps(tool_call.arguments),
-                    "tool_call_id": tool_call.tool_call_id,
-                }
-            )
-        for tool_result in self.prompt.tool_results:
-            instance_id = None
-            if tool_result.instance:
-                try:
-                    if not tool_result.instance.instance_id:
-                        tool_result.instance.instance_id = (
-                            db["tool_instances"]
-                            .insert(
-                                {
-                                    "plugin": tool.plugin,
-                                    "name": tool.name.split("_")[0],
-                                    "arguments": json.dumps(
-                                        tool_result.instance._config
-                                    ),
-                                }
-                            )
-                            .last_pk
-                        )
-                    instance_id = tool_result.instance.instance_id
-                except AttributeError:
-                    pass
-            tool_result_id = (
-                db["tool_results"]
-                .insert(
-                    {
-                        "response_id": response_id,
-                        "tool_id": tool_ids_by_name.get(tool_result.name) or None,
-                        "name": tool_result.name,
-                        "output": tool_result.output,
-                        "tool_call_id": tool_result.tool_call_id,
-                        "instance_id": instance_id,
-                        "exception": (
-                            (
-                                "{}: {}".format(
-                                    tool_result.exception.__class__.__name__,
-                                    str(tool_result.exception),
-                                )
-                            )
-                            if tool_result.exception
-                            else None
-                        ),
-                    }
-                )
-                .last_pk
-            )
-            # Persist attachments for tool results
-            for index, attachment in enumerate(tool_result.attachments):
-                attachment_id = attachment.id()
-                db["attachments"].insert(
-                    {
-                        "id": attachment_id,
-                        "type": attachment.resolve_type(),
-                        "path": attachment.path,
-                        "url": attachment.url,
-                        "content": attachment.content,
-                    },
-                    replace=True,
-                )
-                db["tool_results_attachments"].insert(
-                    {
-                        "tool_result_id": tool_result_id,
-                        "attachment_id": attachment_id,
-                        "order": index,
-                    },
-                )
+        LogStore(db).log(self)
 
 
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
@@ -1627,7 +1662,7 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
         for key, value in dict(response.prompt.options).items()
         if value is not None
     }
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "model": response.model.model_id,
         "prompt": {
             "messages": [m.to_dict() for m in response.prompt.messages],
@@ -1643,7 +1678,7 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
         payload["id"] = response.id
     if response._done:
         if response.input_tokens is not None or response.output_tokens is not None:
-            usage: Dict[str, Any] = {}
+            usage: dict[str, Any] = {}
             if response.input_tokens is not None:
                 usage["input"] = response.input_tokens
             if response.output_tokens is not None:
@@ -1704,6 +1739,22 @@ def _response_from_dict(
     # full picture (reasoning, tool calls, signatures) without needing
     # a StreamEvent replay.
     response._loaded_messages = output_messages
+    # Rebuild _tool_calls from the restored parts so tool_calls() and
+    # reply(tools=...) can execute serialized pending calls. Server-
+    # executed calls stay out, matching add_tool_call() during live
+    # streaming.
+    from .parts import ToolCallPart
+
+    response._tool_calls = [
+        ToolCall(
+            name=p.name,
+            arguments=p.arguments or {},
+            tool_call_id=p.tool_call_id,
+        )
+        for m in output_messages
+        for p in m.parts
+        if isinstance(p, ToolCallPart) and not p.server_executed
+    ]
     response._done = True
     # Restore usage if present.
     usage = data.get("usage")
@@ -1722,11 +1773,11 @@ class Response(_BaseResponse):
 
     def reply(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        messages: Optional[List[Any]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        options: Optional[dict] = None,
+        messages: list[Any] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        options: dict | None = None,
         **kwargs,
     ) -> "Response":
         """Continue the conversation from this response.
@@ -1742,30 +1793,21 @@ class Response(_BaseResponse):
         explicit ``tool_results=`` list (e.g. results you mutated, or
         synthetic ones for testing) to skip auto-execution.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         self._force()
-        if tool_results is None and self._tool_calls:
-            tool_results = self.execute_tool_calls()
         # Forward original tools so the next turn can call them again
         # (mirrors Conversation.prompt's `tools or self.tools` rule).
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
-        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
+        if tool_results is None and self._tool_calls:
+            tool_results = self.execute_tool_calls(tools=kwargs.get("tools"))
+        chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
+            tool_attachments: list[Attachment] = []
+            for tr in tool_results:
+                tool_attachments.extend(tr.attachments or [])
+            _append_tool_results_to_chain(chain, tool_results, tool_attachments)
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
@@ -1784,6 +1826,7 @@ class Response(_BaseResponse):
 
         Returns :class:`~llm.serialization.ResponseDict`.
         """
+        self._force()
         return _response_to_dict(self)
 
     @classmethod
@@ -1833,18 +1876,25 @@ class Response(_BaseResponse):
     def execute_tool_calls(
         self,
         *,
-        before_call: Optional[BeforeCallSync] = None,
-        after_call: Optional[AfterCallSync] = None,
-        tool_calls_list: Optional[List[ToolCall]] = None,
-    ) -> List[ToolResult]:
+        before_call: BeforeCallSync | None = None,
+        after_call: AfterCallSync | None = None,
+        tool_calls_list: list[ToolCall] | None = None,
+        tools: list[ToolDef] | None = None,
+    ) -> list[ToolResult]:
         """Execute tool calls using this response's tools.
 
         By default executes ``self.tool_calls()``; pass
         ``tool_calls_list=`` to execute an explicit list instead (used
         when resuming a chain whose history ends in unresolved calls).
+        Pass ``tools=`` to resolve implementations from an explicit
+        list instead of ``self.prompt.tools`` (used when a rehydrated
+        response has pending calls but no tool implementations).
         """
         tool_results = []
-        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
+        tools_by_name = {
+            tool.name: tool for tool in effective_tools if isinstance(tool, Tool)
+        }
         if tool_calls_list is None:
             tool_calls_list = self.tool_calls()
 
@@ -1860,7 +1910,7 @@ class Response(_BaseResponse):
             inst._prepared = True
 
         for tool_call in tool_calls_list:
-            tool: Optional[Tool] = tools_by_name.get(tool_call.name)
+            tool: Tool | None = tools_by_name.get(tool_call.name)
             # Tool could be None if the tool was not found in the prompt tools,
             # but we still call the before_call method:
             if before_call:
@@ -1883,7 +1933,7 @@ class Response(_BaseResponse):
                     continue
 
             if tool is None:
-                msg = 'tool "{}" does not exist'.format(tool_call.name)
+                msg = f'tool "{tool_call.name}" does not exist'
                 tool_results.append(
                     ToolResult(
                         name=tool_call.name,
@@ -1896,7 +1946,7 @@ class Response(_BaseResponse):
 
             if not tool.implementation:
                 raise ValueError(
-                    "No implementation available for tool: {}".format(tool_call.name)
+                    f"No implementation available for tool: {tool_call.name}"
                 )
 
             attachments = []
@@ -1924,7 +1974,7 @@ class Response(_BaseResponse):
                 ex.tool_call = tool_call
                 ex.tool_results = list(tool_results)
                 raise
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 result = f"Error: {ex}"
                 exception = ex
 
@@ -1947,15 +1997,24 @@ class Response(_BaseResponse):
             tool_results.append(tool_result_obj)
         return tool_results
 
-    def tool_calls(self) -> List[ToolCall]:
+    def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
+        "Utility method for manually executing a tool call with callbacks"
+        tool_call = _ensure_tool_call_id(tool_call)
+        return self.execute_tool_calls(
+            before_call=cast(BeforeCallSync | None, self.before_call),
+            after_call=cast(AfterCallSync | None, self.after_call),
+            tool_calls_list=[tool_call],
+        )[0]
+
+    def tool_calls(self) -> list[ToolCall]:
         "Return the list of tool calls made during this response."
         self._force()
         return self._tool_calls
 
-    def tool_calls_or_raise(self) -> List[ToolCall]:
+    def tool_calls_or_raise(self) -> list[ToolCall]:
         return self.tool_calls()
 
-    def json(self) -> Optional[Dict[str, Any]]:
+    def json(self) -> dict[str, Any] | None:
         "Return the raw JSON response from the model, if available."
         self._force()
         return self.response_json
@@ -1997,7 +2056,7 @@ class Response(_BaseResponse):
                 key=self.model.get_key(self._key),
             )
         else:
-            raise Exception("self.model must be a Model or KeyModel")
+            raise TypeError("self.model must be a Model or KeyModel")
 
         for chunk in generator:
             assert chunk is not None
@@ -2016,7 +2075,7 @@ class Response(_BaseResponse):
                 yield text
 
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
@@ -2042,12 +2101,12 @@ class Response(_BaseResponse):
             yield self._stream_events[-1]
 
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         self._on_done()
 
-    def messages(self) -> List[Any]:
+    def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
 
         Almost always a single assistant Message; multiple messages are
@@ -2068,7 +2127,7 @@ class Response(_BaseResponse):
         text = "... not yet done ..."
         if self._done:
             text = "".join(self._chunks)
-        return "<Response prompt='{}' text='{}'>".format(self.prompt.prompt, text)
+        return f"<Response prompt='{self.prompt.prompt}' text='{text}'>"
 
 
 class AsyncResponse(_BaseResponse):
@@ -2079,11 +2138,11 @@ class AsyncResponse(_BaseResponse):
 
     async def reply(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        messages: Optional[List[Any]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        options: Optional[dict] = None,
+        messages: list[Any] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        options: dict | None = None,
         **kwargs,
     ) -> "AsyncResponse":
         """Async counterpart of Response.reply(). Requires this response
@@ -2093,31 +2152,22 @@ class AsyncResponse(_BaseResponse):
         self.execute_tool_calls()``. See ``Response.reply`` for the
         ``tool_results=`` semantics.
         """
-        from .parts import Message, TextPart, ToolResultPart
+        from .parts import Message, TextPart
 
         if not self._done:
             raise ValueError(
                 "Response not yet awaited — call `await response` before reply()"
             )
-        if tool_results is None and self._tool_calls:
-            tool_results = await self.execute_tool_calls()
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
-        chain: List[Any] = list(self.prompt.messages) + list(self._messages_now())
+        if tool_results is None and self._tool_calls:
+            tool_results = await self.execute_tool_calls(tools=kwargs.get("tools"))
+        chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
-            chain.append(
-                Message(
-                    role="tool",
-                    parts=[
-                        ToolResultPart(
-                            name=tr.name,
-                            output=tr.output,
-                            tool_call_id=tr.tool_call_id,
-                        )
-                        for tr in tool_results
-                    ],
-                )
-            )
+            tool_attachments: list[Attachment] = []
+            for tr in tool_results:
+                tool_attachments.extend(tr.attachments or [])
+            _append_tool_results_to_chain(chain, tool_results, tool_attachments)
         if prompt:
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
@@ -2173,19 +2223,26 @@ class AsyncResponse(_BaseResponse):
     async def execute_tool_calls(
         self,
         *,
-        before_call: Optional[BeforeCallAsync] = None,
-        after_call: Optional[AfterCallAsync] = None,
-        tool_calls_list: Optional[List[ToolCall]] = None,
-    ) -> List[ToolResult]:
+        before_call: BeforeCallAsync | None = None,
+        after_call: AfterCallAsync | None = None,
+        tool_calls_list: list[ToolCall] | None = None,
+        tools: list[ToolDef] | None = None,
+    ) -> list[ToolResult]:
         """Execute tool calls using this response's tools.
 
         By default executes ``await self.tool_calls()``; pass
         ``tool_calls_list=`` to execute an explicit list instead (used
         when resuming a chain whose history ends in unresolved calls).
+        Pass ``tools=`` to resolve implementations from an explicit
+        list instead of ``self.prompt.tools`` (used when a rehydrated
+        response has pending calls but no tool implementations).
         """
         if tool_calls_list is None:
             tool_calls_list = await self.tool_calls()
-        tools_by_name = {tool.name: tool for tool in self.prompt.tools}
+        effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
+        tools_by_name = {
+            tool.name: tool for tool in effective_tools if isinstance(tool, Tool)
+        }
 
         # Run async prepare_async() on all Toolbox instances that need it
         instances_to_prepare: list[Toolbox] = []
@@ -2200,19 +2257,19 @@ class AsyncResponse(_BaseResponse):
             await inst.prepare_async()
             inst._async_prepared = True
 
-        indexed_results: List[tuple[int, ToolResult]] = []
-        async_tasks: List[asyncio.Task] = []
-        async_task_indexes: List[int] = []
+        indexed_results: list[tuple[int, ToolResult]] = []
+        async_tasks: list[asyncio.Task] = []
+        async_task_indexes: list[int] = []
         # Defined failure semantics: a pause or error in one call must not
         # orphan concurrently-running siblings. Pauses and hook failures
         # are collected here and raised only after every task that was
         # started has finished.
-        paused: List[tuple[int, PauseChain]] = []
-        failures: List[tuple[int, BaseException]] = []
+        paused: list[tuple[int, PauseChain]] = []
+        failures: list[tuple[int, BaseException]] = []
 
         for idx, tc in enumerate(tool_calls_list):
-            tool: Optional[Tool] = tools_by_name.get(tc.name)
-            exception: Optional[Exception] = None
+            tool: Tool | None = tools_by_name.get(tc.name)
+            exception: Exception | None = None
 
             if tool is None or not tool.implementation:
                 # Mirror the sync executor: append an error ToolResult so
@@ -2237,11 +2294,11 @@ class AsyncResponse(_BaseResponse):
                             )
                         )
                         continue
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         failures.append((idx, ex))
                         break
                 reason = "does not exist" if tool is None else "has no implementation"
-                msg = 'tool "{}" {}'.format(tc.name, reason)
+                msg = f'tool "{tc.name}" {reason}'
                 indexed_results.append(
                     (
                         idx,
@@ -2292,7 +2349,7 @@ class AsyncResponse(_BaseResponse):
                         # the gather so siblings finish first.
                         ex.tool_call = tc
                         raise
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         output = f"Error: {ex}"
                         exception = ex
 
@@ -2336,7 +2393,7 @@ class AsyncResponse(_BaseResponse):
                             )
                         )
                         continue
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         failures.append((idx, ex))
                         break
 
@@ -2360,7 +2417,7 @@ class AsyncResponse(_BaseResponse):
                     ex.tool_call = tc
                     paused.append((idx, ex))
                     break
-                except Exception as ex:
+                except Exception as ex:  # noqa: BLE001
                     output = f"Error: {ex}"
                     exception = ex
 
@@ -2378,7 +2435,7 @@ class AsyncResponse(_BaseResponse):
                         cb2 = after_call(tool, tc, tr)
                         if inspect.isawaitable(cb2):
                             await cb2
-                except Exception as ex:
+                except Exception as ex:  # noqa: BLE001
                     failures.append((idx, ex))
                     break
 
@@ -2414,6 +2471,16 @@ class AsyncResponse(_BaseResponse):
 
         return results
 
+    async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
+        "Asynchronous counterpart to :meth:`Response.execute_tool_call`."
+        tool_call = _ensure_tool_call_id(tool_call)
+        results = await self.execute_tool_calls(
+            before_call=cast(BeforeCallAsync | None, self.before_call),
+            after_call=cast(AfterCallAsync | None, self.after_call),
+            tool_calls_list=[tool_call],
+        )
+        return results[0]
+
     def __aiter__(self):
         self._start = time.monotonic()
         self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
@@ -2443,7 +2510,7 @@ class AsyncResponse(_BaseResponse):
 
     async def _async_finalize(self):
         if self.conversation:
-            self.conversation.responses.append(self)
+            self.conversation._record_response(self)
         self._end = time.monotonic()
         self._done = True
         if hasattr(self, "_generator"):
@@ -2493,7 +2560,7 @@ class AsyncResponse(_BaseResponse):
         finally:
             pass
 
-    async def messages(self) -> List[Any]:
+    async def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
 
         Awaits ``self._force()`` so ``await response.messages()`` is
@@ -2523,17 +2590,17 @@ class AsyncResponse(_BaseResponse):
         await self._force()
         return "".join(self._chunks)
 
-    async def tool_calls(self) -> List[ToolCall]:
+    async def tool_calls(self) -> list[ToolCall]:
         "Return the list of tool calls made during this response."
         await self._force()
         return self._tool_calls
 
-    def tool_calls_or_raise(self) -> List[ToolCall]:
+    def tool_calls_or_raise(self) -> list[ToolCall]:
         if not self._done:
             raise ValueError("Response not yet awaited")
         return self._tool_calls
 
-    async def json(self) -> Optional[Dict[str, Any]]:
+    async def json(self) -> dict[str, Any] | None:
         "Return the raw JSON response from the model, if available."
         await self._force()
         return self.response_json
@@ -2594,6 +2661,11 @@ class AsyncResponse(_BaseResponse):
         response._prompt_json = self._prompt_json
         response.response_json = self.response_json
         response._tool_calls = list(self._tool_calls)
+        # Without these the sync response falls back to assembling a bare
+        # TextPart from _chunks, so reasoning, redacted markers and every
+        # part's provider_metadata are lost. The CLI converts before
+        # logging, so that loss would apply to every async response.
+        response._stream_events = list(self._stream_events)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response
@@ -2603,7 +2675,7 @@ class AsyncResponse(_BaseResponse):
         cls,
         model: "AsyncModel",
         prompt: str,
-        *attachments: List[Attachment],
+        *attachments: list[Attachment],
         system: str,
         response: str,
     ):
@@ -2626,10 +2698,10 @@ class AsyncResponse(_BaseResponse):
         text = "... not yet awaited ..."
         if self._done:
             text = "".join(self._chunks)
-        return "<AsyncResponse prompt='{}' text='{}'>".format(self.prompt.prompt, text)
+        return f"<AsyncResponse prompt='{self.prompt.prompt}' text='{text}'>"
 
 
-def _append_tool_results_to_chain(chain, tool_results, attachments) -> List[Any]:
+def _append_tool_results_to_chain(chain, tool_results, attachments) -> list[Any]:
     """Append a tool-role message carrying ToolResults to a message
     chain, plus a trailing user-role message for any attachments the
     tools returned (mimics the legacy attachments=[] kwarg behavior)."""
@@ -2648,6 +2720,7 @@ def _append_tool_results_to_chain(chain, tool_results, attachments) -> List[Any]
                         name=tr.name,
                         output=tr.output,
                         tool_call_id=tr.tool_call_id,
+                        exception=_format_tool_exception(tr.exception),
                     )
                     for tr in tool_results
                 ],
@@ -2663,7 +2736,7 @@ def _append_tool_results_to_chain(chain, tool_results, attachments) -> List[Any]
     return chain
 
 
-def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[Any]:
+def _chain_for_tool_results(prior_response, tool_results, attachments) -> list[Any]:
     """Build the message chain for a tool-result turn in a chain loop.
 
     Takes the prior response's full input chain + its structured
@@ -2675,13 +2748,13 @@ def _chain_for_tool_results(prior_response, tool_results, attachments) -> List[A
     including any reasoning signatures or thoughtSignatures from the
     prior turn.
     """
-    chain: List[Any] = list(prior_response.prompt.messages) + list(
+    chain: list[Any] = list(prior_response.prompt.messages) + list(
         prior_response._messages_now()
     )
     return _append_tool_results_to_chain(chain, tool_results, attachments)
 
 
-def _trailing_pending_tool_calls(messages) -> List[ToolCall]:
+def _trailing_pending_tool_calls(messages) -> list[ToolCall]:
     """Find unresolved tool calls at the end of a message history.
 
     Returns ToolCall objects from the last assistant message containing
@@ -2698,7 +2771,7 @@ def _trailing_pending_tool_calls(messages) -> List[ToolCall]:
     from .parts import ToolCallPart, ToolResultPart
 
     last_index = None
-    call_parts: List[Any] = []
+    call_parts: list[Any] = []
     for i, msg in enumerate(messages or []):
         parts = getattr(msg, "parts", None) or []
         calls = [
@@ -2710,7 +2783,7 @@ def _trailing_pending_tool_calls(messages) -> List[ToolCall]:
     if last_index is None:
         return []
 
-    results: List[Any] = []
+    results: list[Any] = []
     for msg in messages[last_index + 1 :]:
         role = getattr(msg, "role", None)
         if role == "tool":
@@ -2747,7 +2820,7 @@ class _BaseChainResponse:
     prompt: "Prompt"
     stream: bool
     conversation: Optional["_BaseConversation"] = None
-    _key: Optional[str] = None
+    _key: str | None = None
 
     def __init__(
         self,
@@ -2755,16 +2828,16 @@ class _BaseChainResponse:
         model: "_BaseModel",
         stream: bool,
         conversation: _BaseConversation,
-        key: Optional[str] = None,
-        chain_limit: Optional[int] = 10,
-        before_call: Optional[Union[BeforeCallSync, BeforeCallAsync]] = None,
-        after_call: Optional[Union[AfterCallSync, AfterCallAsync]] = None,
+        key: str | None = None,
+        chain_limit: int | None = 10,
+        before_call: BeforeCallSync | BeforeCallAsync | None = None,
+        after_call: AfterCallSync | AfterCallAsync | None = None,
     ):
         self.prompt = prompt
         self.model = model
         self.stream = stream
         self._key = key
-        self._responses: List[Any] = []
+        self._responses: list[Any] = []
         self.conversation = conversation
         self.chain_limit = chain_limit
         self.before_call = before_call
@@ -2780,7 +2853,7 @@ class _BaseChainResponse:
                 assert False, "Should have been a Response or AsyncResponse"
             sync_response.log_to_db(db)
 
-    def _pending_tool_calls(self) -> List[ToolCall]:
+    def _pending_tool_calls(self) -> list[ToolCall]:
         """Unresolved tool calls at the end of this chain's history.
 
         Non-empty when the supplied messages= end in an assistant
@@ -2791,7 +2864,7 @@ class _BaseChainResponse:
             return []
         return _trailing_pending_tool_calls(self.prompt.messages)
 
-    def _resume_prompt(self, tool_results: List[ToolResult]) -> Prompt:
+    def _resume_prompt(self, tool_results: list[ToolResult]) -> Prompt:
         """The first prompt for a resumed chain: the original history
         plus a tool-role message carrying the freshly-executed results -
         the same shape as the chain loop's own tool-result turns."""
@@ -2817,9 +2890,9 @@ class _BaseChainResponse:
 
 
 class ChainResponse(_BaseChainResponse):
-    _responses: List["Response"]
-    before_call: Optional[BeforeCallSync] = None
-    after_call: Optional[AfterCallSync] = None
+    _responses: list["Response"]
+    before_call: BeforeCallSync | None = None
+    after_call: AfterCallSync | None = None
 
     def responses(self) -> Iterator[Response]:
         prompt = self.prompt
@@ -2830,6 +2903,8 @@ class ChainResponse(_BaseChainResponse):
             self.stream,
             key=self._key,
             conversation=self.conversation,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
         # Resume: a history ending in unresolved tool calls means a
         # previous run stopped (paused or crashed) before executing
@@ -2849,8 +2924,10 @@ class ChainResponse(_BaseChainResponse):
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
+                before_call=self.before_call,
+                after_call=self.after_call,
             )
-        current_response: Optional[Response] = initial_response
+        current_response: Response | None = initial_response
         while current_response:
             count += 1
             yield current_response
@@ -2895,28 +2972,67 @@ class ChainResponse(_BaseChainResponse):
                     stream=self.stream,
                     key=self._key,
                     conversation=self.conversation,
+                    before_call=self.before_call,
+                    after_call=self.after_call,
                 )
             else:
                 current_response = None
                 break
 
     def __iter__(self) -> Iterator[str]:
+        # Rounds of a chain are separate model responses; joined with
+        # nothing between them the text of one runs straight into the
+        # next ("...have dragons.Now that I..."). Yield one space at
+        # each boundary where neither side brings its own whitespace.
+        # Display only: the separator never enters any response's
+        # recorded events, so it is not stored or hashed.
+        last_char = ""
         for response_item in self.responses():
-            yield from response_item
+            first_chunk = True
+            for chunk in response_item:
+                if not chunk:
+                    continue
+                if (
+                    first_chunk
+                    and last_char
+                    and not last_char.isspace()
+                    and not chunk[0].isspace()
+                ):
+                    yield " "
+                first_chunk = False
+                yield chunk
+                last_char = chunk[-1]
 
     def stream_events(self):
         "Yield StreamEvents from every response in the chain."
+        from .parts import StreamEvent
+
+        # The same round-boundary separator as __iter__, synthesized at
+        # the chain level so it is never part of a response's events.
+        last_char = ""
         for response_item in self.responses():
-            yield from response_item.stream_events()
+            first_text = True
+            for event in response_item.stream_events():
+                if event.type == "text" and event.chunk:
+                    if (
+                        first_text
+                        and last_char
+                        and not last_char.isspace()
+                        and not event.chunk[0].isspace()
+                    ):
+                        yield StreamEvent(type="text", chunk=" ")
+                    first_text = False
+                    last_char = event.chunk[-1]
+                yield event
 
     def text(self) -> str:
         return "".join(self)
 
 
 class AsyncChainResponse(_BaseChainResponse):
-    _responses: List["AsyncResponse"]
-    before_call: Optional[BeforeCallAsync] = None
-    after_call: Optional[AfterCallAsync] = None
+    _responses: list["AsyncResponse"]
+    before_call: BeforeCallAsync | None = None
+    after_call: AfterCallAsync | None = None
 
     async def responses(self) -> AsyncIterator[AsyncResponse]:
         prompt = self.prompt
@@ -2927,6 +3043,8 @@ class AsyncChainResponse(_BaseChainResponse):
             self.stream,
             key=self._key,
             conversation=self.conversation,
+            before_call=self.before_call,
+            after_call=self.after_call,
         )
         # Resume: see ChainResponse.responses() - execute trailing
         # unresolved tool calls before the first provider call. This
@@ -2944,8 +3062,10 @@ class AsyncChainResponse(_BaseChainResponse):
                 self.stream,
                 key=self._key,
                 conversation=self.conversation,
+                before_call=self.before_call,
+                after_call=self.after_call,
             )
-        current_response: Optional[AsyncResponse] = initial_response
+        current_response: AsyncResponse | None = initial_response
         while current_response:
             count += 1
             yield current_response
@@ -2987,20 +3107,52 @@ class AsyncChainResponse(_BaseChainResponse):
                     stream=self.stream,
                     key=self._key,
                     conversation=self.conversation,
+                    before_call=self.before_call,
+                    after_call=self.after_call,
                 )
             else:
                 current_response = None
                 break
 
     async def __aiter__(self) -> AsyncIterator[str]:
+        # Round-boundary separator - same reasoning as the sync chain.
+        last_char = ""
         async for response_item in self.responses():
+            first_chunk = True
             async for chunk in response_item:
+                if not chunk:
+                    continue
+                if (
+                    first_chunk
+                    and last_char
+                    and not last_char.isspace()
+                    and not chunk[0].isspace()
+                ):
+                    yield " "
+                first_chunk = False
                 yield chunk
+                last_char = chunk[-1]
 
     async def astream_events(self):
         "Yield StreamEvents from every response in the chain."
+        from .parts import StreamEvent
+
+        # Same round-boundary separator as __aiter__, synthesized at the
+        # chain level so it is never part of a response's events.
+        last_char = ""
         async for response_item in self.responses():
+            first_text = True
             async for event in response_item.astream_events():
+                if event.type == "text" and event.chunk:
+                    if (
+                        first_text
+                        and last_char
+                        and not last_char.isspace()
+                        and not event.chunk[0].isspace()
+                    ):
+                        yield StreamEvent(type="text", chunk=" ")
+                    first_text = False
+                    last_char = event.chunk[-1]
                 yield event
 
     async def text(self) -> str:
@@ -3018,11 +3170,11 @@ _Options = Options
 
 
 class _get_key_mixin:
-    needs_key: Optional[str] = None
-    key: Optional[str] = None
-    key_env_var: Optional[str] = None
+    needs_key: str | None = None
+    key: str | None = None
+    key_env_var: str | None = None
 
-    def get_key(self, explicit_key: Optional[str] = None) -> Optional[str]:
+    def get_key(self, explicit_key: str | None = None) -> str | None:
         from llm import get_key
 
         if self.needs_key is None:
@@ -3043,27 +3195,30 @@ class _get_key_mixin:
             return key_value
 
         # Show a useful error message
-        message = "No key found - add one using 'llm keys set {}'".format(
-            self.needs_key
-        )
+        message = f"No key found - add one using 'llm keys set {self.needs_key}'"
         if self.key_env_var:
-            message += " or set the {} environment variable".format(self.key_env_var)
+            message += f" or set the {self.key_env_var} environment variable"
         raise NeedsKeyException(message)
 
 
 class _BaseModel(ABC, _get_key_mixin):
     model_id: str
     can_stream: bool = False
-    attachment_types: Set = set()
+    attachment_types: set[str] | frozenset[str] = frozenset()
 
     supports_schema = False
     supports_tools = False
+
+    @property
+    def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:
+        """Server-side tool classes accepted by this model instance."""
+        return ()
 
     class Options(_Options):
         pass
 
     def _validate_attachments(
-        self, attachments: Optional[List[Attachment]] = None
+        self, attachments: list[Attachment] | None = None
     ) -> None:
         if attachments and not self.attachment_types:
             raise ValueError("This model does not support attachments")
@@ -3083,16 +3238,16 @@ class _BaseModel(ABC, _get_key_mixin):
         )
 
     def __repr__(self) -> str:
-        return f"<{str(self)}>"
+        return f"<{self!s}>"
 
 
 class _Model(_BaseModel):
     def conversation(
         self,
-        tools: Optional[List[ToolDef]] = None,
-        before_call: Optional[BeforeCallSync] = None,
-        after_call: Optional[AfterCallSync] = None,
-        chain_limit: Optional[int] = None,
+        tools: list[ToolDef] | None = None,
+        before_call: BeforeCallSync | None = None,
+        after_call: AfterCallSync | None = None,
+        chain_limit: int | None = None,
     ) -> Conversation:
         return Conversation(
             model=self,
@@ -3104,24 +3259,31 @@ class _Model(_BaseModel):
 
     def prompt(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[Union[str, Fragment]]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        system_fragments: Optional[List[Union[str, Fragment]]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str | Fragment] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        system_fragments: list[str | Fragment] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        options: Optional[dict] = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
         **kwargs,
     ) -> Response:
         key_value = kwargs.pop("key", None)
         merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
+        if messages is not None:
+            # messages= is the authoritative history; the other prompt
+            # arguments are this turn's new input, folded in so that
+            # response.prompt.messages stays exactly what the model sees.
+            messages = _append_turn_input(
+                list(messages), prompt, fragments, attachments, tool_results
+            )
         return Response(
             Prompt(
                 prompt,
@@ -3144,21 +3306,21 @@ class _Model(_BaseModel):
 
     def chain(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[str]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        system_fragments: list[str] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[BeforeCallSync] = None,
-        after_call: Optional[AfterCallSync] = None,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        before_call: BeforeCallSync | None = None,
+        after_call: AfterCallSync | None = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
     ) -> ChainResponse:
         return self.conversation().chain(
@@ -3187,7 +3349,7 @@ class Model(_Model):
         prompt: Prompt,
         stream: bool,
         response: Response,
-        conversation: Optional[Conversation],
+        conversation: Conversation | None,
     ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
@@ -3199,8 +3361,8 @@ class KeyModel(_Model):
         prompt: Prompt,
         stream: bool,
         response: Response,
-        conversation: Optional[Conversation],
-        key: Optional[str],
+        conversation: Conversation | None,
+        key: str | None,
     ) -> Iterator[Union[str, "StreamEvent"]]:
         pass
 
@@ -3208,10 +3370,10 @@ class KeyModel(_Model):
 class _AsyncModel(_BaseModel):
     def conversation(
         self,
-        tools: Optional[List[ToolDef]] = None,
-        before_call: Optional[BeforeCallAsync] = None,
-        after_call: Optional[AfterCallAsync] = None,
-        chain_limit: Optional[int] = None,
+        tools: list[ToolDef] | None = None,
+        before_call: BeforeCallAsync | None = None,
+        after_call: AfterCallAsync | None = None,
+        chain_limit: int | None = None,
     ) -> AsyncConversation:
         return AsyncConversation(
             model=self,
@@ -3223,24 +3385,30 @@ class _AsyncModel(_BaseModel):
 
     def prompt(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[Union[str, Fragment]]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        system_fragments: Optional[List[Union[str, Fragment]]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str | Fragment] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        system_fragments: list[str | Fragment] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        options: Optional[dict] = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
         **kwargs,
     ) -> AsyncResponse:
         key_value = kwargs.pop("key", None)
         merged = _merge_options(options, kwargs)
         self._validate_attachments(attachments)
+        if messages is not None:
+            # Same fold as Model.prompt: messages= is the history, the
+            # other prompt arguments are this turn's new input.
+            messages = _append_turn_input(
+                list(messages), prompt, fragments, attachments, tool_results
+            )
         return AsyncResponse(
             Prompt(
                 prompt,
@@ -3263,21 +3431,21 @@ class _AsyncModel(_BaseModel):
 
     def chain(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         *,
-        fragments: Optional[List[str]] = None,
-        attachments: Optional[List[Attachment]] = None,
-        system: Optional[str] = None,
-        system_fragments: Optional[List[str]] = None,
-        messages: Optional[List[Any]] = None,
+        fragments: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
+        system: str | None = None,
+        system_fragments: list[str] | None = None,
+        messages: list[Any] | None = None,
         stream: bool = True,
-        schema: Optional[Union[dict, type[BaseModel]]] = None,
-        tools: Optional[List[ToolDef]] = None,
-        tool_results: Optional[List[ToolResult]] = None,
-        before_call: Optional[BeforeCallAsync] = None,
-        after_call: Optional[AfterCallAsync] = None,
-        key: Optional[str] = None,
-        options: Optional[dict] = None,
+        schema: dict | type[BaseModel] | None = None,
+        tools: list[ToolDef] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        before_call: BeforeCallAsync | None = None,
+        after_call: AfterCallAsync | None = None,
+        key: str | None = None,
+        options: dict | None = None,
         hide_reasoning: bool = False,
     ) -> AsyncChainResponse:
         return self.conversation().chain(
@@ -3306,11 +3474,10 @@ class AsyncModel(_AsyncModel):
         prompt: Prompt,
         stream: bool,
         response: AsyncResponse,
-        conversation: Optional[AsyncConversation],
+        conversation: AsyncConversation | None,
     ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
-        pass
 
 
 class AsyncKeyModel(_AsyncModel):
@@ -3320,24 +3487,23 @@ class AsyncKeyModel(_AsyncModel):
         prompt: Prompt,
         stream: bool,
         response: AsyncResponse,
-        conversation: Optional[AsyncConversation],
-        key: Optional[str],
+        conversation: AsyncConversation | None,
+        key: str | None,
     ) -> AsyncGenerator[Union[str, "StreamEvent"], None]:
         if False:  # Ensure it's a generator type
             yield ""
-        pass
 
 
 class EmbeddingModel(ABC, _get_key_mixin):
     model_id: str
-    key: Optional[str] = None
-    needs_key: Optional[str] = None
-    key_env_var: Optional[str] = None
+    key: str | None = None
+    needs_key: str | None = None
+    key_env_var: str | None = None
     supports_text: bool = True
     supports_binary: bool = False
-    batch_size: Optional[int] = None
+    batch_size: int | None = None
 
-    def _check(self, item: Union[str, bytes]):
+    def _check(self, item: str | bytes):
         if not self.supports_binary and isinstance(item, bytes):
             raise ValueError(
                 "This model does not support binary data, only text strings"
@@ -3347,14 +3513,14 @@ class EmbeddingModel(ABC, _get_key_mixin):
                 "This model does not support text strings, only binary data"
             )
 
-    def embed(self, item: Union[str, bytes]) -> List[float]:
+    def embed(self, item: str | bytes) -> list[float]:
         "Embed a single text string or binary blob, return a list of floats"
         self._check(item)
         return next(iter(self.embed_batch([item])))
 
     def embed_multi(
-        self, items: Iterable[Union[str, bytes]], batch_size: Optional[int] = None
-    ) -> Iterator[List[float]]:
+        self, items: Iterable[str | bytes], batch_size: int | None = None
+    ) -> Iterator[list[float]]:
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
         effective_batch_size = self.batch_size if batch_size is None else batch_size
@@ -3376,17 +3542,16 @@ class EmbeddingModel(ABC, _get_key_mixin):
             yield from self.embed_batch(batch_items)
 
     @abstractmethod
-    def embed_batch(self, items: Iterable[Union[str, bytes]]) -> Iterator[List[float]]:
+    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
         """
         Embed a batch of strings or blobs, return a list of lists of floats
         """
-        pass
 
     def __str__(self) -> str:
-        return "{}: {}".format(self.__class__.__name__, self.model_id)
+        return f"{self.__class__.__name__}: {self.model_id}"
 
     def __repr__(self) -> str:
-        return f"<{str(self)}>"
+        return f"<{self!s}>"
 
 
 @dataclass
@@ -3395,11 +3560,11 @@ class ModelWithAliases:
 
     model: Model
     async_model: AsyncModel
-    aliases: Set[str]
+    aliases: set[str]
 
     def matches(self, query: str) -> bool:
         query_lower = query.lower()
-        all_strings: List[str] = []
+        all_strings: list[str] = []
         all_strings.extend(self.aliases)
         if self.model:
             all_strings.append(str(self.model))
@@ -3411,14 +3576,27 @@ class ModelWithAliases:
 @dataclass
 class EmbeddingModelWithAliases:
     model: EmbeddingModel
-    aliases: Set[str]
+    aliases: set[str]
 
     def matches(self, query: str) -> bool:
         query_lower = query.lower()
-        all_strings: List[str] = []
+        all_strings: list[str] = []
         all_strings.extend(self.aliases)
         all_strings.append(str(self.model))
         return any(query_lower in alias.lower() for alias in all_strings)
+
+
+def _format_tool_exception(exception) -> str | None:
+    """Render a tool's exception the way it is recorded.
+
+    ToolResult carries the exception object; ToolResultPart carries the
+    rendered string, so the chain has to convert rather than drop it.
+    """
+    if exception is None:
+        return None
+    if isinstance(exception, str):
+        return exception
+    return f"{exception.__class__.__name__}: {exception!s}"
 
 
 def _conversation_name(text):

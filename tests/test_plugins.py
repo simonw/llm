@@ -1,15 +1,17 @@
-from click.testing import CliRunner
-import click
 import importlib
+import inspect
 import json
-import llm
-from llm.tools import llm_version, llm_time
-from llm import cli, hookimpl, plugins, get_template_loaders, get_fragment_loaders
 import pathlib
 import re
 from unittest.mock import ANY
+
+import click
 import pytest
-import textwrap
+from click.testing import CliRunner
+
+import llm
+from llm import cli, get_fragment_loaders, get_template_loaders, hookimpl, plugins
+from llm.tools import llm_time, llm_version
 
 
 def test_register_commands():
@@ -176,16 +178,20 @@ def test_register_fragment_loaders(logs_db, httpx_mock):
             cli.cli, ["-m", "echo", "-f", "mixed:x"], catch_exceptions=False
         )
         assert result3.exit_code == 0
-        result3.output.strip == textwrap.dedent("""\
-            system:
-
-
-            prompt:
-            one:x
-
-            attachments:
-            - https://example.com/attachment.png
-            """).strip()
+        assert json.loads(result3.output) == {
+            "prompt": "one:x",
+            "system": "",
+            "attachments": [
+                {
+                    "type": None,
+                    "path": None,
+                    "url": "https://example.com/attachment.png",
+                    "id": ANY,
+                }
+            ],
+            "stream": True,
+            "previous": [],
+        }
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")
@@ -383,7 +389,7 @@ def test_register_tools(tmpdir, logs_db):
         assert '"output": "HI"' in result4.output
 
         # Now check in the database
-        tool_row = [row for row in logs_db["tools"].rows][0]
+        tool_row = next(iter(logs_db["tools"].rows))
         assert tool_row["name"] == "upper"
         assert tool_row["plugin"] == "ToolsPlugin"
 
@@ -455,7 +461,13 @@ def test_register_tools(tmpdir, logs_db):
             (
                 log_row["prompt"],
                 re.sub(
-                    r"tc_[0-9a-z]{26}", "tc_TCID", json.dumps(log_row["tool_results"])
+                    r'"id": \d+',
+                    '"id": ID',
+                    re.sub(
+                        r"tc_[0-9a-z]{26}",
+                        "tc_TCID",
+                        json.dumps(log_row["tool_results"]),
+                    ),
                 ),
             )
             for log_row in log_rows
@@ -464,12 +476,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": 2, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": 3, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -477,7 +489,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": 4, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
             ),
         )
         # Test the --td option
@@ -644,6 +656,7 @@ def test_register_toolbox(tmpdir, logs_db):
             "toolboxes": [
                 {
                     "name": "Filesystem",
+                    "dynamic": False,
                     "tools": [
                         {
                             "name": "Filesystem_list_files",
@@ -654,6 +667,7 @@ def test_register_toolbox(tmpdir, logs_db):
                 },
                 {
                     "name": "Memory",
+                    "dynamic": False,
                     "tools": [
                         {
                             "name": "Memory_append",
@@ -760,7 +774,7 @@ def test_register_toolbox(tmpdir, logs_db):
             [
                 "prompt",
                 "-T",
-                "Filesystem({})".format(json.dumps(str(my_dir2))),
+                f"Filesystem({json.dumps(str(my_dir2))})",
                 json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
                 "-m",
                 "echo",
@@ -778,23 +792,33 @@ def test_register_toolbox(tmpdir, logs_db):
             }
         ]
 
-        # Should show an error if you attempt to llm -c with configured toolboxes
+        # The stored instance configuration comes back as a -T style spec
+        conversation = cli.load_conversation(None)
+        assert conversation.loaded_tools == [
+            "Filesystem({})".format(json.dumps({"path": str(my_dir2)}))
+        ]
+
+        # llm -c should reconstruct the configured toolbox from the log
         result5 = runner.invoke(
             cli.cli,
-            ["-c", "list them again"],
+            ["-c", json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]})],
         )
-        assert result5.exit_code == 1
-        assert (
-            "Error: Tool(s) Filesystem_list_files not found. Available tools:"
-            in result5.output
+        assert result5.exit_code == 0
+        tool_results = json.loads(
+            "["
+            + result5.output.rsplit('"tool_results": [', 1)[1].rsplit("]", 1)[0]
+            + "]"
         )
+        assert tool_results == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(other_path)]),
+                "tool_call_id": ANY,
+            }
+        ]
 
         # Test the logging worked
-        rows = list(logs_db.query(TOOL_RESULTS_SQL))
-        # JSON decode things in rows
-        for row in rows:
-            row["tool_calls"] = json.loads(row["tool_calls"])
-            row["tool_results"] = json.loads(row["tool_results"])
+        rows = tool_activity_rows(logs_db)
         assert rows == [
             {
                 "model": "echo",
@@ -851,10 +875,184 @@ def test_register_toolbox(tmpdir, logs_db):
                     }
                 ],
             },
+            # The llm -c continuation, using the reconstructed toolbox
+            {
+                "model": "echo",
+                "tool_calls": [{"name": "Filesystem_list_files", "arguments": "{}"}],
+                "tool_results": [],
+            },
+            {
+                "model": "echo",
+                "tool_calls": [],
+                "tool_results": [
+                    {
+                        "name": "Filesystem_list_files",
+                        "output": json.dumps([str(other_path)]),
+                        "instance": {
+                            "name": "Filesystem",
+                            "plugin": "ToolboxPlugin",
+                            "arguments": json.dumps({"path": str(my_dir2)}),
+                        },
+                    }
+                ],
+            },
         ]
 
     finally:
         plugins.pm.unregister(name="ToolboxPlugin")
+
+
+class Discovery(llm.Toolbox):
+    """
+    Tools discovered at runtime from a configured source.
+
+    Usage:
+
+        Discovery("demo")
+    """
+
+    def __init__(self, source: str, prefix: str = ""):
+        self.source = source
+        self.prefix = prefix
+
+    def tools(self):
+        def greet(name: str) -> str:
+            "Greet someone by name"
+            return f"hello {name} from {self.source}"
+
+        yield llm.Tool.function(greet, name=self.prefix + "greet")
+
+
+class Counter(llm.Toolbox):
+    """
+    Registers a counting tool during prepare().
+    """
+
+    def __init__(self, start: int = 0):
+        self.value = start
+
+    def prepare(self):
+        def increment() -> int:
+            "Increment the counter"
+            self.value += 1
+            return self.value
+
+        self.add_tool(increment)
+
+
+class DynamicToolboxPlugin:
+    __name__ = "DynamicToolboxPlugin"
+
+    @hookimpl
+    def register_tools(self, register):
+        register(Discovery)
+        register(Counter)
+
+
+def test_toolbox_constructor_signature_preserved():
+    # Toolbox.__init_subclass__ wraps __init__ - that wrapper should not
+    # obscure the constructor signature
+    assert str(inspect.signature(Discovery)) == "(source: str, prefix: str = '')"
+    assert str(inspect.signature(Filesystem)) == "(path: str)"
+
+
+def test_tools_list_dynamic_toolbox():
+    # https://github.com/simonw/llm/issues/1580
+    runner = CliRunner()
+    try:
+        plugins.pm.register(DynamicToolboxPlugin(), name="DynamicToolboxPlugin")
+
+        # Plain listing shows constructor signature and docstring instead of
+        # a bare "Discovery:" header with nothing underneath it
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert "Discovery:" not in result.output
+        assert (
+            "Discovery(source: str, prefix: str = '') (plugin: DynamicToolboxPlugin)\n"
+            "\n"
+            "  Tools discovered at runtime from a configured source.\n"
+            "\n"
+            "  Usage:\n"
+            "\n"
+            '      Discovery("demo")\n'
+        ) in result.output
+
+        # --json marks the toolbox as dynamic
+        result2 = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result2.exit_code == 0
+        toolboxes = {
+            toolbox["name"]: toolbox
+            for toolbox in json.loads(result2.output)["toolboxes"]
+        }
+        assert toolboxes["Discovery"]["dynamic"] is True
+        assert toolboxes["Discovery"]["tools"] == []
+
+        # Passing a constructor spec lists the tools the instance provides,
+        # with the spec itself as the heading
+        result3 = runner.invoke(cli.cli, ["tools", 'Discovery("demo")'])
+        assert result3.exit_code == 0
+        assert result3.output == (
+            'Discovery("demo"):\n\n'
+            "  greet(name: str) -> str\n\n"
+            "    Greet someone by name\n\n"
+        )
+
+        # And --json with the spec includes the discovered tools
+        result4 = runner.invoke(cli.cli, ["tools", 'Discovery("demo")', "--json"])
+        assert result4.exit_code == 0
+        assert json.loads(result4.output)["toolboxes"] == [
+            {
+                "name": "Discovery",
+                "dynamic": True,
+                "tools": [
+                    {
+                        "name": "greet",
+                        "description": "Greet someone by name",
+                        "arguments": {
+                            "properties": {"name": {"type": "string"}},
+                            "required": ["name"],
+                            "type": "object",
+                        },
+                    }
+                ],
+            }
+        ]
+    finally:
+        plugins.pm.unregister(name="DynamicToolboxPlugin")
+
+
+def test_tools_list_prepare_toolbox():
+    # Toolboxes that discover their tools in prepare() are dynamic too
+    runner = CliRunner()
+    try:
+        plugins.pm.register(DynamicToolboxPlugin(), name="DynamicToolboxPlugin")
+
+        result = runner.invoke(cli.cli, ["tools"])
+        assert result.exit_code == 0
+        assert "Counter:" not in result.output
+        assert (
+            "Counter(start: int = 0) (plugin: DynamicToolboxPlugin)\n"
+            "\n"
+            "  Registers a counting tool during prepare().\n"
+        ) in result.output
+
+        result2 = runner.invoke(cli.cli, ["tools", "--json"])
+        assert result2.exit_code == 0
+        toolboxes = {
+            toolbox["name"]: toolbox
+            for toolbox in json.loads(result2.output)["toolboxes"]
+        }
+        assert toolboxes["Counter"]["dynamic"] is True
+        assert toolboxes["Counter"]["tools"] == []
+
+        # A constructor spec runs prepare() and lists the registered tools
+        result3 = runner.invoke(cli.cli, ["tools", "Counter(5)"])
+        assert result3.exit_code == 0
+        assert result3.output == (
+            "Counter(5):\n\n  increment() -> int\n\n    Increment the counter\n\n"
+        )
+    finally:
+        plugins.pm.unregister(name="DynamicToolboxPlugin")
 
 
 def test_register_toolbox_fails_on_bad_class():
@@ -894,7 +1092,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                 "-T",
                 "Memory",
                 "--tool",
-                "Filesystem({})".format(json.dumps(str(path))),
+                f"Filesystem({json.dumps(str(path))})",
                 json.dumps(
                     {
                         "tool_calls": [
@@ -924,11 +1122,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
         plugins.pm.unregister(name="ToolboxPlugin")
 
     # Check the database
-    rows = list(logs_db.query(TOOL_RESULTS_SQL))
-    # JSON decode things in rows
-    for row in rows:
-        row["tool_calls"] = json.loads(row["tool_calls"])
-        row["tool_results"] = json.loads(row["tool_results"])
+    rows = tool_activity_rows(logs_db)
     assert rows == [
         {
             "model": "echo",
@@ -947,7 +1141,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_set",
                     "output": "null",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -956,7 +1150,7 @@ def test_toolbox_logging_async(logs_db, tmpdir):
                     "name": "Memory_get",
                     "output": "two",
                     "instance": {
-                        "name": "Filesystem",
+                        "name": "Memory",
                         "plugin": "ToolboxPlugin",
                         "arguments": "{}",
                     },
@@ -1000,57 +1194,32 @@ def test_plugins_command():
     ]
 
 
-TOOL_RESULTS_SQL = """
--- First, create ordered subqueries for tool_calls and tool_results
-with ordered_tool_calls as (
-    select
-        tc.response_id,
-        json_group_array(
-            json_object(
-                'name', tc.name,
-                'arguments', tc.arguments
-            )
-        ) as tool_calls_json
-    from (
-        select * from tool_calls order by id
-    ) tc
-    where tc.id is not null
-    group by tc.response_id
-),
-ordered_tool_results as (
-    select
-        tr.response_id,
-        json_group_array(
-            json_object(
-                'name', tr.name,
-                'output', tr.output,
-                'instance', case
-                    when ti.id is not null then json_object(
-                        'name', ti.name,
-                        'plugin', ti.plugin,
-                        'arguments', ti.arguments
-                    )
-                    else null
-                end
-            )
-        ) as tool_results_json
-    from (
-        select distinct tr.*, ti.id as ti_id, ti.name as ti_name,
-               ti.plugin, ti.arguments as ti_arguments
-        from tool_results tr
-        left join tool_instances ti on tr.instance_id = ti.id
-        order by tr.id
-    ) tr
-    left join tool_instances ti on tr.instance_id = ti.id
-    where tr.id is not null
-    group by tr.response_id
-)
-select
-    r.model,
-    coalesce(otc.tool_calls_json, '[]') as tool_calls,
-    coalesce(otr.tool_results_json, '[]') as tool_results
-from responses r
-left join ordered_tool_calls otc on r.id = otc.response_id
-left join ordered_tool_results otr on r.id = otr.response_id
-group by r.id, r.model
-order by r.id"""
+def tool_activity_rows(db):
+    """Per-turn tool calls and results from the message store, in the
+    shape the old TOOL_RESULTS_SQL produced from the legacy tables."""
+    from llm.logs import LogStore, log_row_extras, merged_log_rows
+
+    store = LogStore(db)
+    rows = merged_log_rows(store)
+    rows.reverse()
+    out = []
+    for row in rows:
+        extras = log_row_extras(store, row)
+        out.append(
+            {
+                "model": row["model"],
+                "tool_calls": [
+                    {"name": call["name"], "arguments": json.dumps(call["arguments"])}
+                    for call in extras["tool_calls"]
+                ],
+                "tool_results": [
+                    {
+                        "name": result["name"],
+                        "output": result["output"],
+                        "instance": result["instance"],
+                    }
+                    for result in extras["tool_results"]
+                ],
+            }
+        )
+    return out

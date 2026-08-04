@@ -1,12 +1,14 @@
-from click.testing import CliRunner
-from llm.cli import cli
-from llm import Collection
 import json
 import pathlib
-import pytest
-import sqlite_utils
 import sys
 from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+from llm import Collection
+from llm.cli import cli
 
 
 @pytest.mark.parametrize(
@@ -356,7 +358,7 @@ def test_embed_multi_files_binary_store(tmpdir):
     assert result.exit_code == 0
     db = sqlite_utils.Database(str(db_path))
     assert db["embeddings"].count == 1
-    row = list(db["embeddings"].rows)[0]
+    row = next(iter(db["embeddings"].rows))
     assert row == {
         "collection_id": 1,
         "id": "file.bin",
@@ -582,7 +584,7 @@ def test_embed_multi_files_errors(multi_files, args, expected_error):
 )
 def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
     db_path, files = multi_files
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         [

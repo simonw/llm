@@ -1,5 +1,118 @@
 # Changelog
 
+(v0_32)=
+## 0.32 (2026-08-04)
+
+LLM 0.32 is a major, backwards-compatible update to the way prompts, responses, tools and logs are represented. It adds structured messages and parts throughout the Python API, adopts the OpenAI Responses API for reasoning-capable models, substantially expands control over pausable and resumable tool loops and introduces a new content-addressed SQLite logging schema. Reasoning traces are now displayed on standard error by the `llm` command, for models that support them.
+
+### Structured messages and richer responses
+
+Prompt inputs and model outputs are now represented as lists of `Message` objects, each containing typed `Part` objects for text, reasoning, tool calls, tool results and attachments.
+
+- New {ref}`messages= keyword argument <python-api-messages>` on the prompt, conversation and chain APIs, including their asynchronous equivalents. For example, `model.prompt(messages=[llm.user("Hello"), llm.assistant("Hi!"), llm.user("What can you do?")])`. Existing `prompt=`, `system=`, `attachments=` and `tool_results=` arguments continue to work and are converted into the same structured representation.
+- New {ref}`structured streaming methods <python-api-messages>` `response.stream_events()` and `response.astream_events()` expose mixed streams of text, reasoning, tool calls and tool results. Iterating over a response directly continues to yield text strings.
+- `response.messages()` returns the assembled structured output. `response.reply()` continues from any response and can automatically execute pending tool calls before the next turn.
+- `response.to_dict()` and `Response.from_dict()` provide JSON-safe persistence of complete turns, including reasoning and provider metadata, with matching `TypedDict` definitions in the new `llm.serialization` module.
+- `response.prompt.messages` is now the canonical record of exactly what was sent to the model, including the full preceding conversation chain.
+
+These APIs were introduced in {ref}`0.32a0 <v0_32_a0>`. They are described in the {ref}`Advanced model plugins <advanced-model-plugins>` documentation.
+
+### OpenAI Responses API and reasoning
+
+- Most reasoning-capable OpenAI models now use the `/v1/responses` endpoint by default, enabling interleaved reasoning across tool calls. The existing Chat Completions classes remain available, and `-o chat_completions 1` selects that older path for an individual prompt. See {ref}`0.32a2 <v0_32_a2>` for the full list of affected models.
+- OpenAI Responses API models now provide {ref}`WebSearch <openai-models-web-search>` and {ref}`CodeInterpreter <openai-models-code-interpreter>` server-side tools, available from the CLI using `-T WebSearch` or `-T 'CodeInterpreter(memory_limit="4g")'`.
+- {ref}`Visible reasoning summaries <python-api-messages-reasoning>` are streamed to standard error by `llm prompt` and `llm chat`. Use `-R/--hide-reasoning` or the new `hide_reasoning=True` Python argument to hide them. Encrypted reasoning metadata is preserved for subsequent turns.
+- The default model for users who have not selected one is now [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), replacing GPT-4o mini. New built-in models include `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`; models that are no longer available from OpenAI have been removed. See {ref}`0.32rc1 <v0_32_rc1>` and {ref}`0.32rc2 <v0_32_rc2>` for details.
+- New {ref}`llm openai endpoint <openai-endpoint>` command runs prompts and chats, or lists models, against an arbitrary OpenAI-compatible endpoint without configuring it first. These calls are not logged.
+- OpenAI models now support a `service_tier` option. Use `-o service_tier fast` for faster responses at a higher price, or `-o service_tier flex` for slower, cheaper processing on supported models. See {ref}`Fast mode and service tiers <openai-models-service-tier>`. [#1585](https://github.com/simonw/llm/pull/1585)
+- New `llm -m model --options` flag lists the options supported by a model. The Python prompt APIs now accept an explicit {ref}`options= dictionary <python-api-model-options>` as well as the previous keyword-argument form.
+
+### More controllable tool loops
+
+- Every tool call now has a unique `tool_call_id`, synthesized when the provider does not supply one. Tool implementations can {ref}`accept an llm_tool_call parameter <python-api-tools-llm-tool-call>` to inspect the current call and its ID.
+- Tools can {ref}`raise llm.PauseChain <python-api-tools-pause>` to pause execution for human approval or another external event. Chains can later {ref}`resume from a message history ending in unresolved tool calls <python-api-tools-resume>`, without repeating calls that already have results.
+- {ref}`Conversations that use configured tools <usage-tools>` can be continued with `llm -c` or `llm chat -c` without repeating the toolbox configuration.
+- `llm tools` now shows constructor signatures and docstrings for {ref}`dynamic toolboxes <python-api-tools-dynamic>`. Passing a toolbox specification instantiates it and lists its runtime-generated tools, while `llm tools --json` identifies dynamic toolboxes with a `"dynamic"` boolean. [#1580](https://github.com/simonw/llm/issues/1580)
+- Models can now {ref}`declare the server-side tools they support <advanced-model-plugins-server-side-tools>` using the instance-level `supported_server_side_tools` property and the new `llm.ServerSideTool` base class. Server-executed calls and results are captured as structured message parts, and `llm -c` restores configured server-side tools for continued conversations. [#1592](https://github.com/simonw/llm/issues/1592), [#1593](https://github.com/simonw/llm/pull/1593)
+- {ref}`llm tools -m MODEL <usage-tools>` lists the server-side tools supported by that model. `llm models --json` returns model aliases, capability flags, attachment types and server-side tools, with option schemas included when combined with `--options`.
+- {ref}`OpenAI-compatible Responses endpoints <openai-endpoint>` can use provider-specific server-side tools with `ServerSideTool(spec={...})`, including OpenRouter's web search implementation.
+
+See {ref}`0.32a3 <v0_32_a3>` for more detail on pausing, resuming and inspecting tool calls.
+
+### New SQLite logging schema
+
+LLM now logs prompts and responses using a new schema built around threads, turns and a **content-addressed message store**. Existing records in the legacy `responses` table are left untouched, and `llm logs` combines both generations of data. You can {ref}`create a backup <logging-backup>` before upgrading using:
+
+    llm logs backup logs-backup.db
+
+- Messages are stored once and referenced by their content hash, preserving structured text, reasoning, attachments and tool activity without duplicating repeated conversation history. See {ref}`the message store documentation <logging-message-store>`.
+- Raw provider payloads are stored in `turns.response_json`, {ref}`condensed <logging-message-store-response-json>` using [condense-json](https://github.com/simonw/condense-json). `llm logs --json` expands them back to their original shape, and `LogStore.turn_response_json(turn_id)` returns them from Python. [#1586](https://github.com/simonw/llm/pull/1586)
+- Model plugins can define {ref}`json_replacements <advanced-model-plugins-json-replacements>` dictionaries to further improve payload compression.
+- {ref}`Full-text search <logging-search>`, {ref}`model <logging-filter-model>` and {ref}`tool filters <logging-filter-tools>`, and {ref}`conversation views <logging-conversation>` work across both the legacy and new tables. Logs now record which configured toolbox instance supplied each tool.
+- New {ref}`Response.log_to_db() <logging-message-store-python>` Python API writes a response to a logs database. `llm prompt --json` outputs the same structured representation as `llm logs --json`, even when persistent logging is disabled.
+- New {ref}`message_tree SQL view <logging-message-store-queries>` renders conversation threads as indented text outlines for direct SQL exploration.
+- LLM now requires [sqlite-utils 4.0](https://sqlite-utils.datasette.io/en/stable/changelog.html#v4-0) or higher and no longer depends on `sqlite-migrate`.
+
+See {ref}`0.32rc1 <v0_32_rc1>` for the detailed migration notes and complete list of logging changes.
+
+### Fixes since 0.32rc2
+
+- Fixed streamed OpenAI Responses API calls recording two different ciphertexts of the same reasoning: the part's `encrypted_content` was harvested from the `response.output_item.done` event while `response_json` came from `response.completed`, and OpenAI encrypts per event. Reasoning metadata is now re-emitted from the final payload, so both records agree on one blob.
+- Attachments loaded from URLs now follow up to three redirects when detecting their content type or fetching their bytes. Thanks, [Ojas Sharma](https://github.com/ojassharma7). [#1046](https://github.com/simonw/llm/issues/1046), [#1579](https://github.com/simonw/llm/pull/1579)
+- Fixed a bug where `llm openai endpoint --schema` was ignored if the selected template also defined a schema. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1588](https://github.com/simonw/llm/pull/1588)
+- `llm logs status` now counts records in the new `threads` and `turns` tables, with legacy conversation and response counts shown separately when present.
+- `Response.to_dict()` now executes an unconsumed synchronous response before serializing it instead of producing an empty assistant message list.
+- `Response.from_dict()` now restores pending client-side tool calls so they can be inspected, executed or continued using `response.reply(tools=[...])`.
+- `Response.reply()` now correctly passes {ref}`attachments returned by tools <python-api-tools-attachments>` to the next model call, for both synchronous and asynchronous responses.
+
+(v0_32_rc2)=
+## 0.32rc2 (2026-07-30)
+
+- The default model for users who have not set their own default is now [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). It was previously [GPT-4o mini](https://developers.openai.com/api/docs/models/gpt-4o-mini). Luna is a much better and more recent model, albeit slightly more expensive - $0.20 per million input tokens and $1.20 per million output tokens, compared to $0.15/$0.60 for 4o mini. You can switch back to 4o mini using `llm models default gpt-4o-mini`, or switch to [GPT-5 nano](https://developers.openai.com/api/docs/models/gpt-5-nano), an even cheaper default model ($0.05/$0.40), using `llm models default gpt-5-nano`. [#1576](https://github.com/simonw/llm/issues/1576)
+- New {ref}`llm openai endpoint <openai-endpoint>` command for running prompts, chats and model listings against arbitrary OpenAI-compatible endpoints without first configuring a model. These calls are not logged. [#1565](https://github.com/simonw/llm/issues/1565)
+- No longer depends on [sqlite-migrate](https://github.com/simonw/sqlite-migrate), since that functionality is now handled by [sqlite-utils 4.0](https://sqlite-utils.datasette.io/en/stable/changelog.html#v4-0). [#1577](https://github.com/simonw/llm/issues/1577)
+- Fixed a bug where server-executed tool calls were incorrectly reported as pending by `LogStore.pending_tool_calls()`. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1574](https://github.com/simonw/llm/issues/1574)
+- `schema_dsl()` now raises a descriptive `ValueError` instead of an `IndexError` for malformed fields with no name before the colon. [#1466](https://github.com/simonw/llm/issues/1466)
+
+(v0_32_rc1)=
+## 0.32rc1 (2026-07-30)
+
+This release candidate for 0.32 introduces a new database schema for logging prompts and responses that captures full details of the interaction with the underlying LLM, and de-duplicates those records using a **content-addressed message store**.
+
+Upgrading to this RC will create those new tables and start logging to them. Existing data in the `responses` table will be left unaffected, and the `logs` command will read from both old and new tables. New interactions will only be written to the new tables.
+
+You can create a backup of your logs database prior to upgrading using:
+
+    llm logs backup logs-backup.db
+
+### Changes to SQLite logging
+
+- See {ref}`the message store documentation <logging-message-store>` for details of the new logging schema.
+- `llm prompt` logs are now written to a new set of tables, not the legacy tables.
+- New documented {ref}`Response.log_to_db() <logging-message-store-python>` Python API for writing to a SQLite logs database.
+- `llm logs` now reads both generations of log tables: history recorded by older versions of LLM in the legacy `responses` table is merged into the output alongside new turns, with rows from the dual-write era deduplicated by id. The `-m`, `-c`, `-f`, `-T`, `--tools` and `--schema` filters work across both. [#1562](https://github.com/simonw/llm/pull/1562)
+- Raw provider payloads (the old `prompt_json` and `response_json` columns) are no longer persisted - the stored message chain is the record of what was sent and returned. This means data that only ever lived in those raw payloads is no longer stored, notably the log probabilities returned by OpenAI completion models with `-o logprobs`.
+- `llm logs -q` full-text search works against the new log tables. Search covers the prompt text you typed and the model's text responses - system prompts, fragment contents, tool activity and reasoning traces are excluded from the index. See {ref}`logging-search`.
+- `llm logs` now shows which configured toolbox instance provided each tool - in the tools list for a prompt and on each tool result, so a `SQLite_query` result records that it ran against `SQLite("mydb.db")`.
+- New {ref}`message_tree SQL view <logging-message-store-queries>` that renders each conversation thread as an indented text outline, for exploring the message store directly with SQL. [#1562](https://github.com/simonw/llm/pull/1562)
+
+### Other changes
+
+- New OpenAI models: `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`.
+- Removed OpenAI models that are no longer available via the OpenAI API: `chatgpt-4o-latest`, the `gpt-4o` and `gpt-4o-mini` audio preview models, `gpt-4-32k`, `gpt-4-1106-preview`, `gpt-4-0125-preview`, the `gpt-4.5` preview models, `o1-preview`, `o1-mini` and `gpt-5.1-chat-latest`. [#1553](https://github.com/simonw/llm/issues/1553)
+- Continuing a conversation that used a configured toolbox now works: `llm -c` and `llm chat -c` reconstruct each toolbox instance from its recorded configuration, so a conversation started with `-T 'Datasette("https://datasette.io/content")'` can be continued without repeating the `-T` option.
+- New `llm prompt --json` option which outputs a JSON array describing the prompt and the response, in the same format as `llm logs --json`. This works even with `--no-log` or logging turned off, in which case the response is logged to a temporary in-memory database to build the JSON. [#1566](https://github.com/simonw/llm/pull/1566)
+- New `response.execute_tool_call(tool_call)` method (awaitable on async responses) that executes a single tool call and returns its `ToolResult`. This is designed for plugins wrapping provider SDKs that orchestrate the tool loop themselves, described in {ref}`the advanced model plugins documentation <advanced-model-plugins-execute-tool-call>`.
+- Documentation for the `responses: true` setting in `extra-openai-models.yaml`, which opts a custom OpenAI model into the Responses API instead of Chat Completions. See {ref}`openai-extra-models`.
+- Fixed a bug where the system prompt was omitted from the pre-computed `prompt.messages` on the first turn of a conversation, so models that build their request from that message list never received it. Thanks, [Niall Smart](https://github.com/niallsmart). [#1478](https://github.com/simonw/llm/issues/1478)
+- Fixed a bug on Windows where a fragment argument holding an absolute path such as `C:\Users\demo\notes.txt` was mistaken for a reference to a `c:` fragment loader plugin. Fragment arguments that match an existing file path now always resolve as files. [#1563](https://github.com/simonw/llm/issues/1563)
+- LLM now requires [sqlite-utils 4.0](https://sqlite-utils.datasette.io/en/stable/changelog.html#v4-0) or higher.
+
+(v0_31_1)=
+## 0.31.1 (2026-07-09)
+
+- Fix for a bug with OpenAI Chat Completion endpoints where a tool call with empty arguments could result in a JSON error from some providers. [#1521](https://github.com/simonw/llm/issues/1521)
+
 (v0_32_a3)=
 ## 0.32a3 (2026-06-09)
 

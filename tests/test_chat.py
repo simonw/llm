@@ -1,12 +1,35 @@
-from click.testing import CliRunner
-import re
-from unittest.mock import ANY
 import json
-import llm.cli
-import pytest
-import sqlite_utils
+import re
 import sys
 import textwrap
+from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+import llm.cli
+from llm.logs import LogStore, merged_log_rows
+
+
+def logged_rows(db):
+    """Chronological log rows from the store, reduced to the fields
+    these tests care about."""
+    rows = merged_log_rows(LogStore(db))
+    rows.reverse()
+    return [
+        {
+            "model": row["model"],
+            "prompt": row["prompt"],
+            "system": row["system"],
+            "options_json": row["options_json"],
+            "response": row["response"],
+            "conversation_id": row["conversation_id"],
+            "input_tokens": row["input_tokens"],
+            "output_tokens": row["output_tokens"],
+        }
+        for row in rows
+    ]
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -35,52 +58,30 @@ def test_chat_basic(mock_model, logs_db):
         "\n"
     )
     # Should have logged
-    conversations = list(logs_db["conversations"].rows)
-    assert conversations[0] == {
-        "id": ANY,
-        "name": "Hi",
-        "model": "mock",
-    }
-    conversation_id = conversations[0]["id"]
-    responses = list(logs_db["responses"].rows)
+    threads = list(logs_db["threads"].rows)
+    assert threads[0]["name"] == "Hi"
+    conversation_id = threads[0]["id"]
+    responses = logged_rows(logs_db)
     assert responses == [
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
-            "prompt_json": None,
             "options_json": "{}",
             "response": "one world",
-            "response_json": None,
             "conversation_id": conversation_id,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 1,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         },
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Hi two",
             "system": None,
-            "prompt_json": None,
             "options_json": "{}",
             "response": "one again",
-            "response_json": None,
             "conversation_id": conversation_id,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 2,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         },
     ]
     # Now continue that conversation
@@ -103,33 +104,17 @@ def test_chat_basic(mock_model, logs_db):
         "\n> quit"
         "\n"
     )
-    new_responses = list(
-        logs_db.query(
-            "select * from responses where id not in ({})".format(
-                ", ".join("?" for _ in responses)
-            ),
-            [r["id"] for r in responses],
-        )
-    )
+    new_responses = logged_rows(logs_db)[len(responses) :]
     assert new_responses == [
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Continue",
             "system": None,
-            "prompt_json": None,
             "options_json": "{}",
             "response": "continued",
-            "response_json": None,
             "conversation_id": conversation_id,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 1,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         }
     ]
 
@@ -155,26 +140,17 @@ def test_chat_system(mock_model, logs_db):
         "\n> quit"
         "\n"
     )
-    responses = list(logs_db["responses"].rows)
+    responses = logged_rows(logs_db)
     assert responses == [
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Hi",
             "system": "You are mean",
-            "prompt_json": None,
             "options_json": "{}",
             "response": "I am mean",
-            "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 1,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         }
     ]
 
@@ -199,45 +175,27 @@ def test_chat_options(mock_model, logs_db, user_path):
         input="Hi with override\nquit\n",
     )
     assert result.exit_code == 0
-    responses = list(logs_db["responses"].rows)
+    responses = logged_rows(logs_db)
     assert responses == [
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Hi",
             "system": None,
-            "prompt_json": None,
             "options_json": '{"max_tokens": 5}',
             "response": "Default options response",
-            "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 1,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         },
         {
-            "id": ANY,
             "model": "mock",
-            "resolved_model": None,
             "prompt": "Hi with override",
             "system": None,
-            "prompt_json": None,
             "options_json": '{"max_tokens": 10}',
             "response": "Override options response",
-            "response_json": None,
             "conversation_id": ANY,
-            "duration_ms": ANY,
-            "datetime_utc": ANY,
             "input_tokens": 3,
             "output_tokens": 1,
-            "token_details": None,
-            "schema_id": None,
-            "reasoning": None,
         },
     ]
 
@@ -282,7 +240,10 @@ def test_chat_multi(mock_model, logs_db, input, expected):
         llm.cli.cli, ["chat", "-m", "mock", "--option", "max_tokens", "10"], input=input
     )
     assert result.exit_code == 0
-    rows = list(logs_db["responses"].rows_where(select="prompt, response"))
+    rows = [
+        {"prompt": row["prompt"], "response": row["response"]}
+        for row in logged_rows(logs_db)
+    ]
     assert rows == expected
 
 
@@ -309,7 +270,7 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["responses"].count == 2
+    assert sqlite_utils.Database(db_path)["turns"].count == 2
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -354,7 +315,7 @@ def test_chat_tools(logs_db):
         '  "attachments": [],\n'
         '  "stream": true,\n'
         '  "previous": []\n'
-        "}{\n"
+        "} {\n"
         '  "prompt": "",\n'
         '  "system": "",\n'
         '  "attachments": [],\n'
@@ -390,7 +351,7 @@ def test_chat_fragments(tmpdir):
     output = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "echo", "-f", path1],
-        input=("hi\n!fragment {}\nquit\n".format(path2)),
+        input=(f"hi\n!fragment {path2}\nquit\n"),
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output

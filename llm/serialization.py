@@ -32,7 +32,7 @@ keys may be absent from a serialized payload; required keys must
 always be present.
 """
 
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Literal
 
 # NotRequired moved to typing in 3.11; use typing_extensions for 3.10
 # support. typing_extensions is a transitive dep via pydantic.
@@ -75,7 +75,7 @@ class AttachmentDict(TypedDict, total=False):
 class TextPartDict(TypedDict):
     type: Literal["text"]
     text: str
-    provider_metadata: NotRequired[Dict[str, Any]]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ReasoningPartDict(TypedDict):
@@ -85,19 +85,19 @@ class ReasoningPartDict(TypedDict):
     # reasoning (OpenAI GPT-5, Gemini without thoughts). The token
     # total lives on response usage, not on the Part.
     redacted: NotRequired[bool]
-    provider_metadata: NotRequired[Dict[str, Any]]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolCallPartDict(TypedDict):
     type: Literal["tool_call"]
     name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
     tool_call_id: NotRequired[str]
     # True for provider-executed calls (Anthropic web search, Gemini code
     # execution). Adapters use this to restore provider-side blocks on
     # the next turn.
     server_executed: NotRequired[bool]
-    provider_metadata: NotRequired[Dict[str, Any]]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolResultPartDict(TypedDict):
@@ -107,23 +107,23 @@ class ToolResultPartDict(TypedDict):
     tool_call_id: NotRequired[str]
     server_executed: NotRequired[bool]
     exception: NotRequired[str]
-    attachments: NotRequired[List[AttachmentDict]]
-    provider_metadata: NotRequired[Dict[str, Any]]
+    attachments: NotRequired[list[AttachmentDict]]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class AttachmentPartDict(TypedDict):
     type: Literal["attachment"]
     attachment: NotRequired[AttachmentDict]
-    provider_metadata: NotRequired[Dict[str, Any]]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
-PartDict = Union[
-    TextPartDict,
-    ReasoningPartDict,
-    ToolCallPartDict,
-    ToolResultPartDict,
-    AttachmentPartDict,
-]
+PartDict = (
+    TextPartDict
+    | ReasoningPartDict
+    | ToolCallPartDict
+    | ToolResultPartDict
+    | AttachmentPartDict
+)
 """Discriminated union of Part dict shapes. Use with
 ``pydantic.TypeAdapter(PartDict)`` to validate / dispatch by ``type``.
 """
@@ -140,8 +140,8 @@ class MessageDict(TypedDict):
     """
 
     role: str
-    parts: List[PartDict]
-    provider_metadata: NotRequired[Dict[str, Any]]
+    parts: list[PartDict]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 # ---- Response + nested shapes -----------------------------------------------
@@ -152,8 +152,8 @@ class PromptDict(TypedDict):
     full input chain that was sent for this turn plus any options that
     apply."""
 
-    messages: List[MessageDict]
-    options: NotRequired[Dict[str, Any]]
+    messages: list[MessageDict]
+    options: NotRequired[dict[str, Any]]
     system: NotRequired[str]
 
 
@@ -163,7 +163,7 @@ class UsageDict(TypedDict, total=False):
 
     input: int
     output: int
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class ResponseDict(TypedDict):
@@ -174,7 +174,7 @@ class ResponseDict(TypedDict):
 
     model: str
     prompt: PromptDict
-    messages: List[MessageDict]
+    messages: list[MessageDict]
     # Audit fields — present on a freshly-serialized response, optional
     # on hand-constructed ones.
     id: NotRequired[str]

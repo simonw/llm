@@ -1,18 +1,32 @@
+import importlib.metadata
+import json
+import sqlite3
+
+import llm_echo
 import pytest
 import sqlite_utils
-import json
-import llm
-import llm_echo
-from llm.plugins import pm
 from pydantic import Field
 from pytest_httpx import IteratorStream
-from typing import Optional
+
+import llm
+from llm.plugins import pm
 
 
 def pytest_configure(config):
     import sys
 
     sys._called_from_test = True
+
+
+def pytest_report_header(config):
+    conn = sqlite3.connect(":memory:")
+    version = conn.execute("select sqlite_version()").fetchone()[0]
+    conn.close()
+    sqlite_utils_version = importlib.metadata.version("sqlite-utils")
+    return [
+        f"SQLite: {version}",
+        f"sqlite-utils: {sqlite_utils_version}",
+    ]
 
 
 @pytest.fixture
@@ -50,13 +64,13 @@ def env_setup(monkeypatch, user_path):
 
 class MockModel(llm.Model):
     model_id = "mock"
-    attachment_types = {"image/png", "audio/wav"}
+    attachment_types = frozenset({"image/png", "audio/wav"})
     can_stream = True
     supports_schema = True
     supports_tools = True
 
     class Options(llm.Options):
-        max_tokens: Optional[int] = Field(
+        max_tokens: int | None = Field(
             description="Maximum number of tokens to generate.", default=None
         )
 
@@ -249,6 +263,56 @@ def mocked_openai_chat(httpx_mock):
 
 
 @pytest.fixture
+def mock_openai_responses(httpx_mock):
+    def add_response(
+        text="Bob, Alice, Eve",
+        model="gpt-5.6-luna",
+        response_id="resp_test",
+        message_id="msg_test",
+    ):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json={
+                "id": response_id,
+                "object": "response",
+                "created_at": 1,
+                "model": model,
+                "output": [
+                    {
+                        "type": "message",
+                        "id": message_id,
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": text,
+                                "annotations": [],
+                            }
+                        ],
+                    }
+                ],
+                "usage": {
+                    "input_tokens": 5,
+                    "output_tokens": 3,
+                    "total_tokens": 8,
+                },
+                "status": "completed",
+            },
+            headers={"Content-Type": "application/json"},
+        )
+
+    return add_response
+
+
+@pytest.fixture
+def mocked_openai_responses(httpx_mock, mock_openai_responses):
+    mock_openai_responses()
+    return httpx_mock
+
+
+@pytest.fixture
 def mocked_openai_chat_returning_fenced_code(httpx_mock):
     httpx_mock.add_response(
         method="POST",
@@ -289,7 +353,7 @@ def stream_events():
                 }
             )
         ).encode("utf-8")
-    yield "data: [DONE]\n\n".encode("utf-8")
+    yield b"data: [DONE]\n\n"
 
 
 @pytest.fixture
@@ -323,6 +387,7 @@ def mocked_openai_completion(httpx_mock):
             "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
         },
         headers={"Content-Type": "application/json"},
+        is_reusable=True,
     )
     return httpx_mock
 
@@ -395,7 +460,7 @@ def stream_completion_events():
                 }
             )
         ).encode("utf-8")
-    yield "data: [DONE]\n\n".encode("utf-8")
+    yield b"data: [DONE]\n\n"
 
 
 @pytest.fixture

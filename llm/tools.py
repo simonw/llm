@@ -1,6 +1,6 @@
+import time
 from datetime import datetime, timezone
 from importlib.metadata import version
-import time
 
 
 def llm_version() -> str:
@@ -12,7 +12,7 @@ def llm_time() -> dict:
     "Returns the current time, as local time and UTC"
     # Get current times
     utc_time = datetime.now(timezone.utc)
-    local_time = datetime.now()
+    local_time = datetime.now(timezone.utc).astimezone()
 
     # Get timezone information
     local_tz_name = time.tzname[time.localtime().tm_isdst]
