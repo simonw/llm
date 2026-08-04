@@ -734,9 +734,10 @@ class _BaseConversation:
     # exact message list, so reasoning signatures and provider metadata
     # survive being reloaded.
     loaded_messages: list[Any] | None = None
-    # Plugin tool names and toolbox specs (e.g. 'Datasette({"url": ...})')
-    # recorded against this conversation's first turn in storage. Read
-    # when the conversation was loaded from the message store, where
+    # Plugin and server-side tool names and configured specs (e.g.
+    # 'Datasette({"url": ...})' or 'CodeInterpreter({"memory_limit":
+    # "4g"})') recorded against this conversation's first turn in storage.
+    # Read when the conversation was loaded from the message store, where
     # there are no rebuilt responses to copy prompt.tools from.
     loaded_tools: list[str] | None = None
 

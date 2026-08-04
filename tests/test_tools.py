@@ -134,6 +134,22 @@ def test_server_side_tool_support_can_vary_by_model_instance():
         ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
 
 
+def test_server_side_tool_configuration_is_logged():
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    instance = next(iter(db["tool_instances"].rows))
+    assert instance["name"] == "DemoServerSideTool"
+    assert instance["plugin"] is None
+    assert json.loads(instance["arguments"]) == {"value": "configured"}
+    assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
+
+
 def test_function_tools_still_require_supports_tools():
     def local_tool():
         return "local"

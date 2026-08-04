@@ -271,6 +271,129 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
+def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
+    def response_payload(response_id, text):
+        return {
+            "id": response_id,
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": f"msg_{response_id}",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": text,
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        }
+
+    first_payload = response_payload("resp_code_interpreter_first", "Calculated")
+    first_payload["output"] = [
+        {
+            "type": "message",
+            "id": "msg_before_code",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "Running Python",
+                    "annotations": [],
+                }
+            ],
+        },
+        {
+            "type": "code_interpreter_call",
+            "id": "ci_continue",
+            "status": "completed",
+            "container_id": "cntr_continue",
+            "code": "print(6 * 7)",
+            "outputs": [{"type": "logs", "logs": "42\n"}],
+        },
+        {
+            "type": "message",
+            "id": "msg_after_code",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "Calculated",
+                    "annotations": [],
+                }
+            ],
+        },
+    ]
+    for payload in (
+        first_payload,
+        response_payload("resp_code_interpreter_second", "Continued"),
+    ):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
+    runner = CliRunner()
+    first = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'CodeInterpreter(memory_limit="4g")',
+            "--no-stream",
+            "--key",
+            "x",
+            "Run this calculation",
+        ],
+        catch_exceptions=False,
+    )
+    second = runner.invoke(
+        cli,
+        ["Continue", "-c", "--no-stream", "--key", "x"],
+        catch_exceptions=False,
+    )
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert second.output == "Continued\n"
+    request_bodies = [
+        json.loads(request.content) for request in httpx_mock.get_requests()
+    ]
+    expected_tool = {
+        "type": "code_interpreter",
+        "container": {"type": "auto", "memory_limit": "4g"},
+    }
+    assert request_bodies[0]["tools"] == [expected_tool]
+    assert request_bodies[1]["tools"] == [expected_tool]
+    assert request_bodies[1]["input"] == [
+        {"role": "user", "content": "Run this calculation"},
+        {"role": "assistant", "content": "Running Python"},
+        {"role": "assistant", "content": "Calculated"},
+        {"role": "user", "content": "Continue"},
+    ]
+
+    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    instance = next(iter(db["tool_instances"].rows))
+    assert instance["name"] == "CodeInterpreter"
+    assert json.loads(instance["arguments"])["memory_limit"] == "4g"
+    assert {row["instance_id"] for row in db["turn_tools"].rows} == {
+        instance["id"]
+    }
+
+
 def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
     httpx_mock.add_response(
         method="POST",

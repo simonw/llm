@@ -1445,28 +1445,36 @@ def load_conversation(
     except KeyError:
         pass
 
-    # Plugin tools recorded against the first turn, for the same
-    # reuse-on-continue behaviour the rebuilt responses provide. Tools
-    # that came from a toolbox are collapsed into a single spec string
-    # like Datasette({"url": "..."}) - the same format -T accepts - so
-    # the instance can be reconstructed with its configuration.
+    # Plugin and server-side tools recorded against the first turn, for
+    # the same reuse-on-continue behaviour the rebuilt responses provide.
+    # Configured instances are collapsed into a single spec string like
+    # Datasette({"url": "..."}) - the same format -T accepts - so the
+    # instance can be reconstructed with its configuration.
     loaded_tools = []
     seen_instance_ids = set()
+    supported_server_side_tool_names = {
+        tool_class.__name__
+        for tool_class in conversation.model.supported_server_side_tools
+    }
     for tool_row in db.query(
         """
-        select tools.name, turn_tools.instance_id,
+        select tools.name, tools.plugin, turn_tools.instance_id,
             tool_instances.name as instance_name,
             tool_instances.arguments as instance_arguments
         from tools
         join turn_tools on turn_tools.tool_id = tools.id
         left join tool_instances on tool_instances.id = turn_tools.instance_id
-        where tools.plugin is not null
-        and turn_tools.turn_id = (
+        where turn_tools.turn_id = (
             select id from turns where thread_id = ? order by id limit 1
         )
         """,
         [conversation_id],
     ):
+        if (
+            tool_row["plugin"] is None
+            and tool_row["instance_name"] not in supported_server_side_tool_names
+        ):
+            continue
         if tool_row["instance_id"] is None:
             loaded_tools.append(tool_row["name"])
         elif tool_row["instance_id"] not in seen_instance_ids:

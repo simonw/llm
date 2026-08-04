@@ -179,7 +179,7 @@ llm tools -m gpt-5.6-luna
 
 These are displayed in a separate `Server-side tools` section with their constructor signatures and documentation. Add `--json` to return them in a `server_side_tools` array whose entries have `"server_side": true`.
 
-If you run a prompt that uses tools from plugins (as opposed to tools provided using the `--functions` option) continuing that conversation using `llm -c` will reuse the tools from the first prompt. Running `llm chat -c` will start a chat that continues using those same tools. For example:
+If you run a prompt that uses tools from plugins or model-specific server-side tools, continuing that conversation using `llm -c` will reuse the tools from the first prompt. Configured constructor arguments such as `CodeInterpreter(memory_limit="4g")` are retained. Running `llm chat -c` will start a chat that continues using those same tools. For example:
 
 ```
 llm -T simple_eval "12345 * 12345" --td
