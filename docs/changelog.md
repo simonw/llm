@@ -1,7 +1,7 @@
 # Changelog
 
 (v0_32)=
-## 0.32 (2026-08-03)
+## 0.32 (2026-08-04)
 
 LLM 0.32 is a major, backwards-compatible update to the way prompts, responses, tools and logs are represented. It adds structured messages and parts throughout the Python API, adopts the OpenAI Responses API for reasoning-capable models, substantially expands control over pausable and resumable tool loops and introduces a new content-addressed SQLite logging schema. Reasoning traces are now displayed on standard error by the `llm` command, for models that support them.
 
