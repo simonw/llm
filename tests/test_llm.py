@@ -517,6 +517,52 @@ def test_llm_models_async(user_path):
     assert "AsyncMockModel (async): mock" in result.output
 
 
+def test_llm_models_json_includes_server_side_tools():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "models",
+            "--json",
+            "-m",
+            "gpt-5.6-luna",
+            "-m",
+            "chatgpt",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    models = {model["model_id"]: model for model in json.loads(result.output)}
+    assert set(models) == {"gpt-5.6-luna", "gpt-3.5-turbo"}
+    assert models["gpt-5.6-luna"]["server_side_tools"] == [
+        {"name": "WebSearch", "plugin": None},
+        {"name": "CodeInterpreter", "plugin": None},
+        {"name": "ServerSideTool", "plugin": None},
+    ]
+    assert models["gpt-3.5-turbo"]["server_side_tools"] == []
+    assert models["gpt-5.6-luna"]["supports_schema"] is True
+    assert models["gpt-5.6-luna"]["supports_tools"] is True
+    assert models["gpt-5.6-luna"]["can_stream"] is True
+    assert models["gpt-5.6-luna"]["supports_async"] is True
+    assert "application/pdf" in models["gpt-5.6-luna"]["attachment_types"]
+
+
+def test_llm_models_json_options_and_alias_filter():
+    result = CliRunner().invoke(
+        cli,
+        ["models", "--json", "--options", "-m", "4.1"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    models = json.loads(result.output)
+    assert len(models) == 1
+    assert models[0]["model_id"] == "gpt-4.1"
+    assert "4.1" in models[0]["aliases"]
+    assert "temperature" in models[0]["options"]
+
+
 @pytest.mark.parametrize(
     "args,expected_model_ids,unexpected_model_ids",
     (

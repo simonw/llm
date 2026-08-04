@@ -2405,6 +2405,7 @@ def render_model_with_options(model_id, *, async_=False):
 @click.option("async_", "--async", is_flag=True, help="List async models")
 @click.option("--schemas", is_flag=True, help="List models that support schemas")
 @click.option("--tools", is_flag=True, help="List models that support tools")
+@click.option("json_", "--json", is_flag=True, help="Output as JSON")
 @click.option(
     "-q",
     "--query",
@@ -2412,9 +2413,10 @@ def render_model_with_options(model_id, *, async_=False):
     help="Search for models matching these strings",
 )
 @click.option("model_ids", "-m", "--model", help="Specific model IDs", multiple=True)
-def models_list(options, async_, schemas, tools, query, model_ids):
+def models_list(options, async_, schemas, tools, json_, query, model_ids):
     "List available models"
     models_that_have_shown_options = set()
+    json_models = []
     for model_with_aliases in get_models_with_aliases():
         if async_ and not model_with_aliases.async_model:
             continue
@@ -2427,6 +2429,34 @@ def models_list(options, async_, schemas, tools, query, model_ids):
             continue
         if tools and not model_with_aliases.model.supports_tools:
             continue
+        if json_:
+            model = (
+                model_with_aliases.async_model
+                if async_
+                else model_with_aliases.model
+            )
+            model_json = {
+                "model_id": model.model_id,
+                "aliases": model_with_aliases.aliases,
+                "can_stream": model.can_stream,
+                "supports_schema": model.supports_schema,
+                "supports_tools": model.supports_tools,
+                "supports_async": model_with_aliases.async_model is not None,
+                "attachment_types": sorted(model.attachment_types),
+                "server_side_tools": [
+                    {
+                        "name": tool_class.__name__,
+                        "plugin": getattr(tool_class, "plugin", None),
+                    }
+                    for tool_class in model.supported_server_side_tools
+                ],
+            }
+            if options:
+                model_json["options"] = model.Options.model_json_schema()[
+                    "properties"
+                ]
+            json_models.append(model_json)
+            continue
         click.echo(
             render_model_with_aliases(
                 model_with_aliases,
@@ -2435,6 +2465,9 @@ def models_list(options, async_, schemas, tools, query, model_ids):
                 models_that_have_shown_options=models_that_have_shown_options,
             )
         )
+    if json_:
+        click.echo(json.dumps(json_models, indent=2))
+        return
     if not query and not options and not schemas and not model_ids:
         click.echo(f"Default: {get_default_model()}")
 

@@ -591,6 +591,13 @@ Use one or more `-m` options to indicate specific models, either by their model 
 ```bash
 llm models -m gpt-5.6-luna -m claude-opus-4.8
 ```
+
+Add `--json` to return an array of model records with aliases, capability flags, attachment types and `server_side_tools`. Combine it with `-m` to inspect one or more specific models; adding `--options` includes each model's option schemas:
+
+```bash
+llm models --json -m gpt-5.6-luna
+```
+
 Add `--options` to also see documentation for the options supported by each model:
 ```bash
 llm models --options

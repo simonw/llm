@@ -402,6 +402,7 @@ Options:
   --async           List async models
   --schemas         List models that support schemas
   --tools           List models that support tools
+  --json            Output as JSON
   -q, --query TEXT  Search for models matching these strings
   -m, --model TEXT  Specific model IDs
   -h, --help        Show this message and exit.
