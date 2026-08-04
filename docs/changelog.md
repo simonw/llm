@@ -60,10 +60,10 @@ See {ref}`0.32rc1 <v0_32_rc1>` for the detailed migration notes and complete lis
 - Fixed streamed OpenAI Responses API calls recording two different ciphertexts of the same reasoning: the part's `encrypted_content` was harvested from the `response.output_item.done` event while `response_json` came from `response.completed`, and OpenAI encrypts per event. Reasoning metadata is now re-emitted from the final payload, so both records agree on one blob.
 - Attachments loaded from URLs now follow up to three redirects when detecting their content type or fetching their bytes. Thanks, [Ojas Sharma](https://github.com/ojassharma7). [#1046](https://github.com/simonw/llm/issues/1046), [#1579](https://github.com/simonw/llm/pull/1579)
 - Fixed a bug where `llm openai endpoint --schema` was ignored if the selected template also defined a schema. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1588](https://github.com/simonw/llm/pull/1588)
-- `llm logs status` now counts records in the new `threads` and `turns` tables, with legacy conversation and response counts shown separately when present. [#1590](https://github.com/simonw/llm/issues/1590)
-- `Response.to_dict()` now executes an unconsumed synchronous response before serializing it instead of producing an empty assistant message list. [#1590](https://github.com/simonw/llm/issues/1590)
-- `Response.from_dict()` now restores pending client-side tool calls so they can be inspected, executed or continued using `response.reply(tools=[...])`. [#1590](https://github.com/simonw/llm/issues/1590)
-- `Response.reply()` now correctly passes {ref}`attachments returned by tools <python-api-tools-attachments>` to the next model call, for both synchronous and asynchronous responses. [#1590](https://github.com/simonw/llm/issues/1590)
+- `llm logs status` now counts records in the new `threads` and `turns` tables, with legacy conversation and response counts shown separately when present.
+- `Response.to_dict()` now executes an unconsumed synchronous response before serializing it instead of producing an empty assistant message list.
+- `Response.from_dict()` now restores pending client-side tool calls so they can be inspected, executed or continued using `response.reply(tools=[...])`.
+- `Response.reply()` now correctly passes {ref}`attachments returned by tools <python-api-tools-attachments>` to the next model call, for both synchronous and asynchronous responses.
 
 (v0_32_rc2)=
 ## 0.32rc2 (2026-07-30)
