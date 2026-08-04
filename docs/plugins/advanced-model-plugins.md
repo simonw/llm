@@ -203,7 +203,7 @@ Providers with an OpenAI-compatible tools array can optionally support raw speci
 llm.ServerSideTool({"type": "browser_search"})
 ```
 
-Declaring the base class does not claim subclasses belonging to other providers. Unsupported combinations raise an error instead of silently dropping or serializing the tool as a function tool. Server-side tool calls returned by the provider should use the `server_executed=True` events described in {ref}`structured-messages-streaming`.
+Server-side tool calls returned by the provider should use the `server_executed=True` events described in {ref}`structured-messages-streaming`.
 
 ```{eval-rst}
 .. autoclass:: llm.ServerSideTool
