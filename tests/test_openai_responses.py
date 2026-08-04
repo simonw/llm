@@ -24,9 +24,7 @@ def _text_response_json(model="gpt-5.6-luna", text="ok"):
                 "id": "msg_server_tool",
                 "role": "assistant",
                 "status": "completed",
-                "content": [
-                    {"type": "output_text", "text": text, "annotations": []}
-                ],
+                "content": [{"type": "output_text", "text": text, "annotations": []}],
             }
         ],
         "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},

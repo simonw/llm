@@ -627,9 +627,11 @@ def _partition_tools(
             # instances. Without this exact-type exception it would also
             # accidentally claim every provider-specific subclass.
             claimed = any(
-                type(tool) is candidate
-                if candidate is ServerSideTool
-                else isinstance(tool, candidate)
+                (
+                    type(tool) is candidate
+                    if candidate is ServerSideTool
+                    else isinstance(tool, candidate)
+                )
                 for candidate in declared
             )
             if not claimed:

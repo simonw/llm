@@ -389,9 +389,7 @@ def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
     instance = next(iter(db["tool_instances"].rows))
     assert instance["name"] == "CodeInterpreter"
     assert json.loads(instance["arguments"])["memory_limit"] == "4g"
-    assert {row["instance_id"] for row in db["turn_tools"].rows} == {
-        instance["id"]
-    }
+    assert {row["instance_id"] for row in db["turn_tools"].rows} == {instance["id"]}
 
 
 def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
@@ -469,9 +467,7 @@ def test_tools_list_for_model_includes_server_side_tools():
     assert "Run Python in an OpenAI-managed container." in result.output
     assert "ServerSideTool(spec: dict | None = None)" in result.output
 
-    json_result = runner.invoke(
-        cli, ["tools", "-m", "gpt-5.6-luna", "--json"]
-    )
+    json_result = runner.invoke(cli, ["tools", "-m", "gpt-5.6-luna", "--json"])
     assert json_result.exit_code == 0
     server_side_tools = json.loads(json_result.output)["server_side_tools"]
     assert [tool["name"] for tool in server_side_tools] == [

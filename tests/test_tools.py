@@ -111,9 +111,10 @@ def test_unsupported_server_side_tool_fails_before_execution(mock_model):
 
 def test_declaring_raw_escape_hatch_does_not_claim_every_subclass():
     model = RawServerToolOnlyModel()
-    assert model.prompt(
-        "hello", tools=[llm.ServerSideTool({"type": "custom"})]
-    ).text() == "done"
+    assert (
+        model.prompt("hello", tools=[llm.ServerSideTool({"type": "custom"})]).text()
+        == "done"
+    )
     with pytest.raises(ValueError, match="does not support server-side tool"):
         model.prompt("hello", tools=[DemoServerSideTool()])
 
@@ -127,9 +128,10 @@ def test_server_side_tool_support_can_vary_by_model_instance():
         def supported_server_side_tools(self):
             return (DemoServerSideTool,) if self.enabled else ()
 
-    assert ConditionalModel(True).prompt(
-        "hello", tools=[DemoServerSideTool()]
-    ).text() == "done"
+    assert (
+        ConditionalModel(True).prompt("hello", tools=[DemoServerSideTool()]).text()
+        == "done"
+    )
     with pytest.raises(ValueError, match="does not support server-side tool"):
         ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
 

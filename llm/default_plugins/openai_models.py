@@ -1777,9 +1777,7 @@ class CodeInterpreter(llm.ServerSideTool):
         if container is not None and not isinstance(container, str):
             raise TypeError("container must be a string container ID")
         if memory_limit is not None and memory_limit not in self._memory_limits:
-            raise ValueError(
-                "memory_limit must be one of: 1g, 4g, 16g or 64g"
-            )
+            raise ValueError("memory_limit must be one of: 1g, 4g, 16g or 64g")
         if container is not None and (memory_limit is not None or file_ids is not None):
             raise ValueError(
                 "container cannot be combined with memory_limit or file_ids"
@@ -2094,8 +2092,7 @@ class _SharedResponses(_Shared):
             kwargs["instructions"] = instructions
         kwargs["store"] = False
         if self._reasoning and (
-            self._reasoning_summary
-            or getattr(prompt.options, "reasoning_effort", None)
+            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
         ):
             include = kwargs.setdefault("include", [])
             if "reasoning.encrypted_content" not in include:

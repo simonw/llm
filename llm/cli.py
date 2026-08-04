@@ -2431,9 +2431,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
             continue
         if json_:
             model = (
-                model_with_aliases.async_model
-                if async_
-                else model_with_aliases.model
+                model_with_aliases.async_model if async_ else model_with_aliases.model
             )
             model_json = {
                 "model_id": model.model_id,
@@ -2452,9 +2450,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
                 ],
             }
             if options:
-                model_json["options"] = model.Options.model_json_schema()[
-                    "properties"
-                ]
+                model_json["options"] = model.Options.model_json_schema()["properties"]
             json_models.append(model_json)
             continue
         click.echo(
@@ -2848,9 +2844,7 @@ def tools_list(tool_defs, json_, model_id, python_tools):
         output = {"tools": output_tools, "toolboxes": output_toolboxes}
         if model is not None:
             output["server_side_tools"] = server_side_tools
-        click.echo(
-            json.dumps(output, indent=2)
-        )
+        click.echo(json.dumps(output, indent=2))
     else:
         for tool in tool_objects:
             sig = "()"
