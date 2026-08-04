@@ -83,6 +83,45 @@ The following features work with OpenAI models:
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
+(openai-models-code-interpreter)=
+
+## Code Interpreter
+
+Models that use the OpenAI Responses API can run Python in an OpenAI-managed container using the `CodeInterpreter` server-side tool:
+
+```python
+import llm
+from llm.default_plugins.openai_models import CodeInterpreter
+
+model = llm.get_model("gpt-5.6-luna")
+response = model.prompt(
+    "Use the python tool to calculate 111111 * 333333",
+    tools=[CodeInterpreter()],
+)
+print(response.text())
+```
+
+OpenAI calls this Code Interpreter, but models know it as the "python tool", so referring to that name in the prompt is the most explicit way to request it.
+
+By default OpenAI automatically creates a 1 GB container, or reuses an active container from the model's context. Configure a larger automatic container or make existing OpenAI files available to it like this:
+
+```python
+CodeInterpreter(
+    memory_limit="4g",
+    file_ids=["file-1", "file-2"],
+)
+```
+
+The accepted memory limits are `1g`, `4g`, `16g` and `64g`. Higher limits cost more. To reuse a container that was created separately, pass its ID:
+
+```python
+CodeInterpreter(container="cntr_abc123")
+```
+
+An explicit container ID cannot be combined with `memory_limit` or `file_ids`. LLM automatically requests the full Code Interpreter output and records returned code and output as server-executed tool parts; it never tries to run that code locally.
+
+OpenAI containers are ephemeral and expire after 20 minutes without activity. See [OpenAI's Code Interpreter documentation](https://developers.openai.com/api/docs/guides/tools-code-interpreter) for container behavior, supported files and current pricing details.
+
 (openai-models-service-tier)=
 
 ## Fast mode and service tiers

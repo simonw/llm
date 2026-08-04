@@ -4,7 +4,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import click
 import httpx
@@ -25,6 +25,7 @@ from llm import (
     Response,
     hookimpl,
 )
+from llm.models import _partition_tools
 from llm.parts import StreamEvent
 from llm.utils import (
     dicts_to_table_string,
@@ -1604,8 +1605,59 @@ def _responses_attachment(attachment, image_detail=None):
     return {"type": "input_image", "image_url": url}
 
 
+class CodeInterpreter(llm.ServerSideTool):
+    """Run Python in an OpenAI-managed container.
+
+    With no ``container`` argument OpenAI creates or reuses an automatic
+    container. ``memory_limit`` and ``file_ids`` configure that automatic
+    container. Pass an existing ``cntr_`` ID as ``container`` to use it
+    explicitly instead.
+    """
+
+    name = "code_interpreter"
+    _memory_limits = frozenset({"1g", "4g", "16g", "64g"})
+
+    def __init__(
+        self,
+        container: str | None = None,
+        memory_limit: Literal["1g", "4g", "16g", "64g"] | None = None,
+        file_ids: list[str] | None = None,
+    ):
+        super().__init__()
+        if container is not None and not isinstance(container, str):
+            raise TypeError("container must be a string container ID")
+        if memory_limit is not None and memory_limit not in self._memory_limits:
+            raise ValueError(
+                "memory_limit must be one of: 1g, 4g, 16g or 64g"
+            )
+        if container is not None and (memory_limit is not None or file_ids is not None):
+            raise ValueError(
+                "container cannot be combined with memory_limit or file_ids"
+            )
+        self.container = container
+        self.memory_limit = memory_limit
+        self.file_ids = list(file_ids) if file_ids is not None else None
+
+    def tool_spec(self, model):
+        if self.container is not None:
+            return {"type": "code_interpreter", "container": self.container}
+        container = {"type": "auto"}
+        if self.memory_limit is not None:
+            container["memory_limit"] = self.memory_limit
+        if self.file_ids is not None:
+            container["file_ids"] = list(self.file_ids)
+        return {"type": "code_interpreter", "container": container}
+
+    def prepare_request(self, model, kwargs):
+        include = kwargs.setdefault("include", [])
+        if "code_interpreter_call.outputs" not in include:
+            include.append("code_interpreter_call.outputs")
+
+
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
+
+    server_side_tools = (CodeInterpreter, llm.ServerSideTool)
 
     # Recurring boilerplate in Responses API payloads. Same contract as
     # _Shared.json_replacements, which this replaces for Responses
@@ -1863,19 +1915,42 @@ class _SharedResponses(_Shared):
             kwargs["text"] = text
 
         if prompt.tools:
+            _partition_tools(self, prompt.tools)
             kwargs["tools"] = [
-                {
-                    "type": "function",
-                    "name": tool.name,
-                    "description": tool.description or None,
-                    "parameters": tool.input_schema,
-                }
+                (
+                    {
+                        "type": "function",
+                        "name": tool.name,
+                        "description": tool.description or None,
+                        "parameters": tool.input_schema,
+                    }
+                    if isinstance(tool, llm.Tool)
+                    else tool.tool_spec(self)
+                )
                 for tool in prompt.tools
             ]
 
         # Pass anything we did not consume through verbatim - this lets
         # extras like ``parallel_tool_calls`` flow into the API.
         kwargs.update(opts)
+        return kwargs
+
+    def _finalize_responses_kwargs(self, prompt, stream, instructions=None):
+        """Build complete request kwargs, then run server-tool hooks in order."""
+        kwargs = self._build_responses_kwargs(prompt, stream)
+        if instructions is not None:
+            kwargs["instructions"] = instructions
+        kwargs["store"] = False
+        if self._reasoning and (
+            self._reasoning_summary
+            or getattr(prompt.options, "reasoning_effort", None)
+        ):
+            include = kwargs.setdefault("include", [])
+            if "reasoning.encrypted_content" not in include:
+                include.append("reasoning.encrypted_content")
+        _, server_side_tools = _partition_tools(self, prompt.tools)
+        for tool in server_side_tools:
+            tool.prepare_request(self, kwargs)
         return kwargs
 
     def _set_usage_responses(self, response, usage):
@@ -2201,6 +2276,7 @@ class Responses(_SharedResponses, KeyModel):
     ) -> Iterator[str | StreamEvent]:
         if getattr(prompt.options, "chat_completions", None):
             chat = Chat(**self._delegate_chat_kwargs())
+            _partition_tools(chat, prompt.tools)
             yield from chat.execute(prompt, stream, response, conversation, key)
             return
 
@@ -2213,14 +2289,7 @@ class Responses(_SharedResponses, KeyModel):
         input_items, instructions = self._build_responses_input(
             prompt, image_detail=image_detail
         )
-        kwargs = self._build_responses_kwargs(prompt, stream)
-        if instructions is not None:
-            kwargs["instructions"] = instructions
-        kwargs["store"] = False
-        if self._reasoning and (
-            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
-        ):
-            kwargs["include"] = ["reasoning.encrypted_content"]
+        kwargs = self._finalize_responses_kwargs(prompt, stream, instructions)
 
         client = self.get_client(key)
         usage = None
@@ -2442,6 +2511,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
     ) -> AsyncGenerator[str | StreamEvent, None]:
         if getattr(prompt.options, "chat_completions", None):
             chat = AsyncChat(**self._delegate_chat_kwargs())
+            _partition_tools(chat, prompt.tools)
             async for event in chat.execute(
                 prompt, stream, response, conversation, key
             ):
@@ -2457,14 +2527,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         input_items, instructions = self._build_responses_input(
             prompt, image_detail=image_detail
         )
-        kwargs = self._build_responses_kwargs(prompt, stream)
-        if instructions is not None:
-            kwargs["instructions"] = instructions
-        kwargs["store"] = False
-        if self._reasoning and (
-            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
-        ):
-            kwargs["include"] = ["reasoning.encrypted_content"]
+        kwargs = self._finalize_responses_kwargs(prompt, stream, instructions)
 
         client = self.get_client(key, async_=True)
         usage = None
