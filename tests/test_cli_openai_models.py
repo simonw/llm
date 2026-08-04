@@ -214,6 +214,63 @@ def test_gpt5_verbosity_option_validates_allowed_values():
     assert "Input should be 'low', 'medium' or 'high'" in result.output
 
 
+def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_code_interpreter_cli",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_code_interpreter_cli",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Calculated",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5.6-luna",
+            "-T",
+            'CodeInterpreter(memory_limit="4g")',
+            "--no-stream",
+            "--no-log",
+            "--key",
+            "x",
+            "Run this calculation",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "Calculated\n"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["tools"] == [
+        {
+            "type": "code_interpreter",
+            "container": {"type": "auto", "memory_limit": "4g"},
+        }
+    ]
+    assert "code_interpreter_call.outputs" in request_body["include"]
+
+
 @pytest.mark.parametrize(
     "model_id,expected_description",
     (

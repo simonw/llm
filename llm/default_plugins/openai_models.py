@@ -1657,7 +1657,9 @@ class CodeInterpreter(llm.ServerSideTool):
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
 
-    server_side_tools = (CodeInterpreter, llm.ServerSideTool)
+    @property
+    def supported_server_side_tools(self):
+        return (CodeInterpreter, llm.ServerSideTool)
 
     # Recurring boilerplate in Responses API payloads. Same contract as
     # _Shared.json_replacements, which this replaces for Responses

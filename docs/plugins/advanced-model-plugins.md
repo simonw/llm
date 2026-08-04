@@ -184,18 +184,20 @@ class ProviderSearch(llm.ServerSideTool):
             include.append("provider_search.results")
 ```
 
-The model classes that support the tool declare it explicitly:
+Model instances expose the server-side tool classes they support using the `supported_server_side_tools` property:
 
 ```python
 class MyModel(llm.KeyModel):
-    server_side_tools = (ProviderSearch,)
+    @property
+    def supported_server_side_tools(self):
+        return (ProviderSearch,)
 ```
 
-This declaration is independent of `supports_tools`: that flag describes locally executed function tools. A model can support server-side tools, function tools, both or neither.
+This property is evaluated on the model instance, so it can use `self.model_id` or other instance configuration to vary the available tools. It is independent of `supports_tools`: that flag describes locally executed function tools. A model can support server-side tools, function tools, both or neither.
 
 `prompt.tools` can contain both {class}`llm.Tool` and {class}`llm.ServerSideTool` instances. The adapter should partition that list, put each server-side tool's `tool_spec(model)` result wherever its provider expects it and, after the baseline request is complete, call `tool.prepare_request(model, kwargs)` once for each server-side tool in list order. LLM validates the model declaration before `execute()` runs, but it does not interpret the specification or call either method itself.
 
-Providers with an OpenAI-compatible tools array can optionally support raw specifications by including `llm.ServerSideTool` in their declaration. This claims direct instances such as:
+Providers with an OpenAI-compatible tools array can optionally support raw specifications by including `llm.ServerSideTool` in this property. This claims direct instances such as:
 
 ```python
 llm.ServerSideTool({"type": "browser_search"})

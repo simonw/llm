@@ -620,7 +620,7 @@ def _partition_tools(
     """Partition tools and reject server-side tools the model did not claim."""
     function_tools = []
     server_side_tools = []
-    declared = tuple(getattr(model, "server_side_tools", ()))
+    declared = tuple(model.supported_server_side_tools)
     for tool in tools:
         if isinstance(tool, ServerSideTool):
             # Declaring ServerSideTool itself claims only direct raw-spec
@@ -3205,7 +3205,11 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
-    server_side_tools: tuple[type[ServerSideTool], ...] = ()
+
+    @property
+    def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:
+        """Server-side tool classes accepted by this model instance."""
+        return ()
 
     class Options(_Options):
         pass

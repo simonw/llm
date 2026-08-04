@@ -36,7 +36,10 @@ class DemoServerSideTool(llm.ServerSideTool):
 
 class ServerToolsOnlyModel(llm.Model):
     model_id = "server-tools-only"
-    server_side_tools = (DemoServerSideTool,)
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
 
     def execute(self, prompt, stream, response, conversation):
         yield "done"
@@ -44,7 +47,10 @@ class ServerToolsOnlyModel(llm.Model):
 
 class AsyncServerToolsOnlyModel(llm.AsyncModel):
     model_id = "async-server-tools-only"
-    server_side_tools = (DemoServerSideTool,)
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
 
     async def execute(self, prompt, stream, response, conversation):
         yield "done"
@@ -57,7 +63,10 @@ class MixedToolsModel(ServerToolsOnlyModel):
 
 class RawServerToolOnlyModel(ServerToolsOnlyModel):
     model_id = "raw-server-tool-only"
-    server_side_tools = (llm.ServerSideTool,)
+
+    @property
+    def supported_server_side_tools(self):
+        return (llm.ServerSideTool,)
 
 
 def test_server_side_tool_raw_spec_escape_hatch():
@@ -107,6 +116,22 @@ def test_declaring_raw_escape_hatch_does_not_claim_every_subclass():
     ).text() == "done"
     with pytest.raises(ValueError, match="does not support server-side tool"):
         model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_server_side_tool_support_can_vary_by_model_instance():
+    class ConditionalModel(ServerToolsOnlyModel):
+        def __init__(self, enabled):
+            self.enabled = enabled
+
+        @property
+        def supported_server_side_tools(self):
+            return (DemoServerSideTool,) if self.enabled else ()
+
+    assert ConditionalModel(True).prompt(
+        "hello", tools=[DemoServerSideTool()]
+    ).text() == "done"
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
 
 
 def test_function_tools_still_require_supports_tools():

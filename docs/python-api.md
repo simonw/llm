@@ -329,7 +329,7 @@ response = llm.get_model("gpt-5.6-luna").prompt(
 print(response.text())
 ```
 
-Provider plugins define these tools by subclassing {class}`llm.ServerSideTool`. A model rejects server-side tool classes it has not explicitly declared, rather than silently dropping them. See {ref}`advanced-model-plugins-server-side-tools` for the plugin API.
+Provider plugins define these tools by subclassing {class}`llm.ServerSideTool`. Each model instance returns its supported classes from `supported_server_side_tools`; a model rejects classes it has not explicitly included rather than silently dropping them. See {ref}`advanced-model-plugins-server-side-tools` for the plugin API.
 
 (python-api-toolbox)=
 

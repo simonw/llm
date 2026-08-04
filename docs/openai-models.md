@@ -89,6 +89,12 @@ The following features work with OpenAI models:
 
 Models that use the OpenAI Responses API can run Python in an OpenAI-managed container using the `CodeInterpreter` server-side tool:
 
+```bash
+llm -m gpt-5.6-luna -T 'CodeInterpreter(memory_limit="4g")' 'Run this calculation'
+```
+
+The same tool can be used from Python:
+
 ```python
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter

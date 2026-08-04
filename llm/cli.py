@@ -37,6 +37,7 @@ from llm import (
     Fragment,
     KeyModel,
     Response,
+    ServerSideTool,
     Template,
     Tool,
     Toolbox,
@@ -1016,7 +1017,7 @@ def prompt(
         prompt_method = conversation.prompt
 
     tool_kwargs = _tool_chain_kwargs(
-        tools, python_tools, tools_debug, tools_approve, chain_limit
+        tools, python_tools, tools_debug, tools_approve, chain_limit, model=model
     )
     if tool_kwargs:
         prompt_method = conversation.chain
@@ -1292,7 +1293,14 @@ def chat(
         kwargs["options"] = validated_options
 
     kwargs.update(
-        _tool_chain_kwargs(tools, python_tools, tools_debug, tools_approve, chain_limit)
+        _tool_chain_kwargs(
+            tools,
+            python_tools,
+            tools_debug,
+            tools_approve,
+            chain_limit,
+            model=model,
+        )
     )
 
     should_stream = model.can_stream and not no_stream
@@ -4158,29 +4166,38 @@ def _approve_tool_call(_, tool_call):
 
 
 def _gather_tools(
-    tool_specs: list[str], python_tools: list[str]
-) -> list[Tool | type[Toolbox]]:
-    tools: list[Tool | type[Toolbox]] = []
+    tool_specs: list[str], python_tools: list[str], model=None
+) -> list[Tool | Toolbox | ServerSideTool]:
+    tools: list[Tool | Toolbox | ServerSideTool] = []
     if python_tools:
         for code_or_path in python_tools:
             tools.extend(_tools_from_code(code_or_path))
     registered_tools = get_tools()
+    server_side_tool_classes = {
+        tool_class.__name__: tool_class
+        for tool_class in (
+            model.supported_server_side_tools if model is not None else ()
+        )
+    }
+    available_tools = {**registered_tools, **server_side_tool_classes}
     registered_classes = {
-        key: value for key, value in registered_tools.items() if inspect.isclass(value)
+        key: value for key, value in available_tools.items() if inspect.isclass(value)
     }
     bad_tools = [
-        tool for tool in tool_specs if tool.split("(")[0] not in registered_tools
+        tool
+        for tool in tool_specs
+        if tool.split("(", 1)[0].strip() not in available_tools
     ]
     if bad_tools:
         raise click.ClickException(
             "Tool(s) {} not found. Available tools: {}".format(
-                ", ".join(bad_tools), ", ".join(registered_tools.keys())
+                ", ".join(bad_tools), ", ".join(available_tools.keys())
             )
         )
     for tool_spec in tool_specs:
         if not tool_spec[0].isupper():
             # It's a function
-            tools.append(registered_tools[tool_spec])
+            tools.append(available_tools[tool_spec])
         else:
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))
@@ -4188,10 +4205,10 @@ def _gather_tools(
 
 
 def _tool_chain_kwargs(
-    tool_specs, python_tools, tools_debug, tools_approve, chain_limit
+    tool_specs, python_tools, tools_debug, tools_approve, chain_limit, model=None
 ):
     """Build Conversation.chain() keyword arguments for CLI-selected tools."""
-    tool_implementations = _gather_tools(tool_specs, python_tools)
+    tool_implementations = _gather_tools(tool_specs, python_tools, model=model)
     if not tool_implementations:
         return {}
     kwargs = {
