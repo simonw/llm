@@ -9,48 +9,46 @@ LLM 0.32 is a major, backwards-compatible update to the way prompts, responses, 
 
 Prompt inputs and model outputs are now represented as lists of `Message` objects, each containing typed `Part` objects for text, reasoning, tool calls, tool results and attachments.
 
-- New `llm.Message` value type and constructor helpers `llm.user()`, `llm.assistant()`, `llm.system()` and `llm.tool_message()`.
-- New `messages=` keyword argument on the prompt, conversation and chain APIs, including their asynchronous equivalents. Existing `prompt=`, `system=`, `attachments=` and `tool_results=` arguments continue to work and are converted into the same structured representation.
-- New `response.stream_events()` and `response.astream_events()` methods expose mixed streams of text, reasoning, tool calls and tool results. Iterating over a response directly continues to yield text strings.
+- New {ref}`messages= keyword argument <python-api-messages>` on the prompt, conversation and chain APIs, including their asynchronous equivalents. For example, `model.prompt(messages=[llm.user("Hello"), llm.assistant("Hi!"), llm.user("What can you do?")])`. Existing `prompt=`, `system=`, `attachments=` and `tool_results=` arguments continue to work and are converted into the same structured representation.
+- New {ref}`structured streaming methods <python-api-messages>` `response.stream_events()` and `response.astream_events()` expose mixed streams of text, reasoning, tool calls and tool results. Iterating over a response directly continues to yield text strings.
 - `response.messages()` returns the assembled structured output. `response.reply()` continues from any response and can automatically execute pending tool calls before the next turn.
 - `response.to_dict()` and `Response.from_dict()` provide JSON-safe persistence of complete turns, including reasoning and provider metadata, with matching `TypedDict` definitions in the new `llm.serialization` module.
 - `response.prompt.messages` is now the canonical record of exactly what was sent to the model, including the full preceding conversation chain.
 
-These APIs were introduced in {ref}`0.32a0 <v0_32_a0>`, which has a more detailed inventory and links to the expanded {ref}`Advanced model plugins <advanced-model-plugins>` documentation.
+These APIs were introduced in {ref}`0.32a0 <v0_32_a0>`. They are described in the {ref}`Advanced model plugins <advanced-model-plugins>` documentation.
 
 ### OpenAI Responses API and reasoning
 
 - Most reasoning-capable OpenAI models now use the `/v1/responses` endpoint by default, enabling interleaved reasoning across tool calls. The existing Chat Completions classes remain available, and `-o chat_completions 1` selects that older path for an individual prompt. See {ref}`0.32a2 <v0_32_a2>` for the full list of affected models.
-- Visible reasoning summaries are streamed to standard error by `llm prompt` and `llm chat`. Use `-R/--hide-reasoning` or the new `hide_reasoning=True` Python argument to hide them. Encrypted reasoning metadata is preserved for subsequent turns.
+- OpenAI Responses API models now provide {ref}`WebSearch <openai-models-web-search>` and {ref}`CodeInterpreter <openai-models-code-interpreter>` server-side tools, available from the CLI using `-T WebSearch` or `-T 'CodeInterpreter(memory_limit="4g")'`.
+- {ref}`Visible reasoning summaries <python-api-messages-reasoning>` are streamed to standard error by `llm prompt` and `llm chat`. Use `-R/--hide-reasoning` or the new `hide_reasoning=True` Python argument to hide them. Encrypted reasoning metadata is preserved for subsequent turns.
 - The default model for users who have not selected one is now [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), replacing GPT-4o mini. New built-in models include `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`; models that are no longer available from OpenAI have been removed. See {ref}`0.32rc1 <v0_32_rc1>` and {ref}`0.32rc2 <v0_32_rc2>` for details.
 - New {ref}`llm openai endpoint <openai-endpoint>` command runs prompts and chats, or lists models, against an arbitrary OpenAI-compatible endpoint without configuring it first. These calls are not logged.
 - OpenAI models now support a `service_tier` option. Use `-o service_tier fast` for faster responses at a higher price, or `-o service_tier flex` for slower, cheaper processing on supported models. See {ref}`Fast mode and service tiers <openai-models-service-tier>`. [#1585](https://github.com/simonw/llm/pull/1585)
-- New `llm -m model --options` flag lists the options supported by a model. The Python prompt APIs now accept an explicit `options=` dictionary as well as the previous keyword-argument form.
+- New `llm -m model --options` flag lists the options supported by a model. The Python prompt APIs now accept an explicit {ref}`options= dictionary <python-api-model-options>` as well as the previous keyword-argument form.
 
 ### More controllable tool loops
 
-- Every tool call now has a unique `tool_call_id`, synthesized when the provider does not supply one. Tool implementations can accept an `llm_tool_call` parameter to inspect the current call and its ID.
-- Tools can raise `llm.PauseChain` to pause execution for human approval or another external event. Chains can later resume from a message history ending in unresolved tool calls, without repeating calls that already have results.
-- `response.execute_tool_call()` executes one call, while `response.execute_tool_calls(tool_calls_list=...)` can execute an explicit list. Both are awaitable on asynchronous responses.
-- Async sibling calls finish before a pause or callback failure is propagated, avoiding orphaned work. Missing async tools now produce the same error results as synchronous execution.
-- Conversations that use configured toolboxes can be continued with `llm -c` or `llm chat -c` without repeating the toolbox configuration.
-- `llm tools` now shows constructor signatures and docstrings for dynamic toolboxes. Passing a toolbox specification instantiates it and lists its runtime-generated tools, while `llm tools --json` identifies dynamic toolboxes with a `"dynamic"` boolean. [#1580](https://github.com/simonw/llm/issues/1580)
-- Models can now declare the server-side tools they support using the instance-level `supported_server_side_tools` property and the new `llm.ServerSideTool` base class. OpenAI Responses API models provide `WebSearch` and `CodeInterpreter`, available from the CLI using `-T WebSearch` or `-T 'CodeInterpreter(memory_limit="4g")'`. Server-executed calls and results are captured as structured message parts, and `llm -c` restores configured server-side tools for continued conversations. [#1592](https://github.com/simonw/llm/issues/1592), [#1593](https://github.com/simonw/llm/pull/1593)
-- `llm tools -m MODEL` lists the server-side tools supported by that model. `llm models --json` returns model aliases, capability flags, attachment types and server-side tools, with option schemas included when combined with `--options`.
-- OpenAI-compatible Responses endpoints can use provider-specific server-side tools with `ServerSideTool(spec={...})`, including OpenRouter's web search implementation.
+- Every tool call now has a unique `tool_call_id`, synthesized when the provider does not supply one. Tool implementations can {ref}`accept an llm_tool_call parameter <python-api-tools-llm-tool-call>` to inspect the current call and its ID.
+- Tools can {ref}`raise llm.PauseChain <python-api-tools-pause>` to pause execution for human approval or another external event. Chains can later {ref}`resume from a message history ending in unresolved tool calls <python-api-tools-resume>`, without repeating calls that already have results.
+- {ref}`Conversations that use configured tools <usage-tools>` can be continued with `llm -c` or `llm chat -c` without repeating the toolbox configuration.
+- `llm tools` now shows constructor signatures and docstrings for {ref}`dynamic toolboxes <python-api-tools-dynamic>`. Passing a toolbox specification instantiates it and lists its runtime-generated tools, while `llm tools --json` identifies dynamic toolboxes with a `"dynamic"` boolean. [#1580](https://github.com/simonw/llm/issues/1580)
+- Models can now {ref}`declare the server-side tools they support <advanced-model-plugins-server-side-tools>` using the instance-level `supported_server_side_tools` property and the new `llm.ServerSideTool` base class. Server-executed calls and results are captured as structured message parts, and `llm -c` restores configured server-side tools for continued conversations. [#1592](https://github.com/simonw/llm/issues/1592), [#1593](https://github.com/simonw/llm/pull/1593)
+- {ref}`llm tools -m MODEL <usage-tools>` lists the server-side tools supported by that model. `llm models --json` returns model aliases, capability flags, attachment types and server-side tools, with option schemas included when combined with `--options`.
+- {ref}`OpenAI-compatible Responses endpoints <openai-endpoint>` can use provider-specific server-side tools with `ServerSideTool(spec={...})`, including OpenRouter's web search implementation.
 
 See {ref}`0.32a3 <v0_32_a3>` for more detail on pausing, resuming and inspecting tool calls.
 
 ### New SQLite logging schema
 
-LLM now logs prompts and responses using a new schema built around threads, turns and a **content-addressed message store**. Existing records in the legacy `responses` table are left untouched, and `llm logs` combines both generations of data. You can create a backup before upgrading using:
+LLM now logs prompts and responses using a new schema built around threads, turns and a **content-addressed message store**. Existing records in the legacy `responses` table are left untouched, and `llm logs` combines both generations of data. You can {ref}`create a backup <logging-backup>` before upgrading using:
 
     llm logs backup logs-backup.db
 
 - Messages are stored once and referenced by their content hash, preserving structured text, reasoning, attachments and tool activity without duplicating repeated conversation history. See {ref}`the message store documentation <logging-message-store>`.
 - Raw provider payloads are stored in `turns.response_json`, {ref}`condensed <logging-message-store-response-json>` using [condense-json](https://github.com/simonw/condense-json). `llm logs --json` expands them back to their original shape, and `LogStore.turn_response_json(turn_id)` returns them from Python. [#1586](https://github.com/simonw/llm/pull/1586)
 - Model plugins can define {ref}`json_replacements <advanced-model-plugins-json-replacements>` dictionaries to further improve payload compression.
-- Full-text search, model and tool filters and conversation continuation work across both the legacy and new tables. Logs now record which configured toolbox instance supplied each tool.
+- {ref}`Full-text search <logging-search>`, {ref}`model <logging-filter-model>` and {ref}`tool filters <logging-filter-tools>`, and {ref}`conversation views <logging-conversation>` work across both the legacy and new tables. Logs now record which configured toolbox instance supplied each tool.
 - New {ref}`Response.log_to_db() <logging-message-store-python>` Python API writes a response to a logs database. `llm prompt --json` outputs the same structured representation as `llm logs --json`, even when persistent logging is disabled.
 - New {ref}`message_tree SQL view <logging-message-store-queries>` renders conversation threads as indented text outlines for direct SQL exploration.
 - LLM now requires [sqlite-utils 4.0](https://sqlite-utils.datasette.io/en/stable/changelog.html#v4-0) or higher and no longer depends on `sqlite-migrate`.
@@ -65,7 +63,7 @@ See {ref}`0.32rc1 <v0_32_rc1>` for the detailed migration notes and complete lis
 - `llm logs status` now counts records in the new `threads` and `turns` tables, with legacy conversation and response counts shown separately when present. [#1590](https://github.com/simonw/llm/issues/1590)
 - `Response.to_dict()` now executes an unconsumed synchronous response before serializing it instead of producing an empty assistant message list. [#1590](https://github.com/simonw/llm/issues/1590)
 - `Response.from_dict()` now restores pending client-side tool calls so they can be inspected, executed or continued using `response.reply(tools=[...])`. [#1590](https://github.com/simonw/llm/issues/1590)
-- `Response.reply()` now correctly passes attachments returned by tools to the next model call, for both synchronous and asynchronous responses. [#1590](https://github.com/simonw/llm/issues/1590)
+- `Response.reply()` now correctly passes {ref}`attachments returned by tools <python-api-tools-attachments>` to the next model call, for both synchronous and asynchronous responses. [#1590](https://github.com/simonw/llm/issues/1590)
 
 (v0_32_rc2)=
 ## 0.32rc2 (2026-07-30)

@@ -685,6 +685,8 @@ Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`,
 
 Iterating against the response object itself (`for chunk in response`) yields only text strings — reasoning and tool-call events are filtered out.
 
+(python-api-messages-reasoning)=
+
 #### Hiding reasoning output
 
 Some model plugins can return visible reasoning text, exposed as `"reasoning"` events from `response.stream_events()` and assembled as `ReasoningPart` objects in `response.messages()`.
