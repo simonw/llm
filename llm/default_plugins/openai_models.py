@@ -724,7 +724,12 @@ def register_commands(cli):
             prompt_kwargs["key"] = key
 
         tool_kwargs = _tool_chain_kwargs(
-            tools, python_tools, tools_debug, tools_approve, chain_limit
+            tools,
+            python_tools,
+            tools_debug,
+            tools_approve,
+            chain_limit,
+            model=model,
         )
         resolved_attachments = [*attachments, *attachment_types]
         try:
