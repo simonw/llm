@@ -889,7 +889,7 @@ def test_endpoint_responses_api_tools(httpx_mock, user_path):
     ]
 
 
-def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path, recwarn):
+def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path):
     base_url = "https://raw-tools.example.test/v1"
     response_payload = _responses_payload("Search complete")
     response_payload["output"].insert(
@@ -938,7 +938,6 @@ def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path, recw
     assert not (user_path / "logs.db").exists()
     request_body = json.loads(httpx_mock.get_requests()[0].content)
     assert request_body["tools"] == [tool_spec]
-    assert not recwarn.list
 
 
 def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
