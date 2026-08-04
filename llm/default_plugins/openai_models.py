@@ -2558,7 +2558,7 @@ class Responses(_SharedResponses, KeyModel):
                     else:
                         yield from self._server_tool_events(item, message_index)
                 elif etype == "response.completed":
-                    final_response_dict = event.response.model_dump()
+                    final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
@@ -2573,7 +2573,7 @@ class Responses(_SharedResponses, KeyModel):
                 stream=False,
                 **kwargs,
             )
-            dumped = completion.model_dump()
+            dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
             events, had_reasoning = self._non_streaming_output_events(
@@ -2799,7 +2799,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         ):
                             yield server_event
                 elif etype == "response.completed":
-                    final_response_dict = event.response.model_dump()
+                    final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
@@ -2815,7 +2815,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                 stream=False,
                 **kwargs,
             )
-            dumped = completion.model_dump()
+            dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
             events, had_reasoning = self._non_streaming_output_events(

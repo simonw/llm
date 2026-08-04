@@ -136,9 +136,12 @@ llm openai endpoint https://openrouter.ai/api/v1 \
   -m openai/gpt-oss-20b:free \
   --key openrouter \
   --responses \
+  -R \
   -T 'ServerSideTool(spec={"type":"openrouter:web_search","parameters":{"engine":"exa","max_results":2,"max_uses":1}})' \
   "Search for the OpenRouter documentation URL"
 ```
+
+`-R` hides the reasoning text returned by this model so the command displays just its final answer.
 
 ### Configure an OpenAI-compatible model
 
