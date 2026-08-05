@@ -3492,7 +3492,7 @@ def embed_multi(
         collection_obj = Collection(
             collection, db=db, model_id=model or get_default_embedding_model()
         )
-    except ValueError:
+    except UnknownModelError:
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
         )
