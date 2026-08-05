@@ -148,6 +148,30 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+def test_embed_store_after_no_store(collection):
+    # collection fixture embeds id=1 "hello world" without store, so content=NULL
+    row = next(collection.db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] is None
+    # Re-embed the same content with store=True
+    collection.embed("1", "hello world", store=True)
+    row = next(collection.db["embeddings"].rows_where("id = ?", ["1"]))
+    assert row["content"] == "hello world"
+
+
+def test_embed_multi_store_after_no_store():
+    db = sqlite_utils.Database(memory=True)
+    collection = llm.Collection("test", db, model_id="embed-demo")
+    # Embed without store first
+    collection.embed_multi([("1", "hello world"), ("2", "goodbye world")])
+    for row in db["embeddings"].rows:
+        assert row["content"] is None
+    # Re-embed with store=True — existing content should now be populated
+    collection.embed_multi([("1", "hello world"), ("2", "goodbye world")], store=True)
+    rows = {r["id"]: r for r in db["embeddings"].rows}
+    assert rows["1"]["content"] == "hello world"
+    assert rows["2"]["content"] == "goodbye world"
+
+
 def test_collection_delete(collection):
     db = collection.db
     assert db["embeddings"].count == 2
