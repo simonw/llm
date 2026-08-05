@@ -273,6 +273,34 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
     assert sqlite_utils.Database(db_path)["turns"].count == 2
 
 
+def test_chat_recreates_deleted_log_database(user_path, mock_model, monkeypatch):
+    log_path = user_path / "logs.db"
+    mock_model.enqueue(["first response"])
+    mock_model.enqueue(["second response"])
+    original_execute = mock_model.execute
+    calls = 0
+
+    def execute(prompt, stream, response, conversation):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            log_path.remove()
+        yield from original_execute(prompt, stream, response, conversation)
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="first\nsecond\nquit\n",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    rows = logged_rows(sqlite_utils.Database(str(log_path)))
+    assert len(rows) == 1
+    assert rows[0]["prompt"] == "second"
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_tools(logs_db):
     runner = CliRunner()
