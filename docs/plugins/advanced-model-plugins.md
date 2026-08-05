@@ -215,7 +215,7 @@ Server-side tool calls returned by the provider should use the `server_executed=
 
 ## Attachments for multi-modal models
 
-Models such as GPT-4o, Claude 3.5 Sonnet and Google's Gemini 1.5 are multi-modal: they accept input in the form of images and maybe even audio, video and other formats.
+Models such as GPT-4o, Claude 3.5 Sonnet and Google's `gemini-flash-latest` are multi-modal: they accept input in the form of images and maybe even audio, video and other formats.
 
 LLM calls these **attachments**. Models can specify the types of attachments they accept and then implement special code in the `.execute()` method to handle them.
 

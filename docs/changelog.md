@@ -625,7 +625,7 @@ response = model.prompt(
 ```
 Plugins that provide alternative models can support attachments, see {ref}`advanced-model-plugins-attachments` for details.
 
-The latest **[llm-claude-3](https://github.com/simonw/llm-claude-3)** plugin now supports attachments for Anthropic's Claude 3 and 3.5 models. The **[llm-gemini](https://github.com/simonw/llm-gemini)** plugin supports attachments for Google's Gemini 1.5 models.
+The latest **[llm-claude-3](https://github.com/simonw/llm-claude-3)** plugin now supports attachments for Anthropic's Claude 3 and 3.5 models. The **[llm-gemini](https://github.com/simonw/llm-gemini)** plugin supports attachments for Google's `gemini-flash-latest` model.
 
 Also in this release: OpenAI models now record their `"usage"` data in the database even when the response was streamed. These records can be viewed using `llm logs --json`. [#591](https://github.com/simonw/llm/issues/591)
 

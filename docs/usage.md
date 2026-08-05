@@ -65,7 +65,7 @@ You can also {ref}`configure default options <usage-executing-default-options>` 
 (usage-attachments)=
 ### Attachments
 
-Some models are multi-modal, which means they can accept input in more than just text. GPT-4o and GPT-4o mini can accept images, and models such as Google Gemini 1.5 can accept audio and video as well.
+Some models are multi-modal, which means they can accept input in more than just text. GPT-4o and GPT-4o mini can accept images, and models such as Google's `gemini-flash-latest` can accept audio and video as well.
 
 LLM calls these **attachments**. You can pass attachments using the `-a` option like this:
 
