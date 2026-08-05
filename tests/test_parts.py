@@ -16,6 +16,9 @@ class TestTextPart:
     def test_to_dict_shape(self):
         assert llm.parts.TextPart(text="hi").to_dict() == {"type": "text", "text": "hi"}
 
+    def test_from_dict_defaults_missing_type_to_text(self):
+        assert llm.parts.Part.from_dict({"text": "hi"}) == llm.parts.TextPart(text="hi")
+
     def test_with_provider_metadata(self):
         part = llm.parts.TextPart(
             text="hi", provider_metadata={"openai": {"flag": True}}

@@ -63,6 +63,8 @@ from llm import (
     user_dir,
 )
 from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
+from llm.parts import Message, TextPart
+from llm.serialization import MessageDict
 
 from .logs import (
     LogStore,
@@ -483,6 +485,46 @@ def schema_option(fn):
     return fn
 
 
+def _message_from_text(role: str, text: str) -> Message:
+    return Message(role=role, parts=[TextPart(text=text)])
+
+
+def _load_messages(value: str) -> list[Message]:
+    if value == "-":
+        message_json = sys.stdin.read()
+    else:
+        path = pathlib.Path(value)
+        try:
+            if path.exists():
+                try:
+                    message_json = path.read_text("utf-8")
+                except OSError as ex:
+                    raise click.ClickException(f"Could not read --messages file: {ex}")
+            else:
+                message_json = value
+        except OSError:
+            # The argument is probably a long JSON string rather than a path.
+            message_json = value
+
+    try:
+        data = json.loads(message_json)
+    except json.JSONDecodeError as ex:
+        raise click.ClickException(f"--messages must be valid JSON: {ex}")
+
+    if not isinstance(data, list):
+        raise click.ClickException("--messages must be a JSON array")
+
+    messages = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise click.ClickException(f"--messages item {index} must be an object")
+        try:
+            messages.append(Message.from_dict(cast(MessageDict, item)))
+        except Exception as ex:  # noqa: BLE001
+            raise click.ClickException(f"Invalid --messages item {index}: {ex}")
+    return messages
+
+
 def tool_options(fn):
     """Add the shared CLI options for selecting and executing tools."""
     decorators = (
@@ -568,6 +610,20 @@ def cli():
 @cli.command(name="prompt")
 @click.argument("prompt", required=False)
 @click.option("-s", "--system", help="System prompt to use")
+@click.option(
+    "messages_input",
+    "--messages",
+    help="JSON array, path to JSON file, or - for stdin",
+)
+@click.option(
+    "message_entries",
+    "-M",
+    "--message",
+    type=(click.Choice(["system", "user", "assistant"]), str),
+    multiple=True,
+    metavar="ROLE TEXT",
+    help="Append a text message with role system, user or assistant",
+)
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
 @click.option(
     "-d",
@@ -680,6 +736,8 @@ def cli():
 def prompt(
     prompt,
     system,
+    messages_input,
+    message_entries,
     model_id,
     database,
     queries,
@@ -742,6 +800,29 @@ def prompt(
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
+    explicit_messages_requested = messages_input is not None or bool(message_entries)
+    if explicit_messages_requested:
+        disallowed_options = []
+        for option, value in (
+            ("-s/--system", system),
+            ("-a/--attachment", attachments),
+            ("--attachment-type", attachment_types),
+            ("-f/--fragment", fragments),
+            ("--system-fragment", system_fragments),
+            ("-t/--template", template),
+            ("--continue", _continue),
+            ("--cid/--conversation", conversation_id),
+            ("--save", save),
+        ):
+            if value:
+                disallowed_options.append(option)
+        if disallowed_options:
+            raise click.ClickException(
+                "--messages/--message cannot be used with {}".format(
+                    ", ".join(disallowed_options)
+                )
+            )
+
     if queries and not model_id:
         # Use -q options to find model with shortest model_id
         matches = []
@@ -780,6 +861,15 @@ def prompt(
         # Convert that schema into multiple "items" of the same schema
         schema = multi_schema(schema)
 
+    explicit_messages = None
+    if explicit_messages_requested:
+        explicit_messages = []
+        if messages_input is not None:
+            explicit_messages.extend(_load_messages(messages_input))
+        explicit_messages.extend(
+            _message_from_text(role, text) for role, text in message_entries
+        )
+
     def read_prompt():
         nonlocal prompt, schema
 
@@ -802,6 +892,7 @@ def prompt(
             and not attachment_types
             and not schema
             and not fragments
+            and not explicit_messages_requested
         ):
             # Hang waiting for input to stdin (unless --save)
             prompt = sys.stdin.read()
@@ -1037,6 +1128,7 @@ def prompt(
                 if should_stream:
                     response = prompt_method(
                         prompt,
+                        messages=explicit_messages,
                         attachments=resolved_attachments,
                         system=system,
                         schema=schema,
@@ -1052,6 +1144,7 @@ def prompt(
                 else:
                     response = prompt_method(
                         prompt,
+                        messages=explicit_messages,
                         fragments=resolved_fragments,
                         attachments=resolved_attachments,
                         schema=schema,
@@ -1072,6 +1165,7 @@ def prompt(
         else:
             response = prompt_method(
                 prompt,
+                messages=explicit_messages,
                 fragments=resolved_fragments,
                 attachments=resolved_attachments,
                 system=system,
