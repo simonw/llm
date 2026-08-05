@@ -38,6 +38,36 @@ def test_prompt_messages_json_string(mock_model):
     ]
 
 
+def test_prompt_messages_missing_part_type_defaults_to_text(mock_model):
+    mock_model.enqueue(["continued"])
+    messages = [
+        {"role": "user", "parts": [{"text": "Earlier question"}]},
+        {"role": "assistant", "parts": [{"text": "Earlier answer"}]},
+    ]
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "prompt",
+            "-m",
+            "mock",
+            "--no-stream",
+            "--messages",
+            json.dumps(messages),
+            "Now continue",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "continued\n"
+    assert mock_model.history[0][0].messages == [
+        llm.user("Earlier question"),
+        llm.assistant("Earlier answer"),
+        llm.user("Now continue"),
+    ]
+
+
 def test_prompt_messages_from_file_and_message_options(mock_model, tmp_path):
     mock_model.enqueue(["Summary"])
     messages_path = tmp_path / "messages.json"

@@ -132,7 +132,6 @@ The messages are sent to the model in the order provided. Each message has a `ro
     "role": "system",
     "parts": [
       {
-        "type": "text",
         "text": "You are a helpful pirate."
       }
     ]
@@ -141,7 +140,6 @@ The messages are sent to the model in the order provided. Each message has a `ro
     "role": "user",
     "parts": [
       {
-        "type": "text",
         "text": "What is the capital of France?"
       }
     ]
@@ -150,7 +148,6 @@ The messages are sent to the model in the order provided. Each message has a `ro
     "role": "assistant",
     "parts": [
       {
-        "type": "text",
         "text": "Paris, matey."
       }
     ]
@@ -159,7 +156,6 @@ The messages are sent to the model in the order provided. Each message has a `ro
     "role": "user",
     "parts": [
       {
-        "type": "text",
         "text": "And Germany?"
       }
     ]
@@ -173,19 +169,19 @@ You can pass this JSON directly to `--messages`:
 llm --messages '[
   {
     "role": "system",
-    "parts": [{"type": "text", "text": "You are a helpful pirate."}]
+    "parts": [{"text": "You are a helpful pirate."}]
   },
   {
     "role": "user",
-    "parts": [{"type": "text", "text": "What is the capital of France?"}]
+    "parts": [{"text": "What is the capital of France?"}]
   },
   {
     "role": "assistant",
-    "parts": [{"type": "text", "text": "Paris, matey."}]
+    "parts": [{"text": "Paris, matey."}]
   },
   {
     "role": "user",
-    "parts": [{"type": "text", "text": "And Germany?"}]
+    "parts": [{"text": "And Germany?"}]
   }
 ]'
 ```
@@ -208,14 +204,14 @@ The parsing rules are:
 - `--messages path/to/file.json` reads JSON from that file, if the path exists.
 - Otherwise, the argument is parsed as a JSON string.
 
-The `--messages` JSON should be an array of messages using LLM's serialized `Message` format. This is the same format produced by the Python API's `Message.to_dict()` method and accepted by `Message.from_dict()`.
+The `--messages` JSON should be an array of messages accepted by `Message.from_dict()`. The Python API's `Message.to_dict()` method produces the canonical serialized form, which includes a `type` for every part.
 
 Each message has:
 
 - `role`: usually `system`, `user`, `assistant` or `tool`.
-- `parts`: a list of structured parts, most commonly text parts such as `{"type": "text", "text": "Hello"}`.
+- `parts`: a list of structured parts, most commonly text parts such as `{"text": "Hello"}`.
 
-For text-only conversations the `parts` list will usually contain a single text part. More advanced transcripts can include other part types such as `attachment`, `tool_call`, `tool_result` and `reasoning`.
+If a part omits `type` it defaults to `text`. More advanced parts must specify their type, such as `attachment`, `tool_call`, `tool_result` or `reasoning`.
 
 Here is a user message with an image attachment:
 
@@ -225,7 +221,6 @@ Here is a user message with an image attachment:
     "role": "user",
     "parts": [
       {
-        "type": "text",
         "text": "Describe this image"
       },
       {
@@ -311,7 +306,6 @@ If a message history contains tool calls or tool results, use the same serialize
     "role": "user",
     "parts": [
       {
-        "type": "text",
         "text": "What is 12345 * 67890?"
       }
     ]
@@ -345,7 +339,6 @@ If a message history contains tool calls or tool results, use the same serialize
     "role": "user",
     "parts": [
       {
-        "type": "text",
         "text": "Now add 1"
       }
     ]
