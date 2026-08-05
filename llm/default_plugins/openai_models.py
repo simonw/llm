@@ -956,6 +956,32 @@ class SharedOptions(llm.Options):
         return validated_logit_bias
 
 
+class ChatOptions(SharedOptions):
+    chat_template_kwargs: dict | str | None = Field(
+        description=(
+            "Provider-specific arguments for the model's chat template. "
+            "Pass a JSON object string like '{\"enable_thinking\":false}'"
+        ),
+        default=None,
+    )
+
+    @field_validator("chat_template_kwargs")
+    def validate_chat_template_kwargs(cls, chat_template_kwargs):
+        if chat_template_kwargs is None:
+            return None
+
+        if isinstance(chat_template_kwargs, str):
+            try:
+                chat_template_kwargs = json.loads(chat_template_kwargs)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON in chat_template_kwargs string")
+
+        if not isinstance(chat_template_kwargs, dict):
+            raise ValueError("chat_template_kwargs must be a JSON object")
+
+        return chat_template_kwargs
+
+
 class ReasoningEffortEnum(str, Enum):
     none = "none"
     minimal = "minimal"
@@ -1073,7 +1099,7 @@ def build_options_class(
                 default=None,
             ),
         )
-    return create_model("Options", __base__=SharedOptions, **fields)
+    return create_model("Options", __base__=ChatOptions, **fields)
 
 
 def _attachment(attachment, image_detail=None):
@@ -1323,8 +1349,13 @@ class _Shared:
     def build_kwargs(self, prompt, stream):
         kwargs = dict(not_nulls(prompt.options))
         json_object = kwargs.pop("json_object", None)
+        chat_template_kwargs = kwargs.pop("chat_template_kwargs", None)
         kwargs.pop("image_detail", None)
         kwargs.pop("chat_completions", None)
+        if chat_template_kwargs is not None:
+            kwargs["extra_body"] = {
+                "chat_template_kwargs": chat_template_kwargs,
+            }
         if "max_tokens" not in kwargs and self.default_max_tokens is not None:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
@@ -2018,6 +2049,12 @@ class _SharedResponses(_Shared):
         opts.pop("json_object", None)
         opts.pop("chat_completions", None)
         opts.pop("image_detail", None)
+        chat_template_kwargs = opts.pop("chat_template_kwargs", None)
+        if chat_template_kwargs is not None:
+            raise ValueError(
+                "chat_template_kwargs is only supported by Chat Completions; "
+                "use -o chat_completions 1"
+            )
         max_tokens = opts.pop("max_tokens", None)
         reasoning_effort = opts.pop("reasoning_effort", None)
         verbosity = opts.pop("verbosity", None)
