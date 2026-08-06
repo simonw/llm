@@ -347,6 +347,24 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     assert ids == expected_ids
 
 
+def test_embed_file_utf8_content_preserved(tmpdir, user_path):
+    """Non-ASCII UTF-8 characters in a file should be stored without corruption."""
+    db_path = str(user_path / "embeddings.db")
+    path = tmpdir / "content.txt"
+    # Write raw UTF-8 bytes to guarantee the on-disk encoding
+    path.write_binary("æ ø å".encode("utf-8"))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["embed", "items", "1", "-i", str(path), "-m", "embed-demo", "--store", "-d", db_path],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    db = sqlite_utils.Database(db_path)
+    row = list(db["embeddings"].rows)[0]
+    assert row["content"] == "æ ø å"
+
+
 def test_embed_multi_files_binary_store(tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
