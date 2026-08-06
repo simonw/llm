@@ -1985,8 +1985,9 @@ def logs_list(
         # Output as JSON if requested
         output = log_rows_as_json(rows, attachments_by_id)
     elif extract or extract_last:
-        # Extract and return first code block
-        for row in rows:
+        # When -r is set, restrict to the same row -r would display (rows[-1])
+        search_rows = [rows[-1]] if (response and rows) else rows
+        for row in search_rows:
             output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
