@@ -241,7 +241,7 @@ Fragment loader plugins differ from template loader plugins in that you can stac
 
 A fragment loader can return one or more string fragments or attachments, or a mixture of the two. The fragments will be concatenated together into the prompt string, while any attachments will be added to the list of attachments to be sent to the model.
 
-The `prefix` specifies the loader. The `argument` will be passed to that registered callback..
+The `prefix` specifies the loader. The `argument` will be passed to that registered callback.
 
 The callback works in a very similar way to template loaders, but returns either a single `llm.Fragment`, a list of `llm.Fragment` objects, a single `llm.Attachment`, or a list that can mix `llm.Attachment` and `llm.Fragment` objects.
 
