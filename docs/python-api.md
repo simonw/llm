@@ -543,7 +543,7 @@ Then in your Python code:
 import llm
 
 model = llm.get_model("claude-3.5-sonnet")
-# Use this if you have not set the key using 'llm keys set claude':
+# Use this if you have not set the key using 'llm keys set anthropic':
 model.key = 'YOUR_API_KEY_HERE'
 response = model.prompt("Five surprising names for a pet pelican")
 print(response.text())
