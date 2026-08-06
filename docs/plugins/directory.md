@@ -69,7 +69,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-fragments-pypi](https://github.com/samueldg/llm-fragments-pypi)** loads [PyPI](https://pypi.org/) packages' description and metadata as fragments: `llm -f pypi:ruff "What flake8 plugins does ruff re-implement?"`.
 - **[llm-fragments-pdf](https://github.com/daturkel/llm-fragments-pdf)** by Dan Turkel converts PDFs to markdown with [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/index.html) to use as fragments: `llm -f pdf:something.pdf "what's this about?"`.
 - **[llm-fragments-site-text](https://github.com/daturkel/llm-fragments-site-text)** by Dan Turkel converts websites to markdown with [Trafilatura](https://trafilatura.readthedocs.io/en/latest/) to use as fragments: `llm -f site:https://example.com "summarize this"`.
-- **[llm-fragments-reader](https://github.com/simonw/llm-fragments-reader)** runs a URL theough the Jina Reader API: `llm -f 'reader:https://simonwillison.net/tags/jina/' summary`.
+- **[llm-fragments-reader](https://github.com/simonw/llm-fragments-reader)** runs a URL through the Jina Reader API: `llm -f 'reader:https://simonwillison.net/tags/jina/' summary`.
 
 (plugin-directory-embeddings)=
 ## Embedding models
