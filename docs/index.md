@@ -51,7 +51,7 @@ uvx llm openai endpoint http://localhost:1234/v1 \
 ```
 Add `--key your-api-key` if the endpoint requires authentication. See {ref}`Run against an endpoint without configuring it <openai-endpoint>` for more options.
 
-If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
+If you have an [OpenAI API key](https://platform.openai.com/api-keys) you can run this:
 ```bash
 # Paste your OpenAI API key into this
 llm keys set openai
@@ -82,7 +82,7 @@ You can also {ref}`install a plugin <installing-plugins>` to access models that 
 # Install the plugin
 llm install llm-ollama
 
-# Download and run a prompt against the Orca Mini 7B model
+# Download and run a prompt against the Llama 3.2 model
 ollama pull llama3.2:latest
 llm -m llama3.2:latest 'What is the capital of France?'
 ```
