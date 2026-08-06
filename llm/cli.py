@@ -1986,7 +1986,7 @@ def logs_list(
         output = log_rows_as_json(rows, attachments_by_id)
     elif extract or extract_last:
         # Extract and return first code block
-        for row in rows:
+        for row in reversed(rows) if extract_last else rows:
             output = extract_fenced_code_block(row["response"], last=extract_last)
             if output is not None:
                 break
