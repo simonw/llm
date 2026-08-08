@@ -1419,12 +1419,15 @@ def load_conversation(
     migrate(db)
     if conversation_id is None:
         # Most recent conversation from either generation of tables -
-        # thread ids are conversation ids, so the union dedupes rows
-        # from the dual-write era.
+        # thread ids are conversation ids, so a dual-write era id can
+        # show up on both sides, but the outer limit 1 makes that
+        # harmless. "union all" lets SQLite walk each primary key
+        # backwards and stop at the first row, where a distinct
+        # "union" would first materialize every id from both tables.
         matches = list(db.query("""
                 select id from (
                     select id from threads
-                    union
+                    union all
                     select id from conversations
                 ) order by id desc limit 1
                 """))

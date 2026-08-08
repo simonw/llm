@@ -56,6 +56,26 @@ def test_migrate_blank():
     }
 
 
+def test_migrate_creates_log_lookup_indexes():
+    """m028: the columns `llm logs` filters and joins on are indexed,
+    so listings never scan the tool, parts or responses tables."""
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    indexed = {
+        (table.name, tuple(index.columns))
+        for table in db.tables
+        for index in table.indexes
+    }
+    for expected in (
+        ("tool_calls", ("response_id",)),
+        ("tool_results", ("response_id",)),
+        ("tool_responses", ("response_id",)),
+        ("responses", ("conversation_id",)),
+        ("parts", ("type", "tool_name", "message_hash")),
+    ):
+        assert expected in indexed
+
+
 @pytest.mark.parametrize("has_record", [True, False])
 def test_migrate_from_original_schema(has_record):
     db = sqlite_utils.Database(memory=True)
