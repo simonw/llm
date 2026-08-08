@@ -734,3 +734,19 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
     store = LogStore(db)
     chain = store.load_chain(turn["tip_message_hash"])
     assert chain[-1].parts[0].text == "Ho ho ho"
+
+
+def test_build_options_class_is_cached():
+    """Same feature-flag combination -> the same shared Options class.
+
+    Plugins that register hundreds of OpenAI-compatible models call
+    this once per model; without the cache each call builds a fresh
+    pydantic class and dominates registration time."""
+    from llm.default_plugins.openai_models import build_options_class
+
+    reasoning = build_options_class(reasoning=True)
+    assert build_options_class(reasoning=True) is reasoning
+    plain = build_options_class()
+    assert plain is not reasoning
+    assert "reasoning_effort" in reasoning.model_fields
+    assert "reasoning_effort" not in plain.model_fields

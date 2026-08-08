@@ -1,4 +1,5 @@
 import datetime
+import functools
 import json
 import os
 import sys
@@ -1000,6 +1001,12 @@ def enum_values_sentence(enum_class):
     return "{}, and {}".format(", ".join(values[:-1]), values[-1])
 
 
+# Cached: pure function of five booleans (at most 32 classes), and
+# building a pydantic class is expensive enough to dominate model
+# registration when a plugin instantiates hundreds of models. Sharing
+# one class across instances follows the existing pattern of the
+# default Options being a shared class attribute.
+@functools.cache
 def build_options_class(
     *,
     reasoning=False,
