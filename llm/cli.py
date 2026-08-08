@@ -2234,7 +2234,8 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
-            if row["options_json"]:
+            # .get(): annotate_log_rows removes the *_json keys under -t
+            if row.get("options_json"):
                 options = row["options_json"]
                 if isinstance(options, str):
                     options = json.loads(options)
@@ -2248,7 +2249,7 @@ def logs_list(
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             _display_fragments(row["system_fragments"], "System fragments")
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
@@ -2337,7 +2338,7 @@ def logs_list(
 
             # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
             response = row["response"]
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 try:
                     parsed = json.loads(response)
                     response = f"```json\n{json.dumps(parsed, indent=2)}\n```"
