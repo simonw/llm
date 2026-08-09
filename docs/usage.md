@@ -566,7 +566,15 @@ Type '!attach <url-or-path>' to attach a file
 > !edit
 ```
 
-For multi-modal models that support attachments, use `!attach <url-or-path>` to attach a file during a chat. This can be combined with `!multi`:
+For multi-modal models that support attachments, use `!attach <url-or-path>` to queue a file or URL for the next message:
+
+```bash
+> !attach photo.jpg
+Attachment queued for next message
+> Describe this image
+```
+
+You can queue multiple attachments before entering your prompt. `!attach` can also be combined with `!multi`:
 
 ```bash
 > !multi

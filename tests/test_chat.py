@@ -373,21 +373,38 @@ def test_chat_fragments(tmpdir):
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-def test_chat_attach(tmp_path, mock_model, logs_db):
+def test_chat_attach_queued_for_next_prompt(tmp_path, mock_model, logs_db):
     image_path = tmp_path / "image with spaces.png"
     image_path.write_bytes(TINY_PNG)
+    second_image_path = tmp_path / "second image.png"
+    second_image_path.write_bytes(TINY_PNG)
+    missing_path = tmp_path / "missing image.png"
     runner = CliRunner()
     mock_model.enqueue(["saw image"])
+    mock_model.enqueue(["follow-up"])
     result = runner.invoke(
         llm.cli.cli,
         ["chat", "-m", "mock"],
-        input=f"!attach {image_path}\nquit\n",
+        input=(
+            f"!attach {image_path}\n"
+            f"!attach {second_image_path}\n"
+            f"!attach {missing_path}\n"
+            "Describe this image\n"
+            "What did I just ask you to do?\n"
+            "quit\n"
+        ),
         catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert result.output.endswith("\n> quit\n")
+    assert "Attachment queued for next message" in result.output
+    assert f"Error: File {missing_path} does not exist" in result.output
+    assert result.output.index("Error: File") < result.output.index(
+        "> Describe this image"
+    )
+    assert len(mock_model.history) == 2
     prompt = mock_model.history[0][0]
-    assert prompt.prompt == ""
+    assert prompt.prompt == "Describe this image"
     assert prompt.attachments == [
         llm.Attachment(
             type="image/png",
@@ -395,16 +412,18 @@ def test_chat_attach(tmp_path, mock_model, logs_db):
             url=None,
             content=None,
             _id=ANY,
-        )
+        ),
+        llm.Attachment(
+            type="image/png",
+            path=str(second_image_path),
+            url=None,
+            content=None,
+            _id=ANY,
+        ),
     ]
-    attachment = next(iter(logs_db["attachments"].rows))
-    assert attachment == {
-        "id": ANY,
-        "type": "image/png",
-        "path": str(image_path),
-        "url": None,
-        "content": None,
-    }
+    follow_up_prompt = mock_model.history[1][0]
+    assert follow_up_prompt.prompt == "What did I just ask you to do?"
+    assert follow_up_prompt.attachments == []
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
