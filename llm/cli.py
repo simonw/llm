@@ -4341,7 +4341,18 @@ def _get_conversation_tools(conversation, tools):
     multiple=True,
     help="Fragment (alias, URL, hash or file path) to add to the prompt",
 )
-
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Output comparison results as JSON"
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(file_okay=True, dir_okay=False),
+    help="Path to log database",
+)
 # NOTE: making not streaming so that we are using threads for parallel processing
 # atleast for this version we will not enable streaming output
 # @click.option("--no-stream", is_flag=True, help="Do not stream output")
@@ -4353,6 +4364,8 @@ def compare(
     attachments,
     fragments,
     # no_stream,
+    as_json,
+    database
     ):
     """
     Run the same prompt against multiple models and compare their responses.
@@ -4377,7 +4390,7 @@ def compare(
         raise click.ClickException("A prompt is required.")
 
     # resolving fragments or attachments
-    log_path = logs_db_path()
+    log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
 
     db = sqlite_utils.Database(log_path)
@@ -4407,49 +4420,51 @@ def compare(
     def run_model(model_id):
         try:
             model = get_model(model_id)
-        except UnknownModelError as ex:
-            raise click.ClickException(str(ex))
 
         #validate different model options according to the model
 
-        validated_options = {}
+            validated_options = {}
 
-        if options:
-            try:
-                validated_options = {
-                    key: value
-                    for key, value in model.Options(**dict(options))
-                    if value is not None
-                }
-            except pydantic.ValidationError as ex:
-                raise click.ClickException(
-                    f"Invalid options for model '{model_id}': "
-                    f"{render_errors(ex.errors())}"
-                )
+            if options:
+                try:
+                    validated_options = {
+                        key: value
+                        for key, value in model.Options(**dict(options))
+                        if value is not None
+                    }
+                except pydantic.ValidationError as ex:
+                    return {
+                            "model_id": model_id,
+                            "model": model,
+                            "response": None,
+                            "error": (
+                                "Invalid model options: "
+                                f"{render_errors(ex.errors())}"
+                            ),
+                        }
 
-        # adding default configured model options
-        default_options = get_model_options(model.model_id)
-        for key, value in default_options.items():
-            if key not in validated_options:
-                validated_options[key] = value
+            # adding default configured model options
+            default_options = get_model_options(model.model_id)
+            for key, value in default_options.items():
+                if key not in validated_options:
+                    validated_options[key] = value
 
-        #independent conversation for this model
-        conversation = model.conversation()
+            #independent conversation for this model
+            conversation = model.conversation()
 
-        #configuring streaming option
-        # should_stream = model.can_stream and not no_stream
-        kwargs = dict(validated_options)
-        # if not should_stream:
-            # kwargs["stream"] = False
+            #configuring streaming option
+            # should_stream = model.can_stream and not no_stream
+            # kwargs = dict(validated_options)
+            # if not should_stream:
+                # kwargs["stream"] = False
 
-        #run model
-        try:
+            #run model
             response = conversation.prompt(
                 prompt, 
                 system=system,
                 attachments=resolved_attachments,
                 fragments=resolved_fragments,
-                **kwargs
+                **validated_options
             )
 
             return{
@@ -4458,19 +4473,35 @@ def compare(
                 "response": response,
                 "error": None,
             }
-        except (ValueError, NotImplementedError)  as ex:
-            raise click.ClickException(
-                f"Error running model '{model_id}': {ex}"
-            )
+        except UnknownModelError as ex:
+            return {
+                "model_id": model_id,
+                "model": None,
+                "response": None,
+                "error": str(ex),
+            }
+
+        except (ValueError, NotImplementedError) as ex:
+            return {
+                "model_id": model_id,
+                "model": None,
+                "response": None,
+                "error": str(ex),
+            }
+
         except Exception as ex:
             if getattr(sys, "_called_from_test", False) or os.environ.get(
                 "LLM_RAISE_ERRORS"
             ):
                 raise
 
-            raise click.ClickException(
-                f"Error running model '{model_id}': {ex}"
-            )
+            return {
+                "model_id": model_id,
+                "model": None,
+                "response": None,
+                "error": str(ex),
+            }
+
     results = []
 
     max_workers = min(len(model_ids), 8)
@@ -4485,6 +4516,96 @@ def compare(
             results.append(future.result())
 
     #display results
+    if as_json:
+        _display_compare_json(results)
+    elif len(results) == 2:
+        _display_compare_side_by_side(results)
+    else:
+        _display_compare_one_by_one(results)
+
+    # log responses to the database so we can query them using llm logs
+    if logs_on():
+        for result in results:
+            response = result["response"]
+            if response is not None:
+                response.log_to_db(db)
+
+def _display_compare_side_by_side(results):
+    """
+    Display exactly two model results side by side
+    """
+
+    left = results[0]
+    right = results[1]
+    left_lines = _compare_result_lines(left)
+    right_lines = _compare_result_lines(right)
+
+    # width for each column
+    terminal_width = shutil.get_terminal_size((120, 20)).columns
+    column_width = max(40, (terminal_width-3) // 2)
+    max_lines = max(len(left_lines), len(right_lines))
+
+    click.echo()
+    for index in range(max_lines):
+        left_line = (
+            left_lines[index] if index < len(left_lines) else ""
+        )
+        right_line = (
+            right_lines[index] if index < len(right_lines) else ""
+        )
+
+        left_line = _truncate_compare_line(left_line,
+            column_width,
+        )
+
+        right_line = _truncate_compare_line(
+            right_line,
+            column_width,
+        )
+
+        click.echo(
+            f"{left_line:<{column_width}} | {right_line:<{column_width}}"
+        )
+
+    click.echo()
+
+def _compare_result_lines(result):
+    """
+    Convert a comparison result into displayable lines.
+    """
+    model_id = result["model_id"]
+    response = result["response"]
+    error = result["error"]
+    lines = []
+
+    lines.append(f"Model: {model_id}")
+    lines.append("-"*len(f"Model: {model_id}"))
+    if error:
+        lines.append("ERROR")
+        lines.append("")
+        lines.extend(str(error).splitlines())
+    elif response is not None:
+        text = response.text()
+        lines.extend(text.splitlines())
+    else:
+        lines.append("No response from model.")
+    return lines
+
+def _truncate_compare_line(line, width):
+    """
+    Prevent one response from breaking the side-by-side layout.
+    """
+    if len(line) <= width:
+        return line
+    if width <= 3:
+        return line[:width]
+
+    return line[: width - 3] + "..."
+
+def _display_compare_one_by_one(results):
+    """
+    Display three or more model results one after another.
+    """
     for index, result in enumerate(results):
         if index:
             click.echo()
@@ -4492,15 +4613,33 @@ def compare(
             click.echo()
         model_id = result["model_id"]
         response = result["response"]
-
+        error = result["error"]
         click.echo(f"Model: {model_id}")
-        click.echo("-" * 80)
+        click.echo("-"* 80)
+
+        if error:
+            click.echo(f"ERROR: {error}")
+            continue
+        if response is None:
+            click.echo("No Response.")
+            continue
         click.echo(response.text())
 
-        # if no_stream:
-        #     click.echo(response.text())
-        # else:
-        #     display_stream_events(
-        #         response.stream_events()
-        #     )
-        #     click.echo()
+def _display_compare_json(results):
+    output = []
+
+    for result in results:
+        item = {
+            "model": result["model_id"],
+        }
+
+        if result["error"]:
+            item["error"] = result["error"]
+        elif result["response"] is not None:
+            item["response"] = result["response"].text()
+        else:
+            item["response"] = None
+
+        output.append(item)
+
+    click.echo(json.dumps(output, ensure_ascii=False))
