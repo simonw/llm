@@ -688,6 +688,21 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
     assert db["embeddings"].count == 1
 
 
+def test_embed_multi_existing_collection_without_default(user_path):
+    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    Collection("example", db, model_id="embed-demo")
+
+    result = CliRunner().invoke(
+        cli,
+        ["embed-multi", "example", "-"],
+        input="id,name\n1,hello",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert db["embeddings"].count == 1
+
+
 def test_duplicate_content_embedded_only_once(embed_demo):
     # content_hash should avoid embedding the same content twice
     # per collection

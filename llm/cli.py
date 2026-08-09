@@ -3488,11 +3488,12 @@ def embed_multi(
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
 
+    model_id = model or get_default_embedding_model()
     try:
         collection_obj = Collection(
-            collection, db=db, model_id=model or get_default_embedding_model()
+            collection, db=db, model_id=model_id, create=model_id is not None
         )
-    except UnknownModelError:
+    except (Collection.DoesNotExist, UnknownModelError):
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
         )
