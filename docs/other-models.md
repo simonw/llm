@@ -106,7 +106,19 @@ llm openai endpoint https://example.com/v1 \
   "Solve this problem"
 ```
 
-The command does not send reasoning-specific request fields by default and does not request a reasoning summary. Those fields are only added when `reasoning_effort` is used. An endpoint that does not support the option will return its own API error.
+Responses API endpoints can also be asked for a visible reasoning summary using `-o reasoning_summary`, with a value of `auto`, `concise`, or `detailed`:
+
+```bash
+llm openai endpoint https://example.com/v1 \
+  --responses \
+  -m model-id \
+  -o reasoning_summary auto \
+  "Solve this problem"
+```
+
+This maps to the Responses API `reasoning.summary` request field. `auto` asks the endpoint for the most detailed summary available for that model. Use `-R` or `--hide-reasoning` to suppress summary generation for a request.
+
+The command does not send reasoning-specific request fields by default and does not request a reasoning summary unless one of these options is used. An endpoint that does not support an option will return its own API error.
 
 Use `-T` or `--tool` to make an installed LLM tool available to the model, or `--functions` to load Python functions from an inline code block or file:
 

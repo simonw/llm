@@ -565,10 +565,18 @@ def _responses_reasoning_summary_stream():
 
 
 def test_responses_model_is_registered():
+    from llm.default_plugins.openai_models import Chat
+
     model = llm.get_model("gpt-5.5")
     assert "Responses" in type(model).__name__
     # The chat_completions opt-out option must be exposed.
     assert "chat_completions" in model.Options.model_fields
+    assert "reasoning_summary" in model.Options.model_fields
+    assert "reasoning_summary" in llm.get_async_model("gpt-5.5").Options.model_fields
+    assert (
+        "reasoning_summary"
+        not in Chat("reasoning-chat-model", reasoning=True).Options.model_fields
+    )
 
 
 def test_chat_completions_opt_out_dispatches_to_chat(httpx_mock):
@@ -593,8 +601,16 @@ def test_chat_completions_opt_out_dispatches_to_chat(httpx_mock):
         headers={"Content-Type": "application/json"},
     )
     model = llm.get_model("gpt-5.5")
-    response = model.prompt("hello", stream=False, chat_completions=True, key="test")
+    response = model.prompt(
+        "hello",
+        stream=False,
+        chat_completions=True,
+        reasoning_summary="detailed",
+        key="test",
+    )
     assert response.text() == "hi from chat"
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert "reasoning_summary" not in request_body
 
 
 def test_default_routes_to_responses_endpoint(httpx_mock):
@@ -891,6 +907,37 @@ def test_responses_kwargs_sets_reasoning_summary_without_effort():
     assert kwargs["reasoning"] == {"summary": "auto"}
 
 
+@pytest.mark.parametrize("reasoning_summary", ("auto", "concise", "detailed"))
+def test_responses_kwargs_explicit_reasoning_summary(reasoning_summary):
+    model = llm.get_model("gpt-5.5")
+    options = model.Options(reasoning_summary=reasoning_summary)
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert kwargs["reasoning"] == {"summary": reasoning_summary}
+
+
+def test_async_responses_kwargs_explicit_reasoning_summary():
+    model = llm.get_async_model("gpt-5.5")
+    options = model.Options(reasoning_summary="concise")
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert kwargs["reasoning"] == {"summary": "concise"}
+
+
 def test_responses_kwargs_omits_reasoning_summary_when_hide_reasoning():
     model = llm.get_model("gpt-5.5")
     options = model.Options(reasoning_effort="low")
@@ -905,6 +952,23 @@ def test_responses_kwargs_omits_reasoning_summary_when_hide_reasoning():
     p.hide_reasoning = True
     kwargs = model._build_responses_kwargs(p, stream=False)
     assert kwargs["reasoning"] == {"effort": "low"}
+
+
+def test_responses_kwargs_omits_explicit_reasoning_summary_when_hide_reasoning():
+    model = llm.get_model("gpt-5.5")
+    options = model.Options(reasoning_summary="detailed")
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    p.hide_reasoning = True
+    kwargs = model._finalize_responses_kwargs(p, stream=False)
+    assert "reasoning" not in kwargs
+    assert kwargs["include"] == ["reasoning.encrypted_content"]
 
 
 def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():

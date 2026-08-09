@@ -1,6 +1,7 @@
 import base64
 import json
 
+import pytest
 import sqlite_utils
 from click.testing import CliRunner
 from pytest_httpx import IteratorStream
@@ -725,6 +726,79 @@ def test_endpoint_responses_api(httpx_mock, user_path):
         "stream": False,
         "text": {"verbosity": "low"},
     }
+
+
+@pytest.mark.parametrize("reasoning_summary", ("auto", "concise", "detailed"))
+def test_endpoint_responses_reasoning_summary_option(
+    httpx_mock, user_path, reasoning_summary
+):
+    base_url = "https://responses-summary.example.test/v1"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{base_url}/responses",
+        json=_responses_payload("Hello from Responses"),
+        headers={"Content-Type": "application/json"},
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            base_url,
+            "Hello",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+            "-o",
+            "reasoning_summary",
+            reasoning_summary,
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Hello from Responses\n"
+    assert not (user_path / "logs.db").exists()
+    assert json.loads(httpx_mock.get_requests()[0].content) == {
+        "input": [{"role": "user", "content": "Hello"}],
+        "include": ["reasoning.encrypted_content"],
+        "model": "test-model",
+        "reasoning": {"summary": reasoning_summary},
+        "store": False,
+        "stream": False,
+    }
+
+
+def test_endpoint_responses_reasoning_summary_option_rejects_invalid_value(
+    httpx_mock, user_path
+):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "openai",
+            "endpoint",
+            "https://responses-summary.example.test/v1",
+            "Hello",
+            "-m",
+            "test-model",
+            "--responses",
+            "--no-stream",
+            "-o",
+            "reasoning_summary",
+            "verbose",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 1
+    assert result.output == (
+        "Error: reasoning_summary\n"
+        "  Input should be 'auto', 'concise' or 'detailed'\n"
+    )
+    assert not httpx_mock.get_requests()
+    assert not (user_path / "logs.db").exists()
 
 
 def test_endpoint_responses_api_attachment(httpx_mock, user_path):

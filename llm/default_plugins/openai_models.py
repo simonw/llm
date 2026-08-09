@@ -966,6 +966,12 @@ class ReasoningEffortEnum(str, Enum):
     max = "max"
 
 
+class ReasoningSummaryEnum(str, Enum):
+    auto = "auto"
+    concise = "concise"
+    detailed = "detailed"
+
+
 class VerbosityEnum(str, Enum):
     low = "low"
     medium = "medium"
@@ -995,6 +1001,7 @@ def enum_values_sentence(enum_class):
 def build_options_class(
     *,
     reasoning=False,
+    reasoning_summary=False,
     verbosity=False,
     image_detail_original=False,
     chat_completions=False,
@@ -1045,6 +1052,18 @@ def build_options_class(
                     "supported values are low, medium, and high. Reducing reasoning "
                     "effort can result in faster responses and fewer tokens used on "
                     "reasoning in a response."
+                ),
+                default=None,
+            ),
+        )
+    if reasoning_summary:
+        reasoning_summary_values = enum_values_sentence(ReasoningSummaryEnum)
+        fields["reasoning_summary"] = (
+            ReasoningSummaryEnum | None,
+            Field(
+                description=(
+                    "Requests a summary of the model's reasoning. Supported values "
+                    f"are {reasoning_summary_values}."
                 ),
                 default=None,
             ),
@@ -1325,6 +1344,9 @@ class _Shared:
         json_object = kwargs.pop("json_object", None)
         kwargs.pop("image_detail", None)
         kwargs.pop("chat_completions", None)
+        # Responses models reuse their Options object when explicitly routed
+        # through the Chat Completions compatibility path.
+        kwargs.pop("reasoning_summary", None)
         if "max_tokens" not in kwargs and self.default_max_tokens is not None:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
@@ -2020,6 +2042,7 @@ class _SharedResponses(_Shared):
         opts.pop("image_detail", None)
         max_tokens = opts.pop("max_tokens", None)
         reasoning_effort = opts.pop("reasoning_effort", None)
+        reasoning_summary = opts.pop("reasoning_summary", None)
         verbosity = opts.pop("verbosity", None)
         temperature = opts.pop("temperature", None)
         top_p = opts.pop("top_p", None)
@@ -2038,8 +2061,11 @@ class _SharedResponses(_Shared):
             kwargs["seed"] = seed
         if self._reasoning:
             reasoning = {}
-            if self._reasoning_summary and not getattr(prompt, "hide_reasoning", False):
-                reasoning["summary"] = "auto"
+            if not getattr(prompt, "hide_reasoning", False):
+                if reasoning_summary is not None:
+                    reasoning["summary"] = reasoning_summary
+                elif self._reasoning_summary:
+                    reasoning["summary"] = "auto"
             if reasoning_effort:
                 reasoning["effort"] = reasoning_effort
             if reasoning:
@@ -2092,7 +2118,9 @@ class _SharedResponses(_Shared):
             kwargs["instructions"] = instructions
         kwargs["store"] = False
         if self._reasoning and (
-            self._reasoning_summary or getattr(prompt.options, "reasoning_effort", None)
+            self._reasoning_summary
+            or getattr(prompt.options, "reasoning_summary", None)
+            or getattr(prompt.options, "reasoning_effort", None)
         ):
             include = kwargs.setdefault("include", [])
             if "reasoning.encrypted_content" not in include:
@@ -2440,6 +2468,7 @@ class Responses(_SharedResponses, KeyModel):
         # always available on Responses-routed models.
         self.Options = build_options_class(
             reasoning=reasoning,
+            reasoning_summary=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
@@ -2683,6 +2712,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         self._service_tier = service_tier
         self.Options = build_options_class(
             reasoning=reasoning,
+            reasoning_summary=reasoning,
             verbosity=verbosity,
             image_detail_original=image_detail_original,
             chat_completions=True,
