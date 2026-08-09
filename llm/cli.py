@@ -4305,3 +4305,95 @@ def _get_conversation_tools(conversation, tools):
         # toolbox specs were read from turn_tools instead of rebuilt
         # responses.
         return list(conversation.loaded_tools)
+
+
+@cli.command("compare")
+@click.argument("prompt", required = False)
+@click.option(
+    "model_ids",
+    "-m",
+    "--model",
+    multiple = True,
+    required = True
+)
+@click.option("-s", "--system", help = "System prompt to use")
+@click.option(
+    "options",
+    "-o",
+    "--option",
+    type=(str, str),
+    multipe=True,
+    help="key/value options for the models",
+    )
+@click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+    )
+@click.option(
+    "fragments",
+    "-f",
+    "--fragment",
+    multiple=True,
+    help="Fragment (alias, URL, hash or file path) to add to the prompt",
+)
+@click.option("--no-stream", is_flag=True, help="Do not stream output")
+def compare(
+    prompt,
+    model_ids,
+    system,
+    options,
+    attachments,
+    fragments,
+    no_stream,
+    ):
+    """
+    Run the same prompt against multiple models and compare their responses.
+    """
+
+    if len(model_ids) < 2:
+        raise click.ClickException(
+            "compare requires at least two models. "
+            "Specify them with -m/--model."
+        )
+
+    # reading the prompt from stdin if required
+
+    if not sys.stdin.isatty():
+        stdin_prompt = sys.stdin.read()
+        if stdin_prompt:
+            if prompt:
+                prompt = f"{stdin_prompt} {prompt}"
+            else:
+                prompt = stdin_prompt
+    if not prompt:
+        raise click.ClickException("A prompt is required.")
+
+    # resolving fragments or attachments
+    log_path = logs_db_path()
+    (log_path.parent).mkdir(parents=True, exist_ok=True)
+
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    resolved_attachments = list(attachments)
+    try:
+        fragments_and_attachments = resolve_fragments(
+            db,
+            fragments,
+            allow_attachments=True
+        )
+        resolved_fragments = [
+             fragment for fragment in fragments_and_attachments if isinstance(fragment, Fragment)
+        ]
+
+        resolved_attachments.extend(
+            attachment for attachment in fragments_and_attachments if isinstance(attachment, Attachment)
+        )
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
+
+    
