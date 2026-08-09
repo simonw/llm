@@ -17,6 +17,7 @@ from dataclasses import asdict
 from importlib.metadata import version
 from runpy import run_module
 from typing import Any, cast
+from concurrent.futures import ThreadPoolExecutor
 
 import click
 import httpx
@@ -4322,7 +4323,7 @@ def _get_conversation_tools(conversation, tools):
     "-o",
     "--option",
     type=(str, str),
-    multipe=True,
+    multiple=True,
     help="key/value options for the models",
     )
 @click.option(
@@ -4340,7 +4341,10 @@ def _get_conversation_tools(conversation, tools):
     multiple=True,
     help="Fragment (alias, URL, hash or file path) to add to the prompt",
 )
-@click.option("--no-stream", is_flag=True, help="Do not stream output")
+
+# NOTE: making not streaming so that we are using threads for parallel processing
+# atleast for this version we will not enable streaming output
+# @click.option("--no-stream", is_flag=True, help="Do not stream output")
 def compare(
     prompt,
     model_ids,
@@ -4348,7 +4352,7 @@ def compare(
     options,
     attachments,
     fragments,
-    no_stream,
+    # no_stream,
     ):
     """
     Run the same prompt against multiple models and compare their responses.
@@ -4396,4 +4400,107 @@ def compare(
     except FragmentNotFound as ex:
         raise click.ClickException(str(ex))
 
-    
+    #running the prompt
+
+    # results = []
+    # running one model 
+    def run_model(model_id):
+        try:
+            model = get_model(model_id)
+        except UnknownModelError as ex:
+            raise click.ClickException(str(ex))
+
+        #validate different model options according to the model
+
+        validated_options = {}
+
+        if options:
+            try:
+                validated_options = {
+                    key: value
+                    for key, value in model.Options(**dict(options))
+                    if value is not None
+                }
+            except pydantic.ValidationError as ex:
+                raise click.ClickException(
+                    f"Invalid options for model '{model_id}': "
+                    f"{render_errors(ex.errors())}"
+                )
+
+        # adding default configured model options
+        default_options = get_model_options(model.model_id)
+        for key, value in default_options.items():
+            if key not in validated_options:
+                validated_options[key] = value
+
+        #independent conversation for this model
+        conversation = model.conversation()
+
+        #configuring streaming option
+        # should_stream = model.can_stream and not no_stream
+        kwargs = dict(validated_options)
+        # if not should_stream:
+            # kwargs["stream"] = False
+
+        #run model
+        try:
+            response = conversation.prompt(
+                prompt, 
+                system=system,
+                attachments=resolved_attachments,
+                fragments=resolved_fragments,
+                **kwargs
+            )
+
+            return{
+                "model_id": model_id,
+                "model": model,
+                "response": response,
+                "error": None,
+            }
+        except (ValueError, NotImplementedError)  as ex:
+            raise click.ClickException(
+                f"Error running model '{model_id}': {ex}"
+            )
+        except Exception as ex:
+            if getattr(sys, "_called_from_test", False) or os.environ.get(
+                "LLM_RAISE_ERRORS"
+            ):
+                raise
+
+            raise click.ClickException(
+                f"Error running model '{model_id}': {ex}"
+            )
+    results = []
+
+    max_workers = min(len(model_ids), 8)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(run_model, model_id)
+            for model_id in model_ids
+        ]
+
+        # calling result() in submission order to get the output in the same order -m argument
+        for future in futures:
+            results.append(future.result())
+
+    #display results
+    for index, result in enumerate(results):
+        if index:
+            click.echo()
+            click.echo("=" * 80)
+            click.echo()
+        model_id = result["model_id"]
+        response = result["response"]
+
+        click.echo(f"Model: {model_id}")
+        click.echo("-" * 80)
+        click.echo(response.text())
+
+        # if no_stream:
+        #     click.echo(response.text())
+        # else:
+        #     display_stream_events(
+        #         response.stream_events()
+        #     )
+        #     click.echo()
