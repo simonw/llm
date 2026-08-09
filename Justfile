@@ -27,10 +27,10 @@
 @cog:
   uv run cog -r -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" docs/**/*.md docs/*.md README.md
 
-# Serve live docs on localhost:8000
-@docs: cog
+# Serve live docs on localhost (default port: 8000)
+@docs port="8000": cog
   rm -rf docs/_build
-  cd docs && uv run make livehtml
+  cd docs && uv run make livehtml SPHINXOPTS="--port {{port}}"
 
 # Apply Black
 @black:
