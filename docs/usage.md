@@ -518,6 +518,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!attach <url-or-path>' to attach a file
 > who are you?
 I am a sentient cheesecake, meaning I am an artificial
 intelligence embodied in a dessert form, specifically a
@@ -540,6 +541,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!attach <url-or-path>' to attach a file
 > !multi custom-end
  Explain this error:
 
@@ -560,7 +562,17 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!attach <url-or-path>' to attach a file
 > !edit
+```
+
+For multi-modal models that support attachments, use `!attach <url-or-path>` to attach a file during a chat. This can be combined with `!multi`:
+
+```bash
+> !multi
+Describe this image
+!attach photo.jpg
+!end
 ```
 
 `llm chat` takes the same `--tool/-T` and `--functions` options as `llm prompt`. You can use this to start a chat with the specified {ref}`tools <usage-tools>` enabled.

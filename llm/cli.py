@@ -153,6 +153,7 @@ def _run_chat(
         click.echo(
             "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         )
+    click.echo("Type '!attach <url-or-path>' to attach a file")
 
     argument_fragments = list(initial_fragments or [])
     argument_attachments = list(initial_attachments or [])
@@ -187,6 +188,9 @@ def _run_chat(
             prompt = edited_prompt.strip()
         if db is not None and prompt.strip().startswith("!fragment "):
             prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+        if prompt.strip() == "!attach" or prompt.strip().startswith("!attach "):
+            prompt, extra_attachments = process_attachments_in_chat(prompt)
+            attachments += extra_attachments
 
         if in_multi:
             if prompt.strip() == end_token:
@@ -327,6 +331,29 @@ def process_fragments_in_chat(
         else:
             prompt_lines.append(line)
     return "\n".join(prompt_lines), fragments, attachments
+
+
+def process_attachments_in_chat(prompt: str) -> tuple[str, list[Attachment]]:
+    """
+    Process any !attach commands in a chat prompt and return the modified prompt plus resolved attachments.
+    """
+    prompt_lines = []
+    attachments = []
+    for line in prompt.splitlines():
+        stripped_line = line.strip()
+        if stripped_line == "!attach":
+            raise click.ClickException("Usage: !attach <url-or-path>")
+        if stripped_line.startswith("!attach "):
+            attachment_value = stripped_line.removeprefix("!attach ").strip()
+            if not attachment_value:
+                raise click.ClickException("Usage: !attach <url-or-path>")
+            try:
+                attachments.append(resolve_attachment(attachment_value))
+            except AttachmentError as ex:
+                raise click.ClickException(str(ex))
+        else:
+            prompt_lines.append(line)
+    return "\n".join(prompt_lines), attachments
 
 
 class AttachmentError(Exception):

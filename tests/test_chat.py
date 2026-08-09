@@ -32,6 +32,17 @@ def logged_rows(db):
     ]
 
 
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"
+    b"\x02\x03\x00\x00\x00\xe6\x99\xc4^\x00\x00\x00\tPLTE\xff\xff\xff"
+    b"\x00\xff\x00\xfe\x01\x00\x12t\x01J\x00\x00\x00GIDATx\xda\xed\xd81\x11"
+    b"\x000\x08\xc0\xc0.]\xea\xaf&Q\x89\x04V\xe0>\xf3+\xc8\x91Z\xf4\xa2\x08EQ\x14E"
+    b"Q\x14EQ\x14EQ\xd4B\x91$I3\xbb\xbf\x08EQ\x14EQ\x14EQ\x14E\xd1\xa5"
+    b"\xd4\x17\x91\xc6\x95\x05\x15\x0f\x9f\xc5\t\x9f\xa4\x00\x00\x00\x00IEND\xaeB`"
+    b"\x82"
+)
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_basic(mock_model, logs_db):
     runner = CliRunner()
@@ -50,6 +61,7 @@ def test_chat_basic(mock_model, logs_db):
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
         "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+        "\nType '!attach <url-or-path>' to attach a file"
         "\n> Hi"
         "\none world"
         "\n> Hi two"
@@ -99,6 +111,7 @@ def test_chat_basic(mock_model, logs_db):
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
         "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+        "\nType '!attach <url-or-path>' to attach a file"
         "\n> Continue"
         "\ncontinued"
         "\n> quit"
@@ -135,6 +148,7 @@ def test_chat_system(mock_model, logs_db):
         "\nType '!multi' to enter multiple lines, then '!end' to finish"
         "\nType '!edit' to open your default editor and modify the prompt"
         "\nType '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
+        "\nType '!attach <url-or-path>' to attach a file"
         "\n> Hi"
         "\nI am mean"
         "\n> quit"
@@ -307,6 +321,7 @@ def test_chat_tools(logs_db):
         "Type '!multi' to enter multiple lines, then '!end' to finish\n"
         "Type '!edit' to open your default editor and modify the prompt\n"
         "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments\n"
+        "Type '!attach <url-or-path>' to attach a file\n"
         '> {"prompt": "Convert hello to uppercase", "tool_calls": [{"name": "upper", '
         '"arguments": {"text": "hello"}}]}\n'
         "{\n"
@@ -355,3 +370,83 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_attach(tmp_path, mock_model, logs_db):
+    image_path = tmp_path / "image with spaces.png"
+    image_path.write_bytes(TINY_PNG)
+    runner = CliRunner()
+    mock_model.enqueue(["saw image"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input=f"!attach {image_path}\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.endswith("\n> quit\n")
+    prompt = mock_model.history[0][0]
+    assert prompt.prompt == ""
+    assert prompt.attachments == [
+        llm.Attachment(
+            type="image/png",
+            path=str(image_path),
+            url=None,
+            content=None,
+            _id=ANY,
+        )
+    ]
+    attachment = next(iter(logs_db["attachments"].rows))
+    assert attachment == {
+        "id": ANY,
+        "type": "image/png",
+        "path": str(image_path),
+        "url": None,
+        "content": None,
+    }
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_multi_fragments_and_attach(tmp_path, mock_model, logs_db):
+    fragment_path = tmp_path / "fragment.txt"
+    fragment_path.write_text("fragment text")
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+    runner = CliRunner()
+    mock_model.enqueue(["parsed"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input=(
+            "!multi\n"
+            "Describe this image using this fragment:\n"
+            f"!fragment {fragment_path}\n"
+            f"!attach {image_path}\n"
+            "!end\n"
+            "quit\n"
+        ),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.endswith("\n> quit\n")
+    prompt = mock_model.history[0][0]
+    assert prompt.prompt == "fragment text\nDescribe this image using this fragment:"
+    assert prompt.fragments == ["fragment text"]
+    assert prompt.attachments == [
+        llm.Attachment(
+            type="image/png",
+            path=str(image_path),
+            url=None,
+            content=None,
+            _id=ANY,
+        )
+    ]
+    attachment = next(iter(logs_db["attachments"].rows))
+    assert attachment == {
+        "id": ANY,
+        "type": "image/png",
+        "path": str(image_path),
+        "url": None,
+        "content": None,
+    }
