@@ -1400,7 +1400,7 @@ class _BaseResponse:
             elif fam_first == "reasoning":
                 text = "".join(e.chunk for e in evs)
                 redacted = any(e.redacted for e in evs)
-                if text or redacted:
+                if text or redacted or pm_merged:
                     built.append(
                         (
                             mi,

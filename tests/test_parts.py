@@ -510,6 +510,121 @@ class TestStreamEventsFromStreamEventPlugin:
         ev = llm.parts.StreamEvent(type="reasoning", chunk="thinking")
         assert ev.redacted is False
 
+    def test_metadata_only_reasoning_event_emits_part(self, mock_model):
+        # Anthropic display:"omitted" thinking arrives as an empty
+        # thinking block whose signature carries the encrypted
+        # reasoning state. The signature-only event must still become
+        # a ReasoningPart or the signature is lost from history.
+        events = [
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                provider_metadata={"anthropic": {"signature": "sig-omitted"}},
+            ),
+            llm.parts.StreamEvent(type="text", chunk="hi"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={"anthropic": {"signature": "sig-omitted"}},
+            ),
+            llm.parts.TextPart(text="hi"),
+        ]
+        assert "sig-omitted" not in response.text()
+
+    def test_metadata_only_reasoning_part_is_not_hoisted(self, mock_model):
+        # Unlike redacted=True markers, metadata-only reasoning keeps
+        # its position: Anthropic requires thinking/redacted_thinking
+        # blocks replayed in their original order.
+        events = [
+            llm.parts.StreamEvent(type="text", chunk="hello", part_index=0),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=1,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "opaque"}
+                },
+            ),
+            llm.parts.StreamEvent(type="text", chunk="bye", part_index=2),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.TextPart(text="hello"),
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "opaque"}
+                },
+            ),
+            llm.parts.TextPart(text="bye"),
+        ]
+
+    def test_adjacent_reasoning_blocks_with_explicit_index_stay_distinct(
+        self, mock_model
+    ):
+        # Explicit part_index keeps adjacent provider blocks separate:
+        # a visible signed thinking block followed by a redacted one
+        # must not merge (each keeps its own metadata and boundaries).
+        events = [
+            llm.parts.StreamEvent(type="reasoning", chunk="visible ", part_index=0),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "sig-1"}},
+            ),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=1,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "blob"}
+                },
+            ),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=2),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.ReasoningPart(
+                text="visible ",
+                redacted=False,
+                provider_metadata={"anthropic": {"signature": "sig-1"}},
+            ),
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "blob"}
+                },
+            ),
+            llm.parts.TextPart(text="answer"),
+        ]
+
+    def test_empty_reasoning_group_without_metadata_is_dropped(self, mock_model):
+        # No text, no redacted marker, no metadata: nothing worth
+        # preserving, so no Part is built.
+        events = [
+            llm.parts.StreamEvent(type="reasoning", chunk=""),
+            llm.parts.StreamEvent(type="text", chunk="hi"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        assert response.messages()[0].parts == [llm.parts.TextPart(text="hi")]
+
 
 class TestPartIndexAutoAllocation:
     """When part_index is None (the default), the framework groups

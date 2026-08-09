@@ -209,6 +209,31 @@ class TestChainRoundTrip:
         ]
         assert round_trip(store, messages) == messages
 
+    def test_metadata_only_opaque_reasoning_round_trips(self, store):
+        # Anthropic omitted thinking (empty text + signature) and
+        # redacted_thinking (opaque data) as adjacent, distinct parts:
+        # exact metadata and ordering must survive the database so the
+        # blocks can be replayed byte-for-byte on continuation.
+        messages = [
+            llm.user("Think"),
+            llm.assistant(
+                ReasoningPart(
+                    text="",
+                    provider_metadata={
+                        "anthropic": {"type": "thinking", "signature": "sig-a"}
+                    },
+                ),
+                ReasoningPart(
+                    text="",
+                    provider_metadata={
+                        "anthropic": {"type": "redacted_thinking", "data": "blob-b"}
+                    },
+                ),
+                ToolCallPart(name="search", arguments={"q": "x"}, tool_call_id="tc1"),
+            ),
+        ]
+        assert round_trip(store, messages) == messages
+
     def test_interleaved_parts_keep_their_order(self, store):
         # The ordering the old schema could not express: reasoning, a
         # tool call, more reasoning, then text, all in one message.

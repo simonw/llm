@@ -332,6 +332,13 @@ class StreamEvent:
     `signature`, Gemini `thoughtSignature`, OpenAI `encrypted_content`)
     that must be echoed back on the next request; the framework merges
     it onto the finalized Part (last non-None wins per top-level key).
+    A reasoning event with an empty `chunk` and `redacted=False` still
+    assembles into a ReasoningPart when it carries provider_metadata —
+    the metadata-only form used for opaque reasoning state such as an
+    Anthropic omitted-thinking signature or `redacted_thinking` data.
+    Unlike `redacted=True` markers, metadata-only reasoning Parts are
+    not hoisted: they keep their emitted position, because providers
+    require opaque blocks replayed in their original order.
 
     `message_index` is for providers that emit multiple assistant
     messages in a single response (OpenAI Responses server-side tool
