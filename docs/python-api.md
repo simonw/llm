@@ -1012,6 +1012,9 @@ llm.set_default_model("claude-5-sonnet")
 
 This returns the currently configured default model, or `gpt-5.6-luna` if no default has been set.
 
+If the `LLM_DEFAULT_MODEL` environment variable is set, its value is returned
+instead of the configured default.
+
 ```python
 import llm
 
