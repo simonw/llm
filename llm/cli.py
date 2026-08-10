@@ -2929,6 +2929,8 @@ def aliases_list(json_):
             json.dumps({key: value for key, value, type_ in to_output}, indent=4)
         )
         return
+    if not to_output:
+        return
     max_alias_length = max(len(a) for a, _, _ in to_output)
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}{type_}"
     for alias, model_id, type_ in to_output:
