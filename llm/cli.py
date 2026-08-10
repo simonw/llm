@@ -4466,6 +4466,9 @@ def compare(
                 fragments=resolved_fragments,
                 **validated_options
             )
+            # Force execution here to catch any model errors early
+            # This ensures ModelError and other exceptions are caught before display
+            _ = response.text()
 
             return{
                 "model_id": model_id,
