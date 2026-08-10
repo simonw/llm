@@ -136,6 +136,7 @@ schemas
 templates
 fragments
 aliases
+compare
 embeddings/index
 plugins/index
 python-api

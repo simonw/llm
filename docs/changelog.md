@@ -2,7 +2,12 @@
 
 (unreleased)=
 ## Unreleased
-
+### New features
+- Added llm compare command to compare responses from multiple LLM models side-by-side.
+  - Use llm compare -m model1 -m model2 "your prompt" to compare responses from two or more models.
+  - Use --batch to compare multiple prompts in a single run.
+  - Use --output to export comparison results as JSON.
+  - Comparison output includes timing and token usage statistics for each model.
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
 
 (v0_32)=

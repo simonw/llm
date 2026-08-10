@@ -397,6 +397,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
     * [llm embed-models –help](https://llm.datasette.io/en/stable/help.html#llm-embed-models-help)
     * [llm collections –help](https://llm.datasette.io/en/stable/help.html#llm-collections-help)
     * [llm openai –help](https://llm.datasette.io/en/stable/help.html#llm-openai-help)
+    * [llm compare –help](https://llm.datasette.io/en/stable/help.html#llm-compare-help)
 * [Contributing](https://llm.datasette.io/en/stable/contributing.html)
   * [Updating recorded HTTP API interactions and associated snapshots](https://llm.datasette.io/en/stable/contributing.html#updating-recorded-http-api-interactions-and-associated-snapshots)
   * [Debugging tricks](https://llm.datasette.io/en/stable/contributing.html#debugging-tricks)

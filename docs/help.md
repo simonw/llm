@@ -72,6 +72,7 @@ Commands:
   aliases       Manage model aliases
   chat          Hold an ongoing chat with a model.
   collections   View and manage collections of embeddings
+  compare       Run the same prompt against multiple models and compare...
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once in the...
@@ -1132,5 +1133,24 @@ Options:
   --json      Output as JSON
   --key TEXT  OpenAI API key
   -h, --help  Show this message and exit.
+```
+
+(help-compare)=
+### llm compare --help
+```
+Usage: llm compare [OPTIONS] [PROMPT]
+
+  Run the same prompt against multiple models and compare their responses.
+
+Options:
+  -m, --model TEXT             [required]
+  -s, --system TEXT            System prompt to use
+  -o, --option <TEXT TEXT>...  key/value options for the models
+  -a, --attachment ATTACHMENT  Attachment path or URL or -
+  -f, --fragment TEXT          Fragment (alias, URL, hash or file path) to add
+                               to the prompt
+  --json                       Output comparison results as JSON
+  -d, --database FILE          Path to log database
+  -h, --help                   Show this message and exit.
 ```
 <!-- [[[end]]] -->
