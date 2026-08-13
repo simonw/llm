@@ -612,8 +612,12 @@ def test_logs_schema_data_ids(schema_log_path):
         "name",
         "conversation_id__",
     }
+    assert last_row["response_id_"] == str(ulid).lower()
+    assert last_row["conversation_id__"] == "abc123"
     for row in rows:
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
+        assert row["conversation_id"] in {"abc123", "abc456"}
+        assert row["conversation_id"] != row["response_id"]
 
 
 _expected_yaml_re = r"""- id: [a-f0-9]{32}
