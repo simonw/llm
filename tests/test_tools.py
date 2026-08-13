@@ -1222,3 +1222,46 @@ async def test_async_tool_without_implementation_produces_error_result():
     assert [(r.name, r.output) for r in second.prompt.tool_results] == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]
+
+
+def test_after_call_fires_for_missing_tool():
+    after_calls = []
+
+    def real_tool() -> str:
+        return "ok"
+
+    def after(tool, tool_call, tool_result):
+        after_calls.append((tool.name if tool else None, tool_call.name, tool_result.output))
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        after_call=after,
+    )
+    chain_response.text()
+
+    assert (None, "missing_tool", 'Error: tool "missing_tool" does not exist') in after_calls
+    assert ("real_tool", "real_tool", "ok") in after_calls
+
+
+@pytest.mark.asyncio
+async def test_async_after_call_fires_for_missing_tool():
+    after_calls = []
+
+    async def real_tool() -> str:
+        return "ok"
+
+    async def after(tool, tool_call, tool_result):
+        after_calls.append((tool.name if tool else None, tool_call.name, tool_result.output))
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        after_call=after,
+    )
+    await chain_response.text()
+
+    assert (None, "missing_tool", 'Error: tool "missing_tool" does not exist') in after_calls
+    assert ("real_tool", "real_tool", "ok") in after_calls
