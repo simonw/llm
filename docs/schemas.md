@@ -472,7 +472,7 @@ You can include type information by adding a type indicator after the property n
 
     name, bio, age int
 
-Supported types are `int` for integers, `float` for floating point numbers, `str` for strings (the default) and `bool` for true/false booleans.
+Supported types are `int` or `integer` for integers, `float` or `number` for floating point numbers, `str` or `string` for strings (the default) and `bool` or `boolean` for true/false booleans.
 
 To include a description of the field to act as a hint to the model, add one after a colon:
 

@@ -365,9 +365,13 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
     # Type mapping dictionary
     type_mapping = {
         "int": "integer",
+        "integer": "integer",
         "float": "number",
+        "number": "number",
         "bool": "boolean",
+        "boolean": "boolean",
         "str": "string",
+        "string": "string",
     }
 
     # Initialize the schema dictionary with required elements

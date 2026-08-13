@@ -226,6 +226,20 @@ def test_extract_fenced_code_block(input, last, expected):
                 "required": ["name", "age"],
             },
         ),
+        # Test case 9: Full JSON Schema type names
+        (
+            "count integer, score number, active boolean, name string",
+            {
+                "type": "object",
+                "properties": {
+                    "count": {"type": "integer"},
+                    "score": {"type": "number"},
+                    "active": {"type": "boolean"},
+                    "name": {"type": "string"},
+                },
+                "required": ["count", "score", "active", "name"],
+            },
+        ),
     ],
 )
 def test_schema_dsl(schema, expected):
