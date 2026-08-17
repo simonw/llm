@@ -226,6 +226,32 @@ def test_extract_fenced_code_block(input, last, expected):
                 "required": ["name", "age"],
             },
         ),
+        # Test case 9: Repeated property name is listed once in required
+        (
+            "name, age int, name",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+                "required": ["name", "age"],
+            },
+        ),
+        # Test case 10: Repeated name keeps the last description
+        (
+            """
+        name: first name
+        name: last name
+        """,
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "last name"},
+                },
+                "required": ["name"],
+            },
+        ),
     ],
 )
 def test_schema_dsl(schema, expected):

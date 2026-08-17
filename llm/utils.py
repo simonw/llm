@@ -413,8 +413,9 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         if description:
             json_schema["properties"][field_name]["description"] = description
 
-        # Add field to required list
-        json_schema["required"].append(field_name)
+        # Add field to required list, which repeating a name must not duplicate
+        if field_name not in json_schema["required"]:
+            json_schema["required"].append(field_name)
 
     if multi:
         return multi_schema(json_schema)
