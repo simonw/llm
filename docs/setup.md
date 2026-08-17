@@ -180,6 +180,16 @@ llm models default
 ```
 Any of the supported aliases for a model can be passed to this command.
 
+You can override the configured default using the `LLM_DEFAULT_MODEL`
+environment variable:
+
+```bash
+export LLM_DEFAULT_MODEL=gpt-4.1
+```
+
+This takes precedence over the model saved by `llm models default`. An explicit
+`-m/--model` option still takes precedence for an individual command.
+
 ### Setting a custom directory location
 
 This tool stores various files - prompt templates, stored keys, preferences, a database of logs - in a directory on your computer.

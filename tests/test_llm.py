@@ -615,6 +615,18 @@ def test_model_defaults(tmpdir, monkeypatch):
     assert llm.get_model().model_id == "gpt-4o"
 
 
+def test_default_model_environment_variable_takes_precedence(tmpdir, monkeypatch):
+    user_dir = str(tmpdir / "u")
+    monkeypatch.setenv("LLM_USER_PATH", user_dir)
+    llm.set_default_model("gpt-4o")
+
+    monkeypatch.setenv("LLM_DEFAULT_MODEL", "gpt-4.1")
+
+    assert llm.get_default_model() == "gpt-4.1"
+    assert llm.get_model().model_id == "gpt-4.1"
+    assert llm.get_default_embedding_model() is None
+
+
 def test_get_models():
     models = llm.get_models()
     assert all(isinstance(model, (llm.Model, llm.KeyModel)) for model in models)

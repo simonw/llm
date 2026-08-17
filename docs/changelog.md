@@ -4,6 +4,7 @@
 ## Unreleased
 
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
+- The default model can now be overridden using the `LLM_DEFAULT_MODEL` environment variable. This takes precedence over the model saved by `llm models default`.
 
 (v0_32)=
 ## 0.32 (2026-08-04)

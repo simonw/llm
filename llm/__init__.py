@@ -483,6 +483,10 @@ def cosine_similarity(a, b):
 
 
 def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
+    if filename == "default_model.txt":
+        environment_default = os.environ.get("LLM_DEFAULT_MODEL")
+        if environment_default is not None:
+            return environment_default
     path = user_dir() / filename
     if path.exists():
         return path.read_text().strip()
