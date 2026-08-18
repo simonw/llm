@@ -17,6 +17,8 @@ llm embed -c 'This is some content' -m 3-small
 ```
 `-m 3-small` specifies the OpenAI `text-embedding-3-small` model. You will need to have set an OpenAI API key using `llm keys set openai` for this to work.
 
+You can pass an API key directly using the `--key` option instead of relying on a stored or environment variable key. This option is also available for `llm embed-multi`.
+
 You can install plugins to access other models. The [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) plugin can be used to run models on your own laptop, such as the [MiniLM-L6](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) model:
 
 ```bash

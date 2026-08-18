@@ -877,6 +877,7 @@ Usage: llm embed [OPTIONS] [COLLECTION] [ID]
 Options:
   -i, --input PATH                File to embed
   -m, --model TEXT                Embedding model to use
+  --key TEXT                      API key to use
   --store                         Store the text itself in the database
   -d, --database FILE
   -c, --content TEXT              Content to embed
@@ -935,6 +936,7 @@ Options:
   --batch-size INTEGER         Batch size to use when running embeddings
   --prefix TEXT                Prefix to add to the IDs
   -m, --model TEXT             Embedding model to use
+  --key TEXT                   API key to use
   --prepend TEXT               Prepend this string to all content before
                                embedding
   --store                      Store the text itself in the database
