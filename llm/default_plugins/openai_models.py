@@ -1149,6 +1149,14 @@ class Chat(_Shared, KeyModel):
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
                     yield StreamEvent(type="text", chunk=content)
+                # Capture reasoning_content from providers that support it
+                # (e.g. llama.cpp, DeepSeek)
+                try:
+                    reasoning_content = chunk.choices[0].delta.reasoning_content
+                except (IndexError, AttributeError):
+                    reasoning_content = None
+                if reasoning_content:
+                    yield StreamEvent(type="reasoning", chunk=reasoning_content)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
@@ -1191,6 +1199,11 @@ class Chat(_Shared, KeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
+            reasoning_content = getattr(
+                completion.choices[0].message, "reasoning_content", None
+            )
+            if reasoning_content:
+                yield StreamEvent(type="reasoning", chunk=reasoning_content)
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
@@ -1265,6 +1278,12 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     content = None
                 if content:
                     yield StreamEvent(type="text", chunk=content)
+                try:
+                    reasoning_content = chunk.choices[0].delta.reasoning_content
+                except (IndexError, AttributeError):
+                    reasoning_content = None
+                if reasoning_content:
+                    yield StreamEvent(type="reasoning", chunk=reasoning_content)
             if tool_calls:
                 for value in tool_calls.values():
                     response.add_tool_call(
@@ -1307,6 +1326,11 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
+            reasoning_content = getattr(
+                completion.choices[0].message, "reasoning_content", None
+            )
+            if reasoning_content:
+                yield StreamEvent(type="reasoning", chunk=reasoning_content)
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
