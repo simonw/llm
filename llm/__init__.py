@@ -115,7 +115,10 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
         for alias, model_id in configured_aliases.items():
-            extra_model_aliases.setdefault(model_id, []).append(alias)
+            if isinstance(model_id, dict):
+                model_id = model_id.get("model", model_id)
+            if isinstance(model_id, str):
+                extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, async_model=None, aliases=None):
         alias_list = list(aliases or [])
@@ -240,7 +243,10 @@ def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
         for alias, model_id in configured_aliases.items():
-            extra_model_aliases.setdefault(model_id, []).append(alias)
+            if isinstance(model_id, dict):
+                model_id = model_id.get("model", model_id)
+            if isinstance(model_id, str):
+                extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, aliases=None):
         alias_list = list(aliases or [])
