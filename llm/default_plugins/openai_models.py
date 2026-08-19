@@ -327,7 +327,7 @@ def register_models(register):
         Supported fields: model_id, model_name, aliases, api_base, api_type,
         api_version, api_engine, headers, reasoning, can_stream,
         supports_schema, supports_tools, vision, audio, video, pdf,
-        completion, responses, api_key_name, defaults.
+        completion, responses, api_key_name, defaults, providerOptions.
 
         ``api_type`` selects the client class family:
           - ``chat`` (default): OpenAI chat/completions (Chat/AsyncChat)
@@ -371,6 +371,7 @@ def register_models(register):
             headers = extra_model.get("headers")
             reasoning = extra_model.get("reasoning")
             defaults = extra_model.get("defaults")
+            provider_options = extra_model.get("providerOptions")
             kwargs = {}
             if extra_model.get("can_stream") is False:
                 kwargs["can_stream"] = False
@@ -460,31 +461,44 @@ def register_models(register):
                 chat_model.needs_key = extra_model["api_key_name"]
                 if async_model:
                     async_model.needs_key = extra_model["api_key_name"]
-            if defaults:
-                # Store model default options and patch build_kwargs so that
-                # defaults are injected when the prompt does not set them.
-                chat_model.default_options = dict(defaults)
+            if defaults or provider_options:
+                # Store model default options / providerOptions and patch
+                # build_kwargs so they are injected when the prompt does not
+                # set them. providerOptions (e.g. Vercel AI Gateway
+                # ``gateway: {order, only, sort}``) is passed through into
+                # the request body under its camelCase key.
+                chat_model.default_options = dict(defaults or {})
+                chat_model.provider_options = dict(provider_options or {})
                 if async_model:
-                    async_model.default_options = dict(defaults)
+                    async_model.default_options = dict(defaults or {})
+                    async_model.provider_options = dict(provider_options or {})
 
-                def _make_build_kwargs(original, model_defaults):
+                def _make_build_kwargs(original, model_defaults, provider_opts):
                     def build_kwargs_with_defaults(self, prompt, stream):
                         kwargs = original(prompt, stream)
                         for key, value in model_defaults.items():
                             if key not in kwargs:
                                 kwargs[key] = value
+                        if provider_opts and "providerOptions" not in kwargs:
+                            kwargs["providerOptions"] = provider_opts
                         return kwargs
 
                     return build_kwargs_with_defaults
 
                 chat_model.build_kwargs = types.MethodType(
-                    _make_build_kwargs(chat_model.build_kwargs, chat_model.default_options),
+                    _make_build_kwargs(
+                        chat_model.build_kwargs,
+                        chat_model.default_options,
+                        chat_model.provider_options,
+                    ),
                     chat_model,
                 )
                 if async_model:
                     async_model.build_kwargs = types.MethodType(
                         _make_build_kwargs(
-                            async_model.build_kwargs, async_model.default_options
+                            async_model.build_kwargs,
+                            async_model.default_options,
+                            async_model.provider_options,
                         ),
                         async_model,
                     )
