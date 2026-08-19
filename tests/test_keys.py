@@ -66,10 +66,10 @@ def test_keys_list(monkeypatch, tmpdir, args):
     assert result2.output.strip() == "openai"
 
 
-@pytest.mark.httpx_mock(
-    assert_all_requests_were_expected=False, can_send_already_matched_responses=True
-)
 def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
+    mocked_openai_chat.reuse_response(
+        method="POST", url="https://api.openai.com/v1/chat/completions"
+    )
     user_dir = tmpdir / "user-dir"
     pathlib.Path(user_dir).mkdir()
     keys_path = user_dir / "keys.json"

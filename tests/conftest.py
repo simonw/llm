@@ -2,6 +2,7 @@ import importlib.metadata
 import json
 import sqlite3
 
+import httpx
 import llm_echo
 import pytest
 import sqlite_utils
@@ -12,10 +13,51 @@ import llm
 from llm.plugins import pm
 
 
+class OpenAIHTTPX2Mock:
+    """Small pytest-httpx-compatible facade over pytest-httpx2's router."""
+
+    def __init__(self, router):
+        self.router = router
+        self._responses = {}
+
+    def add_response(
+        self,
+        *,
+        method="GET",
+        url,
+        status_code=200,
+        is_reusable=False,
+        **kwargs,
+    ):
+        response = httpx.Response(status_code, **kwargs)
+        key = (method, url)
+        route = self.router.request(method, url)
+        responses = self._responses.setdefault(key, [])
+        responses.append(response)
+        if is_reusable:
+            route.mock(return_value=response)
+        else:
+            route.mock(side_effect=list(responses))
+
+    def get_requests(self):
+        return [call.request for call in self.router.calls]
+
+    def reuse_response(self, *, method, url):
+        response = self._responses[(method, url)][-1]
+        self.router.request(method, url).mock(return_value=response)
+
+    def reset(self):
+        self.router.reset()
+
+
 def pytest_configure(config):
     import sys
 
     sys._called_from_test = True
+    config.addinivalue_line(
+        "markers",
+        "httpx2(*, assert_all_called=False): configure the HTTPX2 mock router",
+    )
 
 
 def pytest_report_header(config):
@@ -27,6 +69,11 @@ def pytest_report_header(config):
         f"SQLite: {version}",
         f"sqlite-utils: {sqlite_utils_version}",
     ]
+
+
+@pytest.fixture
+def openai_httpx2_mock(httpx2_mock):
+    return OpenAIHTTPX2Mock(httpx2_mock)
 
 
 @pytest.fixture
@@ -248,8 +295,8 @@ def register_echo_model():
 
 
 @pytest.fixture
-def mocked_openai_chat(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -259,18 +306,18 @@ def mocked_openai_chat(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 @pytest.fixture
-def mock_openai_responses(httpx_mock):
+def mock_openai_responses(openai_httpx2_mock):
     def add_response(
         text="Bob, Alice, Eve",
         model="gpt-5.6-luna",
         response_id="resp_test",
         message_id="msg_test",
     ):
-        httpx_mock.add_response(
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/responses",
             json={
@@ -307,14 +354,14 @@ def mock_openai_responses(httpx_mock):
 
 
 @pytest.fixture
-def mocked_openai_responses(httpx_mock, mock_openai_responses):
+def mocked_openai_responses(openai_httpx2_mock, mock_openai_responses):
     mock_openai_responses()
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 @pytest.fixture
-def mocked_openai_chat_returning_fenced_code(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat_returning_fenced_code(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -330,7 +377,7 @@ def mocked_openai_chat_returning_fenced_code(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 def stream_events():
@@ -357,8 +404,8 @@ def stream_events():
 
 
 @pytest.fixture
-def mocked_openai_chat_stream(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat_stream(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         stream=IteratorStream(stream_events()),
@@ -367,8 +414,8 @@ def mocked_openai_chat_stream(httpx_mock):
 
 
 @pytest.fixture
-def mocked_openai_completion(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_completion(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         json={
@@ -389,7 +436,7 @@ def mocked_openai_completion(httpx_mock):
         headers={"Content-Type": "application/json"},
         is_reusable=True,
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 def stream_completion_events():
@@ -464,19 +511,19 @@ def stream_completion_events():
 
 
 @pytest.fixture
-def mocked_openai_completion_logprobs_stream(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_completion_logprobs_stream(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         stream=IteratorStream(stream_completion_events()),
         headers={"Content-Type": "text/event-stream"},
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 @pytest.fixture
-def mocked_openai_completion_logprobs(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_completion_logprobs(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         json={
@@ -505,12 +552,12 @@ def mocked_openai_completion_logprobs(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 @pytest.fixture
-def mocked_localai(httpx_mock):
-    httpx_mock.add_response(
+def mocked_localai(openai_httpx2_mock):
+    openai_httpx2_mock.add_response(
         method="POST",
         url="http://localai.localhost/chat/completions",
         json={
@@ -520,7 +567,7 @@ def mocked_localai(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url="http://localai.localhost/completions",
         json={
@@ -530,7 +577,7 @@ def mocked_localai(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return openai_httpx2_mock
 
 
 @pytest.fixture

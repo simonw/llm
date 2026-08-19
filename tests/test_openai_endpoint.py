@@ -10,8 +10,8 @@ from llm.cli import cli
 from llm.migrations import migrate
 
 
-def _add_chat_response(httpx_mock, url, text):
-    httpx_mock.add_response(
+def _add_chat_response(openai_httpx2_mock, url, text):
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{url}/chat/completions",
         json={
@@ -36,8 +36,8 @@ def _add_chat_response(httpx_mock, url, text):
     )
 
 
-def _add_chat_tool_call_response(httpx_mock, url, name, arguments):
-    httpx_mock.add_response(
+def _add_chat_tool_call_response(openai_httpx2_mock, url, name, arguments):
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{url}/chat/completions",
         json={
@@ -158,10 +158,10 @@ def _chat_stream_events():
 
 
 def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
-    httpx_mock, user_path, monkeypatch
+    openai_httpx2_mock, user_path, monkeypatch
 ):
     base_url = "https://example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "Hello from the endpoint")
+    _add_chat_response(openai_httpx2_mock, base_url, "Hello from the endpoint")
     monkeypatch.setenv("OPENAI_API_KEY", "real-default-openai-key")
 
     result = CliRunner().invoke(
@@ -188,7 +188,7 @@ def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
     assert result.output == "Hello from the endpoint\n"
     assert not (user_path / "logs.db").exists()
 
-    request = httpx_mock.get_requests()[0]
+    request = openai_httpx2_mock.get_requests()[0]
     assert request.headers["Authorization"] == "Bearer DUMMY_KEY"
     assert request.headers["X-Test"] == "one"
     assert json.loads(request.content) == {
@@ -199,9 +199,9 @@ def test_endpoint_chat_completions_does_not_log_or_leak_default_key(
     }
 
 
-def test_endpoint_chat_completions_attachment(httpx_mock, user_path, tmp_path):
+def test_endpoint_chat_completions_attachment(openai_httpx2_mock, user_path, tmp_path):
     base_url = "https://attachments.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "A test image")
+    _add_chat_response(openai_httpx2_mock, base_url, "A test image")
     image_bytes = b"\x89PNG\r\n\x1a\nendpoint attachment"
     image_path = tmp_path / "image.png"
     image_path.write_bytes(image_bytes)
@@ -225,7 +225,7 @@ def test_endpoint_chat_completions_attachment(httpx_mock, user_path, tmp_path):
     assert result.exit_code == 0
     assert result.output == "A test image\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content)["messages"] == [
+    assert json.loads(openai_httpx2_mock.get_requests()[0].content)["messages"] == [
         {
             "role": "user",
             "content": [
@@ -243,9 +243,9 @@ def test_endpoint_chat_completions_attachment(httpx_mock, user_path, tmp_path):
     ]
 
 
-def test_endpoint_template(httpx_mock, user_path, templates_path):
+def test_endpoint_template(openai_httpx2_mock, user_path, templates_path):
     base_url = "https://templates.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "Template response")
+    _add_chat_response(openai_httpx2_mock, base_url, "Template response")
     (templates_path / "endpoint.yaml").write_text(
         """
 model: template-model
@@ -289,7 +289,7 @@ attachment_types:
     assert result.exit_code == 0
     assert result.output == "Template response\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content) == {
+    assert json.loads(openai_httpx2_mock.get_requests()[0].content) == {
         "messages": [
             {"role": "system", "content": "You are concise"},
             {
@@ -320,10 +320,10 @@ attachment_types:
 
 
 def test_endpoint_template_schema_object_used_when_no_cli_schema(
-    httpx_mock, user_path, templates_path
+    openai_httpx2_mock, user_path, templates_path
 ):
     base_url = "https://templates2.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "Template response 2")
+    _add_chat_response(openai_httpx2_mock, base_url, "Template response 2")
     (templates_path / "schemaonly.yaml").write_text(
         """
 model: schema-model
@@ -353,7 +353,7 @@ schema_object:
     )
 
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["response_format"] == {
         "type": "json_schema",
         "json_schema": {
@@ -367,9 +367,9 @@ schema_object:
     }
 
 
-def test_endpoint_schema(httpx_mock, user_path):
+def test_endpoint_schema(openai_httpx2_mock, user_path):
     base_url = "https://schema.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, '{"name": "Cleo", "age": 10}')
+    _add_chat_response(openai_httpx2_mock, base_url, '{"name": "Cleo", "age": 10}')
 
     result = CliRunner().invoke(
         cli,
@@ -389,7 +389,7 @@ def test_endpoint_schema(httpx_mock, user_path):
 
     assert result.exit_code == 0
     assert not (user_path / "logs.db").exists()
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["response_format"] == {
         "type": "json_schema",
         "json_schema": {
@@ -406,9 +406,11 @@ def test_endpoint_schema(httpx_mock, user_path):
     }
 
 
-def test_endpoint_schema_by_id_from_existing_logs_database(httpx_mock, user_path):
+def test_endpoint_schema_by_id_from_existing_logs_database(
+    openai_httpx2_mock, user_path
+):
     base_url = "https://schema-id.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, '{"name": "Cleo"}')
+    _add_chat_response(openai_httpx2_mock, base_url, '{"name": "Cleo"}')
     schema = {
         "type": "object",
         "properties": {"name": {"type": "string"}},
@@ -436,7 +438,7 @@ def test_endpoint_schema_by_id_from_existing_logs_database(httpx_mock, user_path
     )
 
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["response_format"]["json_schema"]["schema"] == schema
     assert db["responses"].count == 0
 
@@ -464,10 +466,10 @@ def test_endpoint_invalid_schema_id_does_not_create_logs_database(user_path):
 
 
 def test_endpoint_static_template_runs_once_on_terminal(
-    httpx_mock, user_path, templates_path, monkeypatch
+    openai_httpx2_mock, user_path, templates_path, monkeypatch
 ):
     base_url = "https://terminal-template.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "Five pelicans")
+    _add_chat_response(openai_httpx2_mock, base_url, "Five pelicans")
     (templates_path / "pelican.yaml").write_text(
         "prompt: List five pelican names\n", "utf-8"
     )
@@ -491,15 +493,17 @@ def test_endpoint_static_template_runs_once_on_terminal(
     assert result.exit_code == 0
     assert result.output == "Five pelicans\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content)["messages"] == [
+    assert json.loads(openai_httpx2_mock.get_requests()[0].content)["messages"] == [
         {"role": "user", "content": "List five pelican names"}
     ]
 
 
-def test_endpoint_tools_and_functions(httpx_mock, user_path):
+def test_endpoint_tools_and_functions(openai_httpx2_mock, user_path):
     base_url = "https://tools.example.test/v1"
-    _add_chat_tool_call_response(httpx_mock, base_url, "multiply", {"a": 6, "b": 7})
-    _add_chat_response(httpx_mock, base_url, "The answer is 42")
+    _add_chat_tool_call_response(
+        openai_httpx2_mock, base_url, "multiply", {"a": 6, "b": 7}
+    )
+    _add_chat_response(openai_httpx2_mock, base_url, "The answer is 42")
 
     result = CliRunner().invoke(
         cli,
@@ -527,7 +531,9 @@ def test_endpoint_tools_and_functions(httpx_mock, user_path):
     assert result.output == "The answer is 42\n"
     assert not (user_path / "logs.db").exists()
 
-    requests = [json.loads(request.content) for request in httpx_mock.get_requests()]
+    requests = [
+        json.loads(request.content) for request in openai_httpx2_mock.get_requests()
+    ]
     assert len(requests) == 2
     assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {
         "llm_version",
@@ -557,9 +563,9 @@ def test_endpoint_tools_and_functions(httpx_mock, user_path):
     ]
 
 
-def test_endpoint_streams_by_default(httpx_mock, user_path):
+def test_endpoint_streams_by_default(openai_httpx2_mock, user_path):
     base_url = "https://stream.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/chat/completions",
         stream=IteratorStream(_chat_stream_events()),
@@ -582,14 +588,14 @@ def test_endpoint_streams_by_default(httpx_mock, user_path):
     assert result.exit_code == 0
     assert result.output == "Hello streamed\n"
     assert not (user_path / "logs.db").exists()
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["stream"] is True
     assert request_body["stream_options"] == {"include_usage": True}
 
 
-def test_endpoint_uses_explicit_key(httpx_mock, user_path):
+def test_endpoint_uses_explicit_key(openai_httpx2_mock, user_path):
     base_url = "https://example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "Authenticated")
+    _add_chat_response(openai_httpx2_mock, base_url, "Authenticated")
 
     result = CliRunner().invoke(
         cli,
@@ -608,18 +614,18 @@ def test_endpoint_uses_explicit_key(httpx_mock, user_path):
     )
 
     assert result.exit_code == 0
-    assert httpx_mock.get_requests()[0].headers["Authorization"] == (
+    assert openai_httpx2_mock.get_requests()[0].headers["Authorization"] == (
         "Bearer endpoint-key"
     )
     assert not (user_path / "logs.db").exists()
 
 
 def test_endpoint_lists_models_without_model_or_logging(
-    httpx_mock, user_path, monkeypatch
+    openai_httpx2_mock, user_path, monkeypatch
 ):
     base_url = "https://models.example.test/v1"
     monkeypatch.setenv("OPENAI_API_KEY", "real-default-openai-key")
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="GET",
         url=f"{base_url}/models",
         json={
@@ -659,14 +665,16 @@ def test_endpoint_lists_models_without_model_or_logging(
     assert result.exit_code == 0
     assert result.output == "first-model\nsecond-model\n"
     assert not (user_path / "logs.db").exists()
-    request = httpx_mock.get_requests()[0]
+    request = openai_httpx2_mock.get_requests()[0]
     assert request.headers["Authorization"] == "Bearer DUMMY_KEY"
     assert request.headers["X-Test"] == "one"
 
 
-def test_endpoint_models_surfaces_error_from_successful_response(httpx_mock, user_path):
+def test_endpoint_models_surfaces_error_from_successful_response(
+    openai_httpx2_mock, user_path
+):
     base_url = "https://models-error.example.test"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="GET",
         url=f"{base_url}/models",
         json={"error": "Unexpected endpoint or method. (GET /models)"},
@@ -684,9 +692,9 @@ def test_endpoint_models_surfaces_error_from_successful_response(httpx_mock, use
     assert not (user_path / "logs.db").exists()
 
 
-def test_endpoint_responses_api(httpx_mock, user_path):
+def test_endpoint_responses_api(openai_httpx2_mock, user_path):
     base_url = "https://responses.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_payload("Hello from Responses"),
@@ -717,7 +725,7 @@ def test_endpoint_responses_api(httpx_mock, user_path):
     assert result.exit_code == 0
     assert result.output == "Hello from Responses\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content) == {
+    assert json.loads(openai_httpx2_mock.get_requests()[0].content) == {
         "input": [{"role": "user", "content": "Hello"}],
         "include": ["reasoning.encrypted_content"],
         "model": "test-model",
@@ -730,10 +738,10 @@ def test_endpoint_responses_api(httpx_mock, user_path):
 
 @pytest.mark.parametrize("reasoning_summary", ("auto", "concise", "detailed"))
 def test_endpoint_responses_reasoning_summary_option(
-    httpx_mock, user_path, reasoning_summary
+    openai_httpx2_mock, user_path, reasoning_summary
 ):
     base_url = "https://responses-summary.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_payload("Hello from Responses"),
@@ -761,7 +769,7 @@ def test_endpoint_responses_reasoning_summary_option(
     assert result.exit_code == 0
     assert result.output == "Hello from Responses\n"
     assert not (user_path / "logs.db").exists()
-    assert json.loads(httpx_mock.get_requests()[0].content) == {
+    assert json.loads(openai_httpx2_mock.get_requests()[0].content) == {
         "input": [{"role": "user", "content": "Hello"}],
         "include": ["reasoning.encrypted_content"],
         "model": "test-model",
@@ -772,7 +780,7 @@ def test_endpoint_responses_reasoning_summary_option(
 
 
 def test_endpoint_responses_reasoning_summary_option_rejects_invalid_value(
-    httpx_mock, user_path
+    openai_httpx2_mock, user_path
 ):
     result = CliRunner().invoke(
         cli,
@@ -797,13 +805,13 @@ def test_endpoint_responses_reasoning_summary_option_rejects_invalid_value(
         "Error: reasoning_summary\n"
         "  Input should be 'auto', 'concise' or 'detailed'\n"
     )
-    assert not httpx_mock.get_requests()
+    assert not openai_httpx2_mock.get_requests()
     assert not (user_path / "logs.db").exists()
 
 
-def test_endpoint_responses_api_attachment(httpx_mock, user_path):
+def test_endpoint_responses_api_attachment(openai_httpx2_mock, user_path):
     base_url = "https://responses-attachments.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_payload("A remote image"),
@@ -834,7 +842,7 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
     assert result.exit_code == 0
     assert result.output == "A remote image\n"
     assert not (user_path / "logs.db").exists()
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert "include" not in request_body
     assert "reasoning" not in request_body
     assert request_body["input"] == [
@@ -852,9 +860,9 @@ def test_endpoint_responses_api_attachment(httpx_mock, user_path):
     ]
 
 
-def test_endpoint_responses_api_schema_multi(httpx_mock, user_path):
+def test_endpoint_responses_api_schema_multi(openai_httpx2_mock, user_path):
     base_url = "https://responses-schema.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_payload('{"items": [{"name": "Cleo", "age": 10}]}'),
@@ -880,7 +888,7 @@ def test_endpoint_responses_api_schema_multi(httpx_mock, user_path):
 
     assert result.exit_code == 0
     assert not (user_path / "logs.db").exists()
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["text"]["format"] == {
         "type": "json_schema",
         "name": "output",
@@ -905,15 +913,15 @@ def test_endpoint_responses_api_schema_multi(httpx_mock, user_path):
     }
 
 
-def test_endpoint_responses_api_tools(httpx_mock, user_path):
+def test_endpoint_responses_api_tools(openai_httpx2_mock, user_path):
     base_url = "https://responses-tools.example.test/v1"
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_tool_call_payload("multiply", {"a": 6, "b": 7}),
         headers={"Content-Type": "application/json"},
     )
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=_responses_payload("The answer is 42"),
@@ -945,7 +953,9 @@ def test_endpoint_responses_api_tools(httpx_mock, user_path):
     assert result.output == "The answer is 42\n"
     assert not (user_path / "logs.db").exists()
 
-    requests = [json.loads(request.content) for request in httpx_mock.get_requests()]
+    requests = [
+        json.loads(request.content) for request in openai_httpx2_mock.get_requests()
+    ]
     assert requests[0]["tools"][0]["name"] == "multiply"
     assert requests[1]["input"] == [
         {"role": "user", "content": "What is 6 * 7?"},
@@ -963,7 +973,7 @@ def test_endpoint_responses_api_tools(httpx_mock, user_path):
     ]
 
 
-def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path):
+def test_endpoint_responses_api_raw_server_side_tool(openai_httpx2_mock, user_path):
     base_url = "https://raw-tools.example.test/v1"
     response_payload = _responses_payload("Search complete")
     response_payload["output"].insert(
@@ -979,7 +989,7 @@ def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path):
             },
         },
     )
-    httpx_mock.add_response(
+    openai_httpx2_mock.add_response(
         method="POST",
         url=f"{base_url}/responses",
         json=response_payload,
@@ -1010,13 +1020,13 @@ def test_endpoint_responses_api_raw_server_side_tool(httpx_mock, user_path):
     assert result.exit_code == 0
     assert result.output == "Search complete\n"
     assert not (user_path / "logs.db").exists()
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["tools"] == [tool_spec]
 
 
-def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
+def test_endpoint_reads_one_off_prompt_from_stdin(openai_httpx2_mock, user_path):
     base_url = "https://stdin.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "From stdin")
+    _add_chat_response(openai_httpx2_mock, base_url, "From stdin")
 
     result = CliRunner().invoke(
         cli,
@@ -1033,14 +1043,16 @@ def test_endpoint_reads_one_off_prompt_from_stdin(httpx_mock, user_path):
     )
 
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["messages"] == [{"role": "user", "content": "Hello from stdin"}]
     assert not (user_path / "logs.db").exists()
 
 
-def test_endpoint_without_prompt_waits_for_stdin(httpx_mock, user_path, monkeypatch):
+def test_endpoint_without_prompt_waits_for_stdin(
+    openai_httpx2_mock, user_path, monkeypatch
+):
     base_url = "https://terminal-stdin.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "From awaited stdin")
+    _add_chat_response(openai_httpx2_mock, base_url, "From awaited stdin")
     monkeypatch.setattr("click.testing._NamedTextIOWrapper.isatty", lambda self: True)
 
     result = CliRunner().invoke(
@@ -1059,7 +1071,7 @@ def test_endpoint_without_prompt_waits_for_stdin(httpx_mock, user_path, monkeypa
 
     assert result.exit_code == 0
     assert result.output == "From awaited stdin\n"
-    request_body = json.loads(httpx_mock.get_requests()[0].content)
+    request_body = json.loads(openai_httpx2_mock.get_requests()[0].content)
     assert request_body["messages"] == [
         {"role": "user", "content": "Hello after waiting for stdin"}
     ]
@@ -1067,11 +1079,11 @@ def test_endpoint_without_prompt_waits_for_stdin(httpx_mock, user_path, monkeypa
 
 
 def test_endpoint_interactive_chat_preserves_history(
-    httpx_mock, user_path, templates_path
+    openai_httpx2_mock, user_path, templates_path
 ):
     base_url = "https://chat.example.test/v1"
-    _add_chat_response(httpx_mock, base_url, "First answer")
-    _add_chat_response(httpx_mock, base_url, "Second answer")
+    _add_chat_response(openai_httpx2_mock, base_url, "First answer")
+    _add_chat_response(openai_httpx2_mock, base_url, "Second answer")
     (templates_path / "endpoint-chat.yaml").write_text(
         'prompt: "Question: $input"\n', "utf-8"
     )
@@ -1109,7 +1121,7 @@ def test_endpoint_interactive_chat_preserves_history(
     assert "Second answer" in result.output
     assert not (user_path / "logs.db").exists()
 
-    requests = httpx_mock.get_requests()
+    requests = openai_httpx2_mock.get_requests()
     assert len(requests) == 2
     request_bodies = [json.loads(request.content) for request in requests]
     assert all(

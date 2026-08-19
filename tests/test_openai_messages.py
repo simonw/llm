@@ -323,10 +323,10 @@ class TestBuildMessagesConversationHistory:
         ]
 
     def test_no_double_emission_from_conversation_prompt_flow(
-        self, chat_model, httpx_mock
+        self, chat_model, openai_httpx2_mock
     ):
         # Two staged responses so conv.prompt twice can complete.
-        httpx_mock.add_response(
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             json={
@@ -345,7 +345,7 @@ class TestBuildMessagesConversationHistory:
             },
             headers={"Content-Type": "application/json"},
         )
-        httpx_mock.add_response(
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             json={
@@ -373,7 +373,7 @@ class TestBuildMessagesConversationHistory:
         r2.text()
 
         # Inspect what was sent on the SECOND turn.
-        sent_body = json.loads(httpx_mock.get_requests()[-1].content)
+        sent_body = json.loads(openai_httpx2_mock.get_requests()[-1].content)
         sent_messages = sent_body["messages"]
         # Exactly three: user(Q1), assistant(A1), user(Q2).
         assert sent_messages == [
@@ -384,8 +384,8 @@ class TestBuildMessagesConversationHistory:
 
 
 class TestStreamingExecuteYieldsStreamEvents:
-    def test_text_stream_yields_text_events(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_text_stream_yields_text_events(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream()),
@@ -402,8 +402,10 @@ class TestStreamingExecuteYieldsStreamEvents:
         # Text chunks concatenate to the expected full text.
         assert "".join(e.chunk for e in events) == "Hello"
 
-    def test_text_stream_plain_iteration_still_returns_strings(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_text_stream_plain_iteration_still_returns_strings(
+        self, openai_httpx2_mock
+    ):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream()),
@@ -415,8 +417,8 @@ class TestStreamingExecuteYieldsStreamEvents:
         assert all(isinstance(c, str) for c in chunks)
         assert "".join(chunks) == "Hello"
 
-    def test_text_stream_messages_assembled(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_text_stream_messages_assembled(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream()),
@@ -429,8 +431,8 @@ class TestStreamingExecuteYieldsStreamEvents:
             llm.Message(role="assistant", parts=[llm.parts.TextPart(text="Hello")])
         ]
 
-    def test_tool_call_stream_yields_name_and_args_events(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_tool_call_stream_yields_name_and_args_events(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_tool_call_stream()),
@@ -457,9 +459,9 @@ class TestStreamingExecuteYieldsStreamEvents:
         assert all(e.part_index == name_ev.part_index for e in args_events)
         assert json.loads("".join(e.chunk for e in args_events)) == {"city": "Paris"}
 
-    def test_tool_call_registered_via_add_tool_call(self, httpx_mock):
+    def test_tool_call_registered_via_add_tool_call(self, openai_httpx2_mock):
         """response.tool_calls() still works — chain/execute relies on it."""
-        httpx_mock.add_response(
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_tool_call_stream()),
@@ -479,8 +481,8 @@ class TestStreamingExecuteYieldsStreamEvents:
         assert tcs[0].arguments == {"city": "Paris"}
         assert tcs[0].tool_call_id == "call_1"
 
-    def test_text_then_tool_call_part_index_advances(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_text_then_tool_call_part_index_advances(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_then_tool_call_stream()),
@@ -507,8 +509,8 @@ class TestStreamingExecuteYieldsStreamEvents:
 
 class TestAsyncStreamingExecuteYieldsStreamEvents:
     @pytest.mark.asyncio
-    async def test_text_stream_yields_text_events(self, httpx_mock):
-        httpx_mock.add_response(
+    async def test_text_stream_yields_text_events(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream()),
@@ -545,8 +547,10 @@ def _text_stream_with_reasoning_usage(reasoning_tokens):
 
 
 class TestReasoningTokenCount:
-    def test_redacted_reasoning_part_emitted_when_count_present(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_redacted_reasoning_part_emitted_when_count_present(
+        self, openai_httpx2_mock
+    ):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream_with_reasoning_usage(150)),
@@ -565,8 +569,8 @@ class TestReasoningTokenCount:
             )
         ]
 
-    def test_no_reasoning_part_when_zero_or_absent(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_no_reasoning_part_when_zero_or_absent(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             stream=IteratorStream(_text_stream_with_reasoning_usage(0)),
@@ -582,8 +586,8 @@ class TestReasoningTokenCount:
 
 
 class TestNonStreamingExecuteYieldsStreamEvents:
-    def test_non_streaming_text_yields_single_event(self, httpx_mock):
-        httpx_mock.add_response(
+    def test_non_streaming_text_yields_single_event(self, openai_httpx2_mock):
+        openai_httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
             json={

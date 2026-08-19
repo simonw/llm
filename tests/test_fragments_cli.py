@@ -148,8 +148,8 @@ def test_fragment_absolute_path(user_path, tmp_path):
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
-def test_fragment_url_user_agent(mocked_openai_chat, user_path):
-    mocked_openai_chat.add_response(
+def test_fragment_url_user_agent(mocked_openai_chat, httpx_mock, user_path):
+    httpx_mock.add_response(
         url="https://example.com/fragment.txt",
         text="Hello from URL",
     )
@@ -167,7 +167,7 @@ def test_fragment_url_user_agent(mocked_openai_chat, user_path):
     assert result.exit_code == 0
 
     # Verify the User-Agent header was sent for the fragment URL request
-    requests = mocked_openai_chat.get_requests()
+    requests = httpx_mock.get_requests()
     fragment_request = next(r for r in requests if "example.com" in str(r.url))
     llm_version = version("llm")
     expected_user_agent = f"llm/{llm_version} (https://llm.datasette.io/)"

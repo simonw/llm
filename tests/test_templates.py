@@ -237,7 +237,7 @@ def test_templates_error_on_missing_schema(templates_path):
             ],
             None,
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2(assert_all_called=False),
         ),
         pytest.param(
             "prompt: 'Say $hello'",
@@ -247,7 +247,7 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             "Error: Missing variables: hello",
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2(assert_all_called=False),
         ),
         # Template generated prompt should combine with CLI prompt
         (
