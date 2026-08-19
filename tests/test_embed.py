@@ -1,9 +1,11 @@
 import json
-import llm
-from llm.embeddings import Entry
+from unittest.mock import ANY
+
 import pytest
 import sqlite_utils
-from unittest.mock import ANY
+
+import llm
+from llm.embeddings import Entry
 
 
 def test_demo_plugin():
@@ -20,7 +22,7 @@ def test_demo_plugin():
 )
 def test_embed_huge_list(batch_size, expected_batches):
     model = llm.get_embedding_model("embed-demo")
-    huge_list = ("hello {}".format(i) for i in range(1000))
+    huge_list = (f"hello {i}" for i in range(1000))
     kwargs = {}
     if batch_size:
         kwargs["batch_size"] = batch_size
@@ -176,7 +178,7 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     collection = llm.Collection("test", db, model_id="embed-demo")
     model = collection.model()
     assert getattr(model, "batch_count", 0) == 0
-    ids_and_texts = ((str(i), "hello {}".format(i)) for i in range(1000))
+    ids_and_texts = ((str(i), f"hello {i}") for i in range(1000))
     kwargs = {}
     if batch_size is not None:
         kwargs["batch_size"] = batch_size

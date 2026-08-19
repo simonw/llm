@@ -1,12 +1,14 @@
-from click.testing import CliRunner
-from llm.cli import cli
-from llm import Collection
 import json
 import pathlib
-import pytest
-import sqlite_utils
 import sys
 from unittest.mock import ANY
+
+import pytest
+import sqlite_utils
+from click.testing import CliRunner
+
+from llm import Collection
+from llm.cli import cli
 
 
 @pytest.mark.parametrize(
@@ -356,7 +358,7 @@ def test_embed_multi_files_binary_store(tmpdir):
     assert result.exit_code == 0
     db = sqlite_utils.Database(str(db_path))
     assert db["embeddings"].count == 1
-    row = list(db["embeddings"].rows)[0]
+    row = next(iter(db["embeddings"].rows))
     assert row == {
         "collection_id": 1,
         "id": "file.bin",
@@ -683,6 +685,21 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         assert result3.exit_code == 0
     # At the end of this, there should be 2 embeddings
     db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    assert db["embeddings"].count == 1
+
+
+def test_embed_multi_existing_collection_without_default(user_path):
+    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    Collection("example", db, model_id="embed-demo")
+
+    result = CliRunner().invoke(
+        cli,
+        ["embed-multi", "example", "-"],
+        input="id,name\n1,hello",
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
     assert db["embeddings"].count == 1
 
 

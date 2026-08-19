@@ -13,7 +13,7 @@ content are equal.
 
 import base64
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .models import Attachment
 from .serialization import (
@@ -29,7 +29,7 @@ from .serialization import (
 
 
 def _attachment_to_dict(att: Attachment) -> AttachmentDict:
-    d: Dict[str, Any] = {}
+    d: dict[str, Any] = {}
     if att.type:
         d["type"] = att.type
     if att.url:
@@ -43,7 +43,7 @@ def _attachment_to_dict(att: Attachment) -> AttachmentDict:
 
 def _attachment_from_dict(d: AttachmentDict) -> Attachment:
     raw_content = d.get("content")
-    content_bytes: Optional[bytes] = None
+    content_bytes: bytes | None = None
     if isinstance(raw_content, str):
         content_bytes = base64.b64decode(raw_content)
     return Attachment(
@@ -107,10 +107,10 @@ class Part:
 @dataclass
 class TextPart(Part):
     text: str = ""
-    provider_metadata: Optional[Dict[str, Any]] = None
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> TextPartDict:
-        d: Dict[str, Any] = {"type": "text", "text": self.text}
+        d: dict[str, Any] = {"type": "text", "text": self.text}
         if self.provider_metadata:
             d["provider_metadata"] = self.provider_metadata
         return d  # type: ignore[return-value]
@@ -130,10 +130,10 @@ class ReasoningPart(Part):
 
     text: str = ""
     redacted: bool = False
-    provider_metadata: Optional[Dict[str, Any]] = None
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> ReasoningPartDict:
-        d: Dict[str, Any] = {"type": "reasoning", "text": self.text}
+        d: dict[str, Any] = {"type": "reasoning", "text": self.text}
         if self.redacted:
             d["redacted"] = True
         if self.provider_metadata:
@@ -151,13 +151,13 @@ class ToolCallPart(Part):
     """
 
     name: str = ""
-    arguments: Dict[str, Any] = field(default_factory=dict)
-    tool_call_id: Optional[str] = None
+    arguments: dict[str, Any] = field(default_factory=dict)
+    tool_call_id: str | None = None
     server_executed: bool = False
-    provider_metadata: Optional[Dict[str, Any]] = None
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> ToolCallPartDict:
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "type": "tool_call",
             "name": self.name,
             "arguments": self.arguments,
@@ -177,14 +177,14 @@ class ToolResultPart(Part):
 
     name: str = ""
     output: str = ""
-    tool_call_id: Optional[str] = None
+    tool_call_id: str | None = None
     server_executed: bool = False
-    attachments: List[Any] = field(default_factory=list)
-    exception: Optional[str] = None
-    provider_metadata: Optional[Dict[str, Any]] = None
+    attachments: list[Any] = field(default_factory=list)
+    exception: str | None = None
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> ToolResultPartDict:
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "type": "tool_result",
             "name": self.name,
             "output": self.output,
@@ -206,11 +206,11 @@ class ToolResultPart(Part):
 class AttachmentPart(Part):
     """An inline attachment (image, audio, file)."""
 
-    attachment: Optional[Attachment] = None
-    provider_metadata: Optional[Dict[str, Any]] = None
+    attachment: Attachment | None = None
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> AttachmentPartDict:
-        d: Dict[str, Any] = {"type": "attachment"}
+        d: dict[str, Any] = {"type": "attachment"}
         if self.attachment:
             d["attachment"] = _attachment_to_dict(self.attachment)
         if self.provider_metadata:
@@ -229,11 +229,11 @@ class Message:
     """
 
     role: str
-    parts: List[Part] = field(default_factory=list)
-    provider_metadata: Optional[Dict[str, Any]] = None
+    parts: list[Part] = field(default_factory=list)
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> MessageDict:
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "role": self.role,
             "parts": [p.to_dict() for p in self.parts],
         }
@@ -250,13 +250,13 @@ class Message:
         )
 
 
-def normalize_parts(items: Any) -> List[Part]:
+def normalize_parts(items: Any) -> list[Part]:
     """Normalize helper inputs to a list of Part objects.
 
     Accepts str (→ TextPart), Attachment (→ AttachmentPart), Part
     (passed through), or a list/tuple of those (flattened one level).
     """
-    out: List[Part] = []
+    out: list[Part] = []
     for item in items:
         if isinstance(item, Part):
             out.append(item)
@@ -271,7 +271,7 @@ def normalize_parts(items: Any) -> List[Part]:
     return out
 
 
-def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
+def system(*items: Any, provider_metadata: dict[str, Any] | None = None) -> Message:
     "Build a Message with role='system'."
     return Message(
         role="system",
@@ -280,7 +280,7 @@ def system(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> M
     )
 
 
-def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Message:
+def user(*items: Any, provider_metadata: dict[str, Any] | None = None) -> Message:
     "Build a Message with role='user'."
     return Message(
         role="user",
@@ -289,9 +289,7 @@ def user(*items: Any, provider_metadata: Optional[Dict[str, Any]] = None) -> Mes
     )
 
 
-def assistant(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
-) -> Message:
+def assistant(*items: Any, provider_metadata: dict[str, Any] | None = None) -> Message:
     "Build a Message with role='assistant'."
     return Message(
         role="assistant",
@@ -301,7 +299,7 @@ def assistant(
 
 
 def tool_message(
-    *items: Any, provider_metadata: Optional[Dict[str, Any]] = None
+    *items: Any, provider_metadata: dict[str, Any] | None = None
 ) -> Message:
     "Build a Message with role='tool' (typically wrapping ToolResultParts)."
     return Message(
@@ -334,19 +332,29 @@ class StreamEvent:
     `signature`, Gemini `thoughtSignature`, OpenAI `encrypted_content`)
     that must be echoed back on the next request; the framework merges
     it onto the finalized Part (last non-None wins per top-level key).
+    A reasoning event with an empty `chunk` and `redacted=False` still
+    assembles into a ReasoningPart when it carries provider_metadata —
+    the metadata-only form used for opaque reasoning state such as an
+    Anthropic omitted-thinking signature or `redacted_thinking` data.
+    Unlike `redacted=True` markers, metadata-only reasoning Parts are
+    not hoisted: they keep their emitted position, because providers
+    require opaque blocks replayed in their original order.
 
     `message_index` is for providers that emit multiple assistant
-    messages in a single response (Anthropic server-side tool
-    execution); most plugins leave it at 0.
+    messages in a single response (OpenAI Responses server-side tool
+    execution interleaves multiple `message` output items with tool
+    calls); most plugins leave it at 0 and get a single assistant
+    Message. Events with distinct indexes assemble into distinct
+    Messages, in first-seen order.
     """
 
     type: str  # "text" / "reasoning" / "tool_call_name" /
     # "tool_call_args" / "tool_result"
     chunk: str
-    part_index: Optional[int] = None
-    tool_call_id: Optional[str] = None
+    part_index: int | None = None
+    tool_call_id: str | None = None
     server_executed: bool = False
-    tool_name: Optional[str] = None
+    tool_name: str | None = None
     redacted: bool = False
-    provider_metadata: Optional[Dict[str, Any]] = None
+    provider_metadata: dict[str, Any] | None = None
     message_index: int = 0

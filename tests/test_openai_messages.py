@@ -22,7 +22,7 @@ def _sse(delta, finish_reason=None, usage=None, tool_calls=None):
         chunk["choices"][0]["delta"]["tool_calls"] = tool_calls
     if usage is not None:
         chunk["usage"] = usage
-    return f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+    return f"data: {json.dumps(chunk)}\n\n".encode()
 
 
 def _text_stream():

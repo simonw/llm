@@ -87,9 +87,10 @@ async def test_async_prompt_options_and_kwargs_conflict_raises(async_mock_model)
 
         class Options(llm.Options):
             from typing import Optional as _Opt
+
             from pydantic import Field as _Field
 
-            max_tokens: _Opt[int] = _Field(default=None)
+            max_tokens: int | None = _Field(default=None)
 
         async def execute(self, prompt, stream, response, conversation):
             yield "ok"

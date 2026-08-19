@@ -1,19 +1,21 @@
-from click.testing import CliRunner
-from llm.cli import cli
-from llm.migrations import migrate
-from llm.utils import monotonic_ulid
-from llm import Fragment
 import datetime
 import json
 import pathlib
-import pytest
 import re
-import sqlite_utils
 import sys
 import textwrap
 import time
-from ulid import ULID
+
+import pytest
+import sqlite_utils
 import yaml
+from click.testing import CliRunner
+from ulid import ULID
+
+from llm import Fragment
+from llm.cli import cli
+from llm.migrations import migrate
+from llm.utils import monotonic_ulid
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
 MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
@@ -171,6 +173,41 @@ def test_logs_text_with_options(user_path):
     assert "- media_resolution: low" in output
 
 
+def test_logs_token_usage_details_are_markdown_code(user_path):
+    log_path = str(user_path / "logs_token_details.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": None,
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "token_details": json.dumps(
+                {
+                    "output_tokens_details": {
+                        "reasoning_tokens": 1,
+                        "label": "`reasoning`",
+                    }
+                }
+            ),
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path, "-u"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert (
+        '## Token usage\n\n2 input, 5 output, ``{"output_tokens_details": '
+        '{"reasoning_tokens": 1, "label": "`reasoning`"}}``\n'
+    ) in result.output
+
+
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs_json(n, log_path):
     "Test that logs command correctly returns requested -n records"
@@ -324,19 +361,128 @@ def test_logs_filtered(user_path, model, path_option):
     assert all(record["model"] == model for record in records)
 
 
+def test_logs_search_new_tables(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(["A fine city"])
+    runner.invoke(
+        cli, ["-m", "mock", "tell me about Ljubljana"], catch_exceptions=False
+    )
+    mock_model.enqueue(["Try httpx-retries for that"])
+    runner.invoke(
+        cli, ["-m", "mock", "what retry library should I use"], catch_exceptions=False
+    )
+
+    # Matches prompt text
+    result = runner.invoke(
+        cli, ["logs", "-q", "Ljubljana", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert [row["prompt"] for row in rows] == ["tell me about Ljubljana"]
+
+    # Matches response text
+    result2 = runner.invoke(
+        cli, ["logs", "-q", "httpx", "--json"], catch_exceptions=False
+    )
+    assert result2.exit_code == 0
+    rows2 = json.loads(result2.output)
+    assert [row["response"] for row in rows2] == ["Try httpx-retries for that"]
+
+
+def test_logs_search_prompt_outranks_response(mock_model, logs_db):
+    # The prompt column carries a much higher bm25 weight: what you
+    # typed says more about what a turn is about than what came back.
+    runner = CliRunner()
+    mock_model.enqueue(["I recommend a python one-liner"])
+    runner.invoke(cli, ["-m", "mock", "how do I sort a list"], catch_exceptions=False)
+    mock_model.enqueue(["Use yield"])
+    runner.invoke(
+        cli, ["-m", "mock", "explain python generators"], catch_exceptions=False
+    )
+    result = runner.invoke(
+        cli, ["logs", "-q", "python", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert [row["prompt"] for row in rows] == [
+        "explain python generators",
+        "how do I sort a list",
+    ]
+
+
+def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
+    fragment_path = str(tmpdir / "notes.txt")
+    with open(fragment_path, "w", encoding="utf-8") as fp:
+        fp.write("Wombats are sturdy quadrupedal marsupials")
+    runner = CliRunner()
+    mock_model.enqueue(["They do indeed"])
+    runner.invoke(
+        cli,
+        ["-m", "mock", "-f", fragment_path, "do zebras have stripes"],
+        catch_exceptions=False,
+    )
+    # The typed question is searchable
+    found = runner.invoke(
+        cli, ["logs", "-q", "zebras", "--json"], catch_exceptions=False
+    )
+    assert len(json.loads(found.output)) == 1
+    # The fragment's content is not
+    not_found = runner.invoke(
+        cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False
+    )
+    assert json.loads(not_found.output) == []
+
+
+def test_logs_search_merges_legacy_rows(mock_model, logs_db):
+    # A legacy-only row and a new turn matching the same query both
+    # come back from one search.
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": "name a pet pelican",
+            "response": "Percy",
+            "model": "davinci",
+            "datetime_utc": "2025-01-01T00:00:00",
+        },
+        alter=True,
+    )
+    runner = CliRunner()
+    mock_model.enqueue(["Scoop"])
+    runner.invoke(
+        cli, ["-m", "mock", "another pelican name please"], catch_exceptions=False
+    )
+    result = runner.invoke(
+        cli, ["logs", "-q", "pelican", "--json"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    prompts = {row["prompt"] for row in json.loads(result.output)}
+    assert prompts == {"name a pet pelican", "another pelican name please"}
+
+
+def test_logs_search_bad_query_is_a_clean_error(logs_db):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-q", 'unbalanced"quote'])
+    assert result.exit_code == 1
+    assert "Invalid search query" in result.output
+
+
 @pytest.mark.parametrize(
     "query,extra_args,expected",
     (
         # With no search term order should be by datetime
         ("", [], ["doc1", "doc2", "doc3"]),
-        # With a search it's order by rank instead
-        ("llama", [], ["doc1", "doc3"]),
+        # With a search it's order by rank instead - best match first.
+        # doc3 says llama twice. (The old implementation ordered by
+        # `rank desc`, which with bm25's negative-is-better scores put
+        # the weakest matches first; that sign bug is fixed.)
+        ("llama", [], ["doc3", "doc1"]),
         ("alpaca", [], ["doc2"]),
         # Model filter should work too
-        ("llama", ["-m", "davinci"], ["doc1", "doc3"]),
+        ("llama", ["-m", "davinci"], ["doc3", "doc1"]),
         ("llama", ["-m", "davinci2"], []),
         # Adding -l/--latest should return latest first (order by id desc)
-        ("llama", [], ["doc1", "doc3"]),
         ("llama", ["-l"], ["doc3", "doc1"]),
         ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
@@ -954,10 +1100,12 @@ def test_logs_tools(logs_db):
     assert (
         "### Tool results\n"
         "\n"
-        "- **demo**: `tc_TCID`<br>\n"
+        "- **demo**: `tc_TCID`  \n"
+        "    ```\n"
         "    one\n"
         "    two\n"
         "    three\n"
+        "    ```\n"
         "\n"
     ) in normalized_output
     # Log one that did NOT use tools, check that `llm logs --tools` ignores it
@@ -966,6 +1114,72 @@ def test_logs_tools(logs_db):
     logs_tools_output = runner.invoke(cli, ["logs", "--tools"]).output
     assert "badger" not in logs_tools_output
     assert "three" in logs_tools_output
+
+
+def test_logs_repeated_tools_use_short_hash(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def demo():
+        return "ok"
+    """)
+    args = [
+        "-m",
+        "echo",
+        "--functions",
+        code,
+        json.dumps({"tool_calls": [{"name": "demo"}]}),
+    ]
+    result1 = runner.invoke(cli, args)
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, args)
+    assert result2.exit_code == 0
+
+    result3 = runner.invoke(cli, ["logs", "-n", "2"])
+    assert result3.exit_code == 0
+    tool_hashes = re.findall(r"- \*\*demo\*\*: `([0-9a-f]+)`", result3.output)
+    assert len(tool_hashes) == 2
+    assert len(tool_hashes[0]) == 64
+    assert tool_hashes[1] == tool_hashes[0][:7]
+
+
+def test_logs_tool_call_argument_formatting(logs_db):
+    runner = CliRunner()
+    code = textwrap.dedent("""
+    def demo(timeout: int, options: list):
+        return "ok"
+    """)
+    result1 = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            code,
+            json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "demo",
+                            "arguments": {
+                                "timeout": 120,
+                                "options": ["`tick`"],
+                            },
+                        }
+                    ]
+                }
+            ),
+        ],
+    )
+    assert result1.exit_code == 0
+    result2 = runner.invoke(cli, ["logs", "-c"])
+    normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
+    assert (
+        "### Tool calls\n"
+        "\n"
+        "- **demo**: `tc_TCID`  \n"
+        "    timeout: `120`\n"
+        '    options: ``["`tick`"]``\n'
+    ) in normalized_output
 
 
 def test_logs_backup(logs_db):
@@ -984,6 +1198,23 @@ def test_logs_backup(logs_db):
         assert expected_path.exists()
 
 
+def test_logs_status_counts_threads_and_turns(logs_db):
+    runner = CliRunner()
+    runner.invoke(cli, ["-m", "echo", "simple prompt"])
+    result = runner.invoke(cli, ["logs", "status"])
+    assert result.exit_code == 0
+    assert "Number of threads logged:\t1" in result.output
+    assert "Number of turns logged:\t\t1" in result.output
+    # No legacy rows, so the legacy lines should be hidden
+    assert "legacy" not in result.output
+    # Legacy counts show up once legacy tables have rows
+    logs_db["conversations"].insert({"id": "abc", "name": "test", "model": "echo"})
+    result2 = runner.invoke(cli, ["logs", "status"])
+    assert result2.exit_code == 0
+    assert "Number of legacy conversations:\t1" in result2.output
+    assert "Number of legacy responses:\t0" in result2.output
+
+
 @pytest.mark.parametrize("async_", (False, True))
 def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     mock_model.resolved_model_name = "resolved-mock"
@@ -994,10 +1225,10 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     )
     assert result.exit_code == 0
     # Should have logged the resolved model name
-    assert logs_db["responses"].count
-    response = list(logs_db["responses"].rows)[0]
-    assert response["model"] == "mock"
-    assert response["resolved_model"] == "resolved-mock"
+    assert logs_db["turns"].count
+    turn = next(iter(logs_db["turns"].rows))
+    assert turn["model"] == "mock"
+    assert turn["resolved_model"] == "resolved-mock"
 
     # Should show up in the JSON logs
     result2 = runner.invoke(cli, ["logs", "--json"])
@@ -1017,8 +1248,9 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
 
 def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
     """A response that streams reasoning events should round-trip the
-    visible reasoning text via the new responses.reasoning column."""
+    visible reasoning text via a ReasoningPart in the stored chain."""
     import llm
+    from llm.logs import LogStore, merged_log_rows
 
     mock_model.enqueue(
         [
@@ -1031,19 +1263,21 @@ def test_log_to_db_persists_visible_reasoning(logs_db, mock_model):
     response.text()
     response.log_to_db(logs_db)
 
-    row = next(logs_db["responses"].rows)
+    row = merged_log_rows(LogStore(logs_db))[0]
     assert row["response"] == "hello"
     assert row["reasoning"] == "thinking hard"
 
 
 def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
-    """No reasoning emitted → empty/null reasoning column, never raises."""
+    """No reasoning emitted → null reasoning, never raises."""
+    from llm.logs import LogStore, merged_log_rows
+
     mock_model.enqueue(["just text"])
     response = mock_model.prompt("hi")
     response.text()
     response.log_to_db(logs_db)
-    row = next(logs_db["responses"].rows)
-    assert not row.get("reasoning")
+    row = merged_log_rows(LogStore(logs_db))[0]
+    assert not row["reasoning"]
 
 
 def test_logs_markdown_renders_reasoning_heading(user_path):

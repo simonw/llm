@@ -1,8 +1,19 @@
-from .hookspecs import hookimpl
+import inspect
+import json
+import os
+import pathlib
+import struct
+from collections.abc import Callable
+from typing import Any
+
+import click
+
+from .embeddings import Collection
 from .errors import (
     ModelError,
     NeedsKeyException,
 )
+from .hookspecs import hookimpl
 from .models import (
     AsyncConversation,
     AsyncKeyModel,
@@ -10,7 +21,6 @@ from .models import (
     AsyncResponse,
     Attachment,
     CancelToolCall,
-    PauseChain,
     Conversation,
     EmbeddingModel,
     EmbeddingModelWithAliases,
@@ -18,8 +28,10 @@ from .models import (
     Model,
     ModelWithAliases,
     Options,
+    PauseChain,
     Prompt,
     Response,
+    ServerSideTool,
     Tool,
     Toolbox,
     ToolCall,
@@ -34,33 +46,20 @@ from .parts import (
     tool_message,
     user,
 )
-from .utils import schema_dsl, Fragment
-from .embeddings import Collection
+from .plugins import load_plugins, pm
 from .templates import Template
-from .plugins import pm, load_plugins
-import click
-from typing import Any, Dict, List, Optional, Callable, Type, Union
-import inspect
-import json
-import os
-import pathlib
-import struct
+from .utils import Fragment, schema_dsl
 
 __all__ = [
     "AsyncConversation",
     "AsyncKeyModel",
     "AsyncModel",
     "AsyncResponse",
-    "assistant",
     "Attachment",
     "CancelToolCall",
     "Collection",
     "Conversation",
     "Fragment",
-    "get_async_model",
-    "get_key",
-    "get_model",
-    "hookimpl",
     "KeyModel",
     "Message",
     "Model",
@@ -70,20 +69,26 @@ __all__ = [
     "PauseChain",
     "Prompt",
     "Response",
-    "schema_dsl",
-    "system",
+    "ServerSideTool",
     "Template",
     "Tool",
-    "Toolbox",
     "ToolCall",
-    "tool_message",
     "ToolOutput",
     "ToolResult",
+    "Toolbox",
     "Usage",
+    "assistant",
+    "get_async_model",
+    "get_key",
+    "get_model",
+    "hookimpl",
+    "schema_dsl",
+    "system",
+    "tool_message",
     "user",
     "user_dir",
 ]
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.6-luna"
 
 
 def get_plugins(all=False):
@@ -106,12 +111,12 @@ def get_plugins(all=False):
     return plugins
 
 
-def get_models_with_aliases() -> List["ModelWithAliases"]:
+def get_models_with_aliases() -> list["ModelWithAliases"]:
     model_aliases = []
 
     # Include aliases from aliases.json
     aliases_path = user_dir() / "aliases.json"
-    extra_model_aliases: Dict[str, list] = {}
+    extra_model_aliases: dict[str, list] = {}
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
         for alias, model_id in configured_aliases.items():
@@ -129,7 +134,7 @@ def get_models_with_aliases() -> List["ModelWithAliases"]:
     return model_aliases
 
 
-def _get_loaders(hook_method) -> Dict[str, Callable]:
+def _get_loaders(hook_method) -> dict[str, Callable]:
     load_plugins()
     loaders = {}
 
@@ -145,32 +150,32 @@ def _get_loaders(hook_method) -> Dict[str, Callable]:
     return loaders
 
 
-def get_template_loaders() -> Dict[str, Callable[[str], Template]]:
+def get_template_loaders() -> dict[str, Callable[[str], Template]]:
     """Get template loaders registered by plugins."""
     return _get_loaders(pm.hook.register_template_loaders)
 
 
-def get_fragment_loaders() -> Dict[
+def get_fragment_loaders() -> dict[
     str,
-    Callable[[str], Union[Fragment, Attachment, List[Union[Fragment, Attachment]]]],
+    Callable[[str], Fragment | Attachment | list[Fragment | Attachment]],
 ]:
     """Get fragment loaders registered by plugins."""
     return _get_loaders(pm.hook.register_fragment_loaders)
 
 
-def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
+def get_tools() -> dict[str, Tool | type[Toolbox]]:
     """Return all tools (llm.Tool and llm.Toolbox) registered by plugins."""
     load_plugins()
-    tools: Dict[str, Union[Tool, Type[Toolbox]]] = {}
+    tools: dict[str, Tool | type[Toolbox]] = {}
 
     # Variable to track current plugin name
     current_plugin_name = None
 
     def register(
-        tool_or_function: Union[Tool, Type[Toolbox], Callable[..., Any]],
-        name: Optional[str] = None,
+        tool_or_function: Tool | type[Toolbox] | Callable[..., Any],
+        name: str | None = None,
     ) -> None:
-        tool: Union[Tool, Type[Toolbox], None] = None
+        tool: Tool | type[Toolbox] | None = None
 
         # If it's a Toolbox class, set the plugin field on it
         if inspect.isclass(tool_or_function):
@@ -181,9 +186,7 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
                 tool.name = name or tool.__name__
             else:
                 raise TypeError(
-                    "Toolbox classes must inherit from llm.Toolbox, {} does not.".format(
-                        tool_or_function.__name__
-                    )
+                    f"Toolbox classes must inherit from llm.Toolbox, {tool_or_function.__name__} does not."
                 )
 
         # If it's already a Tool instance, use it directly
@@ -231,12 +234,12 @@ def get_tools() -> Dict[str, Union[Tool, Type[Toolbox]]]:
     return tools
 
 
-def get_embedding_models_with_aliases() -> List["EmbeddingModelWithAliases"]:
+def get_embedding_models_with_aliases() -> list["EmbeddingModelWithAliases"]:
     model_aliases = []
 
     # Include aliases from aliases.json
     aliases_path = user_dir() / "aliases.json"
-    extra_model_aliases: Dict[str, list] = {}
+    extra_model_aliases: dict[str, list] = {}
     if aliases_path.exists():
         configured_aliases = json.loads(aliases_path.read_text())
         for alias, model_id in configured_aliases.items():
@@ -273,7 +276,7 @@ def get_embedding_model(name):
         raise UnknownModelError("Unknown model: " + str(name))
 
 
-def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
+def get_embedding_model_aliases() -> dict[str, EmbeddingModel]:
     model_aliases = {}
     for model_with_aliases in get_embedding_models_with_aliases():
         for alias in model_with_aliases.aliases:
@@ -282,7 +285,7 @@ def get_embedding_model_aliases() -> Dict[str, EmbeddingModel]:
     return model_aliases
 
 
-def get_async_model_aliases() -> Dict[str, AsyncModel]:
+def get_async_model_aliases() -> dict[str, AsyncModel]:
     async_model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
         if model_with_aliases.async_model:
@@ -294,7 +297,7 @@ def get_async_model_aliases() -> Dict[str, AsyncModel]:
     return async_model_aliases
 
 
-def get_model_aliases() -> Dict[str, Model]:
+def get_model_aliases() -> dict[str, Model]:
     model_aliases = {}
     for model_with_aliases in get_models_with_aliases():
         if model_with_aliases.model:
@@ -308,19 +311,19 @@ class UnknownModelError(KeyError):
     pass
 
 
-def get_models() -> List[Model]:
+def get_models() -> list[Model]:
     "Get all registered models"
     models_with_aliases = get_models_with_aliases()
     return [mwa.model for mwa in models_with_aliases if mwa.model]
 
 
-def get_async_models() -> List[AsyncModel]:
+def get_async_models() -> list[AsyncModel]:
     "Get all registered async models"
     models_with_aliases = get_models_with_aliases()
     return [mwa.async_model for mwa in models_with_aliases if mwa.async_model]
 
 
-def get_async_model(name: Optional[str] = None) -> AsyncModel:
+def get_async_model(name: str | None = None) -> AsyncModel:
     "Get an async model by name or alias"
     aliases = get_async_model_aliases()
     name = name or get_default_model()
@@ -339,7 +342,7 @@ def get_async_model(name: Optional[str] = None) -> AsyncModel:
             raise UnknownModelError("Unknown model: " + name)
 
 
-def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
+def get_model(name: str | None = None, _skip_async: bool = False) -> Model:
     "Get a model by name or alias"
     aliases = get_model_aliases()
     name = name or get_default_model()
@@ -361,14 +364,14 @@ def get_model(name: Optional[str] = None, _skip_async: bool = False) -> Model:
 
 
 def get_key(
-    explicit_key: Optional[str] = None,
-    key_alias: Optional[str] = None,
-    env_var: Optional[str] = None,
+    explicit_key: str | None = None,
+    key_alias: str | None = None,
+    env_var: str | None = None,
     *,
-    alias: Optional[str] = None,
-    env: Optional[str] = None,
-    input: Optional[str] = None,
-) -> Optional[str]:
+    alias: str | None = None,
+    env: str | None = None,
+    input: str | None = None,
+) -> str | None:
     """
     Return an API key based on a hierarchy of potential sources. You should use the keyword arguments,
     the positional arguments are here purely for backwards-compatibility with older code.
@@ -459,7 +462,7 @@ def remove_alias(alias):
     except json.decoder.JSONDecodeError:
         raise KeyError("aliases.json file is not valid JSON")
     if alias not in current:
-        raise KeyError("No such alias: {}".format(alias))
+        raise KeyError(f"No such alias: {alias}")
     del current[alias]
     path.write_text(json.dumps(current, indent=4) + "\n")
 

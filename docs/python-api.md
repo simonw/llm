@@ -7,12 +7,12 @@ Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
-To run a prompt against the `gpt-4o-mini` model, run this:
+To run a prompt against the `gpt-5.6-luna` model, run this:
 
 ```python
 import llm
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 # key= is optional, you can configure the key in other ways
 response = model.prompt(
     "Five surprising names for a pet pelican",
@@ -26,7 +26,7 @@ If you inspect the response before it has been evaluated it will look like this:
 
     <Response prompt='Your prompt' text='... not yet done ...'>
 
-The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-4o-mini` if you have not changed the default.
+The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-5.6-luna` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
 
@@ -68,7 +68,7 @@ This example shows two attachments - one from a file path and one from a URL:
 ```python
 import llm
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 response = model.prompt(
     "Describe these images",
     attachments=[
@@ -87,7 +87,7 @@ Use `llm.Attachment(content=b"binary image content here")` to pass binary conten
 You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
 
 ```python
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 print(model.attachment_types)
 # {'image/gif', 'image/png', 'image/jpeg', 'image/webp'}
 
@@ -173,20 +173,20 @@ for response in chain.responses():
 
 Pass a function to the `before_call=` parameter of `model.chain()` to have that called before every tool call is executed. You can raise `llm.CancelToolCall()` to cancel that tool call.
 
-The method signature is `def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
+The method signature is `def before_call(tool: llm.Tool | None, tool_call: llm.ToolCall)` - that first `tool` argument can be `None` if the model requests a tool be executed that has not been provided in the `tools=` list.
 
 Here's an example:
 ```python
 import llm
-from typing import Optional
 
 def upper(text: str) -> str:
     "Convert text to uppercase."
     return text.upper()
 
-def before_call(tool: Optional[llm.Tool], tool_call: llm.ToolCall):
-    print(f"About to call tool {tool.name} with arguments {tool_call.arguments}")
-    if tool.name == "upper" and "bad" in repr(tool_call.arguments):
+def before_call(tool: llm.Tool | None, tool_call: llm.ToolCall):
+    tool_name = tool.name if tool is not None else tool_call.name
+    print(f"About to call tool {tool_name} with arguments {tool_call.arguments}")
+    if tool_name == "upper" and "bad" in repr(tool_call.arguments):
         raise llm.CancelToolCall("Not allowed to call upper on text containing 'bad'")
 
 model = llm.get_model("gpt-4.1-mini")
@@ -310,6 +310,27 @@ def generate_image(prompt: str) -> llm.ToolOutput:
 .. autoclass:: llm.ToolOutput
 ```
 
+(python-api-server-side-tools)=
+
+#### Server-side tools
+
+Server-side tools are executed by the model provider during a response. Pass them in the same `tools=` list as function tools, but do not call `execute_tool_calls()` for them: their calls and results arrive in `response.messages()` with `server_executed=True` and are excluded from the local execution loop.
+
+For example, OpenAI Responses models support {ref}`Web Search <openai-models-web-search>` and {ref}`Code Interpreter <openai-models-code-interpreter>`:
+
+```python
+import llm
+from llm.default_plugins.openai_models import CodeInterpreter
+
+response = llm.get_model("gpt-5.6-luna").prompt(
+    "Use the python tool to calculate the first 20 Fibonacci numbers",
+    tools=[CodeInterpreter(memory_limit="4g")],
+)
+print(response.text())
+```
+
+Provider plugins define these tools by subclassing {class}`llm.ServerSideTool`. Each model instance returns its supported classes from `supported_server_side_tools`; a model rejects classes it has not explicitly included rather than silently dropping them. See {ref}`advanced-model-plugins-server-side-tools` for the plugin API.
+
 (python-api-toolbox)=
 
 #### Toolbox classes
@@ -401,6 +422,8 @@ In asynchronous contexts the alternative method `await toolbox.prepare_async()` 
 
 If you want to prepare the class in this way such that it can be used in both synchronous and asynchronous contexts, implement both `prepare()` and `prepare_async()` methods.
 
+Toolbox classes that override `tools()`, `prepare()` or `prepare_async()` are treated as dynamic by the `llm tools` command. Since their full list of tools cannot be determined until an instance has been configured, `llm tools` displays their constructor signature and class docstring instead of a list of tools - so give your dynamic toolbox a descriptive docstring that shows how to configure it. Users can then pass a full specification such as `llm tools 'MCP("https://example.com/mcp")'` to instantiate the toolbox - running `prepare()` if it is implemented - and list the tools that instance provides. See {ref}`the tools usage documentation <usage-tools>` for details.
+
 (python-api-schemas)=
 
 ### Schemas
@@ -417,7 +440,7 @@ class Dog(BaseModel):
     name: str
     age: int
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 response = model.prompt("Describe a nice dog", schema=Dog)
 dog = json.loads(response.text())
 print(dog)
@@ -460,11 +483,13 @@ print(model.prompt(
 The {ref}`fragment system <usage-fragments>` from the CLI tool can also be accessed from the Python API, by passing `fragments=` and/or `system_fragments=` lists of strings to the `prompt()` method:
 
 ```python
+from pathlib import Path
+
 response = model.prompt(
     "What do these documents say about dogs?",
     fragments=[
-        open("dogs1.txt").read(),
-        open("dogs2.txt").read(),
+        Path("dogs1.txt").read_text(),
+        Path("dogs2.txt").read_text(),
     ],
     system_fragments=[
         "You answer questions like Snoopy",
@@ -496,7 +521,7 @@ print(model.prompt("Names for otters", options={"temperature": 0.2}))
 Models that accept API keys should take an additional `key=` parameter to their `model.prompt()` method:
 
 ```python
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 print(model.prompt("Names for beavers", key="sk-..."))
 ```
 
@@ -537,32 +562,30 @@ You can access this JSON data as a Python dictionary using the `response.json()`
 import llm
 from pprint import pprint
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 response = model.prompt("3 names for an otter")
 json_data = response.json()
 pprint(json_data)
 ```
-Here's that example output from GPT-4o mini:
+Here's an abbreviated example of that output from GPT-5.6 Luna:
 ```python
-{'content': 'Sure! Here are three fun names for an otter:\n'
-            '\n'
-            '1. **Splash**\n'
-            '2. **Bubbles**\n'
-            '3. **Otto** \n'
-            '\n'
-            'Feel free to mix and match or use these as inspiration!',
- 'created': 1739291215,
- 'finish_reason': 'stop',
- 'id': 'chatcmpl-AznO31yxgBjZ4zrzBOwJvHEWgdTaf',
- 'model': 'gpt-4o-mini-2024-07-18',
- 'object': 'chat.completion.chunk',
- 'usage': {'completion_tokens': 43,
-           'completion_tokens_details': {'accepted_prediction_tokens': 0,
-                                         'audio_tokens': 0,
-                                         'reasoning_tokens': 0,
-                                         'rejected_prediction_tokens': 0},
-           'prompt_tokens': 13,
-           'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0},
+{'created_at': 1785451200.0,
+ 'id': 'resp_...',
+ 'model': 'gpt-5.6-luna',
+ 'object': 'response',
+ 'output': [
+     # Reasoning and message items are abbreviated here
+     {'content': [{'annotations': [],
+                   'text': '1. Splash\n2. Bubbles\n3. Otto',
+                   'type': 'output_text'}],
+      'id': 'msg_...',
+      'role': 'assistant',
+      'status': 'completed',
+      'type': 'message'}],
+ 'status': 'completed',
+ 'usage': {'input_tokens': 13,
+           'output_tokens': 43,
+           'output_tokens_details': {'reasoning_tokens': 0},
            'total_tokens': 56}}
 ```
 
@@ -661,6 +684,8 @@ for event in response.stream_events():
 Event types are `"text"`, `"reasoning"`, `"tool_call_name"`, `"tool_call_args"`, and `"tool_result"`. Each event carries a `part_index` that groups events into the same logical Part (all events at the same `part_index` assemble into one Part after the stream completes). For async models, use `async for event in response.astream_events()`.
 
 Iterating against the response object itself (`for chunk in response`) yields only text strings — reasoning and tool-call events are filtered out.
+
+(python-api-messages-reasoning)=
 
 #### Hiding reasoning output
 
@@ -916,7 +941,7 @@ Example usage:
 ```python
 import llm
 
-model = llm.get_model("gpt-4o-mini")
+model = llm.get_model("gpt-5.6-luna")
 response = model.prompt("a poem about a hippo")
 response.on_done(lambda response: print(response.usage()))
 print(response.text())
@@ -933,7 +958,7 @@ Or using an `asyncio` model, where you need to `await response.on_done(done)` to
 import asyncio, llm
 
 async def run():
-    model = llm.get_async_model("gpt-4o-mini")
+    model = llm.get_async_model("gpt-5.6-luna")
     response = model.prompt("a short poem about a brick")
     async def done(response):
         print(await response.usage())
@@ -955,7 +980,7 @@ The `llm.set_alias()` function can be used to define a new alias:
 ```python
 import llm
 
-llm.set_alias("mini", "gpt-4o-mini")
+llm.set_alias("mini", "gpt-5.6-luna")
 ```
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
@@ -980,12 +1005,12 @@ This sets the default model to the given model ID or alias. Any changes to defau
 ```python
 import llm
 
-llm.set_default_model("claude-3.5-sonnet")
+llm.set_default_model("claude-5-sonnet")
 ```
 
 ### get_default_model()
 
-This returns the currently configured default model, or `gpt-4o-mini` if no default has been set.
+This returns the currently configured default model, or `gpt-5.6-luna` if no default has been set.
 
 ```python
 import llm

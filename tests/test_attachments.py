@@ -1,10 +1,13 @@
-from click.testing import CliRunner
 import os
 import sys
 from unittest.mock import ANY
+
+import httpx
+import pytest
+from click.testing import CliRunner
+
 import llm
 from llm import cli
-import pytest
 
 TINY_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"
@@ -42,13 +45,12 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     )
 
     # Check it was logged correctly
-    conversations = list(logs_db["conversations"].rows)
-    assert len(conversations) == 1
-    conversation = conversations[0]
-    assert conversation["model"] == "mock"
-    assert conversation["name"] == "describe file"
-    response = list(logs_db["responses"].rows)[0]
-    attachment = list(logs_db["attachments"].rows)[0]
+    threads = list(logs_db["threads"].rows)
+    assert len(threads) == 1
+    assert threads[0]["name"] == "describe file"
+    turn = next(iter(logs_db["turns"].rows))
+    assert turn["model"] == "mock"
+    attachment = next(iter(logs_db["attachments"].rows))
     assert attachment == {
         "id": ANY,
         "type": attachment_type,
@@ -56,9 +58,9 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
         "url": None,
         "content": attachment_content,
     }
-    prompt_attachment = list(logs_db["prompt_attachments"].rows)[0]
-    assert prompt_attachment["attachment_id"] == attachment["id"]
-    assert prompt_attachment["response_id"] == response["id"]
+    # The attachment hangs off a part of the stored user message
+    part_attachment = next(iter(logs_db["part_attachments"].rows))
+    assert part_attachment["attachment_id"] == attachment["id"]
 
 
 def _count_open_fds():
@@ -96,3 +98,64 @@ def test_attachment_no_file_descriptor_leak(tmp_path):
 
     # File descriptor count should not have grown significantly
     assert _count_open_fds() <= baseline + 5
+
+
+def test_attachment_content_bytes_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        url="https://example.com/actual.png",
+        content=TINY_PNG,
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.content_bytes() == TINY_PNG
+
+
+def test_attachment_content_bytes_limits_redirects(httpx_mock):
+    for redirect in range(4):
+        httpx_mock.add_response(
+            url=f"https://example.com/redirect-{redirect}",
+            status_code=301,
+            headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
+        )
+
+    attachment = llm.Attachment(url="https://example.com/redirect-0")
+    with pytest.raises(httpx.TooManyRedirects):
+        attachment.content_bytes()
+
+    assert len(httpx_mock.get_requests()) == 4
+
+
+def test_attachment_resolve_type_follows_redirects(httpx_mock):
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/redirected.png",
+        status_code=301,
+        headers={"Location": "https://example.com/actual.png"},
+    )
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://example.com/actual.png",
+        headers={"content-type": "image/png"},
+    )
+    attachment = llm.Attachment(url="https://example.com/redirected.png")
+    assert attachment.resolve_type() == "image/png"
+
+
+def test_attachment_resolve_type_limits_redirects(httpx_mock):
+    for redirect in range(4):
+        httpx_mock.add_response(
+            method="HEAD",
+            url=f"https://example.com/redirect-{redirect}",
+            status_code=301,
+            headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
+        )
+
+    attachment = llm.Attachment(url="https://example.com/redirect-0")
+    with pytest.raises(httpx.TooManyRedirects):
+        attachment.resolve_type()
+
+    assert len(httpx_mock.get_requests()) == 4

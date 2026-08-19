@@ -1,9 +1,11 @@
-from click.testing import CliRunner
 import json
-from llm.cli import cli
 import pathlib
-import pytest
 import sys
+
+import pytest
+from click.testing import CliRunner
+
+from llm.cli import cli
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
@@ -81,32 +83,44 @@ def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):
 
     def assert_key(key):
         request = mocked_openai_chat.get_requests()[-1]
-        assert request.headers["Authorization"] == "Bearer {}".format(key)
+        assert request.headers["Authorization"] == f"Bearer {key}"
 
     runner = CliRunner()
 
     # Called without --key uses stored key
-    result = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
+    result = runner.invoke(
+        cli,
+        ["hello", "--no-stream", "-m", "gpt-4o-mini"],
+        catch_exceptions=False,
+    )
     assert result.exit_code == 0
     assert_key("from-keys-file")
 
     # Called without --key and without keys.json uses environment variable
     keys_path.write_text("{}", "utf-8")
-    result2 = runner.invoke(cli, ["hello", "--no-stream"], catch_exceptions=False)
+    result2 = runner.invoke(
+        cli,
+        ["hello", "--no-stream", "-m", "gpt-4o-mini"],
+        catch_exceptions=False,
+    )
     assert result2.exit_code == 0
     assert_key("from-env")
     keys_path.write_text(json.dumps(KEYS), "utf-8")
 
     # Called with --key name-in-keys.json uses that value
     result3 = runner.invoke(
-        cli, ["hello", "--key", "other", "--no-stream"], catch_exceptions=False
+        cli,
+        ["hello", "--key", "other", "--no-stream", "-m", "gpt-4o-mini"],
+        catch_exceptions=False,
     )
     assert result3.exit_code == 0
     assert_key("other-key")
 
     # Called with --key something-else uses exactly that
     result4 = runner.invoke(
-        cli, ["hello", "--key", "custom-key", "--no-stream"], catch_exceptions=False
+        cli,
+        ["hello", "--key", "custom-key", "--no-stream", "-m", "gpt-4o-mini"],
+        catch_exceptions=False,
     )
     assert result4.exit_code == 0
     assert_key("custom-key")

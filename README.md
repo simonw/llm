@@ -30,7 +30,7 @@ cog.out(readme_markdown)
 [![Discord](https://img.shields.io/discord/823971286308356157?label=discord)](https://datasette.io/discord-llm)
 [![Homebrew](https://img.shields.io/homebrew/installs/dy/llm?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/llm)
 
-A CLI tool and Python library for interacting with **OpenAI**, **Anthropic’s Claude**, **Google’s Gemini**, **Meta’s Llama** and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
+A CLI tool and Python library for interacting with **OpenAI**, **Anthropic’s Claude**, **Google’s Gemini**, **Qwen**, **Gemma**, **Kimi**, **DeepSeek**, **Mistral**, and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
 
 Watch **[Language models on the command-line](https://www.youtube.com/watch?v=QUXQNi6jQ30)** on YouTube for a demo or [read the accompanying detailed notes](https://simonwillison.net/2024/Jun/17/cli-language-models/).
 
@@ -69,13 +69,27 @@ Or with [uv](https://docs.astral.sh/uv/guides/tools/)
 uv tool install llm
 ```
 
+Use LLM to run prompts or start chats against an arbitrary OpenAI-compatible Chat Completions endpoint, such as [LM Studio](https://lmstudio.ai). With `uvx`, you can do this without installing LLM first:
+
+```bash
+uvx llm openai endpoint http://localhost:1234/v1 \
+  -m google/gemma-4-12b \
+  "What is the capital of France?"
+
+uvx llm openai endpoint http://localhost:1234/v1 \
+  -m google/gemma-4-12b \
+  --chat
+```
+
+Add `--key your-api-key` if the endpoint requires authentication. See [Run against an endpoint without configuring it](https://llm.datasette.io/en/stable/other-models.html#openai-endpoint) for more options.
+
 If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you can run this:
 
 ```bash
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt (with the default gpt-4o-mini model)
+# Run a prompt (with the default gpt-5.6-luna model)
 llm "Ten fun names for a pet pelican"
 
 # Extract text from an image
@@ -91,12 +105,12 @@ Run prompts against [Gemini](https://aistudio.google.com/apikey) or [Anthropic](
 llm install llm-gemini
 llm keys set gemini
 # Paste Gemini API key here
-llm -m gemini-2.0-flash 'Tell me fun facts about Mountain View'
+llm -m gemini-3.5-flash 'Tell me fun facts about Mountain View'
 
 llm install llm-anthropic
 llm keys set anthropic
 # Paste Anthropic API key here
-llm -m claude-4-opus 'Impress me with wild facts about turnips'
+llm -m claude-sonnet-5 'Impress me with wild facts about turnips'
 ```
 
 You can also [install a plugin](https://llm.datasette.io/en/stable/plugins/installing-plugins.html#installing-plugins) to access models that can run on your local device. If you use [Ollama](https://ollama.com/):
@@ -128,17 +142,24 @@ Why don't pelicans like to tip waiters?
 Because they always have a big bill!
 ```
 
-More background on this project:
+## Project news
 
-- [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
-- [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
-- [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
-- [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
-- [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
-- [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
-- [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
+- 29th April 2026: [LLM 0.32a0 is a major backwards-compatible refactor](https://simonwillison.net/2026/Apr/29/llm/)
+- 11th August 2025: [LLM 0.27, the annotated release notes: GPT-5 and improved tool calling](https://simonwillison.net/2025/Aug/11/llm-027/)
+- 27th May 2025: [Large Language Models can run tools in your terminal with LLM 0.26](https://simonwillison.net/2025/May/27/llm-tools/)
+- 5th May 2025: [Feed a video to a vision LLM as a sequence of JPEG frames on the CLI (also LLM 0.25)](https://simonwillison.net/2025/May/5/llm-video-frames/)
+- 7th April 2025: [Long context support in LLM 0.24 using fragments and template plugins](https://simonwillison.net/2025/Apr/7/long-context-llm/)
+- 28th February 2025: [Structured data extraction from unstructured content using LLM schemas](https://simonwillison.net/2025/Feb/28/llm-schemas/)
+- 17th February 2025: [LLM 0.22, the annotated release notes](https://simonwillison.net/2025/Feb/17/llm/)
+- 29th October 2024: [You can now run prompts against images, audio and video in your terminal using LLM](https://simonwillison.net/2024/Oct/29/llm-multi-modal/)
+- 26th January 2024: [LLM 0.13: The annotated release notes](https://simonwillison.net/2024/Jan/26/llm/)
+- 12th September 2023: [Build an image search engine with llm-clip, chat with models with llm chat](https://simonwillison.net/2023/Sep/12/llm-clip-and-chat/)
+- 4th September 2023: [LLM now provides tools for working with embeddings](https://simonwillison.net/2023/Sep/4/llm-embeddings/)
+- 12th July 2023: [The LLM CLI tool now supports self-hosted language models via plugins](https://simonwillison.net/2023/Jul/12/llm/)
+- 18th May 2023: [llm, ttok and strip-tags—CLI tools for working with ChatGPT and other LLMs](https://simonwillison.net/2023/May/18/cli-tools-for-llms/)
+- 4th April 2023: [The original announcement of the llm CLI tool](https://simonwillison.net/2023/Apr/4/llm/)
 
-See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
+For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
 
 ## Contents
 
@@ -163,6 +184,7 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [System prompts](https://llm.datasette.io/en/stable/usage.html#system-prompts)
     * [Tools](https://llm.datasette.io/en/stable/usage.html#tools)
     * [Extracting fenced code blocks](https://llm.datasette.io/en/stable/usage.html#extracting-fenced-code-blocks)
+    * [JSON output](https://llm.datasette.io/en/stable/usage.html#json-output)
     * [Schemas](https://llm.datasette.io/en/stable/usage.html#schemas)
     * [Fragments](https://llm.datasette.io/en/stable/usage.html#fragments)
     * [Continuing a conversation](https://llm.datasette.io/en/stable/usage.html#continuing-a-conversation)
@@ -175,12 +197,17 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
   * [Configuration](https://llm.datasette.io/en/stable/openai-models.html#configuration)
   * [OpenAI language models](https://llm.datasette.io/en/stable/openai-models.html#openai-language-models)
   * [Model features](https://llm.datasette.io/en/stable/openai-models.html#model-features)
+  * [Web Search](https://llm.datasette.io/en/stable/openai-models.html#web-search)
+  * [Code Interpreter](https://llm.datasette.io/en/stable/openai-models.html#code-interpreter)
+  * [Fast mode and service tiers](https://llm.datasette.io/en/stable/openai-models.html#fast-mode-and-service-tiers)
   * [OpenAI embedding models](https://llm.datasette.io/en/stable/openai-models.html#openai-embedding-models)
   * [OpenAI completion models](https://llm.datasette.io/en/stable/openai-models.html#openai-completion-models)
   * [Adding more OpenAI models](https://llm.datasette.io/en/stable/openai-models.html#adding-more-openai-models)
 * [Other models](https://llm.datasette.io/en/stable/other-models.html)
   * [Installing and using a local model](https://llm.datasette.io/en/stable/other-models.html#installing-and-using-a-local-model)
   * [OpenAI-compatible models](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models)
+    * [Run against an endpoint without configuring it](https://llm.datasette.io/en/stable/other-models.html#run-against-an-endpoint-without-configuring-it)
+    * [Configure an OpenAI-compatible model](https://llm.datasette.io/en/stable/other-models.html#configure-an-openai-compatible-model)
     * [Extra HTTP headers](https://llm.datasette.io/en/stable/other-models.html#extra-http-headers)
 * [Tools](https://llm.datasette.io/en/stable/tools.html)
   * [How tools work](https://llm.datasette.io/en/stable/tools.html#how-tools-work)
@@ -280,8 +307,10 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Async models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#async-models)
     * [Supporting schemas](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-schemas)
     * [Supporting tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-tools)
+    * [Supporting server-side tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-server-side-tools)
     * [Attachments for multi-modal models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#attachments-for-multi-modal-models)
     * [Structured messages and streaming events](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#structured-messages-and-streaming-events)
+    * [Condensing logged payloads with json_replacements](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#condensing-logged-payloads-with-json-replacements)
     * [Consuming prompt.messages in build_messages](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#consuming-prompt-messages-in-build-messages)
     * [Restoring opaque metadata on subsequent requests](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#restoring-opaque-metadata-on-subsequent-requests)
     * [Tracking token usage](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tracking-token-usage)
@@ -332,6 +361,16 @@ See also [the llm tag](https://simonwillison.net/tags/llm/) on my blog.
     * [Browsing data collected using schemas](https://llm.datasette.io/en/stable/logging.html#browsing-data-collected-using-schemas)
   * [Browsing logs using Datasette](https://llm.datasette.io/en/stable/logging.html#browsing-logs-using-datasette)
   * [Backing up your database](https://llm.datasette.io/en/stable/logging.html#backing-up-your-database)
+  * [The message store](https://llm.datasette.io/en/stable/logging.html#the-message-store)
+    * [Threads, turns, messages and parts](https://llm.datasette.io/en/stable/logging.html#threads-turns-messages-and-parts)
+    * [A worked example](https://llm.datasette.io/en/stable/logging.html#a-worked-example)
+    * [Content addressing as a contract](https://llm.datasette.io/en/stable/logging.html#content-addressing-as-a-contract)
+    * [Forking and shared history](https://llm.datasette.io/en/stable/logging.html#forking-and-shared-history)
+    * [Storage by reference](https://llm.datasette.io/en/stable/logging.html#storage-by-reference)
+    * [The raw provider payload](https://llm.datasette.io/en/stable/logging.html#the-raw-provider-payload)
+    * [Table by table](https://llm.datasette.io/en/stable/logging.html#table-by-table)
+    * [Querying the message store](https://llm.datasette.io/en/stable/logging.html#querying-the-message-store)
+    * [Logging from Python](https://llm.datasette.io/en/stable/logging.html#logging-from-python)
   * [SQL schema](https://llm.datasette.io/en/stable/logging.html#sql-schema)
 * [Related tools](https://llm.datasette.io/en/stable/related-tools.html)
   * [strip-tags](https://llm.datasette.io/en/stable/related-tools.html#strip-tags)

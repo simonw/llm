@@ -1,5 +1,7 @@
 import json
+
 import pytest
+
 import llm
 
 
@@ -446,7 +448,7 @@ class TestStreamEventsFromStreamEventPlugin:
         response = mock_model.prompt("hi")
         response.text()
         with pytest.raises(ValueError, match="part_index"):
-            response.messages()  # noqa: B018
+            response.messages()
 
     def test_provider_metadata_merges_last_wins(self, mock_model):
         events = [
@@ -507,6 +509,121 @@ class TestStreamEventsFromStreamEventPlugin:
     def test_redacted_reasoning_event_default_redacted_is_false(self):
         ev = llm.parts.StreamEvent(type="reasoning", chunk="thinking")
         assert ev.redacted is False
+
+    def test_metadata_only_reasoning_event_emits_part(self, mock_model):
+        # Anthropic display:"omitted" thinking arrives as an empty
+        # thinking block whose signature carries the encrypted
+        # reasoning state. The signature-only event must still become
+        # a ReasoningPart or the signature is lost from history.
+        events = [
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                provider_metadata={"anthropic": {"signature": "sig-omitted"}},
+            ),
+            llm.parts.StreamEvent(type="text", chunk="hi"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={"anthropic": {"signature": "sig-omitted"}},
+            ),
+            llm.parts.TextPart(text="hi"),
+        ]
+        assert "sig-omitted" not in response.text()
+
+    def test_metadata_only_reasoning_part_is_not_hoisted(self, mock_model):
+        # Unlike redacted=True markers, metadata-only reasoning keeps
+        # its position: Anthropic requires thinking/redacted_thinking
+        # blocks replayed in their original order.
+        events = [
+            llm.parts.StreamEvent(type="text", chunk="hello", part_index=0),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=1,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "opaque"}
+                },
+            ),
+            llm.parts.StreamEvent(type="text", chunk="bye", part_index=2),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.TextPart(text="hello"),
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "opaque"}
+                },
+            ),
+            llm.parts.TextPart(text="bye"),
+        ]
+
+    def test_adjacent_reasoning_blocks_with_explicit_index_stay_distinct(
+        self, mock_model
+    ):
+        # Explicit part_index keeps adjacent provider blocks separate:
+        # a visible signed thinking block followed by a redacted one
+        # must not merge (each keeps its own metadata and boundaries).
+        events = [
+            llm.parts.StreamEvent(type="reasoning", chunk="visible ", part_index=0),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=0,
+                provider_metadata={"anthropic": {"signature": "sig-1"}},
+            ),
+            llm.parts.StreamEvent(
+                type="reasoning",
+                chunk="",
+                part_index=1,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "blob"}
+                },
+            ),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=2),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        parts = response.messages()[0].parts
+        assert parts == [
+            llm.parts.ReasoningPart(
+                text="visible ",
+                redacted=False,
+                provider_metadata={"anthropic": {"signature": "sig-1"}},
+            ),
+            llm.parts.ReasoningPart(
+                text="",
+                redacted=False,
+                provider_metadata={
+                    "anthropic": {"type": "redacted_thinking", "data": "blob"}
+                },
+            ),
+            llm.parts.TextPart(text="answer"),
+        ]
+
+    def test_empty_reasoning_group_without_metadata_is_dropped(self, mock_model):
+        # No text, no redacted marker, no metadata: nothing worth
+        # preserving, so no Part is built.
+        events = [
+            llm.parts.StreamEvent(type="reasoning", chunk=""),
+            llm.parts.StreamEvent(type="text", chunk="hi"),
+        ]
+        mock_model.enqueue(events)
+        response = mock_model.prompt("x")
+        response.text()
+        assert response.messages()[0].parts == [llm.parts.TextPart(text="hi")]
 
 
 class TestPartIndexAutoAllocation:
@@ -909,8 +1026,8 @@ class TestPromptMessagesSynthesis:
         ]
 
     def test_tool_results_become_tool_role_message(self, mock_model):
-        from llm.models import Prompt
         from llm import ToolResult
+        from llm.models import Prompt
 
         tr = ToolResult(name="t", output="ok", tool_call_id="c1")
         p = Prompt(None, model=mock_model, tool_results=[tr])
@@ -938,9 +1055,11 @@ class TestPromptMessagesExplicit:
         assert p.messages == explicit
 
     def test_explicit_messages_ignores_prompt_kwarg(self, mock_model):
-        """Explicit messages= is authoritative. A prompt= string passed
-        alongside is no longer auto-appended — the invariant is that
-        prompt.messages equals exactly what the model was sent."""
+        """Prompt stores messages= verbatim. Folding prompt= into the
+        chain happens in model.prompt() / _build_full_chain before the
+        Prompt is constructed — internal callers pass chains that
+        already contain the prompt text, so Prompt itself must not
+        append it a second time."""
         from llm.models import Prompt
 
         explicit = [llm.system("x"), llm.user("prior"), llm.user("follow-up")]
@@ -999,6 +1118,90 @@ class TestModelPromptMessagesKwarg:
         assert response.prompt.messages == [llm.user("q")]
 
 
+class TestModelPromptMessagesPlusNewInput:
+    """messages= is the authoritative history; prompt=, fragments=,
+    attachments= and tool_results= passed alongside are this turn's new
+    input, folded into the chain so prompt.messages still equals exactly
+    what the model sees. Previously the prompt text was silently absent
+    from the chain — and so from the log."""
+
+    def test_prompt_text_appends_user_message(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+    def test_fragments_join_the_prompt_text(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "question", fragments=["context"], messages=[llm.user("original")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("context\nquestion"),
+        ]
+
+    def test_attachments_join_the_user_message(self, mock_model):
+        att = llm.Attachment(type="image/png", url="http://example.com/a.png")
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "look", attachments=[att], messages=[llm.user("original")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.Message(
+                role="user",
+                parts=[
+                    llm.parts.TextPart(text="look"),
+                    llm.parts.AttachmentPart(attachment=att),
+                ],
+            ),
+        ]
+
+    def test_tool_results_append_tool_message_before_user(self, mock_model):
+        tr = llm.ToolResult(name="t", output="ok", tool_call_id="c1")
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "next", messages=[llm.user("original")], tool_results=[tr]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(name="t", output="ok", tool_call_id="c1")
+                ],
+            ),
+            llm.user("next"),
+        ]
+
+    def test_conversation_prompt_folds_too(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        response = conv.prompt("follow-up", messages=[llm.user("original")])
+        response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_prompt_folds_too(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        response = async_mock_model.prompt("follow-up", messages=[llm.user("original")])
+        await response.text()
+        assert response.prompt.messages == [
+            llm.user("original"),
+            llm.user("follow-up"),
+        ]
+
+
 # Invariant: response.prompt.messages == exactly what the model was
 # sent for this turn, regardless of whether the caller used
 # model.prompt(messages=[...]), conversation.prompt("text"), or
@@ -1006,17 +1209,21 @@ class TestModelPromptMessagesKwarg:
 
 
 class TestConversationFullChainInvariant:
-    def test_explicit_messages_is_authoritative_no_prompt_combine(self, mock_model):
-        """Explicit messages= is the whole list. If prompt= is ALSO
-        passed, it's ignored for messages-building — the caller asked
-        for exact control."""
+    def test_explicit_messages_plus_prompt_appends_user_message(self, mock_model):
+        """Explicit messages= is the authoritative history. A prompt=
+        passed alongside is this turn's new input and is folded in as a
+        trailing user message — the model sees it, so the chain (and
+        therefore the log) must contain it."""
         mock_model.enqueue(["ok"])
         response = mock_model.prompt(
-            "this prompt argument is ignored",
+            "the new question",
             messages=[llm.user("q")],
         )
         response.text()
-        assert response.prompt.messages == [llm.user("q")]
+        assert response.prompt.messages == [
+            llm.user("q"),
+            llm.user("the new question"),
+        ]
 
     def test_conversation_second_turn_prompt_messages_has_full_chain(self, mock_model):
         mock_model.enqueue(["a1"])
@@ -1120,15 +1327,31 @@ class TestSqliteRehydrateMessages:
         self, mock_model, tmp_path
     ):
         import sqlite_utils
-        from llm.migrations import migrate
 
-        mock_model.enqueue(["answer text"])
-        r1 = mock_model.prompt("q1")
-        r1.text()
+        from llm.migrations import migrate
 
         db = sqlite_utils.Database(str(tmp_path / "logs.db"))
         migrate(db)
-        r1.log_to_db(db)
+        # log_to_db no longer writes the legacy tables - seed the row
+        # the way an older version of llm recorded it, since from_row
+        # is the reader for exactly that history.
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "model": "mock",
+                "prompt": "q1",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "answer text",
+                "response_json": None,
+                "conversation_id": None,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+            },
+            alter=True,
+        )
 
         # Rehydrate the response
         row = next(db["responses"].rows)
@@ -1149,8 +1372,9 @@ class TestSqliteRehydrateMessages:
         """End-to-end: a follow-up turn via load_conversation must send
         [user(q1), assistant(a1), user(q2)] — not drop the assistant."""
         import sqlite_utils
-        from llm.migrations import migrate
+
         from llm.cli import load_conversation
+        from llm.migrations import migrate
 
         mock_model.enqueue(["first answer"])
         mock_model.enqueue(["second answer"])
@@ -1179,6 +1403,7 @@ class TestSqliteRehydrateMessages:
         assistant tool_use. Otherwise Anthropic sees an orphan
         tool_result at the start of the continued request."""
         import sqlite_utils
+
         from llm.cli import load_conversation
         from llm.migrations import migrate
 
@@ -1296,6 +1521,73 @@ class TestAddToolCallWithStreamEvents:
         ]
 
 
+class TestMessageIndexAssembly:
+    def test_message_index_splits_assistant_messages(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(type="text", chunk="STEP ONE", message_index=0),
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="code_interpreter",
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk='{"code": "print(1)"}',
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_result",
+                    chunk="1\n",
+                    tool_call_id="ci1",
+                    server_executed=True,
+                    tool_name="code_interpreter",
+                    message_index=0,
+                ),
+                llm.parts.StreamEvent(type="text", chunk="STEP TWO", message_index=1),
+            ]
+        )
+        response = mock_model.prompt("go")
+        response.text()
+        messages = response.messages()
+        assert len(messages) == 2
+        assert all(m.role == "assistant" for m in messages)
+        assert messages[0].parts == [
+            llm.parts.TextPart(text="STEP ONE"),
+            llm.parts.ToolCallPart(
+                name="code_interpreter",
+                arguments={"code": "print(1)"},
+                tool_call_id="ci1",
+                server_executed=True,
+            ),
+            llm.parts.ToolResultPart(
+                name="code_interpreter",
+                output="1\n",
+                tool_call_id="ci1",
+                server_executed=True,
+            ),
+        ]
+        assert messages[1].parts == [llm.parts.TextPart(text="STEP TWO")]
+
+    def test_adjacent_text_across_message_boundary_does_not_merge(self, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(type="text", chunk="first", message_index=0),
+                llm.parts.StreamEvent(type="text", chunk="second", message_index=1),
+            ]
+        )
+        response = mock_model.prompt("go")
+        response.text()
+        messages = response.messages()
+        assert len(messages) == 2
+        assert messages[0].parts == [llm.parts.TextPart(text="first")]
+        assert messages[1].parts == [llm.parts.TextPart(text="second")]
+
+
 class TestResponseReply:
     def test_reply_builds_next_turn_from_this_response(self, mock_model):
         mock_model.enqueue(["a1"])
@@ -1356,6 +1648,84 @@ class TestResponseReply:
             llm.user("q1"),
             llm.assistant("a1"),
             llm.user("q2"),
+        ]
+
+    def test_reply_tool_result_attachments_become_user_parts(self, mock_model):
+        """Attachments returned by tools must surface as a user-role
+        AttachmentPart message - adapters only emit ToolResultPart.output,
+        so attachments nested inside the part would be silently lost."""
+        mock_model.enqueue(["a1"])
+        mock_model.enqueue(["a2"])
+        r1 = mock_model.prompt("q1")
+        r1.text()
+        attachment = llm.Attachment(type="image/png", content=b"fakepng")
+        r2 = r1.reply(
+            "describe it",
+            tool_results=[
+                llm.ToolResult(
+                    name="take_photo",
+                    output="took photo",
+                    attachments=[attachment],
+                    tool_call_id="c1",
+                )
+            ],
+        )
+        r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(
+                        name="take_photo", output="took photo", tool_call_id="c1"
+                    )
+                ],
+            ),
+            llm.Message(
+                role="user",
+                parts=[llm.parts.AttachmentPart(attachment=attachment)],
+            ),
+            llm.user("describe it"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_tool_result_attachments_become_user_parts(
+        self, async_mock_model
+    ):
+        async_mock_model.enqueue(["a1"])
+        async_mock_model.enqueue(["a2"])
+        r1 = async_mock_model.prompt("q1")
+        await r1.text()
+        attachment = llm.Attachment(type="image/png", content=b"fakepng")
+        r2 = await r1.reply(
+            "describe it",
+            tool_results=[
+                llm.ToolResult(
+                    name="take_photo",
+                    output="took photo",
+                    attachments=[attachment],
+                    tool_call_id="c1",
+                )
+            ],
+        )
+        await r2.text()
+        assert r2.prompt.messages == [
+            llm.user("q1"),
+            llm.assistant("a1"),
+            llm.Message(
+                role="tool",
+                parts=[
+                    llm.parts.ToolResultPart(
+                        name="take_photo", output="took photo", tool_call_id="c1"
+                    )
+                ],
+            ),
+            llm.Message(
+                role="user",
+                parts=[llm.parts.AttachmentPart(attachment=attachment)],
+            ),
+            llm.user("describe it"),
         ]
 
     @pytest.mark.asyncio
@@ -1704,8 +2074,7 @@ class TestChainPropagatesSystem:
                     yield "done"
                     return
                 msgs = self._queue.pop(0)
-                for m in msgs:
-                    yield m
+                yield from msgs
                 if not response._tool_calls:
                     response.add_tool_call(tool_call)
 
@@ -1731,8 +2100,7 @@ class TestChainPropagatesSystem:
                     yield "done"
                     return
                 msgs = self._queue.pop(0)
-                for m in msgs:
-                    yield m
+                yield from msgs
                 if not response._tool_calls:
                     response.add_tool_call(tool_call)
 
@@ -1812,17 +2180,20 @@ class TestChainMessagesKwarg:
         r1 = chain._responses[0]
         assert r1.prompt.messages == [llm.user("explicit")]
 
-    def test_chain_messages_is_authoritative_over_prompt_kwarg(self, mock_model):
-        """Parity with prompt(): when both are passed, messages= wins
-        and the prompt= string is not folded into the chain."""
+    def test_chain_messages_plus_prompt_folds_user_message(self, mock_model):
+        """Parity with prompt(): messages= is the history and a prompt=
+        passed alongside is appended as this turn's user message."""
         mock_model.enqueue(["ok"])
         chain = mock_model.chain(
-            "ignored text",
+            "the new question",
             messages=[llm.user("explicit")],
         )
         chain.text()
         r1 = chain._responses[0]
-        assert r1.prompt.messages == [llm.user("explicit")]
+        assert r1.prompt.messages == [
+            llm.user("explicit"),
+            llm.user("the new question"),
+        ]
 
     def test_chain_with_messages_and_prior_conversation(self, mock_model):
         """Explicit messages= on chain() replaces history reconstruction;
