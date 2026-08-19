@@ -23,6 +23,7 @@ from enum import Enum
 import httpx
 import openai
 import os
+import types
 
 from pydantic import create_model, field_validator, Field
 
@@ -315,68 +316,188 @@ def register_models(register):
     )
 
     # Load extra models
-    extra_path = llm.user_dir() / "extra-openai-models.yaml"
-    if not extra_path.exists():
-        return
-    with open(extra_path) as f:
-        extra_models = yaml.safe_load(f)
-    for extra_model in extra_models:
-        model_id = extra_model["model_id"]
-        aliases = extra_model.get("aliases", [])
-        model_name = extra_model["model_name"]
-        api_base = extra_model.get("api_base")
-        api_type = extra_model.get("api_type")
-        api_version = extra_model.get("api_version")
-        api_engine = extra_model.get("api_engine")
-        headers = extra_model.get("headers")
-        reasoning = extra_model.get("reasoning")
-        kwargs = {}
-        if extra_model.get("can_stream") is False:
-            kwargs["can_stream"] = False
-        if extra_model.get("supports_schema") is True:
-            kwargs["supports_schema"] = True
-        if extra_model.get("supports_tools") is True:
-            kwargs["supports_tools"] = True
-        if extra_model.get("vision") is True:
-            kwargs["vision"] = True
-        if extra_model.get("audio") is True:
-            kwargs["audio"] = True
-        if extra_model.get("completion"):
-            klass = Completion
-            async_klass = None
-        elif extra_model.get("responses"):
-            klass = Responses
-            async_klass = AsyncResponses
-        else:
-            klass = Chat
-            async_klass = AsyncChat
-        model_kwargs = dict(
-            model_id=model_id,
-            model_name=model_name,
-            api_base=api_base,
-            api_type=api_type,
-            api_version=api_version,
-            api_engine=api_engine,
-            headers=headers,
-            reasoning=reasoning,
-            **kwargs,
-        )
-        chat_model = klass(**model_kwargs)
-        async_model = async_klass(**model_kwargs) if async_klass else None
-        if api_base:
-            chat_model.needs_key = None
-            if async_model:
-                async_model.needs_key = None
-        if extra_model.get("api_key_name"):
-            chat_model.needs_key = extra_model["api_key_name"]
-            if async_model:
-                async_model.needs_key = extra_model["api_key_name"]
-        register(
-            chat_model,
-            async_model,
-            aliases=aliases,
-        )
+    # extra-models.yaml (new format) is loaded first, then legacy
+    # extra-openai-models.yaml for backward compatibility. model_ids are
+    # deduplicated: the first file to define a model_id wins.
+    _loaded_extra_model_ids = set()
 
+    def load_extra_models(extra_path):
+        """Load extra model definitions from a YAML file and register them.
+
+        Supported fields: model_id, model_name, aliases, api_base, api_type,
+        api_version, api_engine, headers, reasoning, can_stream,
+        supports_schema, supports_tools, vision, audio, video, pdf,
+        completion, responses, api_key_name, defaults.
+
+        ``api_type`` selects the client class family:
+          - ``chat`` (default): OpenAI chat/completions (Chat/AsyncChat)
+          - ``completion``: legacy text completions (Completion)
+          - ``responses``: OpenAI Responses API (Responses/AsyncResponses)
+          - ``claude``: RESERVED STUB - currently registers as Chat, because
+            real Claude (Anthropic API) support requires the separate
+            llm-anthropic plugin. Documented here so configs can declare
+            intent; do not rely on it producing Anthropic-protocol calls.
+        Explicit ``completion: true`` / ``responses: true`` booleans take
+        precedence over ``api_type`` for backward compatibility.
+
+        ``video: true`` / ``pdf: true`` are stored as model attributes
+        (model.video / model.pdf) mirroring how vision/audio are stored by
+        _Shared.__init__; ``pdf: true`` also adds application/pdf to
+        attachment_types.
+
+        ``defaults`` is a mapping of default option values (e.g.
+        ``defaults: {temperature: 0.3, top_p: 0.9}``) applied when the user
+        does not pass the corresponding -o option. Implemented by wrapping
+        the instance's build_kwargs: the original runs first, then any
+        missing keys are filled in from the defaults.
+        """
+        if not extra_path.exists():
+            return
+        with open(extra_path) as f:
+            extra_models = yaml.safe_load(f)
+        if not extra_models:
+            return
+        for extra_model in extra_models:
+            model_id = extra_model["model_id"]
+            if model_id in _loaded_extra_model_ids:
+                continue
+            _loaded_extra_model_ids.add(model_id)
+            aliases = extra_model.get("aliases", [])
+            model_name = extra_model["model_name"]
+            api_base = extra_model.get("api_base")
+            api_type = extra_model.get("api_type")
+            api_version = extra_model.get("api_version")
+            api_engine = extra_model.get("api_engine")
+            headers = extra_model.get("headers")
+            reasoning = extra_model.get("reasoning")
+            defaults = extra_model.get("defaults")
+            kwargs = {}
+            if extra_model.get("can_stream") is False:
+                kwargs["can_stream"] = False
+            if extra_model.get("supports_schema") is True:
+                kwargs["supports_schema"] = True
+            if extra_model.get("supports_tools") is True:
+                kwargs["supports_tools"] = True
+            if extra_model.get("vision") is True:
+                kwargs["vision"] = True
+            if extra_model.get("audio") is True:
+                kwargs["audio"] = True
+            if extra_model.get("video") is True:
+                kwargs["video"] = True
+            if extra_model.get("pdf") is True:
+                kwargs["pdf"] = True
+            # Client class selection: explicit booleans win for backward
+            # compatibility, then the api_type family selector.
+            if extra_model.get("completion"):
+                klass = Completion
+                async_klass = None
+            elif extra_model.get("responses"):
+                klass = Responses
+                async_klass = AsyncResponses
+            elif api_type == "completion":
+                klass = Completion
+                async_klass = None
+                api_type = None  # do not pass selector through to client kwargs
+            elif api_type == "responses":
+                klass = Responses
+                async_klass = AsyncResponses
+                api_type = None
+            elif api_type == "claude":
+                # Claude support is a stub: it requires the anthropic plugin
+                # for a real implementation; register as Chat for now.
+                klass = Chat
+                async_klass = AsyncChat
+                api_type = None
+            elif api_type == "chat":
+                klass = Chat
+                async_klass = AsyncChat
+                api_type = None
+            else:
+                klass = Chat
+                async_klass = AsyncChat
+
+            def _construct(cls, **kw):
+                # Responses/Completion may not accept video/pdf __init__
+                # args; fall back to setting attributes post-construction.
+                try:
+                    return cls(**kw)
+                except TypeError:
+                    kw = dict(kw)
+                    kw.pop("video", None)
+                    kw.pop("pdf", None)
+                    return cls(**kw)
+
+            model_kwargs = dict(
+                model_id=model_id,
+                model_name=model_name,
+                api_base=api_base,
+                api_type=api_type,
+                api_version=api_version,
+                api_engine=api_engine,
+                headers=headers,
+                reasoning=reasoning,
+                **kwargs,
+            )
+            chat_model = _construct(klass, **model_kwargs)
+            async_model = _construct(async_klass, **model_kwargs) if async_klass else None
+            # Mirror the vision/audio attribute pattern on every instance
+            # regardless of which __init__ path was taken.
+            chat_model.video = bool(extra_model.get("video"))
+            chat_model.pdf = bool(extra_model.get("pdf"))
+            if async_model:
+                async_model.video = chat_model.video
+                async_model.pdf = chat_model.pdf
+            if kwargs.get("pdf") and hasattr(chat_model, "attachment_types"):
+                # pdf: true implies PDF attachments even if vision is false
+                chat_model.attachment_types.add("application/pdf")
+                if async_model:
+                    async_model.attachment_types.add("application/pdf")
+            if api_base:
+                chat_model.needs_key = None
+                if async_model:
+                    async_model.needs_key = None
+            if extra_model.get("api_key_name"):
+                chat_model.needs_key = extra_model["api_key_name"]
+                if async_model:
+                    async_model.needs_key = extra_model["api_key_name"]
+            if defaults:
+                # Store model default options and patch build_kwargs so that
+                # defaults are injected when the prompt does not set them.
+                chat_model.default_options = dict(defaults)
+                if async_model:
+                    async_model.default_options = dict(defaults)
+
+                def _make_build_kwargs(original, model_defaults):
+                    def build_kwargs_with_defaults(self, prompt, stream):
+                        kwargs = original(prompt, stream)
+                        for key, value in model_defaults.items():
+                            if key not in kwargs:
+                                kwargs[key] = value
+                        return kwargs
+
+                    return build_kwargs_with_defaults
+
+                chat_model.build_kwargs = types.MethodType(
+                    _make_build_kwargs(chat_model.build_kwargs, chat_model.default_options),
+                    chat_model,
+                )
+                if async_model:
+                    async_model.build_kwargs = types.MethodType(
+                        _make_build_kwargs(
+                            async_model.build_kwargs, async_model.default_options
+                        ),
+                        async_model,
+                    )
+            register(
+                chat_model,
+                async_model,
+                aliases=aliases,
+            )
+
+    # New-style file first, then the legacy extra-openai-models.yaml for
+    # backward compatibility.
+    load_extra_models(llm.user_dir() / "extra-models.yaml")
+    load_extra_models(llm.user_dir() / "extra-openai-models.yaml")
 
 @hookimpl
 def register_embedding_models(register):
@@ -720,6 +841,8 @@ class _Shared:
         can_stream=True,
         vision=False,
         audio=False,
+        video=False,
+        pdf=False,
         reasoning=False,
         verbosity=False,
         image_detail_original=False,
@@ -739,6 +862,8 @@ class _Shared:
         self.headers = headers
         self.can_stream = can_stream
         self.vision = vision
+        self.video = video
+        self.pdf = pdf
         self.allows_system_prompt = allows_system_prompt
 
         self.attachment_types = set()
