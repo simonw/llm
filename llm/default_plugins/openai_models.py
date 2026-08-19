@@ -458,9 +458,15 @@ def register_models(register):
                 if async_model:
                     async_model.needs_key = None
             if extra_model.get("api_key_name"):
-                chat_model.needs_key = extra_model["api_key_name"]
+                key_name = extra_model["api_key_name"]
+                chat_model.needs_key = key_name
+                # Honour the configured key name as the env var too, so
+                # ``api_key_name: AI_GATEWAY_API_KEY`` picks up $AI_GATEWAY_API_KEY
+                # instead of falling back to the class default (OPENAI_API_KEY).
+                chat_model.key_env_var = key_name
                 if async_model:
-                    async_model.needs_key = extra_model["api_key_name"]
+                    async_model.needs_key = key_name
+                    async_model.key_env_var = key_name
             if defaults or provider_options:
                 # Store model default options / providerOptions and patch
                 # build_kwargs so they are injected when the prompt does not
@@ -479,8 +485,12 @@ def register_models(register):
                         for key, value in model_defaults.items():
                             if key not in kwargs:
                                 kwargs[key] = value
-                        if provider_opts and "providerOptions" not in kwargs:
-                            kwargs["providerOptions"] = provider_opts
+                        if provider_opts:
+                            # The openai SDK rejects unknown top-level kwargs,
+                            # so providerOptions rides in extra_body.
+                            extra_body = dict(kwargs.get("extra_body") or {})
+                            extra_body.setdefault("providerOptions", provider_opts)
+                            kwargs["extra_body"] = extra_body
                         return kwargs
 
                     return build_kwargs_with_defaults
