@@ -26,6 +26,7 @@ classifiers = [
 
 dependencies = [
     "click",
+    "httpx",
     "condense-json>=1.1",
     "openai>=2.32.0",
     "click-default-group>=1.2.3",
