@@ -112,6 +112,27 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       # With an explicit mimetype:
       cat image | llm 'describe image' --at - image/jpeg
 
+  Structured output schemas:
+
+  Use --schema to request one JSON object, or --schema-multi to request multiple
+  objects returned in an "items" array. Both options accept a concise schema
+  DSL. Define each field as NAME [TYPE]: DESCRIPTION, with the type and
+  description both optional. Separate fields with commas:
+
+      llm --schema 'name, age int, active bool' 'Invent a dog'
+
+  Supported types are str, int, float and bool. The default is str and every
+  listed field is required. Descriptions provide extra instructions to the
+  model. Use one field per line if descriptions contain commas:
+
+      llm --schema-multi '
+      name: the dog's name
+      age int: the dog's age in years
+      bio: a short bio, no more than three sentences
+      ' 'Invent three dogs'
+
+  JSON Schema is also accepted.
+
   The -x/--extract option returns just the content of the first ``` fenced code
   block, if one is present. If none are present it returns the full response.
 
@@ -135,8 +156,8 @@ Options:
                                   default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
   --options                       Show options for the selected model
-  --schema TEXT                   JSON schema, filepath or ID
-  --schema-multi TEXT             JSON schema to use for multiple results
+  --schema TEXT                   Schema DSL, JSON schema, filepath or ID
+  --schema-multi TEXT             Schema for multiple results
   -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
                                   add to the prompt
   --sf, --system-fragment TEXT    Fragment to add to system prompt
@@ -352,7 +373,7 @@ Options:
   -f, --fragment TEXT         Filter for prompts using these fragments
   -T, --tool TEXT             Filter for prompts with results from these tools
   --tools                     Filter for prompts with results from any tools
-  --schema TEXT               JSON schema, filepath or ID
+  --schema TEXT               Schema DSL, JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   -l, --latest                Return latest results matching search query
   --data                      Output newline-delimited JSON data for schema
@@ -1097,7 +1118,7 @@ Options:
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   -o, --option <TEXT TEXT>...     key/value options for the model
-  --schema TEXT                   JSON schema, filepath or ID
+  --schema TEXT                   Schema DSL, JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
