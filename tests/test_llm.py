@@ -1,6 +1,10 @@
+import ast
 import json
 import os
 import pathlib
+import re
+import sys
+from importlib import metadata
 from importlib.metadata import version
 from unittest import mock
 
@@ -985,3 +989,55 @@ def test_default_exports():
     "Check key exports in the llm __all__ list"
     for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
         assert name in llm.__all__, f"{name} not in llm.__all__"
+
+
+def test_all_third_party_imports_are_declared():
+    """Every third-party module imported by llm/ must be a declared dependency.
+
+    httpx was imported by four modules but only arrived transitively via openai,
+    so it vanished when openai 3.0 moved to httpx2 and every fresh install broke.
+    This catches the next one in CI instead of on a user's machine.
+    """
+    llm_dir = pathlib.Path(llm.__file__).parent
+
+    imported = set()
+    for path in sorted(llm_dir.rglob("*.py")):
+        # Source under llm/ contains non-ASCII, so don't trust the platform
+        # default encoding - that would fail on the Windows CI runners.
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.add(alias.name.split(".")[0])
+            # level > 0 is a relative import, so it's internal to llm
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                imported.add(node.module.split(".")[0])
+
+    third_party = imported - sys.stdlib_module_names - {"llm"}
+
+    def normalize(name):
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    declared = set()
+    for requirement in metadata.requires("llm") or []:
+        # Skip anything gated behind an extra - those aren't guaranteed installed
+        if "extra ==" in requirement:
+            continue
+        declared.add(normalize(re.split(r"[<>=!~;\s\[]", requirement, 1)[0]))
+
+    module_to_distributions = metadata.packages_distributions()
+
+    undeclared = set()
+    for module in third_party:
+        distributions = module_to_distributions.get(module)
+        if not distributions:
+            # Not installed in this environment, so we can't map it to a
+            # distribution to check. Don't guess.
+            continue
+        if not any(normalize(dist) in declared for dist in distributions):
+            undeclared.add(module)
+
+    assert not undeclared, (
+        "these modules are imported by llm/ but are not declared in "
+        "pyproject.toml dependencies: " + ", ".join(sorted(undeclared))
+    )
