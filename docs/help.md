@@ -161,7 +161,8 @@ Options:
   -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
                                   add to the prompt
   --sf, --system-fragment TEXT    Fragment to add to system prompt
-  -t, --template TEXT             Template to use
+  -t, --template TEXT             Template to use; can be repeated to combine
+                                  templates
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
   -n, --no-log                    Don't log to database

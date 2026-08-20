@@ -633,7 +633,12 @@ def cli():
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-t",
+    "--template",
+    multiple=True,
+    help="Template to use; can be repeated to combine templates",
+)
 @click.option(
     "-p",
     "--param",
@@ -911,32 +916,49 @@ def prompt(
 
     if template:
         params = dict(param)
-        # Cannot be used with system
-        try:
-            template_obj = load_template(template)
-        except LoadTemplateError as ex:
-            raise click.ClickException(str(ex))
-        if not (extract or extract_last):
-            extract = template_obj.extract
-            extract_last = template_obj.extract_last
-        # Combine with template fragments/system_fragments
-        if template_obj.fragments:
-            fragments = [*template_obj.fragments, *fragments]
-        if template_obj.system_fragments:
-            system_fragments = [*template_obj.system_fragments, *system_fragments]
-        if template_obj.schema_object:
-            schema = template_obj.schema_object
-        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
-        if template_obj.options:
-            options = _merge_template_options(template_obj, options)
-        if "input" in template_obj.vars():
+        template_objs = []
+        for template_name in template:
+            try:
+                template_objs.append(load_template(template_name))
+            except LoadTemplateError as ex:
+                raise click.ClickException(str(ex))
+
+        # Prepend list-valued fields in template order, ahead of CLI values
+        for template_obj in reversed(template_objs):
+            if template_obj.fragments:
+                fragments = [*template_obj.fragments, *fragments]
+            if template_obj.system_fragments:
+                system_fragments = [
+                    *template_obj.system_fragments,
+                    *system_fragments,
+                ]
+            tools, python_tools = _merge_template_tools(
+                template_obj, tools, python_tools
+            )
+
+        # Read stdin before applying the first template so templates compose
+        # from left to right, with each one receiving the previous result.
+        if any("input" in template_obj.vars() for template_obj in template_objs):
             prompt = read_prompt()
-        prompt, system = _apply_template(template_obj, prompt, params, system)
-        if model_id is None and template_obj.model:
-            model_id = template_obj.model
-        attachments, attachment_types = _merge_template_attachments(
-            template_obj, attachments, attachment_types
-        )
+
+        for template_obj in template_objs:
+            if not (extract or extract_last):
+                extract = template_obj.extract
+                extract_last = template_obj.extract_last
+            if template_obj.schema_object:
+                schema = template_obj.schema_object
+            if template_obj.options:
+                options = _merge_template_options(template_obj, options)
+            prompt, system = _apply_template(template_obj, prompt, params, system)
+            if model_id is None and template_obj.model:
+                model_id = template_obj.model
+
+        # Like fragments and tools, template attachments precede CLI values
+        # and retain the order in which their templates were specified.
+        for template_obj in reversed(template_objs):
+            attachments, attachment_types = _merge_template_attachments(
+                template_obj, attachments, attachment_types
+            )
     if extract or extract_last or json_output:
         no_stream = True
 
