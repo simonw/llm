@@ -3,6 +3,7 @@ import itertools
 import json
 import os
 import pathlib
+import mimetypes
 import re
 import textwrap
 import threading
@@ -14,6 +15,7 @@ import httpx
 import puremagic
 import sqlite_utils
 from ulid import ULID
+
 
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
@@ -36,22 +38,29 @@ class Fragment(str):
 def mimetype_from_string(content) -> str | None:
     try:
         type_ = puremagic.from_string(content, mime=True)
-        return MIME_TYPE_FIXES.get(type_, type_)
     except puremagic.PureError:
+        type_ = None
+
+    # puremagic can return an empty string if it can't identify the content
+    if not type_:
         return None
+    
+    return MIME_TYPE_FIXES.get(type_, type_)
 
 
-def mimetype_from_path(path) -> str | None:
+def mimetype_from_path(path) -> str | None :
     try:
         type_ = puremagic.from_file(path, mime=True)
-        return MIME_TYPE_FIXES.get(type_, type_)
     except puremagic.PureError:
-        return None
+        type_ =None
+
+    #Fallback to standard library if puremagic returns an empty string or failed
+    if not type_:
+        type_ =mimetypes.guess_type(path)[0]
+    return MIME_TYPE_FIXES.get(type_, type_) if type_ else None
 
 
-def dicts_to_table_string(
-    headings: list[str], dicts: list[dict[str, str]]
-) -> list[str]:
+def dicts_to_table_string(headings: list[str], dicts: list[dict[str, str]]) -> list[str]:
     max_lengths = [len(h) for h in headings]
 
     # Compute maximum length for each column
@@ -131,9 +140,7 @@ def _log_response(response: httpx.Response):
     click.echo("  Body:", err=True)
     try:
         request_body = json.loads(request.content)
-        click.echo(
-            textwrap.indent(json.dumps(request_body, indent=2), "    "), err=True
-        )
+        click.echo(textwrap.indent(json.dumps(request_body, indent=2), "    "), err=True)
     except json.JSONDecodeError:
         click.echo(textwrap.indent(request.content.decode(), "    "), err=True)
     click.echo(f"Response: status_code={response.status_code}", err=True)
@@ -156,11 +163,7 @@ def simplify_usage_dict(d):
     # Recursively remove keys with value 0 and empty dictionaries
     def remove_empty_and_zero(obj):
         if isinstance(obj, dict):
-            cleaned = {
-                k: remove_empty_and_zero(v)
-                for k, v in obj.items()
-                if v != 0 and v != {}
-            }
+            cleaned = {k: remove_empty_and_zero(v) for k, v in obj.items() if v != 0 and v != {}}
             return {k: v for k, v in cleaned.items() if v is not None and v != {}}
         return obj
 
@@ -392,9 +395,7 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         # Process field name and type
         field_parts = field_info.strip().split()
         if not field_parts:
-            raise ValueError(
-                f"Invalid schema DSL: field {field!r} is missing a name before ':'"
-            )
+            raise ValueError(f"Invalid schema DSL: field {field!r} is missing a name before ':'")
         field_name = field_parts[0].strip()
 
         # Default type is string
@@ -489,9 +490,7 @@ def ensure_fragment(db, content):
     if isinstance(content, Fragment):
         source = content.source
     db.execute(sql, {"hash": hash_id, "content": content, "source": source})
-    return db.execute(
-        "select id from fragments where hash = :hash", {"hash": hash_id}
-    ).fetchone()[0]
+    return db.execute("select id from fragments where hash = :hash", {"hash": hash_id}).fetchone()[0]
 
 
 def ensure_tool(db, tool):
@@ -512,9 +511,7 @@ def ensure_tool(db, tool):
             "plugin": tool.plugin,
         },
     )
-    return db.execute(
-        "select id from tools where hash = :hash", {"hash": tool.hash()}
-    ).fetchone()[0]
+    return db.execute("select id from tools where hash = :hash", {"hash": tool.hash()}).fetchone()[0]
 
 
 def ensure_tool_instance(db, name, plugin, arguments) -> int:
@@ -522,17 +519,12 @@ def ensure_tool_instance(db, name, plugin, arguments) -> int:
     distinct (plugin, name, arguments) once however many turns and
     calls it serves."""
     match = db.execute(
-        "select id from tool_instances where name is ? "
-        "and plugin is ? and arguments is ?",
+        "select id from tool_instances where name is ? and plugin is ? and arguments is ?",
         [name, plugin, arguments],
     ).fetchone()
     if match:
         return match[0]
-    return (
-        db["tool_instances"]
-        .insert({"name": name, "plugin": plugin, "arguments": arguments})
-        .last_pk
-    )
+    return db["tool_instances"].insert({"name": name, "plugin": plugin, "arguments": arguments}).last_pk
 
 
 def maybe_fenced_code(content: str) -> str:
@@ -553,14 +545,7 @@ def maybe_fenced_code(content: str) -> str:
         while "`" * num_backticks in content:
             num_backticks += 1
         # Add backticks
-        content = (
-            "\n"
-            + "`" * num_backticks
-            + "\n"
-            + content.strip()
-            + "\n"
-            + "`" * num_backticks
-        )
+        content = "\n" + "`" * num_backticks + "\n" + content.strip() + "\n" + "`" * num_backticks
     return content
 
 
@@ -736,10 +721,7 @@ def monotonic_ulid() -> ULID:
         if now_ms == last_ms:
             rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
             if rand_int >= 1 << (RANDOMNESS_LEN * 8):
-                raise OverflowError(
-                    "Randomness overflow: > 2**80 ULIDs requested "
-                    "in one millisecond!"
-                )
+                raise OverflowError("Randomness overflow: > 2**80 ULIDs requested in one millisecond!")
             randomness = rand_int.to_bytes(RANDOMNESS_LEN, "big")
             _last = _last[:TIMESTAMP_LEN] + randomness
             return ULID(_last)
@@ -754,3 +736,21 @@ def _fresh(ms: int) -> bytes:
     timestamp = int.to_bytes(ms, TIMESTAMP_LEN, "big")
     randomness = os.urandom(RANDOMNESS_LEN)
     return timestamp + randomness
+
+def test_mimetype_from_path_empty_puremagic_fallback():
+    """Regression test for #1340: fallback to mimetypes when puremagic fails."""
+    from llm.utils import mimetype_from_path
+    import tempfile
+    import os
+
+    # Create a temporary file with an .mp4 extension but no real magic bytes
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp.write(b"fake content")
+        tmp_path = tmp.name
+    
+    try:
+        # puremagic will fail on this, but mimetypes.guess_type should catch the .mp4 extension
+        result = mimetype_from_path(tmp_path)
+        assert result == "video/mp4", f"Expected 'video/mp4', got {result}"
+    finally:
+        os.unlink(tmp_path) # Clean up the temporary file
