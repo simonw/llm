@@ -156,9 +156,7 @@ def test_logs_text_with_options(user_path):
             "conversation_id": "abc123",
             "input_tokens": 2,
             "output_tokens": 5,
-            "options_json": json.dumps(
-                {"thinking_level": "high", "media_resolution": "low"}
-            ),
+            "options_json": json.dumps({"thinking_level": "high", "media_resolution": "low"}),
         }
     )
 
@@ -202,10 +200,7 @@ def test_logs_token_usage_details_are_markdown_code(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["logs", "-p", log_path, "-u"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert (
-        '## Token usage\n\n2 input, 5 output, ``{"output_tokens_details": '
-        '{"reasoning_tokens": 1, "label": "`reasoning`"}}``\n'
-    ) in result.output
+    assert ('## Token usage\n\n2 input, 5 output, ``{"output_tokens_details": {"reasoning_tokens": 1, "label": "`reasoning`"}}``\n') in result.output
 
 
 @pytest.mark.parametrize("n", (None, 0, 2))
@@ -227,9 +222,7 @@ def test_logs_json(n, log_path):
     assert len(logs) == expected_length
 
 
-@pytest.mark.parametrize(
-    "args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"])
-)
+@pytest.mark.parametrize("args", (["-r"], ["--response"], ["list", "-r"], ["list", "--response"]))
 def test_logs_response_only(args, log_path):
     "Test that logs -r/--response returns just the last response"
     runner = CliRunner()
@@ -353,8 +346,7 @@ def test_logs_filtered(user_path, model, path_option):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["logs", "list", "-m", model, "--json"]
-        + ([path_option, log_path] if path_option else []),
+        ["logs", "list", "-m", model, "--json"] + ([path_option, log_path] if path_option else []),
     )
     assert result.exit_code == 0
     records = json.loads(result.output.strip())
@@ -364,26 +356,18 @@ def test_logs_filtered(user_path, model, path_option):
 def test_logs_search_new_tables(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["A fine city"])
-    runner.invoke(
-        cli, ["-m", "mock", "tell me about Ljubljana"], catch_exceptions=False
-    )
+    runner.invoke(cli, ["-m", "mock", "tell me about Ljubljana"], catch_exceptions=False)
     mock_model.enqueue(["Try httpx-retries for that"])
-    runner.invoke(
-        cli, ["-m", "mock", "what retry library should I use"], catch_exceptions=False
-    )
+    runner.invoke(cli, ["-m", "mock", "what retry library should I use"], catch_exceptions=False)
 
     # Matches prompt text
-    result = runner.invoke(
-        cli, ["logs", "-q", "Ljubljana", "--json"], catch_exceptions=False
-    )
+    result = runner.invoke(cli, ["logs", "-q", "Ljubljana", "--json"], catch_exceptions=False)
     assert result.exit_code == 0
     rows = json.loads(result.output)
     assert [row["prompt"] for row in rows] == ["tell me about Ljubljana"]
 
     # Matches response text
-    result2 = runner.invoke(
-        cli, ["logs", "-q", "httpx", "--json"], catch_exceptions=False
-    )
+    result2 = runner.invoke(cli, ["logs", "-q", "httpx", "--json"], catch_exceptions=False)
     assert result2.exit_code == 0
     rows2 = json.loads(result2.output)
     assert [row["response"] for row in rows2] == ["Try httpx-retries for that"]
@@ -396,12 +380,8 @@ def test_logs_search_prompt_outranks_response(mock_model, logs_db):
     mock_model.enqueue(["I recommend a python one-liner"])
     runner.invoke(cli, ["-m", "mock", "how do I sort a list"], catch_exceptions=False)
     mock_model.enqueue(["Use yield"])
-    runner.invoke(
-        cli, ["-m", "mock", "explain python generators"], catch_exceptions=False
-    )
-    result = runner.invoke(
-        cli, ["logs", "-q", "python", "--json"], catch_exceptions=False
-    )
+    runner.invoke(cli, ["-m", "mock", "explain python generators"], catch_exceptions=False)
+    result = runner.invoke(cli, ["logs", "-q", "python", "--json"], catch_exceptions=False)
     assert result.exit_code == 0
     rows = json.loads(result.output)
     assert [row["prompt"] for row in rows] == [
@@ -422,14 +402,10 @@ def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
         catch_exceptions=False,
     )
     # The typed question is searchable
-    found = runner.invoke(
-        cli, ["logs", "-q", "zebras", "--json"], catch_exceptions=False
-    )
+    found = runner.invoke(cli, ["logs", "-q", "zebras", "--json"], catch_exceptions=False)
     assert len(json.loads(found.output)) == 1
     # The fragment's content is not
-    not_found = runner.invoke(
-        cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False
-    )
+    not_found = runner.invoke(cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False)
     assert json.loads(not_found.output) == []
 
 
@@ -450,12 +426,8 @@ def test_logs_search_merges_legacy_rows(mock_model, logs_db):
     )
     runner = CliRunner()
     mock_model.enqueue(["Scoop"])
-    runner.invoke(
-        cli, ["-m", "mock", "another pelican name please"], catch_exceptions=False
-    )
-    result = runner.invoke(
-        cli, ["logs", "-q", "pelican", "--json"], catch_exceptions=False
-    )
+    runner.invoke(cli, ["-m", "mock", "another pelican name please"], catch_exceptions=False)
+    result = runner.invoke(cli, ["logs", "-q", "pelican", "--json"], catch_exceptions=False)
     assert result.exit_code == 0
     prompts = {row["prompt"] for row in json.loads(result.output)}
     assert prompts == {"name a pet pelican", "another pelican name please"}
@@ -537,16 +509,7 @@ def test_logs_search(user_path, query, extra_args, expected):
         ),
         (
             ["--schema", MULTI_ID, "--data-key", "items"],
-            (
-                '{"name": "one"}\n'
-                '{"name": "two"}\n'
-                '{"name": "one"}\n'
-                '{"name": "two"}\n'
-                '{"name": "one"}\n'
-                '{"name": "two"}\n'
-                '{"name": "one"}\n'
-                '{"name": "two"}\n'
-            ),
+            ('{"name": "one"}\n{"name": "two"}\n{"name": "one"}\n{"name": "two"}\n{"name": "one"}\n{"name": "two"}\n{"name": "one"}\n{"name": "two"}\n'),
         ),
     ),
 )
@@ -645,9 +608,7 @@ def test_schemas_list_yaml(schema_log_path, args, expected):
 def test_schemas_list_json(schema_log_path, is_nl):
     result = CliRunner().invoke(
         cli,
-        ["schemas", "list"]
-        + (["--nl"] if is_nl else ["--json"])
-        + ["-d", str(schema_log_path)],
+        ["schemas", "list"] + (["--nl"] if is_nl else ["--json"]) + ["-d", str(schema_log_path)],
     )
     assert result.exit_code == 0
     if is_nl:
@@ -710,40 +671,20 @@ def fragments_fixture(user_path):
         )
         # Link fragments to this response
         for fragment_id in prompt_fragment_ids or []:
-            db["prompt_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
-            )
+            db["prompt_fragments"].insert({"response_id": response_id, "fragment_id": fragment_id})
         for fragment_id in system_fragment_ids or []:
-            db["system_fragments"].insert(
-                {"response_id": response_id, "fragment_id": fragment_id}
-            )
+            db["system_fragments"].insert({"response_id": response_id, "fragment_id": fragment_id})
         return {name: response_id}
 
     collected = {}
     collected.update(make_response("no_fragments"))
-    collected.update(
-        single_prompt_fragment_id=make_response("single_prompt_fragment", [1])
-    )
-    collected.update(
-        single_system_fragment_id=make_response("single_system_fragment", None, [2])
-    )
-    collected.update(
-        multi_prompt_fragment_id=make_response("multi_prompt_fragment", [1, 2])
-    )
-    collected.update(
-        multi_system_fragment_id=make_response("multi_system_fragment", None, [1, 2])
-    )
+    collected.update(single_prompt_fragment_id=make_response("single_prompt_fragment", [1]))
+    collected.update(single_system_fragment_id=make_response("single_system_fragment", None, [2]))
+    collected.update(multi_prompt_fragment_id=make_response("multi_prompt_fragment", [1, 2]))
+    collected.update(multi_system_fragment_id=make_response("multi_system_fragment", None, [1, 2]))
     collected.update(both_fragments_id=make_response("both_fragments", [1, 2], [3, 4]))
-    collected.update(
-        single_long_prompt_fragment_with_alias_id=make_response(
-            "single_long_prompt_fragment_with_alias", [5], None
-        )
-    )
-    collected.update(
-        single_system_fragment_with_alias_id=make_response(
-            "single_system_fragment_with_alias", None, [4]
-        )
-    )
+    collected.update(single_long_prompt_fragment_with_alias_id=make_response("single_long_prompt_fragment_with_alias", [5], None))
+    collected.update(single_system_fragment_with_alias_id=make_response("single_system_fragment_with_alias", None, [4]))
     return {
         "path": log_path,
         "fragment_hashes_by_slug": fragment_hashes_by_slug,
@@ -822,23 +763,15 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     reshaped = [
         {
             "name": response["prompt"].replace("prompt: ", ""),
-            "prompt_fragments": [
-                fragment["hash"] for fragment in response["prompt_fragments"]
-            ],
-            "system_fragments": [
-                fragment["hash"] for fragment in response["system_fragments"]
-            ],
+            "prompt_fragments": [fragment["hash"] for fragment in response["prompt_fragments"]],
+            "system_fragments": [fragment["hash"] for fragment in response["system_fragments"]],
         }
         for response in responses
     ]
     # Replace aliases with hash IDs in expected
     for item in expected:
-        item["prompt_fragments"] = [
-            fragment_hashes_by_slug.get(ref, ref) for ref in item["prompt_fragments"]
-        ]
-        item["system_fragments"] = [
-            fragment_hashes_by_slug.get(ref, ref) for ref in item["system_fragments"]
-        ]
+        item["prompt_fragments"] = [fragment_hashes_by_slug.get(ref, ref) for ref in item["prompt_fragments"]]
+        item["system_fragments"] = [fragment_hashes_by_slug.get(ref, ref) for ref in item["system_fragments"]]
     assert reshaped == expected
     # Now test the `-s/--short` option:
     result2 = runner.invoke(cli, args + ["-s"], catch_exceptions=False)
@@ -1067,11 +1000,7 @@ def test_expand_fragment_markdown(fragments_fixture):
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
     output = result.output
-    interesting_bit = (
-        output.split("prompt: single_long_prompt_fragment_with_alias")[1]
-        .split("## System")[0]
-        .strip()
-    )
+    interesting_bit = output.split("prompt: single_long_prompt_fragment_with_alias")[1].split("## System")[0].strip()
     hash = fragment_hashes_by_slug["hash5"]
     expected_prefix = f"### Prompt fragments\n\n<details><summary>{hash}</summary>\nThis is fragment 5"
     assert interesting_bit.startswith(expected_prefix)
@@ -1097,17 +1026,7 @@ def test_logs_tools(logs_db):
     assert result1.exit_code == 0
     result2 = runner.invoke(cli, ["logs", "-c"])
     normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
-    assert (
-        "### Tool results\n"
-        "\n"
-        "- **demo**: `tc_TCID`  \n"
-        "    ```\n"
-        "    one\n"
-        "    two\n"
-        "    three\n"
-        "    ```\n"
-        "\n"
-    ) in normalized_output
+    assert ("### Tool results\n\n- **demo**: `tc_TCID`  \n    ```\n    one\n    two\n    three\n    ```\n\n") in normalized_output
     # Log one that did NOT use tools, check that `llm logs --tools` ignores it
     assert runner.invoke(cli, ["-m", "echo", "badger"]).exit_code == 0
     assert "badger" in runner.invoke(cli, ["logs"]).output
@@ -1173,13 +1092,7 @@ def test_logs_tool_call_argument_formatting(logs_db):
     assert result1.exit_code == 0
     result2 = runner.invoke(cli, ["logs", "-c"])
     normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
-    assert (
-        "### Tool calls\n"
-        "\n"
-        "- **demo**: `tc_TCID`  \n"
-        "    timeout: `120`\n"
-        '    options: ``["`tick`"]``\n'
-    ) in normalized_output
+    assert ('### Tool calls\n\n- **demo**: `tc_TCID`  \n    timeout: `120`\n    options: ``["`tick`"]``\n') in normalized_output
 
 
 def test_logs_backup(logs_db):
@@ -1220,9 +1133,7 @@ def test_logs_resolved_model(logs_db, mock_model, async_mock_model, async_):
     mock_model.resolved_model_name = "resolved-mock"
     async_mock_model.resolved_model_name = "resolved-mock"
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["-m", "mock", "simple prompt"] + (["--async"] if async_ else [])
-    )
+    result = runner.invoke(cli, ["-m", "mock", "simple prompt"] + (["--async"] if async_ else []))
     assert result.exit_code == 0
     # Should have logged the resolved model name
     assert logs_db["turns"].count
@@ -1313,3 +1224,22 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+
+
+def test_logs_data_ids_distinct():
+    """Regression test for #1598: --data-ids should attach distinct conversation_id."""
+    from click.testing import CliRunner
+    from llm.cli import cli
+    import json
+
+    runner = CliRunner()
+    # 1. Create a log entry
+    runner.invoke(cli, ["-m", "echo", "test prompt for 1598"])
+
+    # 2. Fetch it with --data-ids
+    result = runner.invoke(cli, ["logs", "-n", "1", "--data", "--data-ids"])
+    assert result.exit_code == 0
+
+    # 3. Verify the IDs are different
+    data = json.loads(result.output.strip())
+    assert data["response_id"] != data["conversation_id"]
