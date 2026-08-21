@@ -1679,6 +1679,119 @@ def logs_turn_off():
     path = user_dir() / "logs-off"
     path.touch()
 
+    @logs.command(name="rm")
+    @click.argument("cid", required=False)
+    @click.option("--all", "delete_all", is_flag=True, help="Remove all logs")
+    @click.option("--hours", type=int, help="Remove logs from the last N hours")
+    @click.option("--days", type=int, help="Remove logs from the last N days")
+    def logs_rm(cid, delete_all, hours, days):
+        """Remove logs from the database
+        
+        Examples:
+        
+        \b
+            llm logs rm <conversation_id>
+            llm logs rm --all
+            llm logs rm --hours 24
+            llm logs rm --days 7
+        """
+        import datetime
+
+        if not cid and not delete_all and not hours and not days:
+            raise click.ClickException("Must provide a conversation ID, --all, --hours, or --days")
+        
+        if cid and (delete_all or hours or days):
+            raise click.ClickException("Cannot combine conversation ID with --all, --hours, or --days")
+            
+        path = logs_db_path()
+        if not path.exists():
+            raise click.ClickException(f"No log database found at {path}")
+        
+        db = sqlite_utils.Database(path)
+        migrate(db)
+        
+        if delete_all:
+            db["turns"].delete_where()
+            db["threads"].delete_where()
+            if "responses" in db.table_names():
+                db["responses"].delete_where()
+            if "conversations" in db.table_names():
+                db["conversations"].delete_where()
+            click.echo("All logs removed.")
+            return
+
+        if hours or days:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if hours:
+                cutoff = now - datetime.timedelta(hours=hours)
+                time_unit = "hours"
+            else:
+                cutoff = now - datetime.timedelta(days=days)
+                time_unit = "days"
+            cutoff_str = cutoff.isoformat()
+            
+            thread_ids_to_delete = [
+                row["thread_id"] for row in db.query(
+                    "SELECT DISTINCT thread_id FROM turns WHERE datetime_utc >= ?", 
+                    [cutoff_str]
+                )
+            ]
+            
+            legacy_conv_ids = []
+            if "responses" in db.table_names():
+                legacy_conv_ids = [
+                    row["conversation_id"] for row in db.query(
+                        "SELECT DISTINCT conversation_id FROM responses WHERE datetime_utc >= ?",
+                        [cutoff_str]
+                    )
+                ]
+                
+            if not thread_ids_to_delete and not legacy_conv_ids:
+                click.echo(f"No logs found in the last {hours or days} {time_unit}.")
+                return
+                
+            deleted_threads = 0
+            for thread_id in thread_ids_to_delete:
+                db["turns"].delete_where("thread_id = ?", [thread_id])
+                db["threads"].delete_where("id = ?", [thread_id])
+                deleted_threads += 1
+                
+            deleted_convs = 0
+            for conv_id in legacy_conv_ids:
+                if "responses" in db.table_names():
+                    db["responses"].delete_where("conversation_id = ?", [conv_id])
+                if "conversations" in db.table_names():
+                    db["conversations"].delete_where("id = ?", [conv_id])
+                deleted_convs += 1
+                    
+            click.echo(f"Removed {deleted_threads} thread(s) and {deleted_convs} legacy conversation(s) from the last {hours or days} {time_unit}.")
+            return
+
+        if cid:
+            thread_exists = db["threads"].count_where("id = ?", [cid])
+            conv_exists = 0
+            if "conversations" in db.table_names():
+                conv_exists = db["conversations"].count_where("id = ?", [cid])
+                
+            if not thread_exists and not conv_exists:
+                raise click.ClickException(f"Conversation ID '{cid}' not found.")
+                
+            deleted_threads = 0
+            if thread_exists:
+                db["turns"].delete_where("thread_id = ?", [cid])
+                db["threads"].delete_where("id = ?", [cid])
+                deleted_threads = 1
+                
+            deleted_convs = 0
+            if conv_exists:
+                if "responses" in db.table_names():
+                    db["responses"].delete_where("conversation_id = ?", [cid])
+                if "conversations" in db.table_names():
+                    db["conversations"].delete_where("id = ?", [cid])
+                deleted_convs = 1
+                    
+            click.echo(f"Removed {deleted_threads} thread(s) and {deleted_convs} legacy conversation(s) with ID '{cid}'.")
+
 
 def annotate_log_rows(db, rows, expand=False, truncate=False):
     """
