@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_32_1)=
+## 0.32.1 (2026-08-21)
+
+This version pins LLM to use OpenAI Python versions less than [v3.0.0](https://github.com/openai/openai-python/releases#release-v3.0.0), ensuring fresh LLM installations work without needing to also install an extra `httpx` dependency. [#1630](https://github.com/simonw/llm/pull/1630)
+
 (v0_32)=
 ## 0.32 (2026-08-04)
 
