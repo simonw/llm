@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "click",
     "condense-json>=1.1",
-    "openai>=2.32.0",
+    "openai>=2.32.0,<3",
     "click-default-group>=1.2.3",
     "sqlite-utils>=4.0",
     "pydantic>=2.0.0",
