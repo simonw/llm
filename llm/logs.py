@@ -1232,6 +1232,9 @@ class _LogRowBuilder:
                 "_input_message_hashes": self._input_segment_hashes(
                     row["parent_message_hash"]
                 ),
+                "_output_message_hashes": self._output_segment_hashes(
+                    row["tip_message_hash"], row["parent_message_hash"]
+                ),
                 "_tip_message_hash": row["tip_message_hash"],
             }
         )
@@ -1270,6 +1273,30 @@ class _LogRowBuilder:
                 None,
             )
             if message_row is None or message_row["role"] not in ("user", "tool"):
+                break
+            hashes.append(hash_)
+            hash_ = message_row["parent_hash"]
+        hashes.reverse()
+        return hashes
+
+    def _output_segment_hashes(
+        self, tip_hash: str | None, parent_hash: str | None
+    ) -> list[str]:
+        """Hashes of the turn's own output messages - the segment
+        between the parent and the tip, walked directly in the table."""
+        hashes: list[str] = []
+        hash_ = tip_hash
+        while hash_ and hash_ != parent_hash:
+            message_row = next(
+                iter(
+                    self.store.db.query(
+                        "select parent_hash from messages where hash = ?",
+                        [hash_],
+                    )
+                ),
+                None,
+            )
+            if message_row is None:
                 break
             hashes.append(hash_)
             hash_ = message_row["parent_hash"]
@@ -1402,8 +1429,14 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
     # parts.id and tools.id stand in for the row ids the old
     # tool_calls / tool_results tables exposed, so the JSON shape of
     # `llm logs` is unchanged.
-    call_ids = _part_ids(store, [row.get("_tip_message_hash")], "tool_call")
+    output_message_hashes = row.get("_output_message_hashes") or [
+        row.get("_tip_message_hash")
+    ]
+    call_ids = _part_ids(store, output_message_hashes, "tool_call")
     result_ids = _part_ids(store, row.get("_input_message_hashes") or [], "tool_result")
+    # Server-executed tools produce their results inside the response
+    # itself, so those parts sit in the output messages.
+    server_result_ids = _part_ids(store, output_message_hashes, "tool_result")
 
     # input_schema is rendered as a dict, so decode it here rather than
     # handing the caller the raw JSON text out of the column.
@@ -1448,30 +1481,43 @@ def log_row_extras(store: "LogStore", row: dict) -> dict:
             "name": part.name,
             "arguments": part.arguments,
             "tool_call_id": part.tool_call_id,
+            "server_executed": part.server_executed,
         }
         for part in row.get("_output_parts", [])
         if isinstance(part, ToolCallPart)
     ]
+    # Results among the inputs were executed locally and fed back to
+    # the model; results among the outputs were executed server-side
+    # during the response.
     result_parts = [
-        part for part in row.get("_input_parts", []) if isinstance(part, ToolResultPart)
+        (part, False)
+        for part in row.get("_input_parts", [])
+        if isinstance(part, ToolResultPart)
+    ] + [
+        (part, True)
+        for part in row.get("_output_parts", [])
+        if isinstance(part, ToolResultPart)
     ]
     instances = _instances_by_tool_call_id(
         store,
         row["id"],
-        [part.tool_call_id for part in result_parts if part.tool_call_id],
+        [part.tool_call_id for part, _ in result_parts if part.tool_call_id],
     )
     tool_results = [
         {
-            "id": result_ids.get(part.tool_call_id),
+            "id": (server_result_ids if server_executed else result_ids).get(
+                part.tool_call_id
+            ),
             "tool_id": tool_ids.get(part.name),
             "name": part.name,
             "output": part.output,
             "tool_call_id": part.tool_call_id,
             "exception": part.exception,
+            "server_executed": server_executed,
             "instance": instances.get(part.tool_call_id),
             "attachments": [_attachment_summary(a) for a in part.attachments],
         }
-        for part in result_parts
+        for part, server_executed in result_parts
     ]
 
     fragments: dict[str, list[dict]] = {

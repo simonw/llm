@@ -5,6 +5,7 @@
 
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
 - `llm prompt -t/--template` can now be repeated to combine templates in order. This allows model configuration and options from one template to be used with a prompt from another.
+- `llm logs` now includes the output of server-side tool calls, shown in a **Tool results** section within the response. These results are also included in `llm logs --json` and `llm logs --short` output, with a new `server_executed` key distinguishing them from locally executed tool results. [#1629](https://github.com/simonw/llm/issues/1629)
 
 (v0_32)=
 ## 0.32 (2026-08-04)
