@@ -1709,6 +1709,7 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
             "_output_parts",
             "_parent_message_hash",
             "_input_message_hashes",
+            "_output_message_hashes",
             "_tip_message_hash",
             "_legacy",
             "_search_rank",
@@ -2081,6 +2082,34 @@ def logs_list(
                 return details
             return usage
 
+        def _display_tool_results(tool_results):
+            for tool_result in tool_results:
+                attachments = ""
+                for attachment in tool_result["attachments"]:
+                    desc = ""
+                    if attachment.get("type"):
+                        desc += attachment["type"] + ": "
+                    if attachment.get("path"):
+                        desc += attachment["path"]
+                    elif attachment.get("url"):
+                        desc += attachment["url"]
+                    elif attachment.get("content"):
+                        desc += f"<{attachment['content_length']:,} bytes>"
+                    attachments += f"\n    - {desc}"
+                click.echo(
+                    "- **{}**: `{}`  \n{}{}{}".format(
+                        tool_result["name"],
+                        tool_result["tool_call_id"],
+                        _fenced_block(tool_result["output"]),
+                        (
+                            "  \n    **Error**: {}\n".format(tool_result["exception"])
+                            if tool_result["exception"]
+                            else ""
+                        ),
+                        attachments,
+                    )
+                )
+
         def _display_fragments(fragments, title):
             if not fragments:
                 return
@@ -2251,36 +2280,22 @@ def logs_list(
                     )
                     for tool in instance_tools:
                         echo_tool(tool, "    ")
-            if row["tool_results"]:
+            # Results the model was given arrived with the prompt;
+            # server-executed results happened during the response and
+            # render there instead.
+            local_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if not tool_result.get("server_executed")
+            ]
+            server_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if tool_result.get("server_executed")
+            ]
+            if local_tool_results:
                 click.echo("\n### Tool results\n")
-                for tool_result in row["tool_results"]:
-                    attachments = ""
-                    for attachment in tool_result["attachments"]:
-                        desc = ""
-                        if attachment.get("type"):
-                            desc += attachment["type"] + ": "
-                        if attachment.get("path"):
-                            desc += attachment["path"]
-                        elif attachment.get("url"):
-                            desc += attachment["url"]
-                        elif attachment.get("content"):
-                            desc += f"<{attachment['content_length']:,} bytes>"
-                        attachments += f"\n    - {desc}"
-                    click.echo(
-                        "- **{}**: `{}`  \n{}{}{}".format(
-                            tool_result["name"],
-                            tool_result["tool_call_id"],
-                            _fenced_block(tool_result["output"]),
-                            (
-                                "  \n    **Error**: {}\n".format(
-                                    tool_result["exception"]
-                                )
-                                if tool_result["exception"]
-                                else ""
-                            ),
-                            attachments,
-                        )
-                    )
+                _display_tool_results(local_tool_results)
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -2326,6 +2341,10 @@ def logs_list(
                             _format_tool_call_arguments(tool_call["arguments"]),
                         )
                     )
+                click.echo("")
+            if server_tool_results:
+                click.echo("### Tool results\n")
+                _display_tool_results(server_tool_results)
                 click.echo("")
             if response:
                 click.echo(f"{response}\n")
