@@ -26,9 +26,9 @@ classifiers = [
 
 dependencies = [
     "click",
-    "httpx",
+    "httpx2",
     "condense-json>=1.1",
-    "openai>=2.32.0",
+    "openai>3",
     "click-default-group>=1.2.3",
     "sqlite-utils>=4.0",
     "pydantic>=2.0.0",
@@ -47,7 +47,7 @@ dev = [
     "click>=8.2.0",
     "pytest",
     "numpy",
-    "pytest-httpx>=0.33.0",
+    "httpx2-pytest>=1.0.1",
     "pytest-asyncio",
     "cogapp",
     "mypy>=1.10.0",

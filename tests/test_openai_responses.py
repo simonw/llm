@@ -4,7 +4,7 @@ import json
 import os
 
 import pytest
-from pytest_httpx import IteratorStream
+from pytest_httpx2 import IteratorStream
 
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter, Responses, WebSearch

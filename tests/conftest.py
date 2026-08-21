@@ -6,7 +6,7 @@ import llm_echo
 import pytest
 import sqlite_utils
 from pydantic import Field
-from pytest_httpx import IteratorStream
+from pytest_httpx2 import IteratorStream
 
 import llm
 from llm.plugins import pm
