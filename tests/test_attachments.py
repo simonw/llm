@@ -2,7 +2,7 @@ import os
 import sys
 from unittest.mock import ANY
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -123,7 +123,7 @@ def test_attachment_content_bytes_limits_redirects(httpx_mock):
         )
 
     attachment = llm.Attachment(url="https://example.com/redirect-0")
-    with pytest.raises(httpx.TooManyRedirects):
+    with pytest.raises(httpx2.TooManyRedirects):
         attachment.content_bytes()
 
     assert len(httpx_mock.get_requests()) == 4
@@ -155,7 +155,7 @@ def test_attachment_resolve_type_limits_redirects(httpx_mock):
         )
 
     attachment = llm.Attachment(url="https://example.com/redirect-0")
-    with pytest.raises(httpx.TooManyRedirects):
+    with pytest.raises(httpx2.TooManyRedirects):
         attachment.resolve_type()
 
     assert len(httpx_mock.get_requests()) == 4

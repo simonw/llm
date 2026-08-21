@@ -28,7 +28,7 @@ from typing import (
     get_type_hints,
 )
 
-import httpx
+import httpx2
 
 from .errors import NeedsKeyException
 from .serialization import ResponseDict
@@ -92,7 +92,7 @@ class Attachment:
         if self.path:
             return mimetype_from_path(self.path)
         if self.url:
-            with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+            with httpx2.Client(follow_redirects=True, max_redirects=3) as client:
                 response = client.head(self.url)
             response.raise_for_status()
             return response.headers.get("content-type")
@@ -107,7 +107,7 @@ class Attachment:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
-                with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                with httpx2.Client(follow_redirects=True, max_redirects=3) as client:
                     response = client.get(self.url)
                 response.raise_for_status()
                 content = response.content

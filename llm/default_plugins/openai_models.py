@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, ClassVar, Literal
 
 import click
-import httpx
+import httpx2
 import openai
 import sqlite_utils
 import yaml
@@ -839,7 +839,7 @@ def register_commands(cli):
         from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
-        response = httpx.get(
+        response = httpx2.get(
             "https://api.openai.com/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
         )

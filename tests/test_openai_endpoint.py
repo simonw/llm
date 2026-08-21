@@ -4,7 +4,7 @@ import json
 import pytest
 import sqlite_utils
 from click.testing import CliRunner
-from pytest_httpx import IteratorStream
+from pytest_httpx2 import IteratorStream
 
 from llm.cli import cli
 from llm.migrations import migrate

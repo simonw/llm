@@ -19,7 +19,7 @@ from runpy import run_module
 from typing import Any, cast
 
 import click
-import httpx
+import httpx2
 import pydantic
 import sqlite_utils
 import yaml
@@ -254,7 +254,7 @@ def resolve_fragments(
         if fragment.startswith(("http://", "https://")):
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
-            client = httpx.Client(
+            client = httpx2.Client(
                 follow_redirects=True, max_redirects=3, headers=headers
             )
             response = client.get(fragment)
@@ -354,10 +354,10 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx2.head(value)
             response.raise_for_status()
             mimetype = response.headers.get("content-type")
-        except httpx.HTTPError as ex:
+        except httpx2.HTTPError as ex:
             raise AttachmentError(str(ex))
         return Attachment(type=mimetype, path=None, url=value, content=None)
 
@@ -4169,10 +4169,10 @@ def _parse_yaml_template(name, content):
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
-        response = httpx.get(name)
+        response = httpx2.get(name)
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as ex:
+        except httpx2.HTTPStatusError as ex:
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
         return _parse_yaml_template(name, response.text)
 
