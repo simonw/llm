@@ -837,6 +837,7 @@ class Conversation(_BaseConversation):
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "Response":
+        self.model._validate_attachments(attachments)
         merged = _merge_options(options, kwargs)
         # Build the authoritative chain so response.prompt.messages
         # equals exactly what the model sees for this turn.
@@ -1023,6 +1024,7 @@ class AsyncConversation(_BaseConversation):
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "AsyncResponse":
+        self.model._validate_attachments(attachments)
         merged = _merge_options(options, kwargs)
         chain = self._build_full_chain(
             prompt=prompt,
