@@ -12,6 +12,7 @@
 - `schema_dsl()` now raises descriptive `ValueError` exceptions for unknown field types and duplicate field names, instead of silently treating unknown types as strings or overwriting earlier fields. [#1607](https://github.com/simonw/llm/issues/1607), [#1616](https://github.com/simonw/llm/issues/1616)
 - Reasoning stream events that contain provider metadata but no text are now preserved as `ReasoningPart` objects. This allows opaque state such as Anthropic signatures and redacted thinking data to round-trip correctly. [simonw/llm-anthropic#81](https://github.com/simonw/llm-anthropic/issues/81)
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
+- Fixed `llm aliases list` raising a `ValueError` when no aliases are defined. Thanks, [Taraka Abhiram](https://github.com/abhi-0203). [#1602](https://github.com/simonw/llm/issues/1602)
 - `llm embed-multi` now reuses an existing collection's stored embedding model when no default embedding model is configured, and no longer masks unrelated `ValueError` exceptions with a missing-model error. [#1523](https://github.com/simonw/llm/issues/1523)
 - `llm tools -m MODEL` no longer prints a redundant message when the model has no server-side tools.
 
