@@ -11,6 +11,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Generator,
     Iterable,
     Iterator,
 )
@@ -3551,7 +3552,7 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
     def _embed_batch(
         self, items: Iterable[str | bytes], *, key: str | None = None
-    ) -> Iterator[list[float]]:
+    ) -> Generator[list[float], None, None]:
         resolved_key = self.get_key(key)
         try:
             inspect.signature(self.embed_batch).bind(items, key=resolved_key)
