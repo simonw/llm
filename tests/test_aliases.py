@@ -53,8 +53,8 @@ def test_cli_aliases_list(args):
 
 @pytest.mark.parametrize("args", (["aliases", "list"], ["aliases"]))
 def test_cli_aliases_list_empty(monkeypatch, args):
-    monkeypatch.setattr("llm.cli.get_model_aliases", lambda: {})
-    monkeypatch.setattr("llm.cli.get_embedding_model_aliases", lambda: {})
+    monkeypatch.setattr("llm.cli.get_model_aliases", dict)
+    monkeypatch.setattr("llm.cli.get_embedding_model_aliases", dict)
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 0
     assert result.output == ""
