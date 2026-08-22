@@ -471,14 +471,16 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.openai_model_id = openai_model_id
         self.dimensions = dimensions
 
-    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
+    def embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        client = openai.OpenAI(api_key=self.get_key())
+        client = openai.OpenAI(api_key=key)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
 

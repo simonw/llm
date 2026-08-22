@@ -176,20 +176,30 @@ def test_embed_store_binary(user_path):
     ]
 
 
-def test_embed_key_option(embed_demo):
+def test_embed_key_option(embed_key_demo):
     # --key should be passed through to the embedding model
-    assert embed_demo.key is None
+    assert embed_key_demo.key is None
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["embed", "-c", "hello world", "-m", "embed-demo", "--key", "sekrit"]
+        cli,
+        [
+            "embed",
+            "-c",
+            "hello world",
+            "-m",
+            "embed-key-demo",
+            "--key",
+            "sekrit",
+        ],
     )
     assert result.exit_code == 0
-    assert embed_demo.key == "sekrit"
+    assert embed_key_demo.keys == ["sekrit"]
+    assert embed_key_demo.key is None
 
 
-def test_embed_multi_key_option(embed_demo, tmpdir):
+def test_embed_multi_key_option(embed_key_demo, tmpdir):
     # --key should be passed through to the embedding model for embed-multi too
-    assert embed_demo.key is None
+    assert embed_key_demo.key is None
     db_path = str(tmpdir / "embeddings.db")
     db = sqlite_utils.Database(db_path)
     db["content"].insert_all(
@@ -209,13 +219,14 @@ def test_embed_multi_key_option(embed_demo, tmpdir):
             "--sql",
             "select * from content",
             "-m",
-            "embed-demo",
+            "embed-key-demo",
             "--key",
             "sekrit",
         ],
     )
     assert result.exit_code == 0
-    assert embed_demo.key == "sekrit"
+    assert embed_key_demo.keys == ["sekrit"]
+    assert embed_key_demo.key is None
 
 
 def test_collection_delete_errors(user_path):

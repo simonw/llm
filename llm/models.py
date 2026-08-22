@@ -3513,13 +3513,21 @@ class EmbeddingModel(ABC, _get_key_mixin):
                 "This model does not support text strings, only binary data"
             )
 
-    def embed(self, item: str | bytes) -> list[float]:
+    def embed(self, item: str | bytes, *, key: str | None = None) -> list[float]:
         "Embed a single text string or binary blob, return a list of floats"
         self._check(item)
-        return next(iter(self.embed_batch([item])))
+        iterator = self._embed_batch([item], key=key)
+        try:
+            return next(iterator)
+        finally:
+            iterator.close()
 
     def embed_multi(
-        self, items: Iterable[str | bytes], batch_size: int | None = None
+        self,
+        items: Iterable[str | bytes],
+        batch_size: int | None = None,
+        *,
+        key: str | None = None,
     ) -> Iterator[list[float]]:
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
@@ -3533,16 +3541,37 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
             iter_items = checking_iter(items)
         if effective_batch_size is None:
-            yield from self.embed_batch(iter_items)
+            yield from self._embed_batch(iter_items, key=key)
             return
         while True:
             batch_items = list(islice(iter_items, effective_batch_size))
             if not batch_items:
                 break
-            yield from self.embed_batch(batch_items)
+            yield from self._embed_batch(batch_items, key=key)
+
+    def _embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
+        resolved_key = self.get_key(key)
+        try:
+            inspect.signature(self.embed_batch).bind(items, key=resolved_key)
+        except (TypeError, ValueError):
+            # Backwards compatibility for plugins whose embed_batch() method
+            # predates the key= parameter. self.key is shared mutable state, so
+            # new plugins should accept key= instead.
+            previous_key = self.key
+            self.key = resolved_key
+            try:
+                yield from self.embed_batch(items)
+            finally:
+                self.key = previous_key
+        else:
+            yield from self.embed_batch(items, key=resolved_key)
 
     @abstractmethod
-    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
+    def embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
         """
         Embed a batch of strings or blobs, return a list of lists of floats
         """
