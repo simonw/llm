@@ -4,6 +4,7 @@
 ## Unreleased
 
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
+- Fixed `llm aliases list` raising a `ValueError` when no aliases are defined. Thanks, [Taraka Abhiram](https://github.com/abhi-0203). [#1602](https://github.com/simonw/llm/issues/1602)
 
 (v0_32)=
 ## 0.32 (2026-08-04)
