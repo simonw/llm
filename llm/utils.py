@@ -403,8 +403,15 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         # If type is specified, use it
         if len(field_parts) > 1:
             type_indicator = field_parts[1].strip()
-            if type_indicator in type_mapping:
+            try:
                 field_type = type_mapping[type_indicator]
+            except KeyError:
+                # 'from None' hides the internal mapping KeyError from the
+                # user-facing traceback:
+                raise ValueError(
+                    f"Invalid schema DSL: unknown type {type_indicator!r} "
+                    f"for field {field_name!r}"
+                ) from None
 
         # Add field to properties
         json_schema["properties"][field_name] = {"type": field_type}

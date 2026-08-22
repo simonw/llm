@@ -270,6 +270,22 @@ def test_schema_dsl_missing_field_name(schema, invalid_field):
 
 
 @pytest.mark.parametrize(
+    ("schema", "field_name", "unknown_type"),
+    (
+        ("name string", "name", "string"),
+        ("name, age integer", "age", "integer"),
+        ("active boolean: whether active", "active", "boolean"),
+    ),
+)
+def test_schema_dsl_unknown_type(schema, field_name, unknown_type):
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(schema)
+    assert str(ex.value) == (
+        f"Invalid schema DSL: unknown type {unknown_type!r} for field {field_name!r}"
+    )
+
+
+@pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [
         # Basic truncation tests

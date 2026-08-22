@@ -9,6 +9,7 @@
 - Upgraded to the OpenAI Python library 3.x and switched the HTTP client dependency from `httpx` to `httpx2`. [#1608](https://github.com/simonw/llm/issues/1608), [#1631](https://github.com/simonw/llm/pull/1631)
 - `llm prompt -t/--template` can now be repeated to combine templates in order. This allows model configuration and options from one template to be used with a prompt from another.
 - Expanded the `llm prompt --help` documentation for `--schema` and `--schema-multi` with details and examples of the supported schema DSL.
+- `schema_dsl()` now raises a descriptive `ValueError` for unknown field types instead of silently treating them as strings. [#1607](https://github.com/simonw/llm/issues/1607)
 - Reasoning stream events that contain provider metadata but no text are now preserved as `ReasoningPart` objects. This allows opaque state such as Anthropic signatures and redacted thinking data to round-trip correctly. [simonw/llm-anthropic#81](https://github.com/simonw/llm-anthropic/issues/81)
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
 - `llm embed-multi` now reuses an existing collection's stored embedding model when no default embedding model is configured, and no longer masks unrelated `ValueError` exceptions with a missing-model error. [#1523](https://github.com/simonw/llm/issues/1523)
