@@ -13,6 +13,41 @@ def test_demo_plugin():
     assert model.embed("hello world") == [5, 5] + [0] * 14
 
 
+def test_embed_key(embed_key_demo):
+    assert embed_key_demo.embed("hello world", key="sekrit") == [5, 5] + [0] * 14
+    assert embed_key_demo.keys == ["sekrit"]
+    assert embed_key_demo.key is None
+
+
+def test_embed_multi_key(embed_key_demo):
+    results = list(
+        embed_key_demo.embed_multi(
+            ["hello world", "goodbye world"], batch_size=1, key="sekrit"
+        )
+    )
+    assert results == [[5, 5] + [0] * 14, [7, 5] + [0] * 14]
+    assert embed_key_demo.keys == ["sekrit", "sekrit"]
+    assert embed_key_demo.key is None
+
+
+def test_embed_key_legacy_plugin_fallback():
+    class LegacyKeyEmbeddingModel(llm.EmbeddingModel):
+        model_id = "legacy-key"
+        needs_key = "legacy-key"
+
+        def __init__(self):
+            self.keys = []
+
+        def embed_batch(self, items):
+            self.keys.append(self.key)
+            yield from ([float(len(item))] for item in items)
+
+    model = LegacyKeyEmbeddingModel()
+    assert model.embed("hello", key="sekrit") == [5.0]
+    assert model.keys == ["sekrit"]
+    assert model.key is None
+
+
 @pytest.mark.parametrize(
     "batch_size,expected_batches",
     (
@@ -55,6 +90,20 @@ def test_embed_metadata(collection):
     assert entry.id == "3"
     assert entry.metadata == {"foo": "bar"}
     assert entry.content == "hello yet again"
+
+
+def test_collection_embed_key(embed_key_demo):
+    collection = llm.Collection("test", model=embed_key_demo)
+    collection.embed("1", "hello world", key="sekrit")
+    assert embed_key_demo.keys == ["sekrit"]
+    assert embed_key_demo.key is None
+
+
+def test_collection_embed_multi_key(embed_key_demo):
+    collection = llm.Collection("test", model=embed_key_demo)
+    collection.embed_multi([("1", "hello world"), ("2", "goodbye world")], key="sekrit")
+    assert embed_key_demo.keys == ["sekrit"]
+    assert embed_key_demo.key is None
 
 
 def test_collection(collection):

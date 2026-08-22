@@ -42,6 +42,23 @@ class SentenceTransformerModel(llm.EmbeddingModel):
         results = self._model.encode(texts)
         return (list(map(float, result)) for result in results)
 ```
+
+Embedding models that call a hosted API should set `needs_key` and optionally `key_env_var`, then accept a keyword-only `key=` argument in `embed_batch()`. LLM resolves explicit keys, stored key aliases and environment variables before calling this method:
+
+```python
+class HostedEmbeddingModel(llm.EmbeddingModel):
+    model_id = "hosted-embedding-model"
+    needs_key = "hosted"
+    key_env_var = "HOSTED_API_KEY"
+
+    def embed_batch(self, texts, *, key=None):
+        # key is the resolved API key
+        results = hosted_client.embed(texts, api_key=key)
+        return (list(map(float, result)) for result in results)
+```
+
+The `key=` value can come from `llm embed --key`, `llm embed-multi --key` or the Python `embed(..., key=)` and `embed_multi(..., key=)` methods. For compatibility, LLM also supports older plugins whose `embed_batch()` method does not accept `key=` by temporarily exposing the resolved value as `self.key`.
+
 Once installed, the model provided by this plugin can be used with the {ref}`llm embed <embeddings-cli-embed>` command like this:
 
 ```bash

@@ -3409,9 +3409,6 @@ def embed(
                 "You need to specify an embedding model (no default model is set)"
             )
 
-    if key:
-        model_obj.key = key
-
     show_output = True
     if collection and (format_ is None):
         show_output = False
@@ -3431,9 +3428,11 @@ def embed(
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(id, content, metadata=metadata, store=store)
+        embedding = collection_obj.embed(
+            id, content, metadata=metadata, store=store, key=key
+        )
     else:
-        embedding = model_obj.embed(content)
+        embedding = model_obj.embed(content, key=key)
 
     if show_output:
         if format_ == "json" or format_ is None:
@@ -3580,9 +3579,6 @@ def embed_multi(
             "You need to specify an embedding model (no default model is set)"
         )
 
-    if key:
-        collection_obj.model().key = key
-
     expected_length = None
     if files:
         encodings = encodings or ("utf-8", "latin-1")
@@ -3670,7 +3666,7 @@ def embed_multi(
                     content = prepend + content
                 yield id, content or ""
 
-        embed_kwargs = {"store": store}
+        embed_kwargs = {"store": store, "key": key}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
         collection_obj.embed_multi(tuples(), **embed_kwargs)
