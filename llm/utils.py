@@ -414,9 +414,7 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
                 ) from None
 
         if field_name in json_schema["properties"]:
-            raise ValueError(
-                f"Invalid schema DSL: duplicate field name {field_name!r}"
-            )
+            raise ValueError(f"Invalid schema DSL: duplicate field name {field_name!r}")
 
         # Add field to properties
         json_schema["properties"][field_name] = {"type": field_type}
