@@ -285,6 +285,12 @@ def test_schema_dsl_unknown_type(schema, field_name, unknown_type):
     )
 
 
+def test_schema_dsl_duplicate_field_name():
+    with pytest.raises(ValueError) as ex:
+        schema_dsl("name, age int, name")
+    assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
+
+
 @pytest.mark.parametrize(
     "text, max_length, normalize_whitespace, keep_end, expected",
     [
