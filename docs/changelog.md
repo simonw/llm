@@ -1,21 +1,31 @@
 # Changelog
 
-(unreleased)=
-## Unreleased
+(v0_33)=
+## 0.33 (2026-08-22)
 
-- `llm embed` and `llm embed-multi` now accept `--key`. The Python `EmbeddingModel.embed()`, `EmbeddingModel.embed_multi()`, `Collection.embed()` and `Collection.embed_multi()` methods accept `key=` too, passing the resolved per-call key to embedding plugins without changing shared model state. Existing plugins that read `self.key` continue to work through a compatibility fallback. Thanks, [ChrisJr404](https://github.com/ChrisJr404). [#757](https://github.com/simonw/llm/issues/757), [#1620](https://github.com/simonw/llm/pull/1620)
-- `llm logs --data-ids` now sets `conversation_id` to the ID of the conversation instead of incorrectly duplicating the response ID. Thanks, [K Merchant](https://github.com/Kayforkind). [#1598](https://github.com/simonw/llm/issues/1598), [#1613](https://github.com/simonw/llm/pull/1613)
-- `llm logs` now includes the output of server-side tool calls, shown in a **Tool results** section within the response. These results are also included in `llm logs --json` and `llm logs --short` output, with a new `server_executed` key distinguishing them from locally executed tool results. [#1629](https://github.com/simonw/llm/issues/1629)
+New features:
+
 - Upgraded to the OpenAI Python library 3.x and switched the HTTP client dependency from `httpx` to `httpx2`. [#1608](https://github.com/simonw/llm/issues/1608), [#1631](https://github.com/simonw/llm/pull/1631)
+- `llm embed` and `llm embed-multi` now accept `--key`. The Python `EmbeddingModel.embed()`, `EmbeddingModel.embed_multi()`, `Collection.embed()` and `Collection.embed_multi()` methods accept `key=` too, passing the resolved per-call key to embedding plugins without changing shared model state. Existing plugins that read `self.key` continue to work through a compatibility fallback. Thanks, [ChrisJr404](https://github.com/ChrisJr404). [#757](https://github.com/simonw/llm/issues/757), [#1620](https://github.com/simonw/llm/pull/1620)
+- `llm logs` now includes the output of server-side tool calls, shown in a **Tool results** section within the response. These results are also included in `llm logs --json` and `llm logs --short` output, with a new `server_executed` key distinguishing them from locally executed tool results. [#1629](https://github.com/simonw/llm/issues/1629)
 - `llm prompt -t/--template` can now be repeated to combine templates in order. This allows model configuration and options from one template to be used with a prompt from another.
 - Expanded the `llm prompt --help` documentation for `--schema` and `--schema-multi` with details and examples of the supported schema DSL.
 - `schema_dsl()` now raises descriptive `ValueError` exceptions for unknown field types and duplicate field names, instead of silently treating unknown types as strings or overwriting earlier fields. [#1607](https://github.com/simonw/llm/issues/1607), [#1616](https://github.com/simonw/llm/issues/1616)
 - Reasoning stream events that contain provider metadata but no text are now preserved as `ReasoningPart` objects. This allows opaque state such as Anthropic signatures and redacted thinking data to round-trip correctly. [simonw/llm-anthropic#81](https://github.com/simonw/llm-anthropic/issues/81)
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
+- Conversation prompts now validate that attachments are supported by the selected model before execution, for both synchronous and asynchronous conversations. Thanks, [Daniel Peng](https://github.com/original4422). [#1626](https://github.com/simonw/llm/issues/1626), [#1628](https://github.com/simonw/llm/pull/1628)
+
+Bug fixes:
+
+- `llm logs --data-ids` now sets `conversation_id` to the ID of the conversation instead of incorrectly duplicating the response ID. Thanks, [K Merchant](https://github.com/Kayforkind). [#1598](https://github.com/simonw/llm/issues/1598), [#1613](https://github.com/simonw/llm/pull/1613)
 - Fixed `llm aliases list` raising a `ValueError` when no aliases are defined. Thanks, [Taraka Abhiram](https://github.com/abhi-0203). [#1602](https://github.com/simonw/llm/issues/1602)
 - `llm embed-multi` now reuses an existing collection's stored embedding model when no default embedding model is configured, and no longer masks unrelated `ValueError` exceptions with a missing-model error. [#1523](https://github.com/simonw/llm/issues/1523)
 - `llm tools -m MODEL` no longer prints a redundant message when the model has no server-side tools.
-- Conversation prompts now validate that attachments are supported by the selected model before execution, for both synchronous and asynchronous conversations. Thanks, **Daniel Peng** ([original4422](https://github.com/original4422)). [#1626](https://github.com/simonw/llm/issues/1626), [#1628](https://github.com/simonw/llm/pull/1628)
+
+(v0_32_1)=
+## 0.32.1 (2026-08-21)
+
+This version pins LLM to use OpenAI Python versions less than [v3.0.0](https://github.com/openai/openai-python/releases#release-v3.0.0), ensuring fresh LLM installations work without needing to also install an extra `httpx` dependency. [#1630](https://github.com/simonw/llm/pull/1630)
 
 (v0_32)=
 ## 0.32 (2026-08-04)
