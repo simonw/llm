@@ -15,6 +15,7 @@
 - Fixed `llm aliases list` raising a `ValueError` when no aliases are defined. Thanks, [Taraka Abhiram](https://github.com/abhi-0203). [#1602](https://github.com/simonw/llm/issues/1602)
 - `llm embed-multi` now reuses an existing collection's stored embedding model when no default embedding model is configured, and no longer masks unrelated `ValueError` exceptions with a missing-model error. [#1523](https://github.com/simonw/llm/issues/1523)
 - `llm tools -m MODEL` no longer prints a redundant message when the model has no server-side tools.
+- Conversation prompts now validate that attachments are supported by the selected model before execution, for both synchronous and asynchronous conversations. Thanks, **Daniel Peng** ([original4422](https://github.com/original4422)). [#1626](https://github.com/simonw/llm/issues/1626), [#1628](https://github.com/simonw/llm/pull/1628)
 
 (v0_32)=
 ## 0.32 (2026-08-04)
