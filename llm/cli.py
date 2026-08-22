@@ -3327,6 +3327,7 @@ def uninstall(packages, yes):
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -3353,7 +3354,17 @@ def uninstall(packages, yes):
     help="Output format",
 )
 def embed(
-    collection, id, input, model, store, database, content, binary, metadata, format_
+    collection,
+    id,
+    input,
+    model,
+    key,
+    store,
+    database,
+    content,
+    binary,
+    metadata,
+    format_,
 ):
     """Embed text and store or return the result"""
     if collection and not id:
@@ -3397,6 +3408,9 @@ def embed(
             raise click.ClickException(
                 "You need to specify an embedding model (no default model is set)"
             )
+
+    if key:
+        model_obj.key = key
 
     show_output = True
     if collection and (format_ is None):
@@ -3471,6 +3485,7 @@ def embed(
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
@@ -3494,6 +3509,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    key,
     prepend,
     store,
     database,
@@ -3563,6 +3579,9 @@ def embed_multi(
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
         )
+
+    if key:
+        collection_obj.model().key = key
 
     expected_length = None
     if files:
