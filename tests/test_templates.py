@@ -345,6 +345,50 @@ def test_execute_prompt_with_a_template(
         mocked_openai_chat.reset()
 
 
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_execute_prompt_with_multiple_templates_in_order(
+    templates_path, mocked_openai_chat
+):
+    (templates_path / "configuration.yaml").write_text(
+        "model: gpt-4\noptions:\n  temperature: 0.5", "utf-8"
+    )
+    (templates_path / "instruction.yaml").write_text(
+        "prompt: 'Summarize this: $input'", "utf-8"
+    )
+    (templates_path / "wrapper.yaml").write_text(
+        "prompt: 'Be concise. $input'", "utf-8"
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--no-stream",
+            "-t",
+            "configuration",
+            "-t",
+            "instruction",
+            "-t",
+            "wrapper",
+            "Input text",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request = mocked_openai_chat.get_requests()[-1]
+    assert json.loads(request.content) == {
+        "model": "gpt-4",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Be concise. Summarize this: Input text",
+            }
+        ],
+        "stream": False,
+        "temperature": 0.5,
+    }
+
+
 @pytest.mark.parametrize(
     "template,expected",
     (

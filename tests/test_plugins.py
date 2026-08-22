@@ -476,12 +476,12 @@ def test_register_tools(tmpdir, logs_db):
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "one"}}]}', "[]"),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "ONE", "tool_call_id": "tc_TCID", "exception": null, "server_executed": false, "instance": null, "attachments": []}]',
             ),
             ('{"tool_calls": [{"name": "upper", "arguments": {"text": "two"}}]}', "[]"),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "TWO", "tool_call_id": "tc_TCID", "exception": null, "server_executed": false, "instance": null, "attachments": []}]',
             ),
             (
                 '{"tool_calls": [{"name": "upper", "arguments": {"text": "three"}}]}',
@@ -489,7 +489,7 @@ def test_register_tools(tmpdir, logs_db):
             ),
             (
                 "",
-                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "instance": null, "attachments": []}]',
+                '[{"id": ID, "tool_id": 1, "name": "upper", "output": "THREE", "tool_call_id": "tc_TCID", "exception": null, "server_executed": false, "instance": null, "attachments": []}]',
             ),
         )
         # Test the --td option

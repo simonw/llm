@@ -84,6 +84,13 @@ Or as a URL to a YAML file hosted online:
 llm -t https://raw.githubusercontent.com/simonw/llm-templates/refs/heads/main/python-app.yaml \
   'Python app to pick a random line from a file'
 ```
+
+The option can be repeated to combine templates. They are applied from left to right, so one template can provide model configuration and options while a later template provides or transforms the prompt:
+
+```bash
+llm -t model-and-options -t summarize 'Text to summarize'
+```
+
 Note that templates loaded via URLs will have any `functions:` keys ignored, to avoid accidentally executing arbitrary code. This restriction also applies to templates loaded via the {ref}`template loaders plugin mechanism <plugin-hooks-register-template-loaders>`.
 
 (prompt-templates-list)=

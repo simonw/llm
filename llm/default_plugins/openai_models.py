@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, ClassVar, Literal
 
 import click
-import httpx
+import httpx2
 import openai
 import sqlite_utils
 import yaml
@@ -471,14 +471,16 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.openai_model_id = openai_model_id
         self.dimensions = dimensions
 
-    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
+    def embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        client = openai.OpenAI(api_key=self.get_key())
+        client = openai.OpenAI(api_key=key)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
 
@@ -839,7 +841,7 @@ def register_commands(cli):
         from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
-        response = httpx.get(
+        response = httpx2.get(
             "https://api.openai.com/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
         )

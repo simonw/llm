@@ -6,7 +6,7 @@ import llm_echo
 import pytest
 import sqlite_utils
 from pydantic import Field
-from pytest_httpx import IteratorStream
+from pytest_httpx2 import IteratorStream
 
 import llm
 from llm.plugins import pm
@@ -172,6 +172,19 @@ class EmbedDemo(llm.EmbeddingModel):
             yield embedding
 
 
+class EmbedKeyDemo(EmbedDemo):
+    model_id = "embed-key-demo"
+    needs_key = "embed-key-demo"
+
+    def __init__(self):
+        super().__init__()
+        self.keys = []
+
+    def embed_batch(self, texts, *, key=None):
+        self.keys.append(key)
+        yield from super().embed_batch(texts)
+
+
 class EmbedBinaryOnly(EmbedDemo):
     model_id = "embed-binary-only"
     supports_text = False
@@ -187,6 +200,11 @@ class EmbedTextOnly(EmbedDemo):
 @pytest.fixture
 def embed_demo():
     return EmbedDemo()
+
+
+@pytest.fixture
+def embed_key_demo():
+    return EmbedKeyDemo()
 
 
 @pytest.fixture
@@ -210,13 +228,14 @@ def mock_async_key_model():
 
 
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
+def register_embed_demo_model(embed_demo, embed_key_demo, mock_model, async_mock_model):
     class MockModelsPlugin:
         __name__ = "MockModelsPlugin"
 
         @llm.hookimpl
         def register_embedding_models(self, register):
             register(embed_demo)
+            register(embed_key_demo)
             register(EmbedBinaryOnly())
             register(EmbedTextOnly())
 

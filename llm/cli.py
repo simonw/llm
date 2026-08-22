@@ -19,7 +19,7 @@ from runpy import run_module
 from typing import Any, cast
 
 import click
-import httpx
+import httpx2
 import pydantic
 import sqlite_utils
 import yaml
@@ -254,7 +254,7 @@ def resolve_fragments(
         if fragment.startswith(("http://", "https://")):
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
-            client = httpx.Client(
+            client = httpx2.Client(
                 follow_redirects=True, max_redirects=3, headers=headers
             )
             response = client.get(fragment)
@@ -354,10 +354,10 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx2.head(value)
             response.raise_for_status()
             mimetype = response.headers.get("content-type")
-        except httpx.HTTPError as ex:
+        except httpx2.HTTPError as ex:
             raise AttachmentError(str(ex))
         return Attachment(type=mimetype, path=None, url=value, content=None)
 
@@ -478,7 +478,7 @@ def schema_option(fn):
     click.option(
         "schema_input",
         "--schema",
-        help="JSON schema, filepath or ID",
+        help="Schema DSL, JSON schema, filepath or ID",
     )(fn)
     return fn
 
@@ -617,7 +617,7 @@ def cli():
 @schema_option
 @click.option(
     "--schema-multi",
-    help="JSON schema to use for multiple results",
+    help="Schema for multiple results",
 )
 @click.option(
     "fragments",
@@ -633,7 +633,12 @@ def cli():
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-t",
+    "--template",
+    multiple=True,
+    help="Template to use; can be repeated to combine templates",
+)
 @click.option(
     "-p",
     "--param",
@@ -732,6 +737,29 @@ def prompt(
         cat image | llm 'describe image' -a -
         # With an explicit mimetype:
         cat image | llm 'describe image' --at - image/jpeg
+
+    Structured output schemas:
+
+    Use --schema to request one JSON object, or --schema-multi to request
+    multiple objects returned in an "items" array. Both options accept a
+    concise schema DSL. Define each field as NAME [TYPE]: DESCRIPTION, with
+    the type and description both optional. Separate fields with commas:
+
+    \b
+        llm --schema 'name, age int, active bool' 'Invent a dog'
+
+    Supported types are str, int, float and bool. The default is str and every
+    listed field is required. Descriptions provide extra instructions to the
+    model. Use one field per line if descriptions contain commas:
+
+    \b
+        llm --schema-multi '
+        name: the dog's name
+        age int: the dog's age in years
+        bio: a short bio, no more than three sentences
+        ' 'Invent three dogs'
+
+    JSON Schema is also accepted.
 
     The -x/--extract option returns just the content of the first ``` fenced code
     block, if one is present. If none are present it returns the full response.
@@ -888,32 +916,49 @@ def prompt(
 
     if template:
         params = dict(param)
-        # Cannot be used with system
-        try:
-            template_obj = load_template(template)
-        except LoadTemplateError as ex:
-            raise click.ClickException(str(ex))
-        if not (extract or extract_last):
-            extract = template_obj.extract
-            extract_last = template_obj.extract_last
-        # Combine with template fragments/system_fragments
-        if template_obj.fragments:
-            fragments = [*template_obj.fragments, *fragments]
-        if template_obj.system_fragments:
-            system_fragments = [*template_obj.system_fragments, *system_fragments]
-        if template_obj.schema_object:
-            schema = template_obj.schema_object
-        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
-        if template_obj.options:
-            options = _merge_template_options(template_obj, options)
-        if "input" in template_obj.vars():
+        template_objs = []
+        for template_name in template:
+            try:
+                template_objs.append(load_template(template_name))
+            except LoadTemplateError as ex:
+                raise click.ClickException(str(ex))
+
+        # Prepend list-valued fields in template order, ahead of CLI values
+        for template_obj in reversed(template_objs):
+            if template_obj.fragments:
+                fragments = [*template_obj.fragments, *fragments]
+            if template_obj.system_fragments:
+                system_fragments = [
+                    *template_obj.system_fragments,
+                    *system_fragments,
+                ]
+            tools, python_tools = _merge_template_tools(
+                template_obj, tools, python_tools
+            )
+
+        # Read stdin before applying the first template so templates compose
+        # from left to right, with each one receiving the previous result.
+        if any("input" in template_obj.vars() for template_obj in template_objs):
             prompt = read_prompt()
-        prompt, system = _apply_template(template_obj, prompt, params, system)
-        if model_id is None and template_obj.model:
-            model_id = template_obj.model
-        attachments, attachment_types = _merge_template_attachments(
-            template_obj, attachments, attachment_types
-        )
+
+        for template_obj in template_objs:
+            if not (extract or extract_last):
+                extract = template_obj.extract
+                extract_last = template_obj.extract_last
+            if template_obj.schema_object:
+                schema = template_obj.schema_object
+            if template_obj.options:
+                options = _merge_template_options(template_obj, options)
+            prompt, system = _apply_template(template_obj, prompt, params, system)
+            if model_id is None and template_obj.model:
+                model_id = template_obj.model
+
+        # Like fragments and tools, template attachments precede CLI values
+        # and retain the order in which their templates were specified.
+        for template_obj in reversed(template_objs):
+            attachments, attachment_types = _merge_template_attachments(
+                template_obj, attachments, attachment_types
+            )
     if extract or extract_last or json_output:
         no_stream = True
 
@@ -1664,6 +1709,7 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
             "_output_parts",
             "_parent_message_hash",
             "_input_message_hashes",
+            "_output_message_hashes",
             "_tip_message_hash",
             "_legacy",
             "_search_rank",
@@ -1970,7 +2016,9 @@ def logs_list(
                 if data_ids:
                     for item in new_items:
                         item[find_unused_key(item, "response_id")] = row["id"]
-                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row[
+                            "conversation_id"
+                        ]
                 to_output.extend(new_items)
             except ValueError:
                 pass
@@ -2035,6 +2083,34 @@ def logs_list(
                     return f"{usage}, {details}"
                 return details
             return usage
+
+        def _display_tool_results(tool_results):
+            for tool_result in tool_results:
+                attachments = ""
+                for attachment in tool_result["attachments"]:
+                    desc = ""
+                    if attachment.get("type"):
+                        desc += attachment["type"] + ": "
+                    if attachment.get("path"):
+                        desc += attachment["path"]
+                    elif attachment.get("url"):
+                        desc += attachment["url"]
+                    elif attachment.get("content"):
+                        desc += f"<{attachment['content_length']:,} bytes>"
+                    attachments += f"\n    - {desc}"
+                click.echo(
+                    "- **{}**: `{}`  \n{}{}{}".format(
+                        tool_result["name"],
+                        tool_result["tool_call_id"],
+                        _fenced_block(tool_result["output"]),
+                        (
+                            "  \n    **Error**: {}\n".format(tool_result["exception"])
+                            if tool_result["exception"]
+                            else ""
+                        ),
+                        attachments,
+                    )
+                )
 
         def _display_fragments(fragments, title):
             if not fragments:
@@ -2206,36 +2282,22 @@ def logs_list(
                     )
                     for tool in instance_tools:
                         echo_tool(tool, "    ")
-            if row["tool_results"]:
+            # Results the model was given arrived with the prompt;
+            # server-executed results happened during the response and
+            # render there instead.
+            local_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if not tool_result.get("server_executed")
+            ]
+            server_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if tool_result.get("server_executed")
+            ]
+            if local_tool_results:
                 click.echo("\n### Tool results\n")
-                for tool_result in row["tool_results"]:
-                    attachments = ""
-                    for attachment in tool_result["attachments"]:
-                        desc = ""
-                        if attachment.get("type"):
-                            desc += attachment["type"] + ": "
-                        if attachment.get("path"):
-                            desc += attachment["path"]
-                        elif attachment.get("url"):
-                            desc += attachment["url"]
-                        elif attachment.get("content"):
-                            desc += f"<{attachment['content_length']:,} bytes>"
-                        attachments += f"\n    - {desc}"
-                    click.echo(
-                        "- **{}**: `{}`  \n{}{}{}".format(
-                            tool_result["name"],
-                            tool_result["tool_call_id"],
-                            _fenced_block(tool_result["output"]),
-                            (
-                                "  \n    **Error**: {}\n".format(
-                                    tool_result["exception"]
-                                )
-                                if tool_result["exception"]
-                                else ""
-                            ),
-                            attachments,
-                        )
-                    )
+                _display_tool_results(local_tool_results)
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -2281,6 +2343,10 @@ def logs_list(
                             _format_tool_call_arguments(tool_call["arguments"]),
                         )
                     )
+                click.echo("")
+            if server_tool_results:
+                click.echo("### Tool results\n")
+                _display_tool_results(server_tool_results)
                 click.echo("")
             if response:
                 click.echo(f"{response}\n")
@@ -3263,6 +3329,7 @@ def uninstall(packages, yes):
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -3289,7 +3356,17 @@ def uninstall(packages, yes):
     help="Output format",
 )
 def embed(
-    collection, id, input, model, store, database, content, binary, metadata, format_
+    collection,
+    id,
+    input,
+    model,
+    key,
+    store,
+    database,
+    content,
+    binary,
+    metadata,
+    format_,
 ):
     """Embed text and store or return the result"""
     if collection and not id:
@@ -3353,9 +3430,11 @@ def embed(
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(id, content, metadata=metadata, store=store)
+        embedding = collection_obj.embed(
+            id, content, metadata=metadata, store=store, key=key
+        )
     else:
-        embedding = model_obj.embed(content)
+        embedding = model_obj.embed(content, key=key)
 
     if show_output:
         if format_ == "json" or format_ is None:
@@ -3407,6 +3486,7 @@ def embed(
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
@@ -3430,6 +3510,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    key,
     prepend,
     store,
     database,
@@ -3587,7 +3668,7 @@ def embed_multi(
                     content = prepend + content
                 yield id, content or ""
 
-        embed_kwargs = {"store": store}
+        embed_kwargs = {"store": store, "key": key}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
         collection_obj.embed_multi(tuples(), **embed_kwargs)
@@ -4126,10 +4207,10 @@ def _parse_yaml_template(name, content):
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
-        response = httpx.get(name)
+        response = httpx2.get(name)
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as ex:
+        except httpx2.HTTPStatusError as ex:
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
         return _parse_yaml_template(name, response.text)
 
