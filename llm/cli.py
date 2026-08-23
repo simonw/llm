@@ -1598,6 +1598,11 @@ def keys_set(name, value):
         $ llm keys set openai
         Enter key: ...
     """
+    if not value.isascii():
+        raise click.ClickException(
+            "The key must contain only ASCII characters. "
+            "Some non-ASCII characters were detected; please re-copy the key and try again."
+        )
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
     path = user_dir() / "keys.json"
     path.parent.mkdir(parents=True, exist_ok=True)
