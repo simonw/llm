@@ -575,8 +575,12 @@ def test_logs_schema_data_ids(schema_log_path):
         "name",
         "conversation_id__",
     }
+    assert last_row["response_id_"] == str(ulid).lower()
+    assert last_row["conversation_id__"] == "abc123"
     for row in rows:
         assert set(row.keys()) == {"conversation_id", "response_id", "name"}
+        assert row["conversation_id"] in {"abc123", "abc456"}
+        assert row["conversation_id"] != row["response_id"]
 
 
 _expected_yaml_re = r"""- id: [a-f0-9]{32}
@@ -1093,6 +1097,79 @@ def test_logs_tool_call_argument_formatting(logs_db):
     result2 = runner.invoke(cli, ["logs", "-c"])
     normalized_output = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", result2.output)
     assert ('### Tool calls\n\n- **demo**: `tc_TCID`  \n    timeout: `120`\n    options: ``["`tick`"]``\n') in normalized_output
+
+
+def test_logs_server_side_tool_results(logs_db, mock_model):
+    """Server-executed tool calls carry their results inside the
+    response itself, so they render in a Tool results section under
+    ## Response - https://github.com/simonw/llm/issues/1629"""
+    import llm
+
+    mock_model.enqueue(
+        [
+            llm.parts.StreamEvent(
+                type="tool_call_name",
+                chunk="shell",
+                tool_call_id="tc_server_1",
+                server_executed=True,
+            ),
+            llm.parts.StreamEvent(
+                type="tool_call_args",
+                chunk='{"commands": ["python fib.py"]}',
+                tool_call_id="tc_server_1",
+                server_executed=True,
+            ),
+            llm.parts.StreamEvent(
+                type="tool_result",
+                chunk="17711",
+                tool_name="shell",
+                tool_call_id="tc_server_1",
+                server_executed=True,
+            ),
+            llm.parts.StreamEvent(type="text", chunk="Fibonacci(22) = 17711"),
+        ]
+    )
+    response = mock_model.prompt("calculate fibonacci 22")
+    response.text()
+    response.log_to_db(logs_db)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-c"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert (
+        "## Response\n"
+        "\n"
+        "### Tool calls\n"
+        "\n"
+        "- **shell**: `tc_server_1`  \n"
+        '    commands: `["python fib.py"]`\n'
+        "\n"
+        "### Tool results\n"
+        "\n"
+        "- **shell**: `tc_server_1`  \n"
+        "    ```\n"
+        "    17711\n"
+        "    ```\n"
+        "\n"
+        "Fibonacci(22) = 17711\n"
+    ) in result.output
+
+    # --json output records the result and marks it server-executed
+    json_result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert json_result.exit_code == 0
+    row = json.loads(json_result.output)[0]
+    assert row["tool_calls"][0]["server_executed"] is True
+    (tool_result,) = row["tool_results"]
+    assert tool_result["name"] == "shell"
+    assert tool_result["output"] == "17711"
+    assert tool_result["tool_call_id"] == "tc_server_1"
+    assert tool_result["server_executed"] is True
+    assert tool_result["id"] is not None
+
+    # --short mode includes the server-side result too
+    short_result = runner.invoke(cli, ["logs", "--short"], catch_exceptions=False)
+    assert short_result.exit_code == 0
+    assert "shell: 17711" in short_result.output
 
 
 def test_logs_backup(logs_db):

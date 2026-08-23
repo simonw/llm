@@ -10,7 +10,7 @@ import time
 from typing import Any, Final
 
 import click
-import httpx
+import httpx2
 import puremagic
 import sqlite_utils
 from ulid import ULID
@@ -93,18 +93,18 @@ def remove_dict_none_values(d):
     return new_dict
 
 
-class _LogResponse(httpx.Response):
+class _LogResponse(httpx2.Response):
     def iter_bytes(self, *args, **kwargs):
         for chunk in super().iter_bytes(*args, **kwargs):
             click.echo(chunk.decode(), err=True)
             yield chunk
 
 
-class _LogTransport(httpx.BaseTransport):
-    def __init__(self, transport: httpx.BaseTransport):
+class _LogTransport(httpx2.BaseTransport):
+    def __init__(self, transport: httpx2.BaseTransport):
         self.transport = transport
 
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
+    def handle_request(self, request: httpx2.Request) -> httpx2.Response:
         response = self.transport.handle_request(request)
         return _LogResponse(
             status_code=response.status_code,
@@ -114,11 +114,11 @@ class _LogTransport(httpx.BaseTransport):
         )
 
 
-def _no_accept_encoding(request: httpx.Request):
+def _no_accept_encoding(request: httpx2.Request):
     request.headers.pop("accept-encoding", None)
 
 
-def _log_response(response: httpx.Response):
+def _log_response(response: httpx2.Response):
     request = response.request
     click.echo(f"Request: {request.method} {request.url}", err=True)
     click.echo("  Headers:", err=True)
@@ -145,9 +145,9 @@ def _log_response(response: httpx.Response):
     click.echo("  Body:", err=True)
 
 
-def logging_client() -> httpx.Client:
-    return httpx.Client(
-        transport=_LogTransport(httpx.HTTPTransport()),
+def logging_client() -> httpx2.Client:
+    return httpx2.Client(
+        transport=_LogTransport(httpx2.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
@@ -403,8 +403,18 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         # If type is specified, use it
         if len(field_parts) > 1:
             type_indicator = field_parts[1].strip()
-            if type_indicator in type_mapping:
+            try:
                 field_type = type_mapping[type_indicator]
+            except KeyError:
+                # 'from None' hides the internal mapping KeyError from the
+                # user-facing traceback:
+                raise ValueError(
+                    f"Invalid schema DSL: unknown type {type_indicator!r} "
+                    f"for field {field_name!r}"
+                ) from None
+
+        if field_name in json_schema["properties"]:
+            raise ValueError(f"Invalid schema DSL: duplicate field name {field_name!r}")
 
         # Add field to properties
         json_schema["properties"][field_name] = {"type": field_type}

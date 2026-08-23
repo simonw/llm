@@ -20,7 +20,7 @@ from typing import Any, cast
 from datetime import datetime
 
 import click
-import httpx
+import httpx2
 import pydantic
 import sqlite_utils
 import yaml
@@ -251,7 +251,9 @@ def resolve_fragments(db: sqlite_utils.Database, fragments: Iterable[str], allow
         if fragment.startswith(("http://", "https://")):
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
-            client = httpx.Client(follow_redirects=True, max_redirects=3, headers=headers)
+            client = httpx.Client(
+                follow_redirects=True, max_redirects=3, headers=headers
+            )
             response = client.get(fragment)
             response.raise_for_status()
             resolved.append(Fragment(response.text, fragment))
@@ -333,10 +335,10 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx2.head(value)
             response.raise_for_status()
             mimetype = response.headers.get("content-type")
-        except httpx.HTTPError as ex:
+        except httpx2.HTTPError as ex:
             raise AttachmentError(str(ex))
         return Attachment(type=mimetype, path=None, url=value, content=None)
 
@@ -1595,6 +1597,7 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
             "_output_parts",
             "_parent_message_hash",
             "_input_message_hashes",
+            "_output_message_hashes",
             "_tip_message_hash",
             "_legacy",
             "_search_rank",
@@ -1884,7 +1887,9 @@ def logs_list(
                 if data_ids:
                     for item in new_items:
                         item[find_unused_key(item, "response_id")] = row["id"]
-                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row[
+                            "conversation_id"
+                        ]
                 to_output.extend(new_items)
             except ValueError:
                 pass
@@ -1949,6 +1954,34 @@ def logs_list(
                     return f"{usage}, {details}"
                 return details
             return usage
+
+        def _display_tool_results(tool_results):
+            for tool_result in tool_results:
+                attachments = ""
+                for attachment in tool_result["attachments"]:
+                    desc = ""
+                    if attachment.get("type"):
+                        desc += attachment["type"] + ": "
+                    if attachment.get("path"):
+                        desc += attachment["path"]
+                    elif attachment.get("url"):
+                        desc += attachment["url"]
+                    elif attachment.get("content"):
+                        desc += f"<{attachment['content_length']:,} bytes>"
+                    attachments += f"\n    - {desc}"
+                click.echo(
+                    "- **{}**: `{}`  \n{}{}{}".format(
+                        tool_result["name"],
+                        tool_result["tool_call_id"],
+                        _fenced_block(tool_result["output"]),
+                        (
+                            "  \n    **Error**: {}\n".format(tool_result["exception"])
+                            if tool_result["exception"]
+                            else ""
+                        ),
+                        attachments,
+                    )
+                )
 
         def _display_fragments(fragments, title):
             if not fragments:
@@ -2094,7 +2127,20 @@ def logs_list(
                     )
                     for tool in instance_tools:
                         echo_tool(tool, "    ")
-            if row["tool_results"]:
+            # Results the model was given arrived with the prompt;
+            # server-executed results happened during the response and
+            # render there instead.
+            local_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if not tool_result.get("server_executed")
+            ]
+            server_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if tool_result.get("server_executed")
+            ]
+            if local_tool_results:
                 click.echo("\n### Tool results\n")
                 for tool_result in row["tool_results"]:
                     attachments = ""
@@ -2114,7 +2160,13 @@ def logs_list(
                             tool_result["name"],
                             tool_result["tool_call_id"],
                             _fenced_block(tool_result["output"]),
-                            ("  \n    **Error**: {}\n".format(tool_result["exception"]) if tool_result["exception"] else ""),
+                            (
+                                "  \n    **Error**: {}\n".format(
+                                    tool_result["exception"]
+                                )
+                                if tool_result["exception"]
+                                else ""
+                            ),
                             attachments,
                         )
                     )
@@ -2157,6 +2209,10 @@ def logs_list(
                             _format_tool_call_arguments(tool_call["arguments"]),
                         )
                     )
+                click.echo("")
+            if server_tool_results:
+                click.echo("### Tool results\n")
+                _display_tool_results(server_tool_results)
                 click.echo("")
             if response:
                 click.echo(f"{response}\n")
@@ -2763,6 +2819,8 @@ def aliases_list(json_):
     if json_:
         click.echo(json.dumps({key: value for key, value, type_ in to_output}, indent=4))
         return
+    if not to_output:
+        return
     max_alias_length = max(len(a) for a, _, _ in to_output)
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}{type_}"
     for alias, model_id, type_ in to_output:
@@ -3078,7 +3136,9 @@ def uninstall(packages, yes):
     type=click.Path(exists=True, readable=True, allow_dash=True),
     help="File to embed",
 )
-@click.option("-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -3104,7 +3164,9 @@ def uninstall(packages, yes):
     type=click.Choice(["json", "blob", "base64", "hex"]),
     help="Output format",
 )
-def embed(collection, id, input, model, store, database, content, binary, metadata, format_):
+def embed(
+    collection, id, input, model, store, database, content, binary, metadata, format_
+):
     """Embed text and store or return the result"""
     if collection and not id:
         raise click.ClickException("Must provide both collection and id")
@@ -3163,9 +3225,11 @@ def embed(collection, id, input, model, store, database, content, binary, metada
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(id, content, metadata=metadata, store=store)
+        embedding = collection_obj.embed(
+            id, content, metadata=metadata, store=store, key=key
+        )
     else:
-        embedding = model_obj.embed(content)
+        embedding = model_obj.embed(content, key=key)
 
     if show_output:
         if format_ == "json" or format_ is None:
@@ -3212,7 +3276,9 @@ def embed(collection, id, input, model, store, database, content, binary, metada
 )
 @click.option("--batch-size", type=int, help="Batch size to use when running embeddings")
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
-@click.option("-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL")
+@click.option(
+    "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
+)
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
@@ -3236,6 +3302,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    key,
     prepend,
     store,
     database,
@@ -3387,7 +3454,7 @@ def embed_multi(
                     content = prepend + content
                 yield id, content or ""
 
-        embed_kwargs = {"store": store}
+        embed_kwargs = {"store": store, "key": key}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
         collection_obj.embed_multi(tuples(), **embed_kwargs)
@@ -3914,10 +3981,10 @@ def _parse_yaml_template(name, content):
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
-        response = httpx.get(name)
+        response = httpx2.get(name)
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as ex:
+        except httpx2.HTTPStatusError as ex:
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
         return _parse_yaml_template(name, response.text)
 

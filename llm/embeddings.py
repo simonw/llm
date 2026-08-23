@@ -121,6 +121,8 @@ class Collection:
         value: str | bytes,
         metadata: dict[str, Any] | None = None,
         store: bool = False,
+        *,
+        key: str | None = None,
     ) -> None:
         """
         Embed value and store it in the collection with a given ID.
@@ -130,6 +132,7 @@ class Collection:
             value (str or bytes): value to be embedded
             metadata (dict, optional): Metadata to be stored
             store (bool, optional): Whether to store the value in the content or content_blob column
+            key (str, optional): API key or stored key alias to use
         """
         from llm import encode
 
@@ -138,7 +141,7 @@ class Collection:
             "content_hash = ? and collection_id = ?", [content_hash, self.id]
         ):
             return
-        embedding = self.model().embed(value)
+        embedding = self.model().embed(value, key=key)
         cast(Table, self.db["embeddings"]).insert(
             {
                 "collection_id": self.id,
@@ -158,6 +161,8 @@ class Collection:
         entries: Iterable[tuple[str, str | bytes]],
         store: bool = False,
         batch_size: int = 100,
+        *,
+        key: str | None = None,
     ) -> None:
         """
         Embed multiple texts and store them in the collection with given IDs.
@@ -166,11 +171,13 @@ class Collection:
             entries (iterable): Iterable of (id: str, text: str) tuples
             store (bool, optional): Whether to store the text in the content column
             batch_size (int, optional): custom maximum batch size to use
+            key (str, optional): API key or stored key alias to use
         """
         self.embed_multi_with_metadata(
             ((id, value, None) for id, value in entries),
             store=store,
             batch_size=batch_size,
+            key=key,
         )
 
     def embed_multi_with_metadata(
@@ -178,6 +185,8 @@ class Collection:
         entries: Iterable[tuple[str, str | bytes, dict[str, Any] | None]],
         store: bool = False,
         batch_size: int = 100,
+        *,
+        key: str | None = None,
     ) -> None:
         """
         Embed multiple values along with metadata and store them in the collection with given IDs.
@@ -186,6 +195,7 @@ class Collection:
             entries (iterable): Iterable of (id: str, value: str or bytes, metadata: None or dict)
             store (bool, optional): Whether to store the value in the content or content_blob column
             batch_size (int, optional): custom maximum batch size to use
+            key (str, optional): API key or stored key alias to use
         """
         import llm
 
@@ -212,7 +222,7 @@ class Collection:
             ]
             filtered_batch = [item for item in batch if item[0] not in existing_ids]
             embeddings = list(
-                self.model().embed_multi(item[1] for item in filtered_batch)
+                self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )
             with self.db.atomic():
                 cast(Table, self.db["embeddings"]).insert_all(
