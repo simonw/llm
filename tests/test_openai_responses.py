@@ -8,6 +8,7 @@ from pytest_httpx2 import IteratorStream
 
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter, Responses, WebSearch
+from llm.default_plugins import openai_models
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
 
@@ -577,6 +578,38 @@ def test_responses_model_is_registered():
         "reasoning_summary"
         not in Chat("reasoning-chat-model", reasoning=True).Options.model_fields
     )
+    assert "timeout" in model.Options.model_fields
+    assert "max_retries" in model.Options.model_fields
+
+    async_model = llm.get_async_model("gpt-5.5")
+    assert "timeout" in async_model.Options.model_fields
+    assert "max_retries" in async_model.Options.model_fields
+
+
+def test_responses_client_options_are_passed_to_openai_clients(monkeypatch):
+    captured_sync = {}
+    captured_async = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured_sync.update(kwargs)
+
+    class FakeAsyncOpenAI:
+        def __init__(self, **kwargs):
+            captured_async.update(kwargs)
+
+    monkeypatch.setattr(openai_models.openai, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(openai_models.openai, "AsyncOpenAI", FakeAsyncOpenAI)
+
+    model = llm.get_model("gpt-5.5")
+    model.get_client("test-key", timeout=7200.0, max_retries=0)
+    assert captured_sync["timeout"] == 7200.0
+    assert captured_sync["max_retries"] == 0
+
+    async_model = llm.get_async_model("gpt-5.5")
+    async_model.get_client("test-key", async_=True, timeout=7200.0, max_retries=0)
+    assert captured_async["timeout"] == 7200.0
+    assert captured_async["max_retries"] == 0
 
 
 def test_chat_completions_opt_out_dispatches_to_chat(httpx_mock):
@@ -890,6 +923,22 @@ def test_responses_kwargs_packs_reasoning_and_verbosity():
     kwargs = model._build_responses_kwargs(p, stream=False)
     assert kwargs["reasoning"] == {"summary": "auto", "effort": "low"}
     assert kwargs["text"]["verbosity"] == "low"
+
+
+def test_responses_client_options_do_not_leak_into_request_kwargs():
+    model = llm.get_model("gpt-5.5")
+    options = model.Options(timeout=7200, max_retries=0)
+
+    class FakePrompt:
+        pass
+
+    p = FakePrompt()
+    p.options = options
+    p.tools = []
+    p.schema = None
+    kwargs = model._build_responses_kwargs(p, stream=False)
+    assert "timeout" not in kwargs
+    assert "max_retries" not in kwargs
 
 
 def test_responses_kwargs_sets_reasoning_summary_without_effort():
