@@ -1268,12 +1268,16 @@ def chat(
     Hold an ongoing chat with a model.
     """
     # Left and right arrow keys to move cursor:
-    if sys.platform != "win32":
-        readline.parse_and_bind("\\e[D: backward-char")
-        readline.parse_and_bind("\\e[C: forward-char")
-    else:
-        readline.parse_and_bind("bind -x '\\e[D: backward-char'")
-        readline.parse_and_bind("bind -x '\\e[C: forward-char'")
+    try:
+        if sys.platform != "win32":
+            readline.parse_and_bind("\\e[D: backward-char")
+            readline.parse_and_bind("\\e[C: forward-char")
+        else:
+            readline.parse_and_bind('"\\e[D": backward-char')
+            readline.parse_and_bind('"\\e[C": forward-char')
+    except Exception:
+        pass
+
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
