@@ -115,6 +115,27 @@ def test_simplify_usage_dict(input_data, expected_output):
             False,
             "def foo():\n    return `bar`\n",
         ],
+        [
+            "Here is some text.\r\n\r\n```python\r\ndef foo():\r\n    return 'bar'\r\n```\r\n\r\nMore text.",
+            False,
+            "def foo():\r\n    return 'bar'\r\n",
+        ],
+        [
+            (
+                "First code block:\r\n\r\n```python\r\nfirst()\r\n```\r\n\r\n"
+                "Second code block:\n\n```javascript\nsecond();\r\n```\n"
+            ),
+            False,
+            "first()\r\n",
+        ],
+        [
+            (
+                "First code block:\r\n\r\n```python\r\nfirst()\r\n```\r\n\r\n"
+                "Second code block:\n\n```javascript\nsecond();\r\n```\n"
+            ),
+            True,
+            "second();\r\n",
+        ],
     ],
 )
 def test_extract_fenced_code_block(input, last, expected):

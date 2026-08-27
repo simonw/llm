@@ -209,6 +209,36 @@ def test_extract_fenced_code(
         assert "```" in output
 
 
+def test_extract_fenced_code_crlf(httpx_mock):
+    """The CLI extracts fenced code when the model response uses CRLF."""
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": 'Code:\r\n\r\n```python\r\nprint("ok")\r\n```\r\nDone.'
+                    }
+                }
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code", "--extract"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    # Click normalizes terminal output to LF; test_utils.py verifies that
+    # extraction itself preserves the response's CRLF bytes.
+    assert result.output == 'print("ok")\n\n'
+
+
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
