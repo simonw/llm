@@ -1436,7 +1436,8 @@ class Chat(_Shared, KeyModel):
                                 tool_call_id=tool_calls[idx].id,
                             )
                 try:
-                    content = chunk.choices[0].delta.content
+                    delta = chunk.choices[0].delta
+                    content = None if delta is None else delta.content
                 except IndexError:
                     content = None
                 if content:
@@ -3007,8 +3008,8 @@ def combine_chunks(chunks: list) -> dict:
                     }
                 )
 
-            if not hasattr(choice, "delta"):
-                content += choice.text
+            if getattr(choice, "delta", None) is None:
+                content += getattr(choice, "text", "")
                 continue
             role = choice.delta.role
             if choice.delta.content is not None:
