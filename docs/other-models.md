@@ -192,6 +192,23 @@ And confirm they were logged correctly with:
 llm logs -n 1
 ```
 
+The same configuration works with hosted OpenAI-compatible APIs. For example,
+this config registers a hosted model called `pzero`:
+
+```yaml
+- model_id: pzero
+  model_name: deepseek-v4-flash
+  api_base: "https://api.pzero.studio/v1"
+  api_key_name: pzero
+```
+
+In this example, `model_name` is required and is the model identifier sent to
+the API; `model_id` is only LLM's local identifier. Because `api_base` is set,
+the default `openai` key is not used, so `api_key_name` must name a key stored
+with `llm keys set pzero`. Chat Completions is used by default; only add
+`responses: true` when the endpoint supports the Responses API at
+`/v1/responses`.
+
 ### Extra HTTP headers
 
 Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require the setting of additional HTTP headers. You can set those using the `headers:` key like this:

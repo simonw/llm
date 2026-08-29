@@ -260,6 +260,10 @@ Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want 
 ```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
+For a hosted OpenAI-compatible endpoint, see the configuration example in
+{ref}`openai-compatible-models`; set `api_key_name` when using `api_base`, and
+leave `responses` unset unless the endpoint supports the Responses API.
+
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
 
 If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration. This is useful for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through `/v1/responses`.
