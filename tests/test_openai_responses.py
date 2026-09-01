@@ -7,9 +7,21 @@ import pytest
 from pytest_httpx2 import IteratorStream
 
 import llm
-from llm.default_plugins.openai_models import CodeInterpreter, Responses, WebSearch
+from llm.default_plugins.openai_models import (
+    CodeInterpreter,
+    Responses,
+    WebSearch,
+    build_options_class,
+)
 
 API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
+
+
+def test_build_options_class_is_cached_by_capabilities():
+    reasoning_options = build_options_class(reasoning=True)
+
+    assert build_options_class(reasoning=True) is reasoning_options
+    assert build_options_class(reasoning=False) is not reasoning_options
 
 
 def _text_response_json(model="gpt-5.6-luna", text="ok"):
