@@ -264,9 +264,7 @@ def test_schema_dsl_multi():
 def test_schema_dsl_missing_field_name(schema, invalid_field):
     with pytest.raises(ValueError) as ex:
         schema_dsl(schema)
-    assert str(ex.value) == (
-        f"Invalid schema DSL: field {invalid_field!r} is missing a name before ':'"
-    )
+    assert str(ex.value) == (f"Invalid schema DSL: field {invalid_field!r} is missing a name before ':'")
 
 
 @pytest.mark.parametrize(
@@ -357,9 +355,7 @@ def test_truncate_string(text, max_length, normalize_whitespace, keep_end, expec
         ("abcdefghijklmnopqrstuvwxyz", 8, True, None, "abcde..."),
     ],
 )
-def test_test_truncate_string_keep_end(
-    text, max_length, keep_end, prefix_len, expected_full
-):
+def test_test_truncate_string_keep_end(text, max_length, keep_end, prefix_len, expected_full):
     """Test the specific behavior of the keep_end parameter."""
     result = truncate_string(
         text=text,
@@ -558,3 +554,20 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_mimetype_from_path_empty_puremagic_fallback():
+    """Regression test for #1340: fallback to mimetypes when puremagic fails."""
+    from llm.utils import mimetype_from_path
+    import tempfile
+    import os
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp.write(b"fake content")
+        tmp_path = tmp.name
+
+    try:
+        result = mimetype_from_path(tmp_path)
+        assert result == "video/mp4", f"Expected 'video/mp4', got {result}"
+    finally:
+        os.unlink(tmp_path)
