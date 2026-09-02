@@ -447,7 +447,52 @@ class LogStore:
         self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return tip
 
+    def delete_thread(self, thread_id: str) -> bool:
+        """Delete a thread and all of its turns from the log store.
+
+        Returns True if the thread existed and was deleted, False otherwise.
+        """
+        exists = bool(self.db["threads"].count_where("id = ?", [thread_id]))
+        legacy_exists = (
+            self.db["conversations"].exists()
+            and bool(self.db["conversations"].count_where("id = ?", [thread_id]))
+        )
+        if not exists and not legacy_exists:
+            return False
+
+        with self.db.atomic():
+            if self.db["turns"].exists():
+                turns = [
+                    r["id"]
+                    for r in self.db["turns"].rows_where("thread_id = ?", [thread_id])
+                ]
+                if turns:
+                    placeholders = ", ".join(["?"] * len(turns))
+                    for table in (
+                        "turn_tools",
+                        "turn_attachments",
+                        "turn_fragments",
+                        "tool_instantiations",
+                        "turn_options",
+                    ):
+                        if self.db[table].exists():
+                            self.db.execute(
+                                f"delete from {table} where turn_id in ({placeholders})",
+                                turns,
+                            )
+                    self.db["turns"].delete_where("thread_id = ?", [thread_id])
+            if exists:
+                self.db["threads"].delete_where("id = ?", [thread_id])
+
+            if self.db["responses"].exists():
+                self.db["responses"].delete_where("conversation_id = ?", [thread_id])
+            if self.db["conversations"].exists():
+                self.db["conversations"].delete_where("id = ?", [thread_id])
+
+        return True
+
     # -- turns ---------------------------------------------------------
+
 
     def log(self, response, thread_id: str | None = None) -> str:
         """Record a completed response.
