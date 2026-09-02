@@ -4,6 +4,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
+from functools import cache
 from typing import Any, ClassVar, Literal
 
 import click
@@ -1000,6 +1001,7 @@ def enum_values_sentence(enum_class):
     return "{}, and {}".format(", ".join(values[:-1]), values[-1])
 
 
+@cache
 def build_options_class(
     *,
     reasoning=False,
