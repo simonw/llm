@@ -3438,11 +3438,14 @@ def embed(
     if not content:
         if not input or input == "-":
             # Read from stdin
-            input_source = sys.stdin.buffer if binary else sys.stdin
-            content = input_source.read()
+            if binary:
+                content = sys.stdin.buffer.read()
+            else:
+                content = sys.stdin.buffer.read().decode("utf-8")
         else:
             mode = "rb" if binary else "r"
-            with open(input, mode) as f:
+            kwargs = {} if binary else {"encoding": "utf-8"}
+            with open(input, mode, **kwargs) as f:
                 content = f.read()
 
     if not content:
@@ -3755,11 +3758,14 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
         if not content:
             if not input or input == "-":
                 # Read from stdin
-                input_source = sys.stdin.buffer if binary else sys.stdin
-                content = input_source.read()
+                if binary:
+                    content = sys.stdin.buffer.read()
+                else:
+                    content = sys.stdin.buffer.read().decode("utf-8")
             else:
                 mode = "rb" if binary else "r"
-                with open(input, mode) as f:
+                kwargs = {} if binary else {"encoding": "utf-8"}
+                with open(input, mode, **kwargs) as f:
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
