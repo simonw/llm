@@ -1,10 +1,9 @@
 import json
 
+import click
 import pytest
 
 from llm import Toolbox, get_key
-import click
-
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,

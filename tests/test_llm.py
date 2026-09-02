@@ -782,6 +782,21 @@ def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
     assert json.loads(rows[0]["content"]) == expected
 
 
+def test_schema_using_invalid_dsl(tmpdir, monkeypatch):
+    monkeypatch.setenv("LLM_USER_PATH", str(tmpdir / "user"))
+    result = CliRunner().invoke(
+        cli,
+        ["prompt", "--schema", "name, age badtype", "test"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert (
+        "Error: Invalid value: Invalid schema DSL: unknown type 'badtype' "
+        "for field 'age'"
+    ) in result.output
+    assert "Traceback" not in result.output
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_pydantic", (False, True))
 async def test_schema_async(async_mock_model, use_pydantic):
