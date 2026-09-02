@@ -42,7 +42,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-deepseek](https://github.com/abrasumente233/llm-deepseek)** adds support for the [DeepSeek](https://deepseek.com)'s DeepSeek-Chat and DeepSeek-Coder models.
 - **[llm-lambda-labs](https://github.com/simonw/llm-lambda-labs)** provides access to models hosted by [Lambda Labs](https://docs.lambdalabs.com/public-cloud/lambda-chat-api/), including the Nous Hermes 3 series.
 - **[llm-venice](https://github.com/ar-jan/llm-venice)** provides access to uncensored models hosted by privacy-focused [Venice AI](https://docs.venice.ai/), including Llama 3.1 405B.
-- **[llm-openzoo](https://github.com/staccDOTsol/llm-openzoo)** provides access to models hosted by [OpenZoo](https://openzoo.fun), an OpenAI-compatible endpoint with no signup: any API key value works and usage is billed per call.
+- **[llm-openzoo](https://github.com/staccDOTsol/llm-openzoo)** provides access to models served by [OpenZoo](https://openzoo.fun) through its local `npx openzoo` proxy, an OpenAI-compatible endpoint that needs no account or API key and pays for each call over x402.
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
