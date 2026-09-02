@@ -2084,6 +2084,18 @@ def logs_list(
                 return details
             return usage
 
+        def _duration_usage_markdown(duration_ms):
+            total_seconds = duration_ms // 1000
+            hours, remainder = divmod(total_seconds, 60 * 60)
+            minutes, seconds = divmod(remainder, 60)
+            if hours:
+                human_duration = f"{hours}h {minutes}m {seconds}s"
+            elif minutes:
+                human_duration = f"{minutes}m {seconds}s"
+            else:
+                human_duration = f"{seconds}s"
+            return f"{duration_ms}ms ({human_duration})"
+
         def _display_tool_results(tool_results):
             for tool_result in tool_results:
                 attachments = ""
@@ -2147,6 +2159,7 @@ def logs_list(
                 obj = {
                     "model": row["model"],
                     "datetime": row["datetime_utc"].split(".")[0],
+                    "duration_ms": row["duration_ms"],
                     "conversation": cid,
                 }
                 if row["tool_calls"]:
@@ -2356,8 +2369,14 @@ def logs_list(
                     row["output_tokens"],
                     json.loads(row["token_details"]) if row["token_details"] else None,
                 )
-                if token_usage:
-                    click.echo(f"## Token usage\n\n{token_usage}\n")
+                usage_lines = [token_usage] if token_usage else []
+                if row["duration_ms"] is not None:
+                    usage_lines.append(
+                        f"Duration: {_duration_usage_markdown(row['duration_ms'])}"
+                    )
+                if usage_lines:
+                    usage_markdown = "\n\n".join(usage_lines)
+                    click.echo(f"## Token usage\n\n{usage_markdown}\n")
 
 
 @cli.group(

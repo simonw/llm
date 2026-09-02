@@ -208,6 +208,42 @@ def test_logs_token_usage_details_are_markdown_code(user_path):
     ) in result.output
 
 
+@pytest.mark.parametrize(
+    ("duration_ms", "expected"),
+    (
+        (23_347, "23347ms (23s)"),
+        (35_000, "35000ms (35s)"),
+        (94_000, "94000ms (1m 34s)"),
+        (5_582_000, "5582000ms (1h 33m 2s)"),
+    ),
+)
+def test_logs_duration_in_usage_markdown(user_path, duration_ms, expected):
+    log_path = str(user_path / "logs_duration.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "input_tokens": 2,
+            "output_tokens": 5,
+            "duration_ms": duration_ms,
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path, "-u"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert (
+        f"## Token usage\n\n2 input, 5 output\n\nDuration: {expected}\n"
+        in result.output
+    )
+
+
 @pytest.mark.parametrize("n", (None, 0, 2))
 def test_logs_json(n, log_path):
     "Test that logs command correctly returns requested -n records"
@@ -294,6 +330,7 @@ def test_logs_short(log_path, arg, usage):
     expected = (
         "- model: davinci\n"
         "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
+        "  duration_ms: null\n"
         "  conversation: abc123\n"
         "  system: system\n"
         "  prompt: prompt\n"
@@ -301,6 +338,7 @@ def test_logs_short(log_path, arg, usage):
         f"  system_fragments: []\n{expected_usage}"
         "- model: davinci\n"
         "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
+        "  duration_ms: null\n"
         "  conversation: abc123\n"
         "  system: system\n"
         "  prompt: prompt\n"
@@ -308,6 +346,7 @@ def test_logs_short(log_path, arg, usage):
         f"  system_fragments: []\n{expected_usage}"
         "- model: davinci\n"
         "  datetime: 'YYYY-MM-DDTHH:MM:SS'\n"
+        "  duration_ms: null\n"
         "  conversation: abc123\n"
         "  system: system\n"
         "  prompt: prompt\n"
@@ -315,6 +354,29 @@ def test_logs_short(log_path, arg, usage):
         f"  system_fragments: []\n{expected_usage}"
     )
     assert output == expected
+
+
+def test_logs_short_always_includes_duration_ms(user_path):
+    log_path = str(user_path / "logs_short_duration.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "duration_ms": 23_347,
+        }
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", log_path, "--short"])
+    assert result.exit_code == 0
+    assert "  duration_ms: 23347\n" in result.output
+    assert "  usage:" not in result.output
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
