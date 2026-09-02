@@ -291,6 +291,16 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             {"temperature": 0.5},
         ),
+        (
+            "prompt: 'Think briefly: $input'\noptions:\n"
+            "  chat_template_kwargs:\n    enable_thinking: false",
+            "Input text",
+            ["-m", "gpt-4o-mini"],
+            "gpt-4o-mini",
+            "Think briefly: Input text",
+            None,
+            {"chat_template_kwargs": {"enable_thinking": False}},
+        ),
         # Should be over-ridden by CLI
         (
             "prompt: 'Summarize this: $input'\noptions:\n  temperature: 0.5",
