@@ -38,6 +38,8 @@ from llm.utils import (
 
 @hookimpl
 def register_models(register):
+    if not llm.get_key(alias="openai",env="OPEN_AI_KEY"):
+        return
     # GPT-4o
     register(
         Chat(
