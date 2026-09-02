@@ -292,7 +292,10 @@ def resolve_schema_input(db, schema_input, load_template):
             pass
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
-        return schema_dsl(schema_input)
+        try:
+            return schema_dsl(schema_input)
+        except ValueError as e:
+            raise click.BadParameter(str(e)) from None
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():

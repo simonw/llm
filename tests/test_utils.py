@@ -2,6 +2,7 @@ import json
 import threading
 from types import SimpleNamespace
 
+import click
 import pytest
 
 import llm.utils
@@ -11,6 +12,7 @@ from llm.utils import (
     instantiate_from_spec,
     maybe_fenced_code,
     monotonic_ulid,
+    resolve_schema_input,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
@@ -313,6 +315,12 @@ def test_schema_dsl_duplicate_field_name():
     with pytest.raises(ValueError) as ex:
         schema_dsl("name, age int, name")
     assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
+
+
+def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
+    with pytest.raises(click.BadParameter) as ex:
+        resolve_schema_input(None, "name, age badtype", load_template=None)
+    assert "badtype" in str(ex.value)
 
 
 @pytest.mark.parametrize(
