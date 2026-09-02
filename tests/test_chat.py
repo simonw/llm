@@ -355,3 +355,35 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
+
+def test_chat_readline_does_not_use_bash_bind_x(mock_model, logs_db, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        llm.cli.readline, "parse_and_bind", lambda spec: calls.append(spec)
+    )
+    mock_model.enqueue(["ok"])
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert calls == ["\\e[D: backward-char", "\\e[C: forward-char"]
+
+
+def test_chat_survives_readline_bind_errors(mock_model, logs_db, monkeypatch):
+    def boom(_spec):
+        raise ValueError("pyreadline3 does not support this bind")
+
+    monkeypatch.setattr(llm.cli.readline, "parse_and_bind", boom)
+    mock_model.enqueue(["ok"])
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "ok" in result.output
