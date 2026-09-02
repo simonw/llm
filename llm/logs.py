@@ -646,7 +646,11 @@ class LogStore:
             outputs,
             self._turn_tool_pairs(turn_id),
             schema=_load(row["schema_json"]),
-            model_replacements=_model_json_replacements(row["model"]),
+            model_replacements=(
+                _model_json_replacements(row["model"])
+                if _needs_model_replacements(row["response_json"])
+                else None
+            ),
         )
 
     def _turn_tool_pairs(self, turn_id: str) -> list[tuple[str, str]]:
@@ -1041,6 +1045,17 @@ def _model_json_replacements(model_id: str | None):
     return getattr(model, "json_replacements", None)
 
 
+def _needs_model_replacements(condensed: str) -> bool:
+    """Whether a condensed payload can reference model boilerplate.
+
+    Model markers look like ``{"$": "m.key"}``, so a payload whose text
+    never contains ``"m.`` has none and the model need not be resolved
+    at all - resolving it means rebuilding the plugin model registry.
+    A false positive just falls back to the lookup.
+    """
+    return '"m.' in condensed
+
+
 # -- llm logs support ---------------------------------------------------
 #
 # Rows shaped like the ones the older `responses` query produced, so the
@@ -1156,14 +1171,26 @@ class _LogRowBuilder:
     rather than stored a second time. The chain up to the parent is a
     prefix of the chain up to the tip, so splitting them is a matter of
     length.
+
+    One builder serves a whole listing, so it remembers what it has
+    already paid for: every message row and its parts are read once
+    however many turns' chains pass through them, and a model's
+    ``json_replacements`` are resolved once per model id rather than
+    once per row - each resolution rebuilds the plugin model registry.
     """
 
     def __init__(self, store: "LogStore"):
         self.store = store
+        # hash -> messages row, or None when the row does not exist
+        self._message_rows: dict[str, dict | None] = {}
+        # hash -> Message, for every row whose parts have been loaded
+        self._messages: dict[str, Message] = {}
+        # model id -> json_replacements (None when unknown)
+        self._model_replacements: dict[str | None, Any] = {}
 
     def build(self, row: dict) -> dict:
-        inputs = self.store.load_chain(row["parent_message_hash"])
-        outputs = self.store.load_chain(row["tip_message_hash"])[len(inputs) :]
+        inputs = self._chain(row["parent_message_hash"])
+        outputs = self._chain(row["tip_message_hash"])[len(inputs) :]
 
         # The turn's own input is the trailing run of user and tool
         # messages: everything after the last assistant (or system)
@@ -1240,6 +1267,61 @@ class _LogRowBuilder:
         )
         return built
 
+    # -- memoized reads ------------------------------------------------
+
+    def _message_row(self, hash_: str) -> dict | None:
+        "The messages row for ``hash_``, read at most once per builder."
+        if hash_ not in self._message_rows:
+            self._message_rows[hash_] = next(
+                iter(
+                    self.store.db.query(
+                        "select * from messages where hash = ?", [hash_]
+                    )
+                ),
+                None,
+            )
+        return self._message_rows[hash_]
+
+    def _chain(self, tip: str | None) -> list[Message]:
+        """Same as ``LogStore.load_chain`` but memoized across rows.
+
+        Every turn in a conversation shares its ancestors with the turns
+        before it, so a listing walks the same messages over and over.
+        Only the messages above the last known one are read - their
+        parts in one batch - and the chain is then assembled from memory.
+        """
+        if tip is None:
+            return []
+        missing: list[dict] = []
+        hash_: str | None = tip
+        while hash_ is not None and hash_ not in self._messages:
+            row = self._message_row(hash_)
+            if row is None:
+                raise KeyError(hash_)
+            missing.append(row)
+            hash_ = row["parent_hash"]
+        if missing:
+            parts_by_message = self.store._load_parts([row["hash"] for row in missing])
+            for row in missing:
+                self._messages[row["hash"]] = Message(
+                    role=row["role"],
+                    parts=parts_by_message.get(row["hash"], []),
+                    provider_metadata=_load(row["provider_metadata"]),
+                )
+        chain: list[Message] = []
+        hash_ = tip
+        while hash_ is not None:
+            chain.append(self._messages[hash_])
+            hash_ = self._message_rows[hash_]["parent_hash"]  # type: ignore[index]
+        chain.reverse()
+        return chain
+
+    def _model_replacements_for(self, model_id: str | None):
+        "``_model_json_replacements`` resolved at most once per model id."
+        if model_id not in self._model_replacements:
+            self._model_replacements[model_id] = _model_json_replacements(model_id)
+        return self._model_replacements[model_id]
+
     def _resolve_response_json(self, row: dict, outputs) -> str | None:
         condensed = row.get("response_json")
         if not condensed:
@@ -1251,7 +1333,11 @@ class _LogRowBuilder:
                     outputs,
                     self.store._turn_tool_pairs(row["id"]),
                     schema=_load(row.get("schema_json")),
-                    model_replacements=_model_json_replacements(row.get("model")),
+                    model_replacements=(
+                        self._model_replacements_for(row.get("model"))
+                        if _needs_model_replacements(condensed)
+                        else None
+                    ),
                 )
             )
         except UncondenseError:
@@ -1263,15 +1349,7 @@ class _LogRowBuilder:
         hashes: list[str] = []
         hash_ = parent_hash
         while hash_:
-            message_row = next(
-                iter(
-                    self.store.db.query(
-                        "select parent_hash, role from messages where hash = ?",
-                        [hash_],
-                    )
-                ),
-                None,
-            )
+            message_row = self._message_row(hash_)
             if message_row is None or message_row["role"] not in ("user", "tool"):
                 break
             hashes.append(hash_)
@@ -1287,15 +1365,7 @@ class _LogRowBuilder:
         hashes: list[str] = []
         hash_ = tip_hash
         while hash_ and hash_ != parent_hash:
-            message_row = next(
-                iter(
-                    self.store.db.query(
-                        "select parent_hash from messages where hash = ?",
-                        [hash_],
-                    )
-                ),
-                None,
-            )
+            message_row = self._message_row(hash_)
             if message_row is None:
                 break
             hashes.append(hash_)

@@ -2089,3 +2089,100 @@ class TestModelJsonReplacements:
             store.turn_response_json(turn_id)
         (row,) = merged_log_rows(store)
         assert row["response_json"] is None
+
+
+class TestLogListingCost:
+    """`llm logs -c` on a long conversation must not redo per-row work
+    that only depends on the model or on messages it already loaded.
+    https://github.com/simonw/llm/issues/1654"""
+
+    @staticmethod
+    def log_conversation(store, mock_model, turns, response_json=None):
+        conversation = mock_model.conversation()
+        for i in range(turns):
+            mock_model.enqueue([f"reply {i}"])
+            response = conversation.prompt(f"prompt {i}")
+            response.text()
+            if response_json is not None:
+                response.response_json = response_json
+            store.log(response)
+        return conversation
+
+    @staticmethod
+    def count_get_model(monkeypatch):
+        calls = []
+        original = llm.get_model
+
+        def counting_get_model(*args, **kwargs):
+            # get_model() retries itself with _skip_async while deciding
+            # how to describe an unknown model - count each lookup once
+            if not kwargs.get("_skip_async"):
+                calls.append(args)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(llm, "get_model", counting_get_model)
+        return calls
+
+    def test_model_is_resolved_once_per_model_id(self, store, mock_model, monkeypatch):
+        boiler = {"web_search": {"num_requests": 0}}
+        mock_model.json_replacements = {"tool_usage_0": boiler}
+        try:
+            self.log_conversation(
+                store, mock_model, 5, response_json={"tool_usage": boiler}
+            )
+            calls = self.count_get_model(monkeypatch)
+            rows = merged_log_rows(store)
+        finally:
+            del mock_model.json_replacements
+        assert len(rows) == 5
+        assert all(
+            json.loads(row["response_json"])["tool_usage"] == boiler for row in rows
+        )
+        assert len(calls) == 1
+
+    def test_unknown_model_is_looked_up_once(self, store, mock_model, monkeypatch):
+        boiler = {"web_search": {"num_requests": 0}}
+        mock_model.json_replacements = {"tool_usage_0": boiler}
+        try:
+            self.log_conversation(
+                store, mock_model, 4, response_json={"tool_usage": boiler}
+            )
+        finally:
+            del mock_model.json_replacements
+        store.db.execute("update turns set model = 'gone-model'")
+        calls = self.count_get_model(monkeypatch)
+        rows = merged_log_rows(store)
+        assert [row["response_json"] for row in rows] == [None] * 4
+        assert len(calls) == 1
+
+    def test_model_is_not_resolved_when_no_marker_needs_it(
+        self, store, mock_model, monkeypatch
+    ):
+        self.log_conversation(
+            store, mock_model, 3, response_json={"content": "ok", "usage": {"in": 1}}
+        )
+        calls = self.count_get_model(monkeypatch)
+        rows = merged_log_rows(store)
+        assert [json.loads(row["response_json"])["usage"] for row in rows] == [
+            {"in": 1}
+        ] * 3
+        assert calls == []
+
+    def test_listing_a_conversation_loads_each_message_once(self, store, mock_model):
+        turns = 6
+        self.log_conversation(store, mock_model, turns)
+        statements = []
+        store.db.conn.set_trace_callback(statements.append)
+        try:
+            rows = merged_log_rows(store)
+        finally:
+            store.db.conn.set_trace_callback(None)
+        assert [row["prompt"] for row in rows] == [
+            f"prompt {i}" for i in reversed(range(turns))
+        ]
+        assert [row["response"] for row in rows] == [
+            f"reply {i}" for i in reversed(range(turns))
+        ]
+        message_lookups = [s for s in statements if "from messages" in s]
+        # One user and one assistant message per turn, each fetched once
+        assert len(message_lookups) <= 2 * turns
