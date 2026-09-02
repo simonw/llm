@@ -1,5 +1,21 @@
 # Changelog
 
+(v0_34)=
+## 0.34 (2026-09-02)
+
+New features:
+
+- `llm logs --usage` Markdown output now includes the response duration in milliseconds and as a human-readable duration. `llm logs --short` includes a new `duration_ms` field. [#1653](https://github.com/simonw/llm/issues/1653)
+
+Bug fixes:
+
+- Significantly improved the performance of `llm logs` for long conversations by caching repeated message and model lookups. [#1654](https://github.com/simonw/llm/issues/1654)
+- Dynamically generated OpenAI options classes are now cached, avoiding repeated Pydantic class construction by plugins such as `llm-openrouter`. Thanks, [waveplate](https://github.com/waveplate). [#1651](https://github.com/simonw/llm/pull/1651)
+- Invalid schema DSL passed to `llm prompt --schema` now produces a clean command-line error instead of a Python traceback. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1647](https://github.com/simonw/llm/pull/1647)
+- `llm --extract` now recognizes fenced code blocks in responses that use CRLF line endings. Thanks, [mameikagou](https://github.com/mameikagou). [#1644](https://github.com/simonw/llm/pull/1644)
+- `monotonic_ulid()` now remains monotonic if the system clock moves backwards or concurrent calls observe timestamps out of order. Thanks, [Dylan Pulver](https://github.com/dylanpulver). [#1641](https://github.com/simonw/llm/pull/1641)
+- Declared the `typing-extensions` package as a direct dependency, and added tests to protect against accidental missing dependencies. Thanks, [vanshtaneja23](https://github.com/vanshtaneja23). [#1622](https://github.com/simonw/llm/pull/1622)
+
 (v0_33)=
 ## 0.33 (2026-08-22)
 
