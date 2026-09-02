@@ -1719,6 +1719,11 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
         if truncate:
             row["prompt"] = truncate_string(row["prompt"] or "")
             row["response"] = truncate_string(row["response"] or "")
+            # Null when absent (no system prompt, no reasoning
+            # emitted); keep null rather than turning it into ""
+            for key in ("system", "reasoning"):
+                if row.get(key):
+                    row[key] = truncate_string(row[key])
         # Add prompt and system fragments
         for key in ("prompt_fragments", "system_fragments"):
             row[key] = [
