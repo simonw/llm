@@ -1777,10 +1777,16 @@ def logs_json_for_response_ids(db, ids):
 @logs.command(name="list")
 @click.option(
     "-n",
-    "--count",
+    "--limit",
     type=int,
     default=None,
     help="Number of entries to show - defaults to 3, use 0 for all",
+)
+@click.option(
+    "count_only",
+    "--count",
+    is_flag=True,
+    help="Output the number of matching log entries",
 )
 @click.option(
     "-p",
@@ -1876,7 +1882,8 @@ def logs_json_for_response_ids(db, ids):
     help="Expand fragments to show their content",
 )
 def logs_list(
-    count,
+    limit,
+    count_only,
     path,
     database,
     model,
@@ -1948,11 +1955,11 @@ def logs_list(
             raise click.ClickException("No conversations found")
 
     # For --conversation set limit 0, if not explicitly set
-    if count is None:
+    if limit is None:
         if conversation_id:
-            count = 0
+            limit = 0
         else:
-            count = 3
+            limit = 3
 
     model_id = None
     if model:
@@ -1971,7 +1978,7 @@ def logs_list(
     try:
         rows = merged_log_rows(
             store,
-            count=count if count and count > 0 else None,
+            count=None if count_only else (limit if limit and limit > 0 else None),
             model_id=model_id,
             thread_id=conversation_id,
             fragment_hashes=fragment_hashes,
@@ -1992,6 +1999,10 @@ def logs_list(
                 "documentation at https://sqlite.org/fts5.html#full_text_query_syntax"
             )
         raise
+
+    if count_only:
+        click.echo(len(rows))
+        return
 
     # Newest first out of the query, but read chronologically - except
     # for search results, which are already most-relevant first.
