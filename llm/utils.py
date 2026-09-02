@@ -722,8 +722,9 @@ def monotonic_ulid() -> ULID:
     other ULID returned by this function inside the same process.
 
     It works the same way the reference JavaScript `monotonicFactory` does:
-    * If the current call happens in the same millisecond as the previous
-        one, the 80-bit randomness part is incremented by exactly one.
+    * If the current call reads a millisecond that is not later than the
+        previous one, the 80-bit randomness part is incremented by exactly
+        one and the previous timestamp is reused.
     * As soon as the system clock moves forward, a brand-new ULID with
         cryptographically secure randomness is generated.
     * If more than 2**80 ULIDs are requested within a single millisecond
@@ -742,8 +743,10 @@ def monotonic_ulid() -> ULID:
         # Decode timestamp from the last ULID we handed out
         last_ms = int.from_bytes(_last[:TIMESTAMP_LEN], "big")
 
-        # If the millisecond is the same, increment the randomness
-        if now_ms == last_ms:
+        # If the clock did not move forward, increment the randomness and keep
+        # the previous timestamp. `time.time_ns()` is read outside the lock and
+        # the wall clock can step backwards, so now_ms may be below last_ms.
+        if now_ms <= last_ms:
             rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
             if rand_int >= 1 << (RANDOMNESS_LEN * 8):
                 raise OverflowError(

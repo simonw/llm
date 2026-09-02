@@ -1,7 +1,10 @@
 import json
+import threading
+from types import SimpleNamespace
 
 import pytest
 
+import llm.utils
 from llm import Toolbox, get_key
 from llm.utils import (
     extract_fenced_code_block,
@@ -508,6 +511,46 @@ def test_get_key(user_path, monkeypatch):
 def test_monotonic_ulids():
     ulids = [monotonic_ulid() for i in range(1000)]
     assert ulids == sorted(ulids)
+
+
+def _pin_clock(monkeypatch, time_ns):
+    monkeypatch.setattr(llm.utils, "_last", None)
+    monkeypatch.setattr(llm.utils, "time", SimpleNamespace(time_ns=time_ns))
+
+
+def test_monotonic_ulids_when_clock_steps_backwards(monkeypatch):
+    readings = iter([2_000_000_000, 1_999_000_000])
+    _pin_clock(monkeypatch, lambda: next(readings))
+    first = monotonic_ulid()
+    second = monotonic_ulid()
+    assert second > first
+    # The earlier timestamp is discarded rather than encoded into the ULID
+    assert second.timestamp == first.timestamp
+
+
+def test_monotonic_ulids_across_threads(monkeypatch):
+    # time_ns() is read outside the lock, so the thread holding the earlier
+    # reading can reach the lock after the thread holding the later one
+    readings = {"early": 3_000_000_000, "late": 3_001_000_000}
+    _pin_clock(monkeypatch, lambda: readings[threading.current_thread().name])
+
+    late_is_done = threading.Event()
+    generated = {}
+
+    def generate():
+        name = threading.current_thread().name
+        if name == "early":
+            assert late_is_done.wait(timeout=10)
+        generated[name] = monotonic_ulid()
+        late_is_done.set()
+
+    threads = [threading.Thread(target=generate, name=name) for name in readings]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert generated["early"] > generated["late"]
 
 
 def test_toolbox_config_capture():
