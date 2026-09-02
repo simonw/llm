@@ -14,7 +14,7 @@ Bug fixes:
 - Invalid schema DSL passed to `llm prompt --schema` now produces a clean command-line error instead of a Python traceback. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1647](https://github.com/simonw/llm/pull/1647)
 - `llm --extract` now recognizes fenced code blocks in responses that use CRLF line endings. Thanks, [mameikagou](https://github.com/mameikagou). [#1644](https://github.com/simonw/llm/pull/1644)
 - `monotonic_ulid()` now remains monotonic if the system clock moves backwards or concurrent calls observe timestamps out of order. Thanks, [Dylan Pulver](https://github.com/dylanpulver). [#1641](https://github.com/simonw/llm/pull/1641)
-- Declared the `typing-extensions` package as a direct dependency, and added tests to protect against accidental missing dependencies. Thanks, [vanshtaneja23](https://github.com/vanshtaneja23). [#1622](https://github.com/simonw/llm/pull/1622)
+- Declared the `typing-extensions` package as a direct dependency, and added tests to protect against accidental missing dependencies. Thanks, [Vansh Taneja](https://github.com/vanshtaneja23). [#1622](https://github.com/simonw/llm/pull/1622)
 
 (v0_33)=
 ## 0.33 (2026-08-22)
