@@ -2561,7 +2561,8 @@ class AsyncResponse(_BaseResponse):
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]
         finally:
-            pass
+            if not self._done:
+                await self._generator.aclose()
 
     async def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
