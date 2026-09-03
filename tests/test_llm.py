@@ -186,6 +186,52 @@ def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async
     assert len(rows) == 2
 
 
+def test_continue_resumes_most_recently_active_conversation(user_path, mock_model):
+    """llm --continue must resume the conversation with the most recent turn,
+    not the most recently created thread (issue #1140)."""
+    from llm.cli import load_conversation
+
+    runner = CliRunner()
+    log_path = str(user_path / "logs.db")
+
+    # First conversation – thread A is created first (lower ULID).
+    mock_model.enqueue(["response-A"])
+    result = runner.invoke(
+        cli, ["-m", "mock", "prompt A", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+
+    db = sqlite_utils.Database(log_path)
+    thread_A_id = list(db["threads"].rows_where(order_by="id"))[0]["id"]
+
+    # Second conversation – thread B is created later (higher ULID).
+    mock_model.enqueue(["response-B"])
+    result = runner.invoke(
+        cli, ["-m", "mock", "prompt B", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+
+    threads = list(db["threads"].rows_where(order_by="id"))
+    assert len(threads) == 2
+    thread_B_id = threads[1]["id"]
+    assert thread_B_id > thread_A_id  # B was created after A
+
+    # Explicitly continue thread A – this adds a new turn whose ULID exceeds B's.
+    mock_model.enqueue(["response-A2"])
+    result = runner.invoke(
+        cli,
+        ["-m", "mock", "continue A", "--cid", thread_A_id, "--no-stream"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+
+    # load_conversation(None) must return thread A (most recent activity),
+    # not thread B (most recently created).
+    conv = load_conversation(None, database=log_path)
+    assert conv is not None
+    assert conv.id == thread_A_id
+
+
 @pytest.mark.parametrize(
     "args,expect_just_code",
     (
