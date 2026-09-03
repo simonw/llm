@@ -1,4 +1,5 @@
 import json
+from contextlib import aclosing
 
 import pytest
 
@@ -916,6 +917,30 @@ class TestAsyncStreamEvents:
         async for event in response.astream_events():
             seen_types.append(event.type)
         assert seen_types == ["reasoning", "text"]
+
+    @pytest.mark.asyncio
+    async def test_closing_stream_events_closes_provider_generator(self):
+        class ResourceModel(llm.AsyncModel):
+            model_id = "resource-model"
+
+            def __init__(self):
+                self.resource_closed = False
+
+            async def execute(self, prompt, stream, response, conversation):
+                try:
+                    yield "first"
+                    yield "second"
+                finally:
+                    self.resource_closed = True
+
+        model = ResourceModel()
+        response = model.prompt("x")
+
+        async with aclosing(response.astream_events()) as events:
+            event = await anext(events)
+            assert event.chunk == "first"
+
+        assert model.resource_closed
 
     @pytest.mark.asyncio
     async def test_async_iter_yields_only_text(self, async_mock_model):
