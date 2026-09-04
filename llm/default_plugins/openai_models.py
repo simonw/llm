@@ -362,12 +362,27 @@ def register_models(register):
     extra_path = llm.user_dir() / "extra-openai-models.yaml"
     if not extra_path.exists():
         return
-    with open(extra_path) as f:
+    with open(extra_path, encoding="utf-8-sig") as f:
         extra_models = yaml.safe_load(f)
+
+    # Handle empty or invalid YAML files gracefully
+    if not extra_models:
+        return
+    if not isinstance(extra_models, list):
+        raise click.ClickException(f"extra-openai-models.yaml must contain a list of models, got {type(extra_models).__name__}")
+
     for extra_model in extra_models:
-        model_id = extra_model["model_id"]
+        if not isinstance(extra_model, dict):
+            raise click.ClickException(f"Invalid entry in extra-openai-models.yaml: {extra_model}")
+
+        model_id = extra_model.get("model_id")
+        if not model_id:
+            raise click.ClickException(f"Missing 'model_id' in extra-openai-models.yaml entry: {extra_model}")
+
         aliases = extra_model.get("aliases", [])
-        model_name = extra_model["model_name"]
+        # Fall back to model_id if model_name is omitted to prevent KeyError crashes
+        model_name = extra_model.get("model_name", model_id)
+
         api_base = extra_model.get("api_base")
         api_type = extra_model.get("api_type")
         api_version = extra_model.get("api_version")
@@ -443,21 +458,15 @@ def register_embedding_models(register):
     )
     # With varying dimensions
     register(
-        OpenAIEmbeddingModel(
-            "text-embedding-3-small-512", "text-embedding-3-small", 512
-        ),
+        OpenAIEmbeddingModel("text-embedding-3-small-512", "text-embedding-3-small", 512),
         aliases=("3-small-512",),
     )
     register(
-        OpenAIEmbeddingModel(
-            "text-embedding-3-large-256", "text-embedding-3-large", 256
-        ),
+        OpenAIEmbeddingModel("text-embedding-3-large-256", "text-embedding-3-large", 256),
         aliases=("3-large-256",),
     )
     register(
-        OpenAIEmbeddingModel(
-            "text-embedding-3-large-1024", "text-embedding-3-large", 1024
-        ),
+        OpenAIEmbeddingModel("text-embedding-3-large-1024", "text-embedding-3-large", 1024),
         aliases=("3-large-1024",),
     )
 
@@ -662,9 +671,7 @@ def register_commands(cli):
         if template:
             try:
                 template_obj = load_template(template)
-                attachments, attachment_types = _merge_template_attachments(
-                    template_obj, attachments, attachment_types
-                )
+                attachments, attachment_types = _merge_template_attachments(template_obj, attachments, attachment_types)
             except (AttachmentError, LoadTemplateError) as ex:
                 raise click.ClickException(str(ex))
             if not model_id and template_obj.model:
@@ -673,14 +680,10 @@ def register_commands(cli):
                 schema = template_obj.schema_object
             if template_obj.options:
                 options = _merge_template_options(template_obj, options)
-            tools, python_tools = _merge_template_tools(
-                template_obj, tools, python_tools
-            )
+            tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
 
         if not list_models and not model_id:
-            raise click.ClickException(
-                "--model is required unless --models or a template model is used"
-            )
+            raise click.ClickException("--model is required unless --models or a template model is used")
 
         model_class = Responses if use_responses else Chat
         model_kwargs = {
@@ -709,11 +712,7 @@ def register_commands(cli):
             model.needs_key = None
 
         try:
-            validated_options = {
-                option_name: option_value
-                for option_name, option_value in model.Options(**dict(options))
-                if option_value is not None
-            }
+            validated_options = {option_name: option_value for option_name, option_value in model.Options(**dict(options)) if option_value is not None}
         except ValidationError as ex:
             raise click.ClickException(render_errors(ex.errors()))
 
@@ -753,16 +752,12 @@ def register_commands(cli):
                 def transform_chat_prompt(chat_prompt):
                     nonlocal system
                     if template_obj:
-                        chat_prompt, system = _apply_template(
-                            template_obj, chat_prompt, params, system
-                        )
+                        chat_prompt, system = _apply_template(template_obj, chat_prompt, params, system)
                     return chat_prompt
 
                 def execute_chat_prompt(chat_prompt, _fragments, turn_attachments):
                     nonlocal system
-                    prompt_method = (
-                        conversation.chain if tool_kwargs else conversation.prompt
-                    )
+                    prompt_method = conversation.chain if tool_kwargs else conversation.prompt
                     response = prompt_method(
                         chat_prompt,
                         system=system,
@@ -785,24 +780,15 @@ def register_commands(cli):
             if not sys.stdin.isatty():
                 stdin_prompt = sys.stdin.read()
                 if stdin_prompt:
-                    prompt = " ".join(
-                        part for part in (stdin_prompt, prompt) if part is not None
-                    )
-            elif (
-                prompt is None
-                and not resolved_attachments
-                and not schema
-                and (template_obj is None or "input" in template_obj.vars())
-            ):
+                    prompt = " ".join(part for part in (stdin_prompt, prompt) if part is not None)
+            elif prompt is None and not resolved_attachments and not schema and (template_obj is None or "input" in template_obj.vars()):
                 # Match `llm prompt`: wait for stdin until EOF instead of
                 # implicitly starting an interactive chat.
                 prompt = sys.stdin.read()
             if template_obj:
                 prompt, system = _apply_template(template_obj, prompt, params, system)
             if prompt is None and not (resolved_attachments or schema):
-                raise click.ClickException(
-                    "A prompt is required when stdin is not interactive"
-                )
+                raise click.ClickException("A prompt is required when stdin is not interactive")
             if tool_kwargs:
                 response = model.conversation().chain(
                     prompt,
@@ -828,9 +814,7 @@ def register_commands(cli):
         except (ValueError, NotImplementedError) as ex:
             raise click.ClickException(str(ex))
         except Exception as ex:
-            if getattr(sys, "_called_from_test", False) or os.environ.get(
-                "LLM_RAISE_ERRORS"
-            ):
+            if getattr(sys, "_called_from_test", False) or os.environ.get("LLM_RAISE_ERRORS"):
                 raise
             raise click.ClickException(str(ex))
 
@@ -847,9 +831,7 @@ def register_commands(cli):
             headers={"Authorization": f"Bearer {api_key}"},
         )
         if response.status_code != 200:
-            raise click.ClickException(
-                f"Error {response.status_code} from OpenAI API: {response.text}"
-            )
+            raise click.ClickException(f"Error {response.status_code} from OpenAI API: {response.text}")
         models = response.json()["data"]
         if json_:
             click.echo(json.dumps(models, indent=4))
@@ -857,9 +839,7 @@ def register_commands(cli):
             to_print = []
             for model in models:
                 # Print id, owned_by, root, created as ISO 8601
-                created_str = datetime.datetime.fromtimestamp(
-                    model["created"], datetime.timezone.utc
-                ).isoformat()
+                created_str = datetime.datetime.fromtimestamp(model["created"], datetime.timezone.utc).isoformat()
                 to_print.append(
                     {
                         "id": model["id"],
@@ -882,9 +862,7 @@ class SharedOptions(llm.Options):
         le=2,
         default=None,
     )
-    max_tokens: int | None = Field(
-        description="Maximum number of tokens to generate.", default=None
-    )
+    max_tokens: int | None = Field(description="Maximum number of tokens to generate.", default=None)
     top_p: float | None = Field(
         description=(
             "An alternative to sampling with temperature, called nucleus sampling, "
@@ -923,8 +901,7 @@ class SharedOptions(llm.Options):
     )
     logit_bias: dict | str | None = Field(
         description=(
-            "Modify the likelihood of specified tokens appearing in the completion. "
-            'Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
+            'Modify the likelihood of specified tokens appearing in the completion. Pass a JSON string like \'{"1712":-100, "892":-100, "1489":-100}\''
         ),
         default=None,
     )
@@ -1033,17 +1010,12 @@ def build_options_class(
                 default=None,
             ),
         )
-    image_detail_enum = (
-        ImageDetailWithOriginalEnum if image_detail_original else ImageDetailEnum
-    )
+    image_detail_enum = ImageDetailWithOriginalEnum if image_detail_original else ImageDetailEnum
     image_detail_values = enum_values_sentence(image_detail_enum)
     fields["image_detail"] = (
         image_detail_enum | None,
         Field(
-            description=(
-                "Controls the detail level for image attachments. Supported values are "
-                f"{image_detail_values}."
-            ),
+            description=(f"Controls the detail level for image attachments. Supported values are {image_detail_values}."),
             default=None,
         ),
     )
@@ -1065,10 +1037,7 @@ def build_options_class(
         fields["reasoning_summary"] = (
             ReasoningSummaryEnum | None,
             Field(
-                description=(
-                    "Requests a summary of the model's reasoning. Supported values "
-                    f"are {reasoning_summary_values}."
-                ),
+                description=(f"Requests a summary of the model's reasoning. Supported values are {reasoning_summary_values}."),
                 default=None,
             ),
         )
@@ -1076,10 +1045,7 @@ def build_options_class(
         fields["verbosity"] = (
             VerbosityEnum | None,
             Field(
-                description=(
-                    "Controls how verbose the model's response should be. Supported "
-                    "values are low, medium, and high."
-                ),
+                description=("Controls how verbose the model's response should be. Supported values are low, medium, and high."),
                 default=None,
             ),
         )
@@ -1237,9 +1203,7 @@ class _Shared:
             if isinstance(part, TextPart):
                 text_bits.append(part.text)
             elif isinstance(part, AttachmentPart) and part.attachment:
-                attachment_items.append(
-                    _attachment(part.attachment, image_detail=image_detail)
-                )
+                attachment_items.append(_attachment(part.attachment, image_detail=image_detail))
             elif isinstance(part, ToolCallPart):
                 tool_calls.append(
                     {
@@ -1303,9 +1267,7 @@ class _Shared:
             image_detail = image_detail.value
         current_system: str | None = None
         for msg in prompt.messages:
-            current_system = self._append_llm_message(
-                messages, msg, current_system, image_detail=image_detail
-            )
+            current_system = self._append_llm_message(messages, msg, current_system, image_detail=image_detail)
         return messages
 
     def set_usage(self, response, usage):
@@ -1314,9 +1276,7 @@ class _Shared:
         input_tokens = usage.pop("prompt_tokens")
         output_tokens = usage.pop("completion_tokens")
         usage.pop("total_tokens")
-        response.set_usage(
-            input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
-        )
+        response.set_usage(input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage))
 
     def get_client(self, key, *, async_=False):
         kwargs = {}
@@ -1428,9 +1388,7 @@ class Chat(_Shared, KeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[
-                                idx
-                            ].function.arguments += tool_call.function.arguments
+                            tool_calls[idx].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -1488,9 +1446,7 @@ class Chat(_Shared, KeyModel):
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
-        ):
+        if usage and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -1546,9 +1502,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 tool_call_id=tool_call.id,
                             )
                         else:
-                            tool_calls[
-                                idx
-                            ].function.arguments += tool_call.function.arguments
+                            tool_calls[idx].function.arguments += tool_call.function.arguments
                         if tool_call.function.arguments:
                             yield StreamEvent(
                                 type="tool_call_args",
@@ -1604,9 +1558,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
-        ):
+        if usage and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
 
@@ -1664,32 +1616,18 @@ class WebSearch(llm.ServerSideTool):
         include_results: bool = False,
     ):
         super().__init__()
-        self.allowed_domains = self._validate_domains(
-            "allowed_domains", allowed_domains
-        )
-        self.blocked_domains = self._validate_domains(
-            "blocked_domains", blocked_domains
-        )
-        if (
-            search_context_size is not None
-            and search_context_size not in self._search_context_sizes
-        ):
+        self.allowed_domains = self._validate_domains("allowed_domains", allowed_domains)
+        self.blocked_domains = self._validate_domains("blocked_domains", blocked_domains)
+        if search_context_size is not None and search_context_size not in self._search_context_sizes:
             raise ValueError("search_context_size must be one of: low, medium or high")
-        if external_web_access is not None and not isinstance(
-            external_web_access, bool
-        ):
+        if external_web_access is not None and not isinstance(external_web_access, bool):
             raise TypeError("external_web_access must be a boolean")
-        if (
-            return_token_budget is not None
-            and return_token_budget not in self._return_token_budgets
-        ):
+        if return_token_budget is not None and return_token_budget not in self._return_token_budgets:
             raise ValueError("return_token_budget must be default or unlimited")
         if search_content_types is not None:
             if not isinstance(search_content_types, list):
                 raise TypeError("search_content_types must be a list")
-            invalid_content_types = set(search_content_types).difference(
-                self._search_content_types
-            )
+            invalid_content_types = set(search_content_types).difference(self._search_content_types)
             if invalid_content_types:
                 raise ValueError("search_content_types must contain text and/or image")
         if user_location is not None:
@@ -1704,14 +1642,8 @@ class WebSearch(llm.ServerSideTool):
                 raise TypeError("image_settings must be a dictionary")
             image_settings = dict(image_settings)
             max_results = image_settings.get("max_results")
-            if max_results is not None and (
-                isinstance(max_results, bool)
-                or not isinstance(max_results, int)
-                or max_results < 1
-            ):
-                raise ValueError(
-                    "image_settings max_results must be a positive integer"
-                )
+            if max_results is not None and (isinstance(max_results, bool) or not isinstance(max_results, int) or max_results < 1):
+                raise ValueError("image_settings max_results must be a positive integer")
             caption = image_settings.get("caption")
             if caption is not None and not isinstance(caption, bool):
                 raise TypeError("image_settings caption must be a boolean")
@@ -1723,9 +1655,7 @@ class WebSearch(llm.ServerSideTool):
         self.search_context_size = search_context_size
         self.external_web_access = external_web_access
         self.return_token_budget = return_token_budget
-        self.search_content_types = (
-            list(search_content_types) if search_content_types is not None else None
-        )
+        self.search_content_types = list(search_content_types) if search_content_types is not None else None
         self.image_settings = image_settings
         self.include_sources = include_sources
         self.include_results = include_results
@@ -1805,9 +1735,7 @@ class CodeInterpreter(llm.ServerSideTool):
         if memory_limit is not None and memory_limit not in self._memory_limits:
             raise ValueError("memory_limit must be one of: 1g, 4g, 16g or 64g")
         if container is not None and (memory_limit is not None or file_ids is not None):
-            raise ValueError(
-                "container cannot be combined with memory_limit or file_ids"
-            )
+            raise ValueError("container cannot be combined with memory_limit or file_ids")
         self.container = container
         self.memory_limit = memory_limit
         self.file_ids = list(file_ids) if file_ids is not None else None
@@ -1962,11 +1890,7 @@ class _SharedResponses(_Shared):
                 if isinstance(part, TextPart):
                     text_bits.append(part.text)
                 elif isinstance(part, AttachmentPart) and part.attachment:
-                    attachment_items.append(
-                        _responses_attachment(
-                            part.attachment, image_detail=image_detail
-                        )
-                    )
+                    attachment_items.append(_responses_attachment(part.attachment, image_detail=image_detail))
                 elif isinstance(part, ToolCallPart):
                     if part.server_executed:
                         # Server-side tool calls (web_search,
@@ -2022,9 +1946,7 @@ class _SharedResponses(_Shared):
                 if attachment_items:
                     content: list[dict[str, Any]] = []
                     if text_bits:
-                        content.append(
-                            {"type": "input_text", "text": "".join(text_bits)}
-                        )
+                        content.append({"type": "input_text", "text": "".join(text_bits)})
                     content.extend(attachment_items)
                     items.append({"role": "user", "content": content})
                 elif text_bits:
@@ -2122,9 +2044,7 @@ class _SharedResponses(_Shared):
             kwargs["instructions"] = instructions
         kwargs["store"] = False
         if self._reasoning and (
-            self._reasoning_summary
-            or getattr(prompt.options, "reasoning_summary", None)
-            or getattr(prompt.options, "reasoning_effort", None)
+            self._reasoning_summary or getattr(prompt.options, "reasoning_summary", None) or getattr(prompt.options, "reasoning_effort", None)
         ):
             include = kwargs.setdefault("include", [])
             if "reasoning.encrypted_content" not in include:
@@ -2144,9 +2064,7 @@ class _SharedResponses(_Shared):
             value = usage.get(key)
             if value:
                 details[key] = value
-        response.set_usage(
-            input=input_tokens, output=output_tokens, details=details or None
-        )
+        response.set_usage(input=input_tokens, output=output_tokens, details=details or None)
 
     def _reasoning_text_from_item(self, item):
         bits = []
@@ -2180,10 +2098,7 @@ class _SharedResponses(_Shared):
             # ``summary`` is a list of {type:"summary_text", text:"..."}
             # objects when reasoning summaries are enabled.
             try:
-                meta["summary"] = [
-                    s.model_dump() if hasattr(s, "model_dump") else dict(s)
-                    for s in summary
-                ]
+                meta["summary"] = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in summary]
             except Exception:  # noqa: BLE001
                 meta["summary"] = list(summary)
         return StreamEvent(
@@ -2215,11 +2130,7 @@ class _SharedResponses(_Shared):
             prior = done_events.get(item.get("id"))
             if prior is None or prior.part_index is None:
                 continue
-            meta = {
-                key: item[key]
-                for key in ("id", "encrypted_content", "summary")
-                if item.get(key)
-            }
+            meta = {key: item[key] for key in ("id", "encrypted_content", "summary") if item.get(key)}
             if meta:
                 events.append(
                     StreamEvent(
@@ -2265,18 +2176,11 @@ class _SharedResponses(_Shared):
                 )
             )
             results = getattr(item, "results", None) or []
-            results = [
-                result.model_dump() if hasattr(result, "model_dump") else result
-                for result in results
-            ]
+            results = [result.model_dump() if hasattr(result, "model_dump") else result for result in results]
             events.append(
                 StreamEvent(
                     type="tool_result",
-                    chunk=(
-                        json.dumps(results)
-                        if results
-                        else (getattr(item, "status", None) or "completed")
-                    ),
+                    chunk=(json.dumps(results) if results else (getattr(item, "status", None) or "completed")),
                     tool_call_id=item_id,
                     server_executed=True,
                     tool_name="web_search",
@@ -2314,8 +2218,7 @@ class _SharedResponses(_Shared):
             events.append(
                 StreamEvent(
                     type="tool_result",
-                    chunk="\n".join(output_bits)
-                    or (getattr(item, "status", None) or "completed"),
+                    chunk="\n".join(output_bits) or (getattr(item, "status", None) or "completed"),
                     tool_call_id=item_id,
                     server_executed=True,
                     tool_name="code_interpreter",
@@ -2338,12 +2241,7 @@ class _SharedResponses(_Shared):
             prior_events = done_events.get(item_id)
             if not prior_events:
                 continue
-            final_events = {
-                event.type: event
-                for event in self._server_tool_events(
-                    item, prior_events[0].message_index
-                )
-            }
+            final_events = {event.type: event for event in self._server_tool_events(item, prior_events[0].message_index)}
             for prior_event in prior_events:
                 final_event = final_events.get(prior_event.type)
                 if final_event is not None:
@@ -2499,9 +2397,7 @@ class Responses(_SharedResponses, KeyModel):
         image_detail = getattr(prompt.options, "image_detail", None)
         if image_detail is not None:
             image_detail = image_detail.value
-        input_items, instructions = self._build_responses_input(
-            prompt, image_detail=image_detail
-        )
+        input_items, instructions = self._build_responses_input(prompt, image_detail=image_detail)
         kwargs = self._finalize_responses_kwargs(prompt, stream, instructions)
 
         client = self.get_client(key)
@@ -2591,9 +2487,7 @@ class Responses(_SharedResponses, KeyModel):
                         item_id = getattr(item, "id", None)
                         reasoning_event = self._reasoning_event(
                             item,
-                            include_text=(
-                                item_id not in reasoning_items_with_streamed_text
-                            ),
+                            include_text=(item_id not in reasoning_items_with_streamed_text),
                         )
                         reasoning_event.message_index = message_index
                         if item_id:
@@ -2621,17 +2515,13 @@ class Responses(_SharedResponses, KeyModel):
                             server_tool_done_events[item_id] = server_events
                         yield from server_events
                 elif etype == "response.completed":
-                    self._refresh_server_tool_events(
-                        event.response.output, server_tool_done_events
-                    )
+                    self._refresh_server_tool_events(event.response.output, server_tool_done_events)
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
-                yield from self._reasoning_refresh_events(
-                    response.response_json, reasoning_done_events
-                )
+                yield from self._reasoning_refresh_events(response.response_json, reasoning_done_events)
         else:
             completion = client.responses.create(
                 model=self.model_name or self.model_id,
@@ -2642,24 +2532,16 @@ class Responses(_SharedResponses, KeyModel):
             dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
-            events, had_reasoning = self._non_streaming_output_events(
-                completion.output, response
-            )
+            events, had_reasoning = self._non_streaming_output_events(completion.output, response)
             yield from events
 
         self._set_usage_responses(response, usage)
         # Fallback: usage said reasoning happened but the API gave us no
         # reasoning items to harvest encrypted_content from. Emit the
         # opaque "reasoning happened" marker for UI / token accounting.
-        if (
-            not had_reasoning
-            and usage
-            and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens"))
-        ):
+        if not had_reasoning and usage and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens")):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
-        response._prompt_json = redact_data(
-            {"input": input_items, "instructions": instructions}
-        )
+        response._prompt_json = redact_data({"input": input_items, "instructions": instructions})
 
 
 class AsyncResponses(_SharedResponses, AsyncKeyModel):
@@ -2734,9 +2616,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         if getattr(prompt.options, "chat_completions", None):
             chat = AsyncChat(**self._delegate_chat_kwargs())
             _partition_tools(chat, prompt.tools)
-            async for event in chat.execute(
-                prompt, stream, response, conversation, key
-            ):
+            async for event in chat.execute(prompt, stream, response, conversation, key):
                 yield event
             return
 
@@ -2746,9 +2626,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         image_detail = getattr(prompt.options, "image_detail", None)
         if image_detail is not None:
             image_detail = image_detail.value
-        input_items, instructions = self._build_responses_input(
-            prompt, image_detail=image_detail
-        )
+        input_items, instructions = self._build_responses_input(prompt, image_detail=image_detail)
         kwargs = self._finalize_responses_kwargs(prompt, stream, instructions)
 
         client = self.get_client(key, async_=True)
@@ -2838,9 +2716,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         item_id = getattr(item, "id", None)
                         reasoning_event = self._reasoning_event(
                             item,
-                            include_text=(
-                                item_id not in reasoning_items_with_streamed_text
-                            ),
+                            include_text=(item_id not in reasoning_items_with_streamed_text),
                         )
                         reasoning_event.message_index = message_index
                         if item_id:
@@ -2869,17 +2745,13 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                         for server_event in server_events:
                             yield server_event
                 elif etype == "response.completed":
-                    self._refresh_server_tool_events(
-                        event.response.output, server_tool_done_events
-                    )
+                    self._refresh_server_tool_events(event.response.output, server_tool_done_events)
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
             if final_response_dict is not None:
                 response.response_json = remove_dict_none_values(final_response_dict)
-                for refresh in self._reasoning_refresh_events(
-                    response.response_json, reasoning_done_events
-                ):
+                for refresh in self._reasoning_refresh_events(response.response_json, reasoning_done_events):
                     yield refresh
         else:
             completion = await client.responses.create(
@@ -2891,22 +2763,14 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
             usage = dumped.get("usage")
-            events, had_reasoning = self._non_streaming_output_events(
-                completion.output, response
-            )
+            events, had_reasoning = self._non_streaming_output_events(completion.output, response)
             for event in events:
                 yield event
 
         self._set_usage_responses(response, usage)
-        if (
-            not had_reasoning
-            and usage
-            and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens"))
-        ):
+        if not had_reasoning and usage and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens")):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
-        response._prompt_json = redact_data(
-            {"input": input_items, "instructions": instructions}
-        )
+        response._prompt_json = redact_data({"input": input_items, "instructions": instructions})
 
 
 class Completion(Chat):
@@ -2933,9 +2797,7 @@ class Completion(Chat):
         key: str | None = None,
     ) -> Iterator[str | StreamEvent]:
         if prompt.system:
-            raise NotImplementedError(
-                "System prompts are not supported for OpenAI completion models"
-            )
+            raise NotImplementedError("System prompts are not supported for OpenAI completion models")
         from llm.parts import TextPart
 
         # prompt.messages carries the full history - including history
@@ -2944,11 +2806,7 @@ class Completion(Chat):
         for message in prompt.messages:
             if message.role not in ("user", "assistant"):
                 continue
-            text = "".join(
-                part.text
-                for part in message.parts
-                if isinstance(part, TextPart) and part.text
-            )
+            text = "".join(part.text for part in message.parts if isinstance(part, TextPart) and part.text)
             if text:
                 messages.append(text)
         kwargs = self.build_kwargs(prompt, stream)
@@ -3045,12 +2903,7 @@ def redact_data(input_dict):
     """
     if isinstance(input_dict, dict):
         for key, value in input_dict.items():
-            if (
-                key == "image_url"
-                and isinstance(value, dict)
-                and "url" in value
-                and value["url"].startswith("data:")
-            ):
+            if key == "image_url" and isinstance(value, dict) and "url" in value and value["url"].startswith("data:"):
                 value["url"] = "data:..."
             elif key == "input_audio" and isinstance(value, dict) and "data" in value:
                 value["data"] = "..."
