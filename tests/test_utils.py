@@ -1,5 +1,6 @@
 import json
-import os
+import subprocess
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -13,7 +14,6 @@ from llm.utils import (
     instantiate_from_spec,
     maybe_fenced_code,
     monotonic_ulid,
-    redirect_stdout_to_stderr,
     resolve_schema_input,
     schema_dsl,
     simplify_usage_dict,
@@ -635,31 +635,31 @@ def test_toolbox_config_capture():
 
 
 def test_redirect_stdout_to_stderr():
-    # Redirect the real stdout and stderr file descriptors to pipes so we can
-    # observe OS-level writes that bypass Python's sys.stdout/sys.stderr.
-    stdout_read, stdout_write = os.pipe()
-    stderr_read, stderr_write = os.pipe()
-    original_stdout = os.dup(1)
-    original_stderr = os.dup(2)
-    os.dup2(stdout_write, 1)
-    os.dup2(stderr_write, 2)
-    try:
-        with redirect_stdout_to_stderr():
-            os.write(1, b"native-noise")
-        os.write(1, b"clean-output")
-    finally:
-        os.dup2(original_stdout, 1)
-        os.dup2(original_stderr, 2)
-        os.close(original_stdout)
-        os.close(original_stderr)
-        os.close(stdout_write)
-        os.close(stderr_write)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os
+import sys
 
-    stdout_data = os.read(stdout_read, 1024)
-    stderr_data = os.read(stderr_read, 1024)
-    os.close(stdout_read)
-    os.close(stderr_read)
+from llm.utils import redirect_stdout_to_stderr
 
-    assert b"native-noise" not in stdout_data
-    assert b"clean-output" in stdout_data
-    assert b"native-noise" in stderr_data
+print("model-output-before")
+with redirect_stdout_to_stderr():
+    sys.stdout.flush()
+    print("python-noise")
+    os.write(1, b"native-noise\\n")
+print("model-output-after")
+""",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "model-output-before",
+        "model-output-after",
+    ]
+    assert result.stderr.splitlines() == ["native-noise", "python-noise"]

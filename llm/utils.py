@@ -31,18 +31,27 @@ def redirect_stdout_to_stderr():
     example, llama.cpp (used by the ``llm-llama-cpp`` plugin) and gpt4all
     emit diagnostics this way. Wrapping those native calls in this context
     manager routes that noise to stderr, leaving stdout free for model output.
+
+    This changes file descriptor 1 process-wide, so the redirect affects every
+    thread while the context manager is active.
     """
     stdout = sys.__stdout__ or sys.stdout
     stderr = sys.__stderr__ or sys.stderr
     stdout_fd = stdout.fileno()
     stderr_fd = stderr.fileno()
+    stdout.flush()
     saved_stdout_fd = os.dup(stdout_fd)
     try:
         os.dup2(stderr_fd, stdout_fd)
-        yield
+        try:
+            yield
+        finally:
+            stdout.flush()
     finally:
-        os.dup2(saved_stdout_fd, stdout_fd)
-        os.close(saved_stdout_fd)
+        try:
+            os.dup2(saved_stdout_fd, stdout_fd)
+        finally:
+            os.close(saved_stdout_fd)
 
 
 class Fragment(str):
