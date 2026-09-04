@@ -43,7 +43,9 @@ class Template(BaseModel):
         self, input: str, params: dict[str, Any] | None = None
     ) -> tuple[str | None, str | None]:
         """Evaluate the template with the given input and parameters, returning (prompt, system)."""
-        params = params or {}
+        # Template-only values such as ``input`` and defaults should not leak
+        # into the mapping supplied by the caller.
+        params = dict(params or {})
         params["input"] = input
         if self.defaults:
             for k, v in self.defaults.items():
