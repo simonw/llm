@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -635,6 +636,8 @@ def test_toolbox_config_capture():
 
 
 def test_redirect_stdout_to_stderr():
+    env = os.environ.copy()
+    env.pop("PYTHONUNBUFFERED", None)
     result = subprocess.run(
         [
             sys.executable,
@@ -655,6 +658,7 @@ print("model-output-after")
         ],
         check=True,
         capture_output=True,
+        env=env,
         text=True,
     )
 
