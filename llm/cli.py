@@ -24,6 +24,19 @@ import pydantic
 import sqlite_utils
 import yaml
 from click_default_group import DefaultGroup
+
+
+class _DefaultGroupWithDoubleDash(DefaultGroup):
+    def parse_args(self, ctx, args):
+        # When the user writes `llm -- <arg>` the group's parser consumes `--`
+        # and passes `<arg>` to the subcommand resolver without the separator.
+        # If `<arg>` starts with `-` the subcommand's parser then mistakes it
+        # for an option.  Inserting the default command name before `--` turns
+        # `['--', arg]` into `['prompt', '--', arg]` so the separator is
+        # forwarded intact and the subcommand treats the arg as positional.
+        if args and args[0] == "--" and self.default_cmd_name:
+            args.insert(0, self.default_cmd_name)
+        return super().parse_args(ctx, args)
 from sqlite_utils.utils import Format, rows_from_file
 
 from llm import (
@@ -532,7 +545,7 @@ def tool_options(fn):
 
 
 @click.group(
-    cls=DefaultGroup,
+    cls=_DefaultGroupWithDoubleDash,
     default="prompt",
     default_if_no_args=True,
     context_settings={"help_option_names": ["-h", "--help"]},

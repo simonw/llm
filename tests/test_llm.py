@@ -714,6 +714,19 @@ def test_schema(mock_model, use_pydantic):
     assert response.prompt.schema == dog_schema
 
 
+def test_double_dash_separator(monkeypatch):
+    # `llm -- "--option-like"` should treat "--option-like" as the prompt, not
+    # as an option for the prompt command.  Previously the group consumed `--`
+    # and the subcommand received "--option-like" without the separator,
+    # causing Click to raise "No such option".
+    monkeypatch.setenv("LLM_MODEL", "echo")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--", "--find me"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["prompt"] == "--find me"
+
+
 def test_model_environment_variable(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "echo")
     runner = CliRunner()
