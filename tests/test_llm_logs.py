@@ -1452,3 +1452,76 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+
+
+# ---- llm logs rm --------------------------------------------------
+
+
+def test_logs_rm_deletes_conversation(user_path, mock_model):
+    db_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    mock_model.enqueue(["hello"])
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(db)
+    thread_id = next(iter(db["threads"].rows))["id"]
+    assert db["turns"].count == 1
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "rm", thread_id, "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert result.output == f"Deleted conversation {thread_id}\n"
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+    assert db["turns"].count == 0
+
+    listed = runner.invoke(
+        cli, ["logs", "list", "--cid", thread_id, "-d", db_path], catch_exceptions=False
+    )
+    assert listed.exit_code == 0
+    assert listed.output == ""
+
+
+def test_logs_rm_missing_conversation(user_path):
+    db_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "rm", "missing-id", "-d", db_path])
+    assert result.exit_code != 0
+    assert "No conversation found with id=missing-id" in result.output
+
+
+def test_logs_rm_legacy_conversation(user_path):
+    db_path = str(user_path / "logs.db")
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    db["conversations"].insert({"id": "abc123", "name": "old", "model": "davinci"})
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "model": "davinci",
+            "prompt": "sensitive prompt",
+            "response": "reply",
+            "conversation_id": "abc123",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "rm", "abc123", "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert result.output == "Deleted conversation abc123\n"
+    assert db["conversations"].count == 0
+    assert db["responses"].count == 0
+
+
+def test_logs_rm_missing_database(user_path):
+    runner = CliRunner()
+    missing = str(user_path / "does-not-exist.db")
+    result = runner.invoke(cli, ["logs", "rm", "abc123", "-d", missing])
+    assert result.exit_code != 0
+    assert "No log database found" in result.output or "does not exist" in result.output

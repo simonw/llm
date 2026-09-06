@@ -447,6 +447,94 @@ class LogStore:
         self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return tip
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete a thread and the turns recorded against it.
+
+        Shared message rows are left in place: another thread may still
+        reach them. Garbage collection of unreachable messages is
+        deliberately left as future work.
+
+        Also removes a matching legacy conversation and its responses,
+        when those tables still have a row with this id.
+
+        Raises ``KeyError`` if neither a thread nor a legacy
+        conversation exists with this id.
+        """
+        has_thread = bool(self.db["threads"].count_where("id = ?", [thread_id]))
+        has_legacy = bool(self.db["conversations"].count_where("id = ?", [thread_id]))
+        if not has_thread and not has_legacy:
+            raise KeyError(thread_id)
+
+        with self.db.atomic():
+            self._delete_turns_for_thread(thread_id)
+            self._delete_legacy_conversation(thread_id)
+            if has_thread:
+                # Child forks keep their own history; they just no
+                # longer record which thread they were forked from.
+                self.db.execute(
+                    "update threads set forked_from = null where forked_from = ?",
+                    [thread_id],
+                )
+                self.db["threads"].delete(thread_id)
+
+    def _delete_turns_for_thread(self, thread_id: str) -> None:
+        turn_ids = [
+            row["id"]
+            for row in self.db.query(
+                "select id from turns where thread_id = ?", [thread_id]
+            )
+        ]
+        if not turn_ids:
+            return
+        placeholders = ",".join("?" * len(turn_ids))
+        for table in (
+            "turn_tools",
+            "turn_fragments",
+            "turn_search",
+            "tool_instantiations",
+        ):
+            self.db.execute(
+                f"delete from {table} where turn_id in ({placeholders})",
+                turn_ids,
+            )
+        self.db["turns"].delete_where("thread_id = ?", [thread_id])
+
+    def _delete_legacy_conversation(self, conversation_id: str) -> None:
+        response_ids = [
+            row["id"]
+            for row in self.db.query(
+                "select id from responses where conversation_id = ?",
+                [conversation_id],
+            )
+        ]
+        if response_ids:
+            placeholders = ",".join("?" * len(response_ids))
+            self.db.execute(
+                f"""
+                delete from tool_results_attachments
+                where tool_result_id in (
+                    select id from tool_results where response_id in ({placeholders})
+                )
+                """,
+                response_ids,
+            )
+            for table in (
+                "prompt_attachments",
+                "prompt_fragments",
+                "system_fragments",
+                "tool_responses",
+                "tool_calls",
+                "tool_results",
+            ):
+                self.db.execute(
+                    f"delete from {table} where response_id in ({placeholders})",
+                    response_ids,
+                )
+            self.db["responses"].delete_where(
+                "conversation_id = ?", [conversation_id]
+            )
+        self.db["conversations"].delete_where("id = ?", [conversation_id])
+
     # -- turns ---------------------------------------------------------
 
     def log(self, response, thread_id: str | None = None) -> str:

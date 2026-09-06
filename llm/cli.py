@@ -1680,6 +1680,37 @@ def logs_turn_off():
     path.touch()
 
 
+@logs.command(name="rm")
+@click.argument("conversation_id")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+def logs_rm(conversation_id, database):
+    """
+    Delete a conversation and its turns from the logs
+
+    Example usage:
+
+    \b
+        llm logs rm 01h82n0q9crqtnzmf13gkyxawg
+    """
+    path = pathlib.Path(database) if database else logs_db_path()
+    if not path.exists():
+        raise click.ClickException(f"No log database found at {path}")
+    db = sqlite_utils.Database(path)
+    store = LogStore(db)
+    try:
+        store.delete_thread(conversation_id)
+    except KeyError:
+        raise click.ClickException(
+            f"No conversation found with id={conversation_id}"
+        )
+    click.echo(f"Deleted conversation {conversation_id}")
+
+
 def annotate_log_rows(db, rows, expand=False, truncate=False):
     """
     Modify log rows from the merged reader in place: attach fragments

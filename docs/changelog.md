@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New `llm logs rm CONVERSATION_ID` command deletes a conversation thread and its associated turns from the logs database. [#1637](https://github.com/simonw/llm/issues/1637)
+
 (v0_34)=
 ## 0.34 (2026-09-02)
 

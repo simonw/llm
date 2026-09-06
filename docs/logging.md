@@ -285,6 +285,24 @@ llm logs backup /tmp/backup.db
 ```
 This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
+(logging-delete)=
+
+## Deleting a conversation
+
+To delete a conversation thread and its associated turns from the logs database:
+
+```bash
+llm logs rm 01h82n0q9crqtnzmf13gkyxawg
+```
+
+Use `llm logs --cid ID` to confirm the conversation ID before deleting. You can point this at a specific database with `-d/--database`:
+
+```bash
+llm logs rm 01h82n0q9crqtnzmf13gkyxawg -d /tmp/logs.db
+```
+
+This removes the thread (and a matching legacy conversation, if one exists) plus every turn or response recorded against it. Shared {ref}`message rows <logging-message-store-forking>` are left in place, because another conversation may still reach the same history.
+
 (logging-message-store)=
 
 ## The message store
