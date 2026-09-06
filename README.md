@@ -57,7 +57,7 @@ Or with Homebrew (see [warning note](https://llm.datasette.io/en/stable/setup.ht
 brew install llm
 ```
 
-Or with [pipx](https://pypa.github.io/pipx/):
+Or with [pipx](https://pipx.pypa.io/):
 
 ```bash
 pipx install llm
