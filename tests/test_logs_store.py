@@ -467,6 +467,84 @@ class TestForking:
         assert len(store.thread_messages(forked)) == 1
 
 
+class TestDeleteThread:
+    def test_deletes_thread_and_turns_but_not_messages(self, store, mock_model):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        response.log_to_db(store.db)
+        thread_id = next(iter(store.db["threads"].rows))["id"]
+        assert store.db["turns"].count == 1
+        assert store.db["messages"].count == 2
+
+        store.delete_thread(thread_id)
+
+        assert store.db["threads"].count == 0
+        assert store.db["turns"].count == 0
+        assert store.db["messages"].count == 2
+
+    def test_leaves_other_threads_intact(self, store, mock_model):
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["one"])
+        first = conversation.prompt("first")
+        first.text()
+        first.log_to_db(store.db)
+        keep_id = conversation.id
+
+        other = mock_model.conversation()
+        mock_model.enqueue(["two"])
+        second = other.prompt("second")
+        second.text()
+        second.log_to_db(store.db)
+        delete_id = other.id
+
+        store.delete_thread(delete_id)
+
+        assert store.db["threads"].count_where("id = ?", [keep_id]) == 1
+        assert store.db["threads"].count_where("id = ?", [delete_id]) == 0
+        assert store.db["turns"].count_where("thread_id = ?", [keep_id]) == 1
+        assert store.db["turns"].count_where("thread_id = ?", [delete_id]) == 0
+
+    def test_clears_forked_from_and_keeps_shared_messages(self, store):
+        original = store.create_thread(name="Original")
+        tip = store.append(original, [llm.user("Hi"), llm.assistant("Hello")])
+        forked = store.fork(tip, name="Copy", forked_from=original)
+        before_messages = store.db["messages"].count
+
+        store.delete_thread(original)
+
+        assert store.db["threads"].count_where("id = ?", [original]) == 0
+        assert store.db["threads"].get(forked)["forked_from"] is None
+        assert store.db["messages"].count == before_messages
+        assert [m.parts[0].text for m in store.thread_messages(forked)] == [
+            "Hi",
+            "Hello",
+        ]
+
+    def test_deletes_legacy_conversation_and_responses(self, store):
+        store.db["conversations"].insert(
+            {"id": "legacy-cid", "name": "old", "model": "davinci"}
+        )
+        store.db["responses"].insert(
+            {
+                "id": "legacy-rid",
+                "model": "davinci",
+                "prompt": "secret",
+                "response": "reply",
+                "conversation_id": "legacy-cid",
+            }
+        )
+
+        store.delete_thread("legacy-cid")
+
+        assert store.db["conversations"].count_where("id = ?", ["legacy-cid"]) == 0
+        assert store.db["responses"].count_where("id = ?", ["legacy-rid"]) == 0
+
+    def test_unknown_thread_raises(self, store):
+        with pytest.raises(KeyError):
+            store.delete_thread("does-not-exist")
+
+
 # ---- pending tool calls ----------------------------------------------
 
 
