@@ -1187,6 +1187,35 @@ def prompt(
         click.echo(logs_json_for_response_ids(log_db, response_ids))
 
 
+def _bind_cursor_keys():
+    """Bind the left/right arrow keys to move the cursor, where that is needed.
+
+    On Windows the readline module is pyreadline3, which already binds ``left``
+    and ``right`` to ``backward-char``/``forward-char`` in its default keymap,
+    so there is nothing to do there.
+
+    The Windows branch this replaces called
+    ``parse_and_bind("bind -x '\\e[D: backward-char'")``, which was a silent
+    no-op: pyreadline3 matches a binding line against
+    ``\\s*(\\S+)\\s*:\\s*([-a-zA-Z]+)\\s*$``, and ``bind -x '...'`` does not match,
+    so it was logged as unparseable and dropped. The GNU readline
+    escape-sequence form does not work there either -- pyreadline3 names keys
+    ``left``/``right`` and raises ``IndexError: Not a valid key: '\\e[d'`` for an
+    escape sequence.
+
+    The remaining call is guarded because binding cursor keys is a convenience.
+    A readline shim that does not understand the syntax should not stop
+    ``llm chat`` from starting.
+    """
+    if sys.platform == "win32":
+        return
+    try:
+        readline.parse_and_bind("\\e[D: backward-char")
+        readline.parse_and_bind("\\e[C: forward-char")
+    except Exception:  # pragma: no cover - depends on the readline implementation
+        pass
+
+
 @cli.command()
 @click.option("-s", "--system", help="System prompt to use")
 @click.option("model_id", "-m", "--model", help="Model to use", envvar="LLM_MODEL")
@@ -1267,13 +1296,7 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
-    # Left and right arrow keys to move cursor:
-    if sys.platform != "win32":
-        readline.parse_and_bind("\\e[D: backward-char")
-        readline.parse_and_bind("\\e[C: forward-char")
-    else:
-        readline.parse_and_bind("bind -x '\\e[D: backward-char'")
-        readline.parse_and_bind("bind -x '\\e[C: forward-char'")
+    _bind_cursor_keys()
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = sqlite_utils.Database(log_path)
