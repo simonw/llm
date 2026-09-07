@@ -48,7 +48,7 @@ dev = [
     "click>=8.2.0",
     "pytest",
     "numpy",
-    "httpx2-pytest>=1.0.1",
+    "httpx2-pytest>=2",
     "pytest-asyncio",
     "cogapp",
     "mypy>=1.10.0",

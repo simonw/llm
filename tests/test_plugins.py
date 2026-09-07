@@ -99,8 +99,8 @@ def test_register_template_loaders():
         assert get_template_loaders() == {}
 
 
-def test_register_fragment_loaders(logs_db, httpx_mock):
-    httpx_mock.add_response(
+def test_register_fragment_loaders(logs_db, httpx2_mock):
+    httpx2_mock.add_response(
         method="HEAD",
         url="https://example.com/attachment.png",
         content=b"attachment",

@@ -237,7 +237,7 @@ def test_templates_error_on_missing_schema(templates_path):
             ],
             None,
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2_mock(),
         ),
         pytest.param(
             "prompt: 'Say $hello'",
@@ -247,7 +247,7 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             "Error: Missing variables: hello",
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2_mock(),
         ),
         # Template generated prompt should combine with CLI prompt
         (
@@ -419,8 +419,8 @@ def test_execute_prompt_with_multiple_templates_in_order(
         ),
     ),
 )
-def test_execute_prompt_from_template_url(httpx_mock, template, expected):
-    httpx_mock.add_response(
+def test_execute_prompt_from_template_url(httpx2_mock, template, expected):
+    httpx2_mock.add_response(
         url="https://example.com/prompt.yaml",
         method="GET",
         text=template,
@@ -508,7 +508,7 @@ class GreetingsPlugin:
     ),
 )
 def test_tools_in_templates(
-    source, expected_tool_success, expected_functions_success, httpx_mock, tmpdir
+    source, expected_tool_success, expected_functions_success, httpx2_mock, tmpdir
 ):
     template_yaml = textwrap.dedent("""
     name: test
@@ -535,7 +535,7 @@ def test_tools_in_templates(
         (tmpdir / "test.yaml").write_text(template_yaml, "utf-8")
         args = ["-t", str(tmpdir / "test.yaml")]
     elif source == "url":
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url="https://example.com/test.yaml",
             method="GET",
             text=template_yaml,

@@ -145,7 +145,7 @@ def test_llm_default_prompt(
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async_):
+def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, async_):
     mock_openai_responses(
         text="Bob, Alice, Eve",
         response_id="resp_first",
@@ -213,9 +213,9 @@ def test_extract_fenced_code(
         assert "```" in output
 
 
-def test_extract_fenced_code_crlf(httpx_mock):
+def test_extract_fenced_code_crlf(httpx2_mock):
     """The CLI extracts fenced code when the model response uses CRLF."""
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -908,7 +908,7 @@ def test_schemas_dsl():
 def test_llm_prompt_continue_with_database(
     tmpdir,
     monkeypatch,
-    httpx_mock,
+    httpx2_mock,
     mock_openai_responses,
     user_path,
     custom_database_path,
