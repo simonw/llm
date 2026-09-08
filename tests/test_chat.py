@@ -32,8 +32,8 @@ def logged_rows(db):
     ]
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_basic(mock_model, logs_db):
+
     runner = CliRunner()
     mock_model.enqueue(["one world"])
     mock_model.enqueue(["one again"])
@@ -119,7 +119,6 @@ def test_chat_basic(mock_model, logs_db):
     ]
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_system(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["I am mean"])
@@ -155,8 +154,8 @@ def test_chat_system(mock_model, logs_db):
     ]
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_options(mock_model, logs_db, user_path):
+
     options_path = user_path / "model_options.json"
     options_path.write_text(json.dumps({"mock": {"max_tokens": "5"}}), "utf-8")
 
@@ -200,7 +199,6 @@ def test_chat_options(mock_model, logs_db, user_path):
     ]
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize(
     "input,expected",
     (
@@ -273,7 +271,6 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
     assert sqlite_utils.Database(db_path)["turns"].count == 2
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_tools(logs_db):
     runner = CliRunner()
     functions = textwrap.dedent("""
@@ -339,7 +336,6 @@ def test_chat_tools(logs_db):
     )
 
 
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_fragments(tmpdir):
     path1 = str(tmpdir / "frag1.txt")
     path2 = str(tmpdir / "frag2.txt")
@@ -355,3 +351,4 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
