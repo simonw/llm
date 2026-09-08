@@ -1,0 +1,25 @@
+# LLM
+
+> A CLI tool and Python library for interacting with OpenAI, Anthropic's Claude, Google's Gemini, Meta's Llama and dozens of other Large Language Models, both via remote APIs and with models that can be installed and run on your own machine.
+
+With LLM you can run prompts from the command-line, store prompts and responses in SQLite, generate and store embeddings, extract structured content from text and images, and grant models the ability to execute tools. Install with `pip install llm`, `brew install llm`, `pipx install llm`, or `uv tool install llm`.
+
+## Docs
+
+- [Setup](https://llm.datasette.io/en/stable/setup.html): installation, upgrading, API key management, configuration
+- [Usage](https://llm.datasette.io/en/stable/usage.html): executing prompts, attachments, system prompts, tools, JSON output, schemas, fragments, interactive chat
+- [OpenAI models](https://llm.datasette.io/en/stable/openai-models.html): configuration and available models
+- [Other models](https://llm.datasette.io/en/stable/other-models.html): local models, OpenAI-compatible models
+- [Tools](https://llm.datasette.io/en/stable/tools.html): how tool calling works, default tools, implementation tips
+- [Schemas](https://llm.datasette.io/en/stable/schemas.html): structured data extraction tutorial and reference
+- [Templates](https://llm.datasette.io/en/stable/templates.html): saving and reusing prompt templates
+- [Fragments](https://llm.datasette.io/en/stable/fragments.html): reusable chunks of prompt content
+- [Model aliases](https://llm.datasette.io/en/stable/aliases.html): managing shorthand names for models
+- [Embeddings](https://llm.datasette.io/en/stable/embeddings/index.html): CLI and Python API for embeddings
+- [Plugins](https://llm.datasette.io/en/stable/plugins/index.html): installing plugins, plugin directory, plugin hooks
+
+## Optional
+
+- [Changelog](https://llm.datasette.io/en/stable/changelog.html)
+- [Python API](https://llm.datasette.io/en/stable/python-api.html)
+- [Related tools](https://llm.datasette.io/en/stable/related-tools.html)
