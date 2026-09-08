@@ -26,6 +26,7 @@ from llm import (
     Response,
     hookimpl,
 )
+from llm.default_plugins.openai_strict_schema import to_strict_json_schema
 from llm.models import _partition_tools
 from llm.parts import StreamEvent
 from llm.utils import (
@@ -1042,7 +1043,20 @@ def build_options_class(
                 description="Output a valid JSON object {...}. Prompt must mention JSON.",
                 default=None,
             ),
-        )
+        ),
+        "strict_schema": (
+            bool | None,
+            Field(
+                description=(
+                    "Request OpenAI Structured Outputs with strict: true so the "
+                    "response is guaranteed to match the JSON schema. Requires a "
+                    "schema. The schema is rewritten to the restricted strict "
+                    "format (additionalProperties: false, every property "
+                    "required); unsupported keywords raise an error."
+                ),
+                default=None,
+            ),
+        ),
     }
     if chat_completions:
         fields["chat_completions"] = (
@@ -1374,6 +1388,7 @@ class _Shared:
         json_object = kwargs.pop("json_object", None)
         kwargs.pop("image_detail", None)
         kwargs.pop("chat_completions", None)
+        strict_schema = kwargs.pop("strict_schema", None)
         # Responses models reuse their Options object when explicitly routed
         # through the Chat Completions compatibility path.
         kwargs.pop("reasoning_summary", None)
@@ -1381,10 +1396,16 @@ class _Shared:
             kwargs["max_tokens"] = self.default_max_tokens
         if json_object:
             kwargs["response_format"] = {"type": "json_object"}
+        if strict_schema and not prompt.schema:
+            raise ValueError("The strict_schema option requires a schema")
         if prompt.schema:
+            json_schema = {"name": "output", "schema": prompt.schema}
+            if strict_schema:
+                json_schema["schema"] = to_strict_json_schema(prompt.schema)
+                json_schema["strict"] = True
             kwargs["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": "output", "schema": prompt.schema},
+                "json_schema": json_schema,
             }
         if prompt.tools:
             kwargs["tools"] = [
@@ -2074,6 +2095,7 @@ class _SharedResponses(_Shared):
         opts.pop("json_object", None)
         opts.pop("chat_completions", None)
         opts.pop("image_detail", None)
+        strict_schema = opts.pop("strict_schema", None)
         max_tokens = opts.pop("max_tokens", None)
         reasoning_effort = opts.pop("reasoning_effort", None)
         reasoning_summary = opts.pop("reasoning_summary", None)
@@ -2110,17 +2132,24 @@ class _SharedResponses(_Shared):
             text["verbosity"] = verbosity
         if prompt.options.json_object:
             text["format"] = {"type": "json_object"}
+        if strict_schema and not prompt.schema:
+            raise ValueError("The strict_schema option requires a schema")
         if prompt.schema:
-            # ``strict: False`` mirrors the looser behaviour of the
-            # /v1/chat/completions json_schema response_format - required
-            # because the Responses API otherwise insists on
-            # ``additionalProperties: false`` everywhere.
-            text["format"] = {
+            format_options: dict[str, Any] = {
                 "type": "json_schema",
                 "name": "output",
                 "schema": prompt.schema,
-                "strict": False,
             }
+            if strict_schema:
+                format_options["schema"] = to_strict_json_schema(prompt.schema)
+                format_options["strict"] = True
+            else:
+                # ``strict: False`` mirrors the looser behaviour of the
+                # /v1/chat/completions json_schema response_format - required
+                # because the Responses API otherwise insists on
+                # ``additionalProperties: false`` everywhere.
+                format_options["strict"] = False
+            text["format"] = format_options
         if text:
             kwargs["text"] = text
 
