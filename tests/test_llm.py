@@ -237,9 +237,12 @@ def test_extract_fenced_code_crlf(httpx2_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
-    # Click normalizes terminal output to LF; test_utils.py verifies that
-    # extraction itself preserves the response's CRLF bytes.
-    assert result.output == 'print("ok")\n\n'
+    # Line endings in captured output are platform dependent: on Windows the
+    # text stream rewrites "\n" as "\r\n", so the CRLF inside the extracted
+    # code becomes "\r\r\n" and Click's Result.output only collapses one
+    # "\r\n" of that. Strip every "\r" so the assertion holds on every OS.
+    # test_utils.py verifies that extraction itself preserves the CRLF bytes.
+    assert result.output.replace("\r", "") == 'print("ok")\n\n'
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
