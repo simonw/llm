@@ -6,6 +6,8 @@ migration = MIGRATIONS.append
 
 
 def migrate(db):
+    if not db.memory:
+        db.enable_wal()
     ensure_migrations_table(db)
     already_applied = {r["name"] for r in db["_llm_migrations"].rows}
     for fn in MIGRATIONS:
@@ -22,14 +24,14 @@ def migrate(db):
 
 
 def ensure_migrations_table(db):
-    if not db["_llm_migrations"].exists():
-        db["_llm_migrations"].create(
-            {
-                "name": str,
-                "applied_at": str,
-            },
-            pk="name",
-        )
+    db["_llm_migrations"].create(
+        {
+            "name": str,
+            "applied_at": str,
+        },
+        pk="name",
+        if_not_exists=True,
+    )
 
 
 @migration

@@ -99,6 +99,24 @@ def test_migrate_from_original_schema(has_record):
     }
 
 
+def test_migrate_enables_wal_mode(tmp_path):
+    # https://github.com/simonw/llm/issues/789
+    db_path = tmp_path / "test.db"
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    assert db.journal_mode == "wal"
+
+
+def test_ensure_migrations_table_idempotent():
+    # ensure_migrations_table must be safe to call twice (no TOCTOU race)
+    from llm.migrations import ensure_migrations_table
+
+    db = sqlite_utils.Database(memory=True)
+    ensure_migrations_table(db)
+    ensure_migrations_table(db)
+    assert "_llm_migrations" in db.table_names()
+
+
 def test_migrations_with_legacy_alter_table():
     # https://github.com/simonw/llm/issues/162
     db = sqlite_utils.Database(memory=True)
