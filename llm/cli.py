@@ -1680,7 +1680,99 @@ def logs_turn_off():
     path.touch()
 
 
+def _delete_log_cids(cids, yes, database):
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    if not log_path.exists():
+        raise click.ClickException(f"No log database found at {log_path}")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    store = LogStore(db)
+
+    id_to_thread = {}
+    if db["threads"].exists():
+        for row in db["threads"].rows:
+            id_to_thread[row["id"]] = row["id"]
+    if db["conversations"].exists():
+        for row in db["conversations"].rows:
+            id_to_thread[row["id"]] = row["id"]
+    if db["turns"].exists():
+        for row in db["turns"].rows:
+            if row.get("thread_id"):
+                id_to_thread[row["id"]] = row["thread_id"]
+    if db["responses"].exists():
+        for row in db["responses"].rows:
+            if row.get("conversation_id"):
+                id_to_thread[row["id"]] = row["conversation_id"]
+
+    resolved_thread_ids = set()
+    for cid in cids:
+        if cid in id_to_thread:
+            resolved_thread_ids.add(id_to_thread[cid])
+        else:
+            matches = [i for i in id_to_thread if i.startswith(cid)]
+            matched_threads = {id_to_thread[m] for m in matches}
+            if len(matched_threads) == 1:
+                resolved_thread_ids.add(next(iter(matched_threads)))
+            elif len(matched_threads) > 1:
+                raise click.ClickException(
+                    f"Ambiguous conversation prefix '{cid}' matches multiple entries"
+                )
+            else:
+                raise click.ClickException(f"No conversation found matching '{cid}'")
+
+    for thread_id in sorted(resolved_thread_ids):
+        if not yes:
+            if not click.confirm(f"Delete conversation {thread_id}?"):
+                click.echo(f"Skipped {thread_id}")
+                continue
+        success = store.delete_thread(thread_id)
+        if success:
+            click.echo(f"Deleted conversation {thread_id}")
+        else:
+            click.echo(f"Failed to delete conversation {thread_id}")
+
+
+
+@logs.command(name="rm")
+@click.argument("cids", nargs=-1, required=True)
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Confirm deletion without prompting",
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False, writable=True),
+    help="Path to log database",
+)
+def logs_rm(cids, yes, database):
+    "Delete one or more conversations from the log database"
+    _delete_log_cids(cids, yes, database)
+
+
+@logs.command(name="delete")
+@click.argument("cids", nargs=-1, required=True)
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Confirm deletion without prompting",
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False, writable=True),
+    help="Path to log database",
+)
+def logs_delete(cids, yes, database):
+    "Delete one or more conversations from the log database"
+    _delete_log_cids(cids, yes, database)
+
+
 def annotate_log_rows(db, rows, expand=False, truncate=False):
+
     """
     Modify log rows from the merged reader in place: attach fragments
     and tool information, decode (or, if truncate is on, remove) their

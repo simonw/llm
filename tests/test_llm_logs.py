@@ -1452,3 +1452,136 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+
+
+def test_logs_rm_with_yes(user_path, mock_model):
+    db_path = str(user_path / "logs_rm.db")
+    mock_model.enqueue(["response 1"])
+    response = mock_model.prompt("prompt 1")
+    response.text()
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    from llm.logs import LogStore
+
+    store = LogStore(db)
+    turn_id = store.log(response)
+    thread_id = db["turns"].get(turn_id)["thread_id"]
+    assert db["threads"].count_where("id = ?", [thread_id]) == 1
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "rm", thread_id, "-y", "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert f"Deleted conversation {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+
+
+def test_logs_rm_interactive_confirm(user_path, mock_model):
+    db_path = str(user_path / "logs_rm_confirm.db")
+    mock_model.enqueue(["response 1"])
+    response = mock_model.prompt("prompt 1")
+    response.text()
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    from llm.logs import LogStore
+
+    store = LogStore(db)
+    turn_id = store.log(response)
+    thread_id = db["turns"].get(turn_id)["thread_id"]
+
+    runner = CliRunner()
+    # User inputs 'n' -> cancelled/skipped
+    result = runner.invoke(
+        cli, ["logs", "rm", thread_id, "-d", db_path], input="n\n", catch_exceptions=False
+    )
+    assert f"Skipped {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 1
+
+    # User inputs 'y' -> deleted
+    result = runner.invoke(
+        cli, ["logs", "rm", thread_id, "-d", db_path], input="y\n", catch_exceptions=False
+    )
+    assert f"Deleted conversation {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+
+
+def test_logs_rm_prefix_matching(user_path, mock_model):
+    db_path = str(user_path / "logs_rm_prefix.db")
+    mock_model.enqueue(["response 1"])
+    response = mock_model.prompt("prompt 1")
+    response.text()
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    from llm.logs import LogStore
+
+    store = LogStore(db)
+    turn_id = store.log(response)
+    thread_id = db["turns"].get(turn_id)["thread_id"]
+    prefix = thread_id[:8]
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "rm", prefix, "-y", "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert f"Deleted conversation {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+
+
+def test_logs_rm_by_turn_id(user_path, mock_model):
+    db_path = str(user_path / "logs_rm_turn_id.db")
+    mock_model.enqueue(["response 1"])
+    response = mock_model.prompt("prompt 1")
+    response.text()
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    from llm.logs import LogStore
+
+    store = LogStore(db)
+    turn_id = store.log(response)
+    thread_id = db["turns"].get(turn_id)["thread_id"]
+
+    runner = CliRunner()
+    # Passing turn_id resolves to parent thread_id and deletes it
+    result = runner.invoke(
+        cli, ["logs", "rm", turn_id, "-y", "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert f"Deleted conversation {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+
+
+def test_logs_rm_nonexistent(user_path):
+    db_path = str(user_path / "logs_rm_nonexistent.db")
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "rm", "nonexistent_id", "-y", "-d", db_path])
+    assert result.exit_code != 0
+    assert "No conversation found matching 'nonexistent_id'" in result.output
+
+
+def test_logs_delete_alias(user_path, mock_model):
+    db_path = str(user_path / "logs_delete_alias.db")
+    mock_model.enqueue(["response 1"])
+    response = mock_model.prompt("prompt 1")
+    response.text()
+    db = sqlite_utils.Database(db_path)
+    migrate(db)
+    from llm.logs import LogStore
+
+    store = LogStore(db)
+    turn_id = store.log(response)
+    thread_id = db["turns"].get(turn_id)["thread_id"]
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "delete", thread_id, "-y", "-d", db_path], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert f"Deleted conversation {thread_id}" in result.output
+    assert db["threads"].count_where("id = ?", [thread_id]) == 0
+
+
