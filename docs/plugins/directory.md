@@ -42,6 +42,7 @@ These plugins can be used to interact with remotely hosted models via their API:
 - **[llm-deepseek](https://github.com/abrasumente233/llm-deepseek)** adds support for the [DeepSeek](https://deepseek.com)'s DeepSeek-Chat and DeepSeek-Coder models.
 - **[llm-lambda-labs](https://github.com/simonw/llm-lambda-labs)** provides access to models hosted by [Lambda Labs](https://docs.lambdalabs.com/public-cloud/lambda-chat-api/), including the Nous Hermes 3 series.
 - **[llm-venice](https://github.com/ar-jan/llm-venice)** provides access to uncensored models hosted by privacy-focused [Venice AI](https://docs.venice.ai/), including Llama 3.1 405B.
+- **[llm-tiyuvta](https://github.com/avifenesh/llm-tiyuvta)** by Avi Fenesh provides access to open-weight models hosted by [tiyuvta](https://inference.tiyuvta.ai/). The plugin reads the live model catalog, so newly launched models appear without a plugin update, and detects per-model capabilities — vision attachments are only enabled for models that support them.
 
 If an API model host provides an OpenAI-compatible API you can also [configure LLM to talk to it](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models) without needing an extra plugin.
 
