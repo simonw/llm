@@ -8,6 +8,7 @@ from importlib.metadata import version
 import pytest
 import sqlite_utils
 from click.testing import CliRunner
+from pydantic import BaseModel
 
 import llm
 from llm import CancelToolCall, cli
@@ -1019,6 +1020,50 @@ def test_llm_tool_call_excluded_from_input_schema():
     assert "llm_tool_call" not in tool.input_schema.get("properties", {})
     assert "llm_tool_call" not in tool.input_schema.get("required", [])
     assert "name" in tool.input_schema["properties"]
+
+
+def test_tool_parameter_named_title_is_kept_in_input_schema():
+    def demo_a(title: str, when: str) -> str:
+        "param named title"
+        return ""
+
+    def demo_b(heading: str, when: str) -> str:
+        "same thing, renamed"
+        return ""
+
+    schema_a = llm.Tool.function(demo_a).input_schema
+    schema_b = llm.Tool.function(demo_b).input_schema
+
+    assert list(schema_a["properties"]) == ["title", "when"]
+    assert schema_a["required"] == ["title", "when"]
+    assert schema_a["properties"]["title"] == {"type": "string"}
+    assert schema_a["properties"]["when"] == {"type": "string"}
+
+    assert list(schema_b["properties"]) == ["heading", "when"]
+    assert schema_b["required"] == ["heading", "when"]
+    assert schema_b["properties"]["heading"] == {"type": "string"}
+    assert schema_b["properties"]["when"] == {"type": "string"}
+
+
+def test_nested_model_field_named_title_is_kept_in_input_schema():
+    class Person(BaseModel):
+        title: str
+        name: str
+
+    def demo(person: Person, title: str) -> str:
+        "nested plus top-level title"
+        return ""
+
+    schema = llm.Tool.function(demo).input_schema
+    person = schema["$defs"]["Person"]
+    assert list(schema["properties"]) == ["person", "title"]
+    assert schema["required"] == ["person", "title"]
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert list(person["properties"]) == ["title", "name"]
+    assert person["required"] == ["title", "name"]
+    assert person["properties"]["title"] == {"type": "string"}
+    assert person["properties"]["name"] == {"type": "string"}
+    assert "title" not in person
 
 
 def test_kwargs_only_function_does_not_receive_llm_tool_call():
