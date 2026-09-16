@@ -84,6 +84,42 @@ def test_templates_list(templates_path, args):
     )
 
 
+def test_templates_list_markers(templates_path):
+    "templates list should surface pinned model, schema and tools"
+    (templates_path / "cmd.yaml").write_text(
+        "system: reply with macos terminal commands only, no extra information",
+        "utf-8",
+    )
+    (templates_path / "dog.yaml").write_text(
+        "prompt: invent a dog\nschema_object:\n  type: object", "utf-8"
+    )
+    (templates_path / "report.yaml").write_text(
+        "system: Write a QA report\nmodel: gpt-4o\ntools:\n- llm_time\n- search",
+        "utf-8",
+    )
+    (templates_path / "frag.yaml").write_text(
+        "prompt: with fragments\nfragments:\n- one\n- two", "utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "list"])
+    assert result.exit_code == 0
+    assert result.output == (
+        "cmd    : system: reply with macos terminal commands only, no extra information\n"
+        "dog    : invent a dog [schema]\n"
+        "frag   : with fragments [fragments: 2]\n"
+        "report : system: Write a QA report [model: gpt-4o] [tools: llm_time, search]\n"
+    )
+
+
+def test_templates_list_markers_absent_for_simple_templates(templates_path):
+    "A prompt-only template listing is unchanged by the markers"
+    (templates_path / "one.yaml").write_text("template one", "utf-8")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "list"])
+    assert result.exit_code == 0
+    assert result.output == "one : template one\n"
+
+
 @pytest.mark.parametrize(
     "args,expected,expected_error",
     (

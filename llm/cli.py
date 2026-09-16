@@ -2577,6 +2577,24 @@ def templates():
     "Manage stored prompt templates"
 
 
+def template_list_markers(template: Template) -> str:
+    "Compact markers describing what a template pins beyond its prompt text"
+    parts = []
+    if template.model:
+        parts.append(f"model: {template.model}")
+    if template.schema_object:
+        parts.append("schema")
+    if template.tools:
+        parts.append("tools: {}".format(", ".join(template.tools)))
+    if template.functions:
+        parts.append(f"functions: {template.functions}")
+    if template.fragments:
+        parts.append(f"fragments: {len(template.fragments)}")
+    if template.system_fragments:
+        parts.append(f"system_fragments: {len(template.system_fragments)}")
+    return "] [".join(parts)
+
+
 @templates.command(name="list")
 def templates_list():
     "List available prompt templates"
@@ -2596,6 +2614,9 @@ def templates_list():
                 text.append(f" prompt: {template.prompt}")
         else:
             text = [template.prompt if template.prompt else ""]
+        markers = template_list_markers(template)
+        if markers:
+            text.append(f" [{markers}]")
         pairs.append((name, "".join(text).replace("\n", " ")))
     try:
         max_name_len = max(len(p[0]) for p in pairs)
