@@ -1321,20 +1321,20 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     assert "shell: 17711" in short_result.output
 
 
-def test_logs_backup(logs_db):
+def test_logs_backup(logs_db, tmp_path, monkeypatch):
     assert not logs_db.tables
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        runner.invoke(cli, ["-m", "echo", "simple prompt"])
-        assert logs_db.tables
-        expected_path = pathlib.Path("backup.db")
-        assert not expected_path.exists()
-        # Now back it up
-        result = runner.invoke(cli, ["logs", "backup", "backup.db"])
-        assert result.exit_code == 0
-        assert result.output.startswith("Backed up ")
-        assert result.output.endswith("to backup.db\n")
-        assert expected_path.exists()
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(cli, ["-m", "echo", "simple prompt"])
+    assert logs_db.tables
+    expected_path = pathlib.Path("backup.db")
+    assert not expected_path.exists()
+    # Now back it up
+    result = runner.invoke(cli, ["logs", "backup", "backup.db"])
+    assert result.exit_code == 0
+    assert result.output.startswith("Backed up ")
+    assert result.output.endswith("to backup.db\n")
+    assert expected_path.exists()
 
 
 def test_logs_status_counts_threads_and_turns(logs_db):

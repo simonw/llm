@@ -1,5 +1,30 @@
 from subprocess import PIPE, Popen
 
+from docutils import nodes
+
+
+def markdown_admonitions(app, doctree, docname):
+    """Render callouts unsupported by the Markdown builder as block quotes."""
+    if app.builder.name != "markdown":
+        return
+    for node in list(
+        doctree.findall(lambda node: isinstance(node, (nodes.tip, nodes.admonition)))
+    ):
+        children = list(node.children)
+        if children and isinstance(children[0], nodes.title):
+            title = children.pop(0).astext()
+        else:
+            title = "Tip"
+        heading = nodes.paragraph("", "", nodes.strong("", title))
+        replacement = nodes.block_quote("", heading, *children)
+        replacement["ids"] = node["ids"]
+        node.replace_self(replacement)
+
+
+def setup(app):
+    app.connect("doctree-resolved", markdown_admonitions)
+
+
 # This file is execfile()d with the current directory set to its
 # containing dir.
 #

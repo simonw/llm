@@ -200,13 +200,13 @@ def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
     # - ^ or \n ensures that the fence is at the start of a line
     # - (`{3,}) captures the opening backticks (at least three)
     # - (\w+)? optionally captures the language tag
-    # - \n matches the newline after the opening fence
+    # - \r?\n matches the newline after the opening fence
     # - (.*?) non-greedy match for the code block content
     # - (?P=fence) ensures that the closing fence has the same number of backticks
     # - [ ]* allows for optional spaces between the closing fence and newline
-    # - (?=\n|$) ensures that the closing fence is followed by a newline or end of string
+    # - (?=\r?\n|$) ensures that the closing fence is followed by a newline or end of string
     pattern = re.compile(
-        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\n|$)""",
+        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\r?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\r?\n|$)""",
         re.DOTALL,
     )
     matches = list(pattern.finditer(text))
@@ -292,7 +292,10 @@ def resolve_schema_input(db, schema_input, load_template):
             pass
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
-        return schema_dsl(schema_input)
+        try:
+            return schema_dsl(schema_input)
+        except ValueError as e:
+            raise click.BadParameter(str(e)) from None
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():
@@ -722,8 +725,9 @@ def monotonic_ulid() -> ULID:
     other ULID returned by this function inside the same process.
 
     It works the same way the reference JavaScript `monotonicFactory` does:
-    * If the current call happens in the same millisecond as the previous
-        one, the 80-bit randomness part is incremented by exactly one.
+    * If the current call reads a millisecond that is not later than the
+        previous one, the 80-bit randomness part is incremented by exactly
+        one and the previous timestamp is reused.
     * As soon as the system clock moves forward, a brand-new ULID with
         cryptographically secure randomness is generated.
     * If more than 2**80 ULIDs are requested within a single millisecond
@@ -742,8 +746,10 @@ def monotonic_ulid() -> ULID:
         # Decode timestamp from the last ULID we handed out
         last_ms = int.from_bytes(_last[:TIMESTAMP_LEN], "big")
 
-        # If the millisecond is the same, increment the randomness
-        if now_ms == last_ms:
+        # If the clock did not move forward, increment the randomness and keep
+        # the previous timestamp. `time.time_ns()` is read outside the lock and
+        # the wall clock can step backwards, so now_ms may be below last_ms.
+        if now_ms <= last_ms:
             rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
             if rand_int >= 1 << (RANDOMNESS_LEN * 8):
                 raise OverflowError(
