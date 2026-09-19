@@ -35,7 +35,7 @@ from .errors import NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
-    from .parts import StreamEvent
+    from .parts import Message, StreamEvent
 import inspect
 import json
 from abc import ABC, abstractmethod
@@ -1110,6 +1110,7 @@ class _BaseResponse:
 
     id: str
     prompt: "Prompt"
+    _loaded_messages: list["Message"]
     stream: bool
     resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
@@ -2685,6 +2686,10 @@ class AsyncResponse(_BaseResponse):
         # part's provider_metadata are lost. The CLI converts before
         # logging, so that loss would apply to every async response.
         response._stream_events = list(self._stream_events)
+        # Deserialized responses keep their structured output here instead
+        # of reconstructing it from stream events.
+        if hasattr(self, "_loaded_messages"):
+            response._loaded_messages = list(self._loaded_messages)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response

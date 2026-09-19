@@ -1557,6 +1557,55 @@ class TestAsyncLogging:
         with pytest.raises(ValueError, match="Response not yet awaited"):
             response.log_to_db(store.db)
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("empty", [False, True])
+    @pytest.mark.parametrize("convert_first", [False, True])
+    async def test_restored_async_response_preserves_output_when_logged(
+        self, store, async_mock_model, empty, convert_first
+    ):
+        messages = (
+            []
+            if empty
+            else [
+                Message(
+                    role="assistant",
+                    parts=[
+                        ReasoningPart(
+                            text="thinking hard",
+                            provider_metadata={"anthropic": {"signature": "SIG"}},
+                        ),
+                        ToolCallPart(
+                            name="search",
+                            arguments={"q": "pelicans"},
+                            tool_call_id="call-1",
+                        ),
+                    ],
+                ),
+                Message(
+                    role="assistant",
+                    parts=[TextPart(text="the answer")],
+                    provider_metadata={"provider": {"message_id": "answer-1"}},
+                ),
+            ]
+        )
+        response = llm.AsyncResponse.from_dict(
+            {
+                "model": async_mock_model.model_id,
+                "prompt": {"messages": [llm.user("q").to_dict()]},
+                "messages": [message.to_dict() for message in messages],
+            },
+            model=async_mock_model,
+        )
+        if convert_first:
+            response = await response.to_sync_response()
+            assert response.messages() == messages
+
+        response.log_to_db(store.db)
+
+        turn = store.db["turns"].get(response.id)
+        assert store.load_chain(turn["tip_message_hash"])[1:] == messages
+        assert store.verify() == []
+
 
 # ---- llm logs against the new tables ---------------------------------
 
