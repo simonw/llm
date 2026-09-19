@@ -3679,16 +3679,15 @@ def _ensure_dict_schema(schema):
 
 
 def _remove_titles_recursively(obj):
-    """Recursively remove all 'title' fields from a nested dictionary."""
+    """Recursively remove JSON Schema 'title' annotations from a nested dictionary."""
     if isinstance(obj, dict):
-        # Remove title if present
-        obj.pop("title", None)
-
-        # Recursively process all values
+        # JSON Schema "title" is a string. A property or $defs entry named
+        # "title" has an object value and must be kept.
+        if isinstance(obj.get("title"), str):
+            obj.pop("title")
         for value in obj.values():
             _remove_titles_recursively(value)
     elif isinstance(obj, list):
-        # Process each item in lists
         for item in obj:
             _remove_titles_recursively(item)
 
