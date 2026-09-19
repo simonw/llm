@@ -144,7 +144,7 @@ If your model supports {ref}`structured output <schemas>` against a defined JSON
 ```python
 class MyModel(llm.KeyModel):
     ...
-    support_schema = True
+    supports_schema = True
 ```
 And then adding code to your `.execute()` method that checks for `prompt.schema` and, if it is present, uses that to prompt the model.
 
