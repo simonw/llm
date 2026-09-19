@@ -237,9 +237,9 @@ def test_extract_fenced_code_crlf(httpx2_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
-    # Click normalizes terminal output to LF; test_utils.py verifies that
-    # extraction itself preserves the response's CRLF bytes.
-    assert result.output == 'print("ok")\n\n'
+    # Windows stdout translates CRLF to CRCRLF, which Click only partially
+    # normalizes. test_utils.py verifies that extraction preserves CRLF.
+    assert result.output.replace("\r\n", "\n") == 'print("ok")\n\n'
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
