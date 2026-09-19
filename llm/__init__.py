@@ -10,6 +10,7 @@ import click
 
 from .embeddings import Collection
 from .errors import (
+    ConversationNotSupported,
     ModelError,
     NeedsKeyException,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "CancelToolCall",
     "Collection",
     "Conversation",
+    "ConversationNotSupported",
     "Fragment",
     "KeyModel",
     "Message",

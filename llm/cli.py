@@ -1314,6 +1314,9 @@ def chat(
     except KeyError:
         raise click.ClickException(f"'{model_id}' is not a known model")
 
+    if not model.supports_conversation:
+        raise click.ClickException(f"{model} does not support conversations")
+
     if conversation is None:
         # Start a fresh conversation for this chat
         conversation = Conversation(model=model)
@@ -2524,6 +2527,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
                 "can_stream": model.can_stream,
                 "supports_schema": model.supports_schema,
                 "supports_tools": model.supports_tools,
+                "supports_conversation": model.supports_conversation,
                 "supports_async": model_with_aliases.async_model is not None,
                 "attachment_types": sorted(model.attachment_types),
                 "server_side_tools": [

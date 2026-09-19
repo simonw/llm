@@ -31,7 +31,7 @@ from typing import (
 
 import httpx2
 
-from .errors import NeedsKeyException
+from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
@@ -1169,6 +1169,13 @@ class _BaseResponse:
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
+
+        if not self.model.supports_conversation and any(
+            message.role in ("assistant", "tool") for message in self.prompt.messages
+        ):
+            raise ConversationNotSupported(
+                f"{self.model} does not support conversations"
+            )
 
         function_tools, _ = _partition_tools(self.model, self.prompt.tools)
         if function_tools and not self.model.supports_tools:
@@ -3211,6 +3218,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
+    supports_conversation = True
 
     @property
     def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:

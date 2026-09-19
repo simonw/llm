@@ -450,6 +450,8 @@ llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
 ```
 You can find these conversation IDs using the `llm logs` command.
 
+Some models only support single-turn prompts. These models report an error if you try to continue a conversation using `-c` or `--cid`, or start a session using `llm chat`. Start a new prompt without the continuation options instead. You can check a model's `supports_conversation` flag using `llm models --json`.
+
 ### Tips for using LLM with Bash or Zsh
 
 To learn more about your computer's operating system based on the output of `uname -a`, run this:

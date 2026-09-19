@@ -846,6 +846,8 @@ The `before_call` and `after_call` hooks can be async functions when used with a
 
 LLM supports *conversations*, where you ask follow-up questions of a model as part of an ongoing conversation.
 
+Some models only support single-turn prompts. You can check `model.supports_conversation` to see if a model supports follow-up questions. Models that don't will raise `llm.ConversationNotSupported`, a subclass of `ValueError`, if you attempt a reply or pass `messages=` containing an `assistant` or `tool` message.
+
 To start a new conversation, use the `model.conversation()` method:
 
 ```python
