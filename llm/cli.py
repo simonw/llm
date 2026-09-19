@@ -1314,6 +1314,9 @@ def chat(
     except KeyError:
         raise click.ClickException(f"'{model_id}' is not a known model")
 
+    if not model.supports_conversation:
+        raise click.ClickException(f"{model} does not support conversations")
+
     if conversation is None:
         # Start a fresh conversation for this chat
         conversation = Conversation(model=model)
@@ -1903,7 +1906,7 @@ def logs_list(
     id_gte,
     json_output,
     expand,
-):
+) -> None:
     "Show logged prompts and their responses"
     if database and not path:
         path = database
@@ -2234,7 +2237,8 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
-            if row["options_json"]:
+            # .get(): annotate_log_rows removes the *_json keys under -t
+            if row.get("options_json"):
                 options = row["options_json"]
                 if isinstance(options, str):
                     options = json.loads(options)
@@ -2248,7 +2252,7 @@ def logs_list(
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             _display_fragments(row["system_fragments"], "System fragments")
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
@@ -2280,8 +2284,8 @@ def logs_list(
                 for tool in row["tools"]:
                     instance = tool.get("instance")
                     if instance:
-                        key = (instance["name"], instance["arguments"])
-                        by_instance.setdefault(key, []).append(tool)
+                        instance_key = (instance["name"], instance["arguments"])
+                        by_instance.setdefault(instance_key, []).append(tool)
                     else:
                         plain_tools.append(tool)
                 for tool in plain_tools:
@@ -2337,7 +2341,7 @@ def logs_list(
 
             # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
             response = row["response"]
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 try:
                     parsed = json.loads(response)
                     response = f"```json\n{json.dumps(parsed, indent=2)}\n```"
@@ -2524,6 +2528,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
                 "can_stream": model.can_stream,
                 "supports_schema": model.supports_schema,
                 "supports_tools": model.supports_tools,
+                "supports_conversation": model.supports_conversation,
                 "supports_async": model_with_aliases.async_model is not None,
                 "attachment_types": sorted(model.attachment_types),
                 "server_side_tools": [
@@ -2818,7 +2823,7 @@ def tools():
     help="Python code block or file path defining functions to register as tools",
     multiple=True,
 )
-def tools_list(tool_defs, json_, model_id, python_tools):
+def tools_list(tool_defs, json_, model_id, python_tools) -> None:
     "List available tools, optionally including tools supported by a model"
 
     model = None
@@ -2828,7 +2833,7 @@ def tools_list(tool_defs, json_, model_id, python_tools):
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
-    server_side_tools = []
+    server_side_tools: list[dict[str, Any]] = []
     if model is not None:
         for tool_class in model.supported_server_side_tools:
             try:
@@ -2867,24 +2872,22 @@ def tools_list(tool_defs, json_, model_id, python_tools):
         return methods
 
     toolbox_specs: dict[int, str] = {}
+    tools: dict[str, Tool | Toolbox | ServerSideTool | type[Toolbox]] = {}
     if tool_defs:
-        tools = {}
         gathered = _gather_tools(tool_defs, python_tools)
         # _gather_tools returns --functions tools first, then one per spec
         specs = [None] * (len(gathered) - len(tool_defs)) + list(tool_defs)
-        for spec, tool in zip(specs, gathered):
-            if hasattr(tool, "name"):
-                tools[tool.name] = tool
-            else:
-                tools[tool.__class__.__name__] = tool
-            if spec is not None and isinstance(tool, Toolbox):
-                toolbox_specs[id(tool)] = spec
+        for spec, gathered_tool in zip(specs, gathered):
+            name = gathered_tool.name or gathered_tool.__class__.__name__
+            tools[name] = gathered_tool
+            if spec is not None and isinstance(gathered_tool, Toolbox):
+                toolbox_specs[id(gathered_tool)] = spec
     else:
-        tools = get_tools()
+        tools.update(get_tools())
         if python_tools:
             for code_or_path in python_tools:
-                for tool in _tools_from_code(code_or_path):
-                    tools[tool.name] = tool
+                for code_tool in _tools_from_code(code_or_path):
+                    tools[code_tool.name] = code_tool
 
     output_tools = []
     output_toolboxes = []

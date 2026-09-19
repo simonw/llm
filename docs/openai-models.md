@@ -66,6 +66,7 @@ OpenAI Responses: gpt-5.5-2026-04-23
 OpenAI Responses: gpt-5.6-sol
 OpenAI Responses: gpt-5.6-terra
 OpenAI Responses: gpt-5.6-luna
+OpenAI Responses: gpt-6-astra
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->

@@ -100,13 +100,13 @@ def test_attachment_no_file_descriptor_leak(tmp_path):
     assert _count_open_fds() <= baseline + 5
 
 
-def test_attachment_content_bytes_follows_redirects(httpx_mock):
-    httpx_mock.add_response(
+def test_attachment_content_bytes_follows_redirects(httpx2_mock):
+    httpx2_mock.add_response(
         url="https://example.com/redirected.png",
         status_code=301,
         headers={"Location": "https://example.com/actual.png"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://example.com/actual.png",
         content=TINY_PNG,
     )
@@ -114,9 +114,9 @@ def test_attachment_content_bytes_follows_redirects(httpx_mock):
     assert attachment.content_bytes() == TINY_PNG
 
 
-def test_attachment_content_bytes_limits_redirects(httpx_mock):
+def test_attachment_content_bytes_limits_redirects(httpx2_mock):
     for redirect in range(4):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url=f"https://example.com/redirect-{redirect}",
             status_code=301,
             headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
@@ -126,17 +126,17 @@ def test_attachment_content_bytes_limits_redirects(httpx_mock):
     with pytest.raises(httpx2.TooManyRedirects):
         attachment.content_bytes()
 
-    assert len(httpx_mock.get_requests()) == 4
+    assert len(httpx2_mock.get_requests()) == 4
 
 
-def test_attachment_resolve_type_follows_redirects(httpx_mock):
-    httpx_mock.add_response(
+def test_attachment_resolve_type_follows_redirects(httpx2_mock):
+    httpx2_mock.add_response(
         method="HEAD",
         url="https://example.com/redirected.png",
         status_code=301,
         headers={"Location": "https://example.com/actual.png"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="HEAD",
         url="https://example.com/actual.png",
         headers={"content-type": "image/png"},
@@ -145,9 +145,9 @@ def test_attachment_resolve_type_follows_redirects(httpx_mock):
     assert attachment.resolve_type() == "image/png"
 
 
-def test_attachment_resolve_type_limits_redirects(httpx_mock):
+def test_attachment_resolve_type_limits_redirects(httpx2_mock):
     for redirect in range(4):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             method="HEAD",
             url=f"https://example.com/redirect-{redirect}",
             status_code=301,
@@ -158,7 +158,7 @@ def test_attachment_resolve_type_limits_redirects(httpx_mock):
     with pytest.raises(httpx2.TooManyRedirects):
         attachment.resolve_type()
 
-    assert len(httpx_mock.get_requests()) == 4
+    assert len(httpx2_mock.get_requests()) == 4
 
 
 UNSUPPORTED_ATTACHMENT_CASES = (

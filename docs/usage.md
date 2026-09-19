@@ -450,6 +450,8 @@ llm 'More names' --cid 01h53zma5txeby33t1kbe3xk8q
 ```
 You can find these conversation IDs using the `llm logs` command.
 
+Some models only support single-turn prompts. These models report an error if you try to continue a conversation using `-c` or `--cid`, or start a session using `llm chat`. Start a new prompt without the continuation options instead. You can check a model's `supports_conversation` flag using `llm models --json`.
+
 ### Tips for using LLM with Bash or Zsh
 
 To learn more about your computer's operating system based on the output of `uname -a`, run this:
@@ -1519,6 +1521,33 @@ OpenAI Responses: gpt-5.6-terra
     key: openai
     env_var: OPENAI_API_KEY
 OpenAI Responses: gpt-5.6-luna
+  Options:
+    temperature: float
+    max_tokens: int
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+    stop: str
+    logit_bias: dict, str
+    seed: int
+    json_object: boolean
+    chat_completions: boolean
+    image_detail: str
+    reasoning_effort: str
+    reasoning_summary: str
+    verbosity: str
+    service_tier: str
+  Attachment types:
+    application/pdf, image/gif, image/jpeg, image/png, image/webp
+  Features:
+  - streaming
+  - schemas
+  - tools
+  - async
+  Keys:
+    key: openai
+    env_var: OPENAI_API_KEY
+OpenAI Responses: gpt-6-astra
   Options:
     temperature: float
     max_tokens: int

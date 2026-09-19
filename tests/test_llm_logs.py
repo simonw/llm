@@ -1321,20 +1321,20 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     assert "shell: 17711" in short_result.output
 
 
-def test_logs_backup(logs_db):
+def test_logs_backup(logs_db, tmp_path, monkeypatch):
     assert not logs_db.tables
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        runner.invoke(cli, ["-m", "echo", "simple prompt"])
-        assert logs_db.tables
-        expected_path = pathlib.Path("backup.db")
-        assert not expected_path.exists()
-        # Now back it up
-        result = runner.invoke(cli, ["logs", "backup", "backup.db"])
-        assert result.exit_code == 0
-        assert result.output.startswith("Backed up ")
-        assert result.output.endswith("to backup.db\n")
-        assert expected_path.exists()
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(cli, ["-m", "echo", "simple prompt"])
+    assert logs_db.tables
+    expected_path = pathlib.Path("backup.db")
+    assert not expected_path.exists()
+    # Now back it up
+    result = runner.invoke(cli, ["logs", "backup", "backup.db"])
+    assert result.exit_code == 0
+    assert result.output.startswith("Backed up ")
+    assert result.output.endswith("to backup.db\n")
+    assert expected_path.exists()
 
 
 def test_logs_status_counts_threads_and_turns(logs_db):
@@ -1452,3 +1452,48 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+
+
+def test_logs_truncate_markdown_with_options_and_schema(user_path):
+    """-t removes the *_json keys from rows; the markdown renderer must
+    render without them (it used to crash with KeyError: 'options_json')."""
+    log_path = str(user_path / "logs_truncate.db")
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+    db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "options_json": '{"temperature": 0.5}',
+            "schema_id": SINGLE_ID,
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-t", "-p", log_path], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Options" not in result.output
+    assert "## Schema" not in result.output
+    # Without -t the same row still renders both sections
+    result2 = runner.invoke(cli, ["logs", "-p", log_path], catch_exceptions=False)
+    assert result2.exit_code == 0
+    assert "- temperature: 0.5" in result2.output
+    assert "## Schema" in result2.output
+
+
+def test_logs_truncate_markdown_new_store(logs_db, mock_model):
+    """Same for rows from the new tables, whose builder always fills
+    options_json - so -t always removed the key."""
+    mock_model.enqueue(["hello"])
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-t"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Response\n\nhello" in result.output

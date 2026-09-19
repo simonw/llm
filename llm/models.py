@@ -31,11 +31,11 @@ from typing import (
 
 import httpx2
 
-from .errors import NeedsKeyException
+from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
-    from .parts import StreamEvent
+    from .parts import Message, StreamEvent
 import inspect
 import json
 from abc import ABC, abstractmethod
@@ -467,7 +467,7 @@ class PauseChain(Exception):
     calls.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         super().__init__(*args)
         self.tool_call: ToolCall | None = None
         self.tool_results: list[ToolResult] = []
@@ -480,7 +480,7 @@ class Prompt:
     _prompt: str | None
     model: "Model"
     fragments: list[str | Fragment] | None
-    attachments: list[Attachment] | None
+    attachments: list[Attachment]
     _system: str | None
     system_fragments: list[str | Fragment] | None
     prompt_json: str | None
@@ -536,7 +536,7 @@ class Prompt:
         return _combine_system(self._system, self.system_fragments)
 
     @property
-    def messages(self):
+    def messages(self) -> list["Message"]:
         """Canonical list of Message objects for this prompt.
 
         **Invariant:** this property returns exactly what the model
@@ -1169,6 +1169,13 @@ class _BaseResponse:
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
+
+        if not self.model.supports_conversation and any(
+            message.role in ("assistant", "tool") for message in self.prompt.messages
+        ):
+            raise ConversationNotSupported(
+                f"{self.model} does not support conversations"
+            )
 
         function_tools, _ = _partition_tools(self.model, self.prompt.tools)
         if function_tools and not self.model.supports_tools:
@@ -2561,7 +2568,8 @@ class AsyncResponse(_BaseResponse):
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]
         finally:
-            pass
+            if not self._done:
+                await self._generator.aclose()
 
     async def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
@@ -3211,6 +3219,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
+    supports_conversation = True
 
     @property
     def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:

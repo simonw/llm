@@ -175,7 +175,7 @@ def test_web_search_prepare_request_is_additive_and_idempotent():
     assert default_kwargs == {}
 
 
-def test_responses_web_search_request_and_result_capture(httpx_mock):
+def test_responses_web_search_request_and_result_capture(httpx2_mock):
     sources = [
         {"type": "url", "url": "https://openai.com/news/"},
         {"type": "url", "url": "https://example.com/report"},
@@ -205,7 +205,7 @@ def test_responses_web_search_request_and_result_capture(httpx_mock):
             "results": results,
         },
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=response_json,
@@ -226,7 +226,7 @@ def test_responses_web_search_request_and_result_capture(httpx_mock):
     )
 
     assert response.text() == "A cited answer"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [
         {
             "type": "web_search",
@@ -286,8 +286,8 @@ def test_server_side_prepare_request_runs_in_list_order_after_baseline():
     ]
 
 
-def test_responses_mixes_function_and_code_interpreter_tools(httpx_mock):
-    httpx_mock.add_response(
+def test_responses_mixes_function_and_code_interpreter_tools(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=_text_response_json(),
@@ -306,7 +306,7 @@ def test_responses_mixes_function_and_code_interpreter_tools(httpx_mock):
     )
     assert response.text() == "ok"
 
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"][0]["type"] == "function"
     assert request_body["tools"][0]["name"] == "multiply"
     assert request_body["tools"][1] == {
@@ -319,8 +319,8 @@ def test_responses_mixes_function_and_code_interpreter_tools(httpx_mock):
     ]
 
 
-def test_responses_raw_server_tool_passthrough_on_custom_endpoint(httpx_mock):
-    httpx_mock.add_response(
+def test_responses_raw_server_tool_passthrough_on_custom_endpoint(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://example.test/v1/responses",
         json=_text_response_json(model="custom-model"),
@@ -337,7 +337,7 @@ def test_responses_raw_server_tool_passthrough_on_custom_endpoint(httpx_mock):
     )
 
     assert response.text() == "ok"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [raw_spec]
 
 
@@ -361,8 +361,8 @@ def test_server_side_tool_rejected_by_chat_and_chat_fallback(tool):
 
 
 @pytest.mark.asyncio
-async def test_async_responses_code_interpreter_request(httpx_mock):
-    httpx_mock.add_response(
+async def test_async_responses_code_interpreter_request(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=_text_response_json(),
@@ -377,7 +377,7 @@ async def test_async_responses_code_interpreter_request(httpx_mock):
     )
 
     assert await response.text() == "ok"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [
         {
             "type": "code_interpreter",
@@ -391,8 +391,8 @@ async def test_async_responses_code_interpreter_request(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_async_responses_web_search_request(httpx_mock):
-    httpx_mock.add_response(
+async def test_async_responses_web_search_request(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=_text_response_json(),
@@ -406,7 +406,7 @@ async def test_async_responses_web_search_request(httpx_mock):
     )
 
     assert await response.text() == "ok"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [
         {"type": "web_search", "external_web_access": False}
     ]
@@ -591,10 +591,10 @@ def test_responses_model_is_registered():
     )
 
 
-def test_chat_completions_opt_out_dispatches_to_chat(httpx_mock):
+def test_chat_completions_opt_out_dispatches_to_chat(httpx2_mock):
     """When chat_completions=1 is passed, the request must hit
     /v1/chat/completions, not /v1/responses."""
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -621,12 +621,12 @@ def test_chat_completions_opt_out_dispatches_to_chat(httpx_mock):
         key="test",
     )
     assert response.text() == "hi from chat"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert "reasoning_summary" not in request_body
 
 
-def test_default_routes_to_responses_endpoint(httpx_mock):
-    httpx_mock.add_response(
+def test_default_routes_to_responses_endpoint(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -662,15 +662,15 @@ def test_default_routes_to_responses_endpoint(httpx_mock):
     response = model.prompt("hello", stream=False, key="test")
     assert response.text() == "hi from responses"
     # Ensure we sent to the right endpoint
-    requests = [r for r in httpx_mock.get_requests()]
+    requests = [r for r in httpx2_mock.get_requests()]
     assert any("/v1/responses" in str(r.url) for r in requests)
     request_body = json.loads(requests[-1].content)
     assert request_body["include"] == ["reasoning.encrypted_content"]
     assert request_body["reasoning"] == {"summary": "auto"}
 
 
-def test_hide_reasoning_omits_reasoning_summary_from_responses_request(httpx_mock):
-    httpx_mock.add_response(
+def test_hide_reasoning_omits_reasoning_summary_from_responses_request(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -705,15 +705,15 @@ def test_hide_reasoning_omits_reasoning_summary_from_responses_request(httpx_moc
     model = llm.get_model("gpt-5.5")
     response = model.prompt("hello", stream=False, key="test", hide_reasoning=True)
     assert response.text() == "hidden"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["include"] == ["reasoning.encrypted_content"]
     assert "reasoning" not in request_body
 
 
-def test_non_reasoning_responses_model_omits_encrypted_reasoning_include(httpx_mock):
+def test_non_reasoning_responses_model_omits_encrypted_reasoning_include(httpx2_mock):
     from llm.default_plugins.openai_models import Responses
 
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -750,7 +750,7 @@ def test_non_reasoning_responses_model_omits_encrypted_reasoning_include(httpx_m
     response = model.prompt("hello", stream=False, key="test")
 
     assert response.text() == "hi from gpt-4.1"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["model"] == "gpt-4.1"
     assert "include" not in request_body
     assert "reasoning" not in request_body
@@ -827,7 +827,7 @@ def test_responses_input_translation_assistant_text_uses_easy_input_message():
     ]
 
 
-def test_responses_reply_sends_prior_assistant_text_as_string(httpx_mock):
+def test_responses_reply_sends_prior_assistant_text_as_string(httpx2_mock):
     """response.reply() should send the same simple history shape a direct
     openai-python Responses call would use for a text-only assistant turn."""
 
@@ -860,13 +860,13 @@ def test_responses_reply_sends_prior_assistant_text_as_string(httpx_mock):
             "status": "completed",
         }
 
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=response_json("resp_1", "msg_1", "first-ok"),
         headers={"Content-Type": "application/json"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json=response_json("resp_2", "msg_2", "followup-ok"),
@@ -879,7 +879,7 @@ def test_responses_reply_sends_prior_assistant_text_as_string(httpx_mock):
 
     assert first.text() == "first-ok"
     assert second.text() == "followup-ok"
-    requests = httpx_mock.get_requests()
+    requests = httpx2_mock.get_requests()
     second_body = json.loads(requests[-1].content)
     assert second_body["input"] == [
         {"role": "user", "content": "Say exactly: first-ok"},
@@ -1031,8 +1031,8 @@ def test_responses_kwargs_includes_service_tier():
     assert kwargs["service_tier"] == "fast"
 
 
-def test_service_tier_sent_to_responses_endpoint(httpx_mock):
-    httpx_mock.add_response(
+def test_service_tier_sent_to_responses_endpoint(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -1068,14 +1068,14 @@ def test_service_tier_sent_to_responses_endpoint(httpx_mock):
     model = llm.get_model("gpt-5.6-sol")
     response = model.prompt("hello", stream=False, service_tier="fast", key="test")
     assert response.text() == "fast reply"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["service_tier"] == "fast"
     # The response body reports the tier that actually processed the request
     assert response.json()["service_tier"] == "priority"
 
 
-def test_service_tier_sent_to_chat_completions_fallback(httpx_mock):
-    httpx_mock.add_response(
+def test_service_tier_sent_to_chat_completions_fallback(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -1098,12 +1098,12 @@ def test_service_tier_sent_to_chat_completions_fallback(httpx_mock):
         "hello", stream=False, chat_completions=True, service_tier="fast", key="test"
     )
     assert response.text() == "fast chat"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["service_tier"] == "fast"
 
 
-def test_responses_streams_reasoning_summary_text(httpx_mock):
-    httpx_mock.add_response(
+def test_responses_streams_reasoning_summary_text(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_responses_reasoning_summary_stream()),
@@ -1407,8 +1407,8 @@ def _responses_reasoning_refresh_stream():
     )
 
 
-def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx_mock):
-    httpx_mock.add_response(
+def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_responses_reasoning_refresh_stream()),
@@ -1436,10 +1436,10 @@ def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx_mock):
     assert reasoning_parts[0].text == "Thinking aloud"
 
 
-def test_code_interpreter_multi_message_response(httpx_mock):
+def test_code_interpreter_multi_message_response(httpx2_mock):
     """Server-side tool execution interleaving multiple message output
     items must assemble into multiple assistant Messages."""
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -1505,8 +1505,8 @@ def test_code_interpreter_multi_message_response(httpx_mock):
     assert response.tool_calls() == []
 
 
-def test_code_interpreter_streaming_output_and_request(httpx_mock):
-    httpx_mock.add_response(
+def test_code_interpreter_streaming_output_and_request(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_code_interpreter_stream()),
@@ -1525,7 +1525,7 @@ def test_code_interpreter_streaming_output_and_request(httpx_mock):
     assert all(event.server_executed for event in events[:3])
     assert response.tool_calls() == []
 
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
@@ -1552,8 +1552,8 @@ def _assert_web_search_streaming_uses_final_payload(response, messages):
     assert json.loads(tool_result.output) == final_item["results"]
 
 
-def test_web_search_streaming_refreshes_from_final_payload(httpx_mock):
-    httpx_mock.add_response(
+def test_web_search_streaming_refreshes_from_final_payload(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_web_search_refresh_stream()),
@@ -1570,8 +1570,8 @@ def test_web_search_streaming_refreshes_from_final_payload(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_async_web_search_streaming_refreshes_from_final_payload(httpx_mock):
-    httpx_mock.add_response(
+async def test_async_web_search_streaming_refreshes_from_final_payload(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_web_search_refresh_stream()),

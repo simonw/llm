@@ -6,7 +6,7 @@ Install this tool using `pip`:
 ```bash
 pip install llm
 ```
-Or using [pipx](https://pypa.github.io/pipx/):
+Or using [pipx](https://pipx.pypa.io/):
 ```bash
 pipx install llm
 ```

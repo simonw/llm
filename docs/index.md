@@ -31,7 +31,7 @@ Or with Homebrew (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
 ```
-Or with [pipx](https://pypa.github.io/pipx/):
+Or with [pipx](https://pipx.pypa.io/):
 ```bash
 pipx install llm
 ```

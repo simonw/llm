@@ -20,10 +20,9 @@ from llm.models import Usage
 
 def test_version():
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["--version"])
-        assert result.exit_code == 0
-        assert result.output.startswith("cli, version ")
+    result = runner.invoke(cli, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.startswith("cli, version ")
 
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
@@ -145,7 +144,7 @@ def test_llm_default_prompt(
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async_):
+def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, async_):
     mock_openai_responses(
         text="Bob, Alice, Eve",
         response_id="resp_first",
@@ -213,9 +212,9 @@ def test_extract_fenced_code(
         assert "```" in output
 
 
-def test_extract_fenced_code_crlf(httpx_mock):
+def test_extract_fenced_code_crlf(httpx2_mock):
     """The CLI extracts fenced code when the model response uses CRLF."""
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -238,9 +237,9 @@ def test_extract_fenced_code_crlf(httpx_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
-    # Click normalizes terminal output to LF; test_utils.py verifies that
-    # extraction itself preserves the response's CRLF bytes.
-    assert result.output == 'print("ok")\n\n'
+    # Windows stdout translates CRLF to CRCRLF, which Click only partially
+    # normalizes. test_utils.py verifies that extraction preserves CRLF.
+    assert result.output.replace("\r\n", "\n") == 'print("ok")\n\n'
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
@@ -908,7 +907,7 @@ def test_schemas_dsl():
 def test_llm_prompt_continue_with_database(
     tmpdir,
     monkeypatch,
-    httpx_mock,
+    httpx2_mock,
     mock_openai_responses,
     user_path,
     custom_database_path,
@@ -1068,7 +1067,7 @@ def test_all_third_party_imports_are_declared():
         # Skip anything gated behind an extra - those aren't guaranteed installed
         if "extra ==" in requirement:
             continue
-        declared.add(normalize(re.split(r"[<>=!~;\s\[]", requirement, 1)[0]))
+        declared.add(normalize(re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0]))
 
     module_to_distributions = metadata.packages_distributions()
 

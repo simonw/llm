@@ -1,5 +1,10 @@
 # Changelog
 
+(v0_35)=
+## 0.35 (2026-09-07)
+
+- New OpenAI model: `gpt-6-astra` for [GPT-6 Astra](https://openai.com/index/gpt-6-astra/).
+
 (v0_34)=
 ## 0.34 (2026-09-02)
 
