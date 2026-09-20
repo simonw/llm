@@ -64,6 +64,120 @@ def test_openai_options_min_max():
         assert f"less than or equal to {max_val}" in result2.output
 
 
+def test_chat_template_kwargs_option_is_sent_as_json_object(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Thought briefly"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o-mini",
+            "-o",
+            "chat_template_kwargs",
+            '{"enable_thinking": false}',
+            "-o",
+            "temperature",
+            "0.5",
+            "--no-stream",
+            "--key",
+            "x",
+            "Think briefly",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert request_body["temperature"] == 0.5
+
+
+@pytest.mark.parametrize(
+    "value,expected_error",
+    (
+        ("{", "Invalid JSON in chat_template_kwargs string"),
+        ('["enable_thinking"]', "chat_template_kwargs must be a JSON object"),
+    ),
+)
+def test_chat_template_kwargs_option_rejects_invalid_json_objects(
+    value, expected_error
+):
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "-o", "chat_template_kwargs", value, "Say hi"],
+    )
+
+    assert result.exit_code == 1
+    assert expected_error in result.output
+
+
+def test_responses_model_requires_chat_completions_for_chat_template_kwargs():
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5",
+            "--key",
+            "x",
+            "-o",
+            "chat_template_kwargs",
+            '{"enable_thinking": false}',
+            "Say hi",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert (
+        "chat_template_kwargs is only supported by Chat Completions; "
+        "use -o chat_completions 1"
+    ) in result.output
+
+
+def test_responses_model_delegates_chat_template_kwargs_to_chat_completions(
+    httpx_mock,
+):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-5",
+            "usage": {},
+            "choices": [{"message": {"content": "Thought briefly"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5",
+            "-o",
+            "chat_completions",
+            "1",
+            "-o",
+            "chat_template_kwargs",
+            '{"enable_thinking": false}',
+            "--no-stream",
+            "--key",
+            "x",
+            "Think briefly",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    assert request_body["chat_template_kwargs"] == {"enable_thinking": False}
+
+
 @pytest.mark.parametrize(
     "model_id",
     (
