@@ -141,6 +141,21 @@ def test_simplify_usage_dict(input_data, expected_output):
             True,
             "second();\r\n",
         ],
+        [
+            "Text with a c++ fence:\n\n```c++\nint main() { return 0; }\n```\n",
+            False,
+            "int main() { return 0; }\n",
+        ],
+        [
+            "Text with an objective-c fence:\n\n```objective-c\nreturn 0;\n```\n",
+            False,
+            "return 0;\n",
+        ],
+        [
+            'Text with an info string:\n\n```python title="example.py"\nprint("hi")\n```\n',
+            False,
+            'print("hi")\n',
+        ],
     ],
 )
 def test_extract_fenced_code_block(input, last, expected):
