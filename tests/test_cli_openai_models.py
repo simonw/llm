@@ -734,3 +734,47 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx2_mock, async_, usa
     store = LogStore(db)
     chain = store.load_chain(turn["tip_message_hash"])
     assert chain[-1].parts[0].text == "Ho ho ho"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("usage_field", ("missing", "null"))
+def test_chat_completion_without_usage_sync_and_async(
+    monkeypatch, tmpdir, httpx2_mock, async_, usage_field
+):
+    # OpenAI-compatible servers can omit "usage" from non-streaming responses
+    user_path = tmpdir / "user_dir"
+    log_db = user_path / "logs.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    body = {
+        "id": "chatcmpl-no-usage",
+        "object": "chat.completion",
+        "created": 1730871958,
+        "model": "gpt-4o-mini",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "Ho ho ho"},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    if usage_field == "null":
+        body["usage"] = None
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json=body,
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "Ho ho ho\n"
+    db = sqlite_utils.Database(str(log_db))
+    assert db["turns"].count == 1
+    turn = next(db["turns"].rows)
+    assert turn["input_tokens"] is None
+    assert turn["output_tokens"] is None
