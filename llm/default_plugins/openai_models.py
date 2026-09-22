@@ -352,7 +352,7 @@ def register_models(register):
             ),
         )
     # GPT-6
-    for model_id in ("gpt-6-astra",):
+    for model_id in ("gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
         register(
             Responses(
                 model_id,

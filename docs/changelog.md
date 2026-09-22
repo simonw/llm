@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New OpenAI models: `gpt-6-sol` for [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and `gpt-6-luna` for [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna).
+
 (v0_35)=
 ## 0.35 (2026-09-07)
 

@@ -67,11 +67,15 @@ OpenAI Responses: gpt-5.6-sol
 OpenAI Responses: gpt-5.6-terra
 OpenAI Responses: gpt-5.6-luna
 OpenAI Responses: gpt-6-astra
+OpenAI Responses: gpt-6-sol
+OpenAI Responses: gpt-6-luna
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
+
+[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) use the Responses API by default and support `-o reasoning_effort` values of `none`, `low`, `medium`, `high`, `xhigh` and `max`. If you opt into Chat Completions with `-o chat_completions 1`, function calling requires `-o reasoning_effort none`.
 
 `gpt-5.6-luna` is one of the less expensive models, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
 
