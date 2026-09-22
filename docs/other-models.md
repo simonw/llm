@@ -205,3 +205,30 @@ Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require t
     HTTP-Referer: "https://llm.datasette.io/"
     X-Title: LLM
 ```
+
+### OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible AI gateway that routes requests to models from OpenAI, Anthropic, Google, DeepSeek, Qwen and other providers through a single endpoint. It exposes the same provider/model namespace used by OpenRouter, and the `orcarouter/auto` model name selects an upstream model adaptively based on your routing configuration. The `model_name` must be the full vendor-prefixed model identifier as listed on the OrcaRouter dashboard.
+
+Store an OrcaRouter API key using `llm keys set orcarouter`, then add entries to your `extra-openai-models.yaml`:
+
+```yaml
+- model_id: orcarouter-auto
+  model_name: orcarouter/auto
+  api_base: "https://api.orcarouter.ai/v1"
+  api_key_name: orcarouter
+  supports_tools: true
+
+- model_id: orcarouter-gpt-5
+  model_name: openai/gpt-5.5
+  api_base: "https://api.orcarouter.ai/v1"
+  api_key_name: orcarouter
+  supports_tools: true
+  supports_schema: true
+```
+
+Run prompts against any configured model:
+
+```bash
+llm -m orcarouter-auto 'Explain git rebase in 2 sentences'
+```
