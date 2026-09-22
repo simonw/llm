@@ -305,6 +305,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
     * [Tip: lazily load expensive dependencies](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tip-lazily-load-expensive-dependencies)
     * [Models that accept API keys](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#models-that-accept-api-keys)
     * [Async models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#async-models)
+    * [Models that do not support conversations](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#models-that-do-not-support-conversations)
     * [Supporting schemas](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-schemas)
     * [Supporting tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-tools)
     * [Supporting server-side tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-server-side-tools)

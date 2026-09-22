@@ -1,8 +1,26 @@
 # Changelog
 
-## Unreleased
+(v0_36)=
+## 0.36 (2026-09-22)
 
-- New OpenAI models: `gpt-6-sol` for [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and `gpt-6-luna` for [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna).
+New features:
+
+- New OpenAI models: `gpt-6-sol` for [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and `gpt-6-luna` for [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna). [#1702](https://github.com/simonw/llm/issues/1702)
+- Model plugins can now declare `supports_conversation = False` for models that only accept single-turn prompts. LLM raises `llm.ConversationNotSupported` when these models receive assistant or tool history, and `llm chat` rejects them before starting a session. See {ref}`Models that do not support conversations <advanced-model-plugins-conversations>`. The first plugin to use this is [llm-typesafe](https://github.com/simonw/llm-typesafe). [#1692](https://github.com/simonw/llm/issues/1692)
+- Reasoning traces in the Markdown output of `llm logs` are now wrapped in `<details><summary>` tags. [#1701](https://github.com/simonw/llm/issues/1701)
+
+Bug fixes:
+
+- Fixed `llm logs -t` crashing with `KeyError: 'options_json'` when displaying truncated logs with options or schemas. Thanks, [rdslw](https://github.com/rdslw). [#1656](https://github.com/simonw/llm/pull/1656)
+- Fixed `AsyncResponse.log_to_db()` raising `sqlite3.ProgrammingError` after a response had been awaited. Structured messages and provider metadata are also preserved when logging restored async responses. Thanks, [Roli Bosch](https://github.com/roli-lpci). [#1668](https://github.com/simonw/llm/pull/1668)
+- Tool parameters and nested model fields named `title` are now preserved in generated input schemas. Thanks, [Christopher Pruijsen](https://github.com/cpruijsen). [#1679](https://github.com/simonw/llm/issues/1679), [#1680](https://github.com/simonw/llm/pull/1680)
+- Constructing `llm.Prompt` directly without options now initializes the model's default `Options` object, fixing errors in providers that access option attributes. Thanks, [Jane Li](https://github.com/oodadoudou). [#1028](https://github.com/simonw/llm/issues/1028), [#1663](https://github.com/simonw/llm/pull/1663)
+- Closing an asynchronous `response.astream_events()` stream before completion now closes the underlying provider generator, allowing it to release streaming connections and other resources. Thanks, [Shunsuke](https://github.com/imshunsuke). [#1659](https://github.com/simonw/llm/pull/1659)
+- SQLite connections opened by CLI commands are now closed when the command finishes, including on errors, avoiding unclosed-connection warnings.
+
+Documentation:
+
+- Corrected the structured output example in the advanced model plugins documentation to use `supports_schema = True`. Thanks, [Ethan Stoner](https://github.com/ethanstoner). [#1686](https://github.com/simonw/llm/pull/1686)
 
 (v0_35)=
 ## 0.35 (2026-09-07)
