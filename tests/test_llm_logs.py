@@ -1420,8 +1420,7 @@ def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
 
 
 def test_logs_markdown_renders_reasoning_heading(user_path):
-    """When a row has reasoning text, `llm logs` renders a `## Reasoning`
-    heading between System and Response."""
+    """Reasoning renders in a collapsible block below its heading and before Response."""
     log_path = str(user_path / "logs_with_reasoning.db")
     db = sqlite_utils.Database(log_path)
     migrate(db)
@@ -1442,7 +1441,10 @@ def test_logs_markdown_renders_reasoning_heading(user_path):
     assert result.exit_code == 0
     # rstrip() before rendering so trailing newlines from the
     # provider output don't push `## Response` down the page.
-    assert "## Reasoning\n\nI thought hard about it.\n\n## Response" in result.output
+    assert (
+        "## Reasoning\n\n<details><summary>Reasoning trace</summary>\n\n"
+        "I thought hard about it.\n\n</details>\n\n## Response"
+    ) in result.output
 
 
 def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
@@ -1452,6 +1454,7 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+    assert "<details>" not in result.output
 
 
 def test_logs_truncate_markdown_with_options_and_schema(user_path):
