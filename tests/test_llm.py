@@ -9,7 +9,6 @@ from importlib.metadata import version
 from unittest import mock
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 from pydantic import BaseModel
 
@@ -27,7 +26,7 @@ def test_version():
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
-    mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
+    db_factory, mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
 ):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
@@ -46,7 +45,7 @@ def test_llm_prompt_creates_log_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 1
+    assert db_factory(db_path)["turns"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -63,11 +62,17 @@ def test_llm_prompt_creates_log_database(
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai_responses, use_stdin, user_path, logs_off, logs_args, should_log
+    db_factory,
+    mocked_openai_responses,
+    use_stdin,
+    user_path,
+    logs_off,
+    logs_args,
+    should_log,
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -144,7 +149,9 @@ def test_llm_default_prompt(
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, async_):
+def test_llm_prompt_continue(
+    db_factory, httpx2_mock, mock_openai_responses, user_path, async_
+):
     mock_openai_responses(
         text="Bob, Alice, Eve",
         response_id="resp_first",
@@ -157,7 +164,7 @@ def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, asyn
     )
 
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -249,9 +256,9 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     assert result.output == "Hi.\n"
 
 
-def test_openai_completion(mocked_openai_completion, user_path):
+def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -339,10 +346,10 @@ def test_openai_completion_system_prompt_error():
 
 
 def test_openai_completion_logprobs_stream(
-    mocked_openai_completion_logprobs_stream, user_path
+    db_factory, mocked_openai_completion_logprobs_stream, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -368,10 +375,10 @@ def test_openai_completion_logprobs_stream(
 
 
 def test_openai_completion_logprobs_nostream(
-    mocked_openai_completion_logprobs, user_path
+    db_factory, mocked_openai_completion_logprobs, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -409,9 +416,9 @@ EXTRA_MODELS_YAML = """
 """
 
 
-def test_openai_localai_configuration(mocked_localai, user_path):
+def test_openai_localai_configuration(db_factory, mocked_localai, user_path):
     log_path = user_path / "logs.db"
-    sqlite_utils.Database(str(log_path))
+    db_factory(str(log_path))
     # Write the configuration file
     config_path = user_path / "extra-openai-models.yaml"
     config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
@@ -732,7 +739,7 @@ def test_model_environment_variable(monkeypatch):
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
-def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
+def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filename):
     user_path = tmpdir / "user"
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
@@ -752,7 +759,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     assert result.output == '{"name": "Cleo", "age": 10}\n'
     # Should have created user_path and put a logs.db in it
     assert (user_path / "logs.db").exists()
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert rows == [
         {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
     ]
@@ -799,7 +806,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
         ),
     ),
 )
-def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
+def test_schema_using_dsl(db_factory, mock_model, tmpdir, monkeypatch, args, expected):
     user_path = tmpdir / "user"
     mock_model.enqueue([json.dumps(dog)])
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -811,7 +818,7 @@ def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
     )
     assert result.exit_code == 0
     assert result.output == '{"name": "Cleo", "age": 10}\n'
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert json.loads(rows[0]["content"]) == expected
 
 
@@ -905,6 +912,7 @@ def test_schemas_dsl():
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
+    db_factory,
     tmpdir,
     monkeypatch,
     httpx2_mock,
@@ -950,7 +958,7 @@ def test_llm_prompt_continue_with_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 2
+    assert db_factory(db_path)["turns"].count == 2
 
 
 @pytest.mark.parametrize("async_", (False, True))

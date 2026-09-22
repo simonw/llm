@@ -672,12 +672,11 @@ def register_commands(cli):
             # database can resolve stored schema IDs; all other schema input
             # is resolved using a temporary in-memory database.
             log_path = logs_db_path()
-            if log_path.exists():
-                schema_db = sqlite_utils.Database(log_path)
-            else:
-                schema_db = sqlite_utils.Database(memory=True)
-            migrate(schema_db)
-            schema = resolve_schema_input(schema_db, schema_input, load_template)
+            with sqlite_utils.Database(
+                log_path if log_path.exists() else ":memory:"
+            ) as schema_db:
+                migrate(schema_db)
+                schema = resolve_schema_input(schema_db, schema_input, load_template)
             if schema_multi:
                 schema = multi_schema(schema)
 

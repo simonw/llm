@@ -6,7 +6,6 @@ import time
 from importlib.metadata import version
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 from pydantic import BaseModel
 
@@ -137,8 +136,8 @@ def test_server_side_tool_support_can_vary_by_model_instance():
         ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
 
 
-def test_server_side_tool_configuration_is_logged():
-    db = sqlite_utils.Database(memory=True)
+def test_server_side_tool_configuration_is_logged(db_factory):
+    db = db_factory(memory=True)
     migrate(db)
     response = ServerToolsOnlyModel().prompt(
         "hello", tools=[DemoServerSideTool("configured")]
@@ -153,8 +152,8 @@ def test_server_side_tool_configuration_is_logged():
     assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
 
 
-def test_logs_expanded_server_side_tool(user_path):
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+def test_logs_expanded_server_side_tool(db_factory, user_path):
+    db = db_factory(str(user_path / "logs.db"))
     migrate(db)
     response = ServerToolsOnlyModel().prompt(
         "hello", tools=[DemoServerSideTool("configured")]
@@ -213,7 +212,7 @@ async def test_async_declared_server_side_tool_and_executor_partition():
 
 
 @pytest.mark.vcr
-def test_tool_use_basic(vcr):
+def test_tool_use_basic(db_factory, vcr):
     model = llm.get_model("gpt-4o-mini")
 
     def multiply(a: int, b: int) -> int:
@@ -236,7 +235,7 @@ def test_tool_use_basic(vcr):
     assert second.prompt.tool_results[0].output == "2869461"
 
     # Test writing to the database
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
 
@@ -308,7 +307,7 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
-def test_chain_round_separator_is_display_only():
+def test_chain_round_separator_is_display_only(db_factory):
     """The space between chain rounds is synthesized at the chain level
     for display - it must never become a stored whitespace part."""
 
@@ -324,7 +323,7 @@ def test_chain_round_separator_is_display_only():
     # The separator reached the streamed output...
     assert "\n} {\n" in text
 
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
     # ...but no whitespace-only text part was stored.

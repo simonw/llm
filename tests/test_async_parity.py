@@ -87,15 +87,14 @@ async def test_async_from_dict_then_reply_continues():
 
 
 @pytest.mark.asyncio
-async def test_async_from_row_response_messages_synthesized(tmp_path):
+async def test_async_from_row_response_messages_synthesized(db_factory, tmp_path):
     """SQLite rehydrate for async responses must populate
     response.messages from _chunks+_tool_calls so follow-up chains
     don't silently drop the assistant turn."""
-    import sqlite_utils
 
     from llm.migrations import migrate
 
-    db = sqlite_utils.Database(str(tmp_path / "logs.db"))
+    db = db_factory(str(tmp_path / "logs.db"))
     migrate(db)
     # log_to_db no longer writes the legacy tables, so seed a row the
     # way an older version of llm would have recorded it - from_row is
@@ -133,11 +132,10 @@ async def test_async_from_row_response_messages_synthesized(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_async_load_conversation_follow_up_preserves_chain(tmp_path):
+async def test_async_load_conversation_follow_up_preserves_chain(db_factory, tmp_path):
     """Async equivalent of the llm -c regression: after log_to_db +
     load_conversation, a follow-up turn's prompt.messages is the full
     [user, assistant, user] chain — not missing the assistant."""
-    import sqlite_utils
 
     from llm.cli import load_conversation
     from llm.migrations import migrate
@@ -147,7 +145,7 @@ async def test_async_load_conversation_follow_up_preserves_chain(tmp_path):
     await r1.text()
 
     db_path = tmp_path / "logs.db"
-    db = sqlite_utils.Database(str(db_path))
+    db = db_factory(str(db_path))
     migrate(db)
     (await r1.to_sync_response()).log_to_db(db)
 

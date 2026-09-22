@@ -4,7 +4,6 @@ import sys
 from unittest.mock import ANY
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 
 from llm import Collection
@@ -82,7 +81,7 @@ def test_embed_errors(args, expected_error):
         ('{"foo": "incomplete}', "metadata must be valid JSON"),
     ),
 )
-def test_embed_store(user_path, metadata, metadata_error):
+def test_embed_store(db_factory, user_path, metadata, metadata_error):
     embeddings_db = user_path / "embeddings.db"
     assert not embeddings_db.exists()
     runner = CliRunner()
@@ -104,7 +103,7 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert result.exit_code == 0
     assert embeddings_db.exists()
     # Check the contents
-    db = sqlite_utils.Database(str(embeddings_db))
+    db = db_factory(str(embeddings_db))
     rows = list(db["collections"].rows)
     assert rows == [{"id": 1, "name": "items", "model": "embed-demo"}]
     expected_metadata = None
@@ -150,12 +149,12 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert db["embeddings"].count == 0
 
 
-def test_embed_store_binary(user_path):
+def test_embed_store_binary(db_factory, user_path):
     runner = CliRunner()
     args = ["embed", "-m", "embed-demo", "items", "2", "--binary", "--store"]
     result = runner.invoke(cli, args, input=b"\x00\x01\x02")
     assert result.exit_code == 0
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = db_factory(str(user_path / "embeddings.db"))
     rows = list(db["embeddings"].rows)
     assert rows == [
         {
@@ -197,11 +196,11 @@ def test_embed_key_option(embed_key_demo):
     assert embed_key_demo.key is None
 
 
-def test_embed_multi_key_option(embed_key_demo, tmpdir):
+def test_embed_multi_key_option(db_factory, embed_key_demo, tmpdir):
     # --key should be passed through to the embedding model for embed-multi too
     assert embed_key_demo.key is None
     db_path = str(tmpdir / "embeddings.db")
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     db["content"].insert_all(
         [
             {"id": 1, "name": "cli", "description": "Command line interface"},
@@ -229,8 +228,8 @@ def test_embed_multi_key_option(embed_key_demo, tmpdir):
     assert embed_key_demo.key is None
 
 
-def test_collection_delete_errors(user_path):
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+def test_collection_delete_errors(db_factory, user_path):
+    db = db_factory(str(user_path / "embeddings.db"))
     collection = Collection("items", db, model_id="embed-demo")
     collection.embed("1", "hello")
     assert db["collections"].count == 1
@@ -369,7 +368,9 @@ def test_similar_by_content_prefixed(
         ),
     ),
 )
-def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, content):
+def test_embed_multi_file_input(
+    db_factory, tmpdir, use_stdin, prefix, prepend, filename, content
+):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "phrases", "-d", str(db_path), "-m", "embed-demo"]
     input = None
@@ -391,7 +392,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     # Check that everything was embedded correctly
-    db = sqlite_utils.Database(str(db_path))
+    db = db_factory(str(db_path))
     assert db["embeddings"].count == 2
     ids = [row["id"] for row in db["embeddings"].rows]
     expected_ids = ["1", "2"]
@@ -400,7 +401,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     assert ids == expected_ids
 
 
-def test_embed_multi_files_binary_store(tmpdir):
+def test_embed_multi_files_binary_store(db_factory, tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
     bin_path = tmpdir / "file.bin"
@@ -409,7 +410,7 @@ def test_embed_multi_files_binary_store(tmpdir):
     runner = CliRunner()
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
-    db = sqlite_utils.Database(str(db_path))
+    db = db_factory(str(db_path))
     assert db["embeddings"].count == 1
     row = next(iter(db["embeddings"].rows))
     assert row == {
@@ -432,13 +433,13 @@ def test_embed_multi_files_binary_store(tmpdir):
 @pytest.mark.parametrize("use_other_db", (True, False))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
-def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
+def test_embed_multi_sql(db_factory, tmpdir, use_other_db, prefix, prepend):
     db_path = str(tmpdir / "embeddings.db")
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     extra_args = []
     if use_other_db:
         db_path2 = str(tmpdir / "other.db")
-        db = sqlite_utils.Database(db_path2)
+        db = db_factory(db_path2)
         extra_args = ["--attach", "other", db_path2]
 
     if prefix:
@@ -470,7 +471,7 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
         + extra_args,
     )
     assert result.exit_code == 0
-    embeddings_db = sqlite_utils.Database(db_path)
+    embeddings_db = db_factory(db_path)
     assert embeddings_db["embeddings"].count == 2
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     assert rows == [
@@ -485,7 +486,7 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
     ]
 
 
-def test_embed_multi_batch_size(embed_demo, tmpdir):
+def test_embed_multi_batch_size(db_factory, embed_demo, tmpdir):
     db_path = str(tmpdir / "data.db")
     runner = CliRunner()
     sql = """
@@ -514,7 +515,7 @@ def test_embed_multi_batch_size(embed_demo, tmpdir):
         ],
     )
     assert result.exit_code == 0
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     assert db["embeddings"].count == 100
     assert embed_demo.batch_count == 13
 
@@ -541,7 +542,7 @@ def multi_files(tmpdir):
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("scenario", ("single", "multi"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
-def test_embed_multi_files(multi_files, scenario, prepend):
+def test_embed_multi_files(db_factory, multi_files, scenario, prepend):
     db_path, files = multi_files
     for filename, content in (
         ("file1.txt", b"hello world"),
@@ -589,7 +590,7 @@ def test_embed_multi_files(multi_files, scenario, prepend):
         + extra_args,
     )
     assert result.exit_code == 0
-    embeddings_db = sqlite_utils.Database(db_path)
+    embeddings_db = db_factory(db_path)
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     if scenario == "single":
         assert rows == [
@@ -635,7 +636,9 @@ def test_embed_multi_files_errors(multi_files, args, expected_error):
         (["--encoding", "utf-8", "--encoding", "latin-1"], None),
     ),
 )
-def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
+def test_embed_multi_files_encoding(
+    db_factory, multi_files, extra_args, expected_error
+):
     db_path, files = multi_files
     runner = CliRunner()
     result = runner.invoke(
@@ -661,7 +664,7 @@ def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
     else:
         assert result.exit_code == 0
         assert not result.stderr
-        embeddings_db = sqlite_utils.Database(db_path)
+        embeddings_db = db_factory(db_path)
         rows = list(
             embeddings_db.query("select id, content from embeddings order by id")
         )
@@ -709,7 +712,7 @@ def test_llm_embed_models_query(user_path, args, expected_model_id):
 
 @pytest.mark.parametrize("default_is_set", (False, True))
 @pytest.mark.parametrize("command", ("embed", "embed-multi"))
-def test_default_embed_model_errors(user_path, default_is_set, command):
+def test_default_embed_model_errors(db_factory, user_path, default_is_set, command):
     runner = CliRunner()
     if default_is_set:
         (user_path / "default_embedding_model.txt").write_text(
@@ -737,12 +740,12 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         result3 = runner.invoke(cli, args, input=input, catch_exceptions=False)
         assert result3.exit_code == 0
     # At the end of this, there should be 2 embeddings
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = db_factory(str(user_path / "embeddings.db"))
     assert db["embeddings"].count == 1
 
 
-def test_embed_multi_existing_collection_without_default(user_path):
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+def test_embed_multi_existing_collection_without_default(db_factory, user_path):
+    db = db_factory(str(user_path / "embeddings.db"))
     Collection("example", db, model_id="embed-demo")
 
     result = CliRunner().invoke(
@@ -756,10 +759,10 @@ def test_embed_multi_existing_collection_without_default(user_path):
     assert db["embeddings"].count == 1
 
 
-def test_duplicate_content_embedded_only_once(embed_demo):
+def test_duplicate_content_embedded_only_once(db_factory, embed_demo):
     # content_hash should avoid embedding the same content twice
     # per collection
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     assert len(embed_demo.embedded_content) == 0
     collection = Collection("test", db, model_id="embed-demo")
     collection.embed("1", "hello world")

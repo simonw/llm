@@ -61,8 +61,8 @@ LEGACY_TABLES = {
 
 
 @pytest.fixture
-def store():
-    return LogStore(sqlite_utils.Database(memory=True))
+def store(db_factory):
+    return LogStore(db_factory(memory=True))
 
 
 # ---- canonical form + hashing ----------------------------------------
@@ -620,9 +620,9 @@ class TestConversationThreads:
 
 
 @pytest.fixture
-def cli_store(user_path):
+def cli_store(db_factory, user_path):
     "A LogStore over the same database the CLI logs to."
-    return LogStore(sqlite_utils.Database(str(user_path / "logs.db")))
+    return LogStore(db_factory(str(user_path / "logs.db")))
 
 
 def run(*args):
@@ -666,10 +666,10 @@ class TestCliContinuation:
         conversation_id = next(iter(cli_store.db["threads"].rows))["id"]
         assert len(cli_store.thread_messages(conversation_id)) == 4
 
-    def test_history_comes_from_the_new_tables(self, user_path):
+    def test_history_comes_from_the_new_tables(self, db_factory, user_path):
         run("-m", "echo", "First")
 
-        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        db = db_factory(str(user_path / "logs.db"))
         conversation_id = next(iter(db["threads"].rows))["id"]
         db.close()
 
@@ -678,7 +678,7 @@ class TestCliContinuation:
         # Four messages only if the second turn was built on top of the
         # first. Had the history been lost, the second turn would have
         # started a fresh root and the thread would hold just two.
-        store = LogStore(sqlite_utils.Database(str(user_path / "logs.db")))
+        store = LogStore(db_factory(str(user_path / "logs.db")))
         chain = store.thread_messages(conversation_id)
         assert len(chain) == 4
         assert chain[0].parts[0].text == "First"
@@ -726,13 +726,15 @@ class TestLoadedMessages:
 
 
 class TestLegacyConversations:
-    def test_continuing_a_conversation_with_no_thread_still_works(self, user_path):
+    def test_continuing_a_conversation_with_no_thread_still_works(
+        self, db_factory, user_path
+    ):
         # Conversations logged before this schema existed have no thread,
         # so `-c` has to fall back to rebuilding from the legacy rows.
         # Nothing writes those rows any more - seed them the way an
         # older version of llm would have.
         path = str(user_path / "logs.db")
-        db = sqlite_utils.Database(path)
+        db = db_factory(path)
         migrate(db)
         db["conversations"].insert(
             {"id": "01aaaaaaaaaaaaaaaaaaaaaaaa", "name": "First", "model": "echo"}
@@ -1007,15 +1009,15 @@ class TestAtomicWrites:
 
 class TestConcurrentWriters:
     def test_losing_the_insert_race_neither_raises_nor_duplicates(
-        self, tmp_path, monkeypatch
+        self, db_factory, tmp_path, monkeypatch
     ):
         # Two connections to the same database. B checks for the hash
         # while it is absent - simulated by disabling its fast-path
         # check - then A wins the insert. B's own insert must quietly
         # lose: no UNIQUE error, no second set of parts.
         path = str(tmp_path / "logs.db")
-        store_a = LogStore(sqlite_utils.Database(path))
-        store_b = LogStore(sqlite_utils.Database(path))
+        store_a = LogStore(db_factory(path))
+        store_b = LogStore(db_factory(path))
         message = llm.user("Hi")
         tip = store_a.ensure_chain([message])
         monkeypatch.setattr(
@@ -1061,13 +1063,13 @@ class TestTurnInputBoundary:
 
 
 class TestUnsupportedBranchDatabases:
-    def test_existing_message_store_tables_fail_loudly(self, tmp_path):
+    def test_existing_message_store_tables_fail_loudly(self, db_factory, tmp_path):
         # The message store migration creates its tables in final form
         # and assumes they do not exist - a database carrying tables
         # from unreleased development revisions is an unsupported
         # state, and the migration fails loudly rather than dropping
         # or adapting whatever is there.
-        db = sqlite_utils.Database(str(tmp_path / "old-branch.db"))
+        db = db_factory(str(tmp_path / "old-branch.db"))
         db["messages"].create({"hash": str}, pk="hash")
         with pytest.raises(sqlite3.OperationalError):
             migrate(db)
@@ -1455,14 +1457,16 @@ class TestFragmentsEndToEnd:
         response.text()
         assert response.prompt.messages[-1].parts[0].text == response.prompt.prompt
 
-    def test_the_cli_stores_a_fragment_by_reference(self, user_path, tmpdir):
+    def test_the_cli_stores_a_fragment_by_reference(
+        self, db_factory, user_path, tmpdir
+    ):
         novel = "CALL ME ISHMAEL. " * 3000
         path = tmpdir / "novel.txt"
         path.write_text(novel, "utf-8")
         for question in ("who?", "where?", "when?"):
             run("-m", "echo", question, "-f", str(path))
 
-        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        db = db_factory(str(user_path / "logs.db"))
         assert db["fragments"].count == 1
         assert db["part_fragments"].count >= 3
         # Every question re-sends the novel; it must be stored once.
@@ -1617,10 +1621,8 @@ def forget_legacy(user_path):
     have been served by the content-addressed tables. Without it these
     tests pass against the legacy path and prove nothing.
     """
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
-    with db.conn:
+    with sqlite_utils.Database(str(user_path / "logs.db")) as db, db.conn:
         db.execute("delete from responses")
-    db.close()
 
 
 class TestLogsCommand:
@@ -1660,26 +1662,26 @@ class TestLogsCommand:
         assert json.loads(run("logs", "-m", "echo", "--json").output)
         assert json.loads(run("logs", "-m", "gpt-4o", "--json").output) == []
 
-    def test_filters_to_a_conversation(self, user_path):
+    def test_filters_to_a_conversation(self, db_factory, user_path):
         run("-m", "echo", "first")
         run("-c", "second")
         run("-m", "echo", "unrelated")
         forget_legacy(user_path)
-        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        db = db_factory(str(user_path / "logs.db"))
         thread_id = next(
             iter(db.query("select thread_id from turns order by id limit 1"))
         )["thread_id"]
         rows = json.loads(run("logs", "--cid", thread_id, "--json").output)
         assert [r["prompt"] for r in rows] == ["first", "second"]
 
-    def test_filters_by_fragment(self, user_path, tmpdir):
+    def test_filters_by_fragment(self, db_factory, user_path, tmpdir):
         path = tmpdir / "frag.txt"
         path.write_text("FRAGMENT BODY", "utf-8")
         run("-m", "echo", "with fragment", "-f", str(path))
         run("-m", "echo", "without fragment")
         forget_legacy(user_path)
 
-        db = sqlite_utils.Database(str(user_path / "logs.db"))
+        db = db_factory(str(user_path / "logs.db"))
         fragment_hash = next(iter(db["fragments"].rows))["hash"]
         rows = json.loads(run("logs", "-f", fragment_hash, "--json").output)
         # The stored prompt is the resolved text the model was sent.

@@ -2,7 +2,6 @@ import json
 from unittest.mock import ANY
 
 import pytest
-import sqlite_utils
 
 import llm
 from llm.embeddings import Entry
@@ -92,15 +91,17 @@ def test_embed_metadata(collection):
     assert entry.content == "hello yet again"
 
 
-def test_collection_embed_key(embed_key_demo):
+def test_collection_embed_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
+    request.addfinalizer(collection.db.close)
     collection.embed("1", "hello world", key="sekrit")
     assert embed_key_demo.keys == ["sekrit"]
     assert embed_key_demo.key is None
 
 
-def test_collection_embed_multi_key(embed_key_demo):
+def test_collection_embed_multi_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
+    request.addfinalizer(collection.db.close)
     collection.embed_multi([("1", "hello world"), ("2", "goodbye world")], key="sekrit")
     assert embed_key_demo.keys == ["sekrit"]
     assert embed_key_demo.key is None
@@ -166,8 +167,8 @@ def test_similar_by_id(collection):
     ),
 )
 @pytest.mark.parametrize("with_metadata", (False, True))
-def test_embed_multi(with_metadata, batch_size, expected_batches):
-    db = sqlite_utils.Database(memory=True)
+def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
+    db = db_factory(memory=True)
     collection = llm.Collection("test", db, model_id="embed-demo")
     model = collection.model()
     assert getattr(model, "batch_count", 0) == 0

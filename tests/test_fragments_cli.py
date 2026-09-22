@@ -4,7 +4,6 @@ import textwrap
 from importlib.metadata import version
 from unittest import mock
 
-import sqlite_utils
 import yaml
 from click.testing import CliRunner
 
@@ -70,9 +69,9 @@ def test_fragments_set_show_remove(user_path, tmp_path, monkeypatch):
     assert runner.invoke(cli, ["fragments", "list", "--aliases"]).output == ""
 
 
-def test_fragments_list(user_path):
+def test_fragments_list(db_factory, user_path):
     runner = CliRunner()
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    db = db_factory(str(user_path / "logs.db"))
     with db.conn:
         migrate(db)
         db["fragments"].insert_all(

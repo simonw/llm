@@ -7,7 +7,6 @@ import textwrap
 import time
 
 import pytest
-import sqlite_utils
 import yaml
 from click.testing import CliRunner
 from ulid import ULID
@@ -22,9 +21,9 @@ MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
 
 
 @pytest.fixture
-def log_path(user_path):
+def log_path(db_factory, user_path):
     log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     db["responses"].insert_all(
@@ -45,9 +44,9 @@ def log_path(user_path):
 
 
 @pytest.fixture
-def schema_log_path(user_path):
+def schema_log_path(db_factory, user_path):
     log_path = str(user_path / "logs_schema.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
@@ -137,10 +136,10 @@ def test_logs_text(log_path, usage):
     assert output == expected
 
 
-def test_logs_text_with_options(user_path):
+def test_logs_text_with_options(db_factory, user_path):
     """Test that ## Options section appears when options_json is set"""
     log_path = str(user_path / "logs_with_options.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
 
@@ -173,9 +172,9 @@ def test_logs_text_with_options(user_path):
     assert "- media_resolution: low" in output
 
 
-def test_logs_token_usage_details_are_markdown_code(user_path):
+def test_logs_token_usage_details_are_markdown_code(db_factory, user_path):
     log_path = str(user_path / "logs_token_details.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -217,9 +216,9 @@ def test_logs_token_usage_details_are_markdown_code(user_path):
         (5_582_000, "5582000ms (1h 33m 2s)"),
     ),
 )
-def test_logs_duration_in_usage_markdown(user_path, duration_ms, expected):
+def test_logs_duration_in_usage_markdown(db_factory, user_path, duration_ms, expected):
     log_path = str(user_path / "logs_duration.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -356,9 +355,9 @@ def test_logs_short(log_path, arg, usage):
     assert output == expected
 
 
-def test_logs_short_always_includes_duration_ms(user_path):
+def test_logs_short_always_includes_duration_ms(db_factory, user_path):
     log_path = str(user_path / "logs_short_duration.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -396,11 +395,11 @@ def test_logs_path(monkeypatch, env, user_path):
 
 @pytest.mark.parametrize("model", ("davinci", "curie"))
 @pytest.mark.parametrize("path_option", (None, "-p", "--path", "-d", "--database"))
-def test_logs_filtered(user_path, model, path_option):
+def test_logs_filtered(db_factory, user_path, model, path_option):
     log_path = str(user_path / "logs.db")
     if path_option:
         log_path = str(user_path / "logs_alternative.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert_all(
         {
@@ -549,9 +548,9 @@ def test_logs_search_bad_query_is_a_clean_error(logs_db):
         ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
 )
-def test_logs_search(user_path, query, extra_args, expected):
+def test_logs_search(db_factory, user_path, query, extra_args, expected):
     log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
 
     def _insert(id, text):
@@ -623,8 +622,8 @@ def test_logs_schema(schema_log_path, args, expected):
     assert result.output == expected
 
 
-def test_logs_schema_data_ids(schema_log_path):
-    db = sqlite_utils.Database(schema_log_path)
+def test_logs_schema_data_ids(db_factory, schema_log_path):
+    db = db_factory(schema_log_path)
     ulid = ULID.from_timestamp(time.time() + 100)
     db["responses"].insert(
         {
@@ -729,9 +728,9 @@ def test_schemas_list_json(schema_log_path, is_nl):
 
 
 @pytest.fixture
-def fragments_fixture(user_path):
+def fragments_fixture(db_factory, user_path):
     log_path = str(user_path / "logs_fragments.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     # Replace everything from here on
@@ -1419,10 +1418,10 @@ def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
     assert not row["reasoning"]
 
 
-def test_logs_markdown_renders_reasoning_heading(user_path):
+def test_logs_markdown_renders_reasoning_heading(db_factory, user_path):
     """Reasoning renders in a collapsible block below its heading and before Response."""
     log_path = str(user_path / "logs_with_reasoning.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -1457,11 +1456,11 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     assert "<details>" not in result.output
 
 
-def test_logs_truncate_markdown_with_options_and_schema(user_path):
+def test_logs_truncate_markdown_with_options_and_schema(db_factory, user_path):
     """-t removes the *_json keys from rows; the markdown renderer must
     render without them (it used to crash with KeyError: 'options_json')."""
     log_path = str(user_path / "logs_truncate.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
     db["responses"].insert(
