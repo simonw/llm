@@ -1154,6 +1154,19 @@ def _attachment(attachment, image_detail=None):
         }
 
 
+def _reasoning_content(message: Any) -> str | None:
+    """Reasoning text from a Chat Completions message or delta.
+
+    OpenAI-compatible servers that expose reasoning (DeepSeek, vLLM, llama.cpp
+    with --reasoning-format deepseek) send it as an extra `reasoning_content`
+    field, which the openai client keeps on the model object.
+    """
+    if message is None:
+        return None
+    value = getattr(message, "reasoning_content", None)
+    return value if isinstance(value, str) else None
+
+
 class _Shared:
     # NEVER remove or change an existing entry - only ever append new
     # ones.
@@ -1427,6 +1440,7 @@ class Chat(_Shared, KeyModel):
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
         usage = None
+        saw_reasoning = False
         if stream:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -1463,9 +1477,14 @@ class Chat(_Shared, KeyModel):
                                 tool_call_id=tool_calls[idx].id,
                             )
                 try:
-                    content = chunk.choices[0].delta.content
+                    delta = chunk.choices[0].delta
                 except IndexError:
-                    content = None
+                    delta = None
+                reasoning = _reasoning_content(delta)
+                if reasoning:
+                    saw_reasoning = True
+                    yield StreamEvent(type="reasoning", chunk=reasoning)
+                content = delta.content if delta else None
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
@@ -1507,14 +1526,20 @@ class Chat(_Shared, KeyModel):
                     chunk=tool_call.function.arguments or "",
                     tool_call_id=tool_call.id,
                 )
+            reasoning = _reasoning_content(completion.choices[0].message)
+            if reasoning:
+                saw_reasoning = True
+                yield StreamEvent(type="reasoning", chunk=reasoning)
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
+        if (
+            not saw_reasoning
+            and usage
+            and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
         ):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
@@ -1545,6 +1570,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key, async_=True)
         usage = None
+        saw_reasoning = False
         if stream:
             completion = await client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -1581,9 +1607,14 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 tool_call_id=tool_calls[idx].id,
                             )
                 try:
-                    content = chunk.choices[0].delta.content
+                    delta = chunk.choices[0].delta
                 except IndexError:
-                    content = None
+                    delta = None
+                reasoning = _reasoning_content(delta)
+                if reasoning:
+                    saw_reasoning = True
+                    yield StreamEvent(type="reasoning", chunk=reasoning)
+                content = delta.content if delta else None
                 if content:
                     yield StreamEvent(type="text", chunk=content)
             if tool_calls:
@@ -1623,14 +1654,20 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     chunk=tool_call.function.arguments or "",
                     tool_call_id=tool_call.id,
                 )
+            reasoning = _reasoning_content(completion.choices[0].message)
+            if reasoning:
+                saw_reasoning = True
+                yield StreamEvent(type="reasoning", chunk=reasoning)
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
+        if (
+            not saw_reasoning
+            and usage
+            and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
         ):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
