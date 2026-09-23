@@ -143,6 +143,7 @@ def _run_chat(
     transform_prompt=None,
     after_response=None,
     show_reasoning=True,
+    initial_multi=False,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
     click.echo(f"Chatting with {model_label}")
@@ -156,7 +157,7 @@ def _run_chat(
 
     argument_fragments = list(initial_fragments or [])
     argument_attachments = list(initial_attachments or [])
-    in_multi = False
+    in_multi = initial_multi
     accumulated = []
     accumulated_fragments = []
     accumulated_attachments = []
@@ -1243,6 +1244,7 @@ def prompt(
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option("--key", help="API key to use")
+@click.option("--multi", is_flag=True, help="Start in multi-line mode")
 @tool_options
 def chat(
     system,
@@ -1263,6 +1265,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    multi,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1409,6 +1412,7 @@ def chat(
         transform_prompt=transform_chat_prompt,
         after_response=lambda response: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
+        initial_multi=multi,
     )
 
 
