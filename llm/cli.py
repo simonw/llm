@@ -770,10 +770,12 @@ def prompt(
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
 
+    models_with_aliases = None
     if queries and not model_id:
         # Use -q options to find model with shortest model_id
         matches = []
-        for model_with_aliases in get_models_with_aliases():
+        models_with_aliases = get_models_with_aliases()
+        for model_with_aliases in models_with_aliases:
             if all(model_with_aliases.matches(q) for q in queries):
                 matches.append(model_with_aliases.model.model_id)
         if not matches:
@@ -784,14 +786,20 @@ def prompt(
 
     if show_model_options and not (conversation_id or _continue or template):
         model_id = model_id or get_default_model()
+        if models_with_aliases is None:
+            models_with_aliases = get_models_with_aliases()
         try:
             if async_:
-                get_async_model(model_id)
+                get_async_model(model_id, models_with_aliases=models_with_aliases)
             else:
-                get_model(model_id)
+                get_model(model_id, models_with_aliases=models_with_aliases)
         except UnknownModelError as ex:
             raise click.ClickException(ex)
-        click.echo(render_model_with_options(model_id, async_=async_))
+        click.echo(
+            render_model_with_options(
+                model_id, async_=async_, models_with_aliases=models_with_aliases
+            )
+        )
         return
 
     log_path = pathlib.Path(database) if database else logs_db_path()
@@ -983,16 +991,22 @@ def prompt(
             model_id = get_default_model()
 
     # Now resolve the model
+    if show_model_options and models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
     try:
         if async_:
-            model = get_async_model(model_id)
+            model = get_async_model(model_id, models_with_aliases=models_with_aliases)
         else:
-            model = get_model(model_id)
+            model = get_model(model_id, models_with_aliases=models_with_aliases)
     except UnknownModelError as ex:
         raise click.ClickException(ex)
 
     if show_model_options:
-        click.echo(render_model_with_options(model_id, async_=async_))
+        click.echo(
+            render_model_with_options(
+                model_id, async_=async_, models_with_aliases=models_with_aliases
+            )
+        )
         return
 
     if conversation is None:
@@ -2481,8 +2495,10 @@ def render_model_with_aliases(
     return output
 
 
-def render_model_with_options(model_id, *, async_=False):
-    for model_with_aliases in get_models_with_aliases():
+def render_model_with_options(model_id, *, async_=False, models_with_aliases=None):
+    if models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
+    for model_with_aliases in models_with_aliases:
         if model_matches_id_or_alias(model_with_aliases, [model_id]):
             return render_model_with_aliases(
                 model_with_aliases,

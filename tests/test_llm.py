@@ -481,6 +481,36 @@ def test_prompt_select_model_with_queries(mock_model, user_path, args, exit_code
     assert result.exit_code == exit_code
 
 
+@pytest.mark.parametrize(
+    "args,exit_code",
+    (
+        (["-q", "mock", "--no-log", "hello"], 0),
+        (["--async", "-q", "mock", "--no-log", "hello"], 0),
+        (["-q", "mock", "--options"], 0),
+        (["-m", "mock", "--options"], 0),
+        (["-m", "nonexistent", "--options"], 1),
+    ),
+)
+def test_prompt_registers_models_once(user_path, args, exit_code):
+    from llm.plugins import pm
+
+    class CountingPlugin:
+        calls = 0
+
+        @llm.hookimpl
+        def register_models(self, register):
+            self.calls += 1
+
+    plugin = CountingPlugin()
+    pm.register(plugin)
+    try:
+        result = CliRunner().invoke(cli, args, catch_exceptions=False)
+        assert result.exit_code == exit_code
+        assert plugin.calls == 1
+    finally:
+        pm.unregister(plugin)
+
+
 EXPECTED_OPTIONS = """
 OpenAI Chat: gpt-4o (aliases: 4o)
   Options:
