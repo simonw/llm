@@ -12,6 +12,7 @@ from llm.utils import (
     instantiate_from_spec,
     maybe_fenced_code,
     monotonic_ulid,
+    output_rows_as_json,
     resolve_schema_input,
     schema_dsl,
     simplify_usage_dict,
@@ -58,6 +59,28 @@ from llm.utils import (
 def test_simplify_usage_dict(input_data, expected_output):
     # This utility function is used by at least one plugin - llm-openai-plugin
     assert simplify_usage_dict(input_data) == expected_output
+
+
+def test_output_rows_as_json_with_json_cols():
+    # A row missing the json_cols key should be emitted, not crash
+    assert list(output_rows_as_json([{"id": 1}], json_cols={"content"}, compact=True)) == [
+        "[{\"id\": 1}]"
+    ]
+
+    # A NULL value in a json_cols should be passed through, not crash
+    assert list(
+        output_rows_as_json([{"content": None}], json_cols={"content"}, compact=True)
+    ) == ["[{\"content\": null}]"]
+
+    # Source rows must not be mutated by the JSON decoding
+    rows = [{"content": '{"x": 1}'}]
+    list(output_rows_as_json(rows, json_cols={"content"}))
+    assert rows[0]["content"] == '{"x": 1}'
+
+    # Actual JSON content is still decoded
+    assert list(
+        output_rows_as_json(rows, json_cols={"content"}, compact=True)
+    ) == ['[{"content": {"x": 1}}]']
 
 
 @pytest.mark.parametrize(

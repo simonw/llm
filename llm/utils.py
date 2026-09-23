@@ -241,8 +241,11 @@ def output_rows_as_json(rows, nl=False, compact=False, json_cols=()):
 
     for row, next_row in itertools.zip_longest(current_iter, next_iter):
         is_last = next_row is None
+        row = dict(row)
         for col in json_cols:
-            row[col] = json.loads(row[col])
+            value = row.get(col)
+            if isinstance(value, str) and value:
+                row[col] = json.loads(value)
 
         if nl:
             # Newline-delimited JSON: one JSON object per line
