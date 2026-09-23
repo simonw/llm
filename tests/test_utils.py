@@ -482,6 +482,11 @@ class ValueFlag:
         self.flag = flag
 
 
+class Nullable:
+    def __init__(self, nullable=False):
+        self.nullable = nullable
+
+
 @pytest.mark.parametrize(
     "spec, expected_cls, expected_attrs",
     [
@@ -497,10 +502,13 @@ class ValueFlag:
         ),
         ("ValueFlag(flag=true)", ValueFlag, {"flag": True}),
         ("ValueFlag(value=123, flag=false)", ValueFlag, {"value": 123, "flag": False}),
+        ("Nullable(nullable=true)", Nullable, {"nullable": True}),
     ],
 )
 def test_instantiate_valid(spec, expected_cls, expected_attrs):
-    obj = instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+    obj = instantiate_from_spec(
+        {"Files": Files, "ValueFlag": ValueFlag, "Nullable": Nullable}, spec
+    )
     assert isinstance(obj, expected_cls)
     for key, val in expected_attrs.items():
         assert getattr(obj, key) == val
