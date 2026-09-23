@@ -37,7 +37,7 @@ def mimetype_from_string(content) -> str | None:
     try:
         type_ = puremagic.from_string(content, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
-    except puremagic.PureError:
+    except (puremagic.PureError, puremagic.main.PureValueError):
         return None
 
 
@@ -45,7 +45,7 @@ def mimetype_from_path(path) -> str | None:
     try:
         type_ = puremagic.from_file(path, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
-    except puremagic.PureError:
+    except (puremagic.PureError, puremagic.main.PureValueError):
         return None
 
 
@@ -159,7 +159,7 @@ def simplify_usage_dict(d):
             cleaned = {
                 k: remove_empty_and_zero(v)
                 for k, v in obj.items()
-                if v != 0 and v != {}
+                if (v is False) or (v != 0 and v != {})
             }
             return {k: v for k, v in cleaned.items() if v is not None and v != {}}
         return obj

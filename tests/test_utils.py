@@ -11,6 +11,8 @@ from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
+    mimetype_from_path,
+    mimetype_from_string,
     monotonic_ulid,
     resolve_schema_input,
     schema_dsl,
@@ -53,11 +55,34 @@ from llm.utils import (
             },
             {"level1": {"level2": {"another_value": 1}}, "level3": {"valid_token": 10}},
         ),
+        (
+            {"flag": False, "zero": 0},
+            {"flag": False},
+        ),
+        (
+            {
+                "prompt_tokens_details": {"cached_tokens": 0, "completed": False},
+                "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 1},
+            },
+            {
+                "prompt_tokens_details": {"completed": False},
+                "completion_tokens_details": {"audio_tokens": 1},
+            },
+        ),
     ],
 )
 def test_simplify_usage_dict(input_data, expected_output):
     # This utility function is used by at least one plugin - llm-openai-plugin
     assert simplify_usage_dict(input_data) == expected_output
+
+
+def test_mimetype_from_empty_input(tmp_path):
+    # puremagic raises PureValueError (not a subclass of PureError) for
+    # empty content - these should be handled gracefully, not crash
+    empty_file = tmp_path / "empty.bin"
+    empty_file.write_bytes(b"")
+    assert mimetype_from_path(str(empty_file)) is None
+    assert mimetype_from_string(b"") is None
 
 
 @pytest.mark.parametrize(
