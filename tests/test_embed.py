@@ -107,6 +107,33 @@ def test_collection_embed_multi_key(embed_key_demo, request):
     assert embed_key_demo.key is None
 
 
+def test_embed_multi_deduplicates_by_content_not_id(embed_demo, db_factory, request):
+    # embed_multi() deduplicates on content_hash, so identical content under a
+    # second ID must not be embedded twice. It used to key on the row's id,
+    # duplicating the content and skipping genuinely new content in the batch.
+    db = db_factory(memory=True)
+    collection = llm.Collection("test", db, model=embed_demo)
+    request.addfinalizer(collection.db.close)
+    collection.embed("1", "hello world")
+    assert collection.count() == 1
+    assert len(embed_demo.embedded_content) == 1
+
+    # Same content under a brand-new id: must be skipped, not re-embedded.
+    collection.embed_multi([("2", "hello world")])
+    assert collection.count() == 1
+    assert len(embed_demo.embedded_content) == 1
+
+    # A mixed batch still embeds genuinely new content.
+    collection.embed_multi([("3", "hello world"), ("4", "fresh content")])
+    assert collection.count() == 2
+    assert len(embed_demo.embedded_content) == 2
+    rows = list(collection.db["embeddings"].rows)
+    assert {(row["id"], row["content_hash"]) for row in rows} == {
+        ("1", collection.content_hash("hello world")),
+        ("4", collection.content_hash("fresh content")),
+    }
+
+
 def test_collection(collection):
     assert collection.id == 1
     assert collection.count() == 2
