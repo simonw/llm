@@ -62,7 +62,7 @@ from llm import (
     set_default_model,
     user_dir,
 )
-from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
+from llm.models import _BaseChainResponse, _BaseConversation
 
 from .logs import (
     LogStore,
@@ -1148,7 +1148,7 @@ def prompt(
         raise click.ClickException(str(ex))
 
     if usage:
-        if isinstance(response, ChainResponse):
+        if isinstance(response, _BaseChainResponse):
             responses = response._responses
         else:
             responses = [response]
