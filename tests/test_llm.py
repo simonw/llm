@@ -550,6 +550,31 @@ def test_prompt_options_shows_selected_model_options(user_path):
     assert not (user_path / "logs.db").exists()
 
 
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["-m", "mock", "-o", "max_token", "5", "hello"],
+        ["chat", "-m", "mock", "-o", "max_token", "5"],
+        ["-m", "mock", "-o", "max_token", "5", "--save", "template"],
+    ),
+)
+def test_unknown_model_option_suggests_options(mock_model, user_path, args):
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 1
+    assert "max_token\n  Extra inputs are not permitted" in result.output
+    assert "llm -m mock --options" in result.output
+
+
+def test_invalid_model_option_value_does_not_suggest_options(mock_model, user_path):
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "-o", "max_tokens", "not-a-number", "hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 1
+    assert "llm -m mock --options" not in result.output
+
+
 def test_llm_models_async(user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["models", "--async"], catch_exceptions=False)
