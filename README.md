@@ -376,6 +376,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
 * [OpenTelemetry](https://llm.datasette.io/en/stable/telemetry.html)
   * [Turning it on](https://llm.datasette.io/en/stable/telemetry.html#turning-it-on)
   * [Spans](https://llm.datasette.io/en/stable/telemetry.html#spans)
+  * [Metrics](https://llm.datasette.io/en/stable/telemetry.html#metrics)
   * [How spans nest](https://llm.datasette.io/en/stable/telemetry.html#how-spans-nest)
   * [Limitations](https://llm.datasette.io/en/stable/telemetry.html#limitations)
   * [Privacy](https://llm.datasette.io/en/stable/telemetry.html#privacy)

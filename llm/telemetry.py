@@ -1,7 +1,8 @@
 """OpenTelemetry spans for llm (``opentelemetry-api`` only; a no-op without
 an SDK): a ``chat {model_id}`` CLIENT span per ``execute()`` call and an
-``execute_tool {name}`` span per tool call. Never records prompt, response,
-tool argument or error message text. See docs/telemetry.md for lifetimes."""
+``execute_tool {name}`` span per tool call, plus ``gen_ai.client.*``
+histograms for model calls. Never records prompt, response, tool argument or
+error message text. See docs/telemetry.md for lifetimes."""
 
 import asyncio
 import importlib.metadata
@@ -10,7 +11,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from opentelemetry import context, trace
+from opentelemetry import context, metrics, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
 try:
@@ -19,6 +20,7 @@ except importlib.metadata.PackageNotFoundError:  # pragma: no cover
     _version = "unknown"
 
 tracer = trace.get_tracer("llm", _version)
+meter = metrics.get_meter("llm", _version)
 
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
 GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
@@ -39,6 +41,29 @@ LLM_TOOL_OUTCOME = "llm.tool.outcome"
 
 # Cancellation is a designed way for work to end: outcome cancelled, status UNSET
 _CANCELLED = (asyncio.CancelledError, KeyboardInterrupt)
+
+# Histograms, with the semconv-recommended bucket boundaries. Attributes
+# are bounded: operation, provider, request model, error.type - never ids.
+GEN_AI_TOKEN_TYPE = "gen_ai.token.type"
+token_usage = meter.create_histogram(
+    "gen_ai.client.token.usage",
+    unit="{token}",
+    description="Input and output tokens per model call",
+    explicit_bucket_boundaries_advisory=[4**i for i in range(14)],
+)
+_SECONDS = [round(0.01 * 2**i, 2) for i in range(14)]
+operation_duration = meter.create_histogram(
+    "gen_ai.client.operation.duration",
+    unit="s",
+    description="Duration of a model call",
+    explicit_bucket_boundaries_advisory=_SECONDS,
+)
+time_to_first_chunk = meter.create_histogram(
+    "gen_ai.client.operation.time_to_first_chunk",
+    unit="s",
+    description="Time to the first chunk of a streaming model call",
+    explicit_bucket_boundaries_advisory=_SECONDS,
+)
 
 # Semconv well-known names for plugins whose package name differs.
 _PROVIDER_ALIASES = {
@@ -69,18 +94,25 @@ class ChatSpan:
     def __init__(self, response: Any):
         self.response = response
         self.stream = bool(response.stream)
-        self.provider = provider_name_for(response.model)
-        self.model_id = getattr(response.model, "model_id", None) or "unknown"
-        self.started = time.perf_counter()
+        model_id = getattr(response.model, "model_id", None) or "unknown"
+        # Bounded attributes, shared by the span and the metrics
+        self.attributes = {
+            GEN_AI_OPERATION_NAME: "chat",
+            GEN_AI_PROVIDER_NAME: provider_name_for(response.model),
+            GEN_AI_REQUEST_MODEL: model_id,
+        }
+        # Wall-clock start for the span; durations are measured monotonically
+        self.started = time.time_ns()
+        self._mono = time.perf_counter_ns()
         self.first_chunk: float | None = None
         self.last_step: int | None = None
-        self.span = tracer.start_span(f"chat {self.model_id}", kind=SpanKind.CLIENT)
+        self.span = tracer.start_span(
+            f"chat {model_id}", kind=SpanKind.CLIENT, start_time=self.started
+        )
         self.context = trace.set_span_in_context(self.span)
         self.span.set_attributes(
             {
-                GEN_AI_OPERATION_NAME: "chat",
-                GEN_AI_PROVIDER_NAME: self.provider,
-                GEN_AI_REQUEST_MODEL: self.model_id,
+                **self.attributes,
                 GEN_AI_REQUEST_STREAM: self.stream,
                 LLM_RESPONSE_ID: str(response.id),
             }
@@ -99,9 +131,9 @@ class ChatSpan:
             context.detach(token)
 
     def chunk(self) -> None:
-        self.last_step = time.time_ns()
+        self.last_step = time.perf_counter_ns()
         if self.first_chunk is None:
-            self.first_chunk = time.perf_counter() - self.started
+            self.first_chunk = (self.last_step - self._mono) / 1e9
 
     def fail(self, exception: BaseException) -> None:
         "End as ``cancelled`` (status UNSET) or ``error`` (status ERROR)."
@@ -117,15 +149,27 @@ class ChatSpan:
             span.set_status(Status(StatusCode.ERROR))
         if self.stream and self.first_chunk is not None:
             span.set_attribute(GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK, self.first_chunk)
-        for attribute, value in (
-            (GEN_AI_USAGE_INPUT_TOKENS, self.response.input_tokens),
-            (GEN_AI_USAGE_OUTPUT_TOKENS, self.response.output_tokens),
+        # Metrics are recorded whether or not the span is sampled
+        attributes = dict(self.attributes)
+        for attribute, token_type, value in (
+            (GEN_AI_USAGE_INPUT_TOKENS, "input", self.response.input_tokens),
+            (GEN_AI_USAGE_OUTPUT_TOKENS, "output", self.response.output_tokens),
         ):
             if value is not None:
                 span.set_attribute(attribute, value)
-        # An abandoned span ends at its last chunk, not whenever the
+                token_usage.record(value, {**attributes, GEN_AI_TOKEN_TYPE: token_type})
+        if self.stream and self.first_chunk is not None:
+            time_to_first_chunk.record(self.first_chunk, attributes)
+        # An abandoned call ends at its last chunk, not whenever the
         # generator happened to be closed or garbage collected.
-        span.end(end_time=self.last_step if outcome == "abandoned" else None)
+        ended = time.perf_counter_ns()
+        if outcome == "abandoned" and self.last_step is not None:
+            ended = self.last_step
+        elapsed = ended - self._mono
+        if error_type is not None:
+            attributes[ERROR_TYPE] = error_type
+        operation_duration.record(elapsed / 1e9, attributes)
+        span.end(end_time=self.started + elapsed)
 
 
 def traced(response: Any, chunks: Any) -> Iterator[Any]:

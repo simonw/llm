@@ -2,7 +2,12 @@ import asyncio
 import json
 
 import pytest
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.sdk.metrics import Histogram, MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
+    InMemoryMetricReader,
+)
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
@@ -13,6 +18,10 @@ from opentelemetry.trace import SpanKind, StatusCode
 import llm
 
 _exporter = InMemorySpanExporter()
+# Delta temporality: each collection only holds points since the last one
+_reader = InMemoryMetricReader(
+    preferred_temporality={Histogram: AggregationTemporality.DELTA}
+)
 
 
 @pytest.fixture(scope="session")
@@ -21,6 +30,7 @@ def _provider():
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(_exporter))
     trace.set_tracer_provider(provider)
+    metrics.set_meter_provider(MeterProvider(metric_readers=[_reader]))
     return provider
 
 
@@ -317,3 +327,79 @@ def test_tool_pause_is_not_an_error(exporter, mode):
     assert span.attributes["llm.tool.outcome"] == "paused"
     assert span.status.status_code == StatusCode.UNSET
     assert "error.type" not in span.attributes
+
+
+SECONDS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12)
+SECONDS += (10.24, 20.48, 40.96, 81.92)
+
+
+@pytest.fixture
+def collect_metrics(_provider):
+    _reader.get_metrics_data()  # discard points from earlier tests
+
+    def collect():
+        data = _reader.get_metrics_data()
+        return {
+            metric.name: [(dict(p.attributes), p) for p in metric.data.data_points]
+            for resource in (data.resource_metrics if data else [])
+            for scope in resource.scope_metrics
+            for metric in scope.metrics
+        }
+
+    return collect
+
+
+@pytest.mark.parametrize("stream", (True, False))
+def test_metrics(exporter, collect_metrics, mock_model, stream):
+    mock_model.enqueue(["hello ", "world"])
+    mock_model.prompt("three word prompt", stream=stream).text()
+    points = collect_metrics()
+    attributes = {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "unknown",
+        "gen_ai.request.model": "mock",
+    }
+    tokens = points["gen_ai.client.token.usage"]
+    by_type = {a.pop("gen_ai.token.type"): (a, p.sum) for a, p in tokens}
+    assert by_type == {"input": (attributes, 3), "output": (attributes, 2)}
+    assert tokens[0][1].explicit_bounds == tuple(4**i for i in range(14))
+    ((duration_attributes, duration),) = points["gen_ai.client.operation.duration"]
+    assert duration_attributes == attributes
+    assert duration.count == 1
+    assert duration.explicit_bounds == SECONDS
+    (span,) = chat_spans(exporter)
+    assert duration.sum == (span.end_time - span.start_time) / 1e9
+    first_chunk = points.get("gen_ai.client.operation.time_to_first_chunk", [])
+    assert [a for a, _ in first_chunk] == ([attributes] if stream else [])
+    assert all(p.explicit_bounds == SECONDS for _, p in first_chunk)
+
+
+async def _cancel_mid_stream():
+    task = asyncio.create_task(SlowAsyncModel().prompt("hi").text())
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.parametrize(
+    "outcome,error_type",
+    [("error", "ValueError"), ("cancelled", "CancelledError"), ("abandoned", None)],
+)
+def test_metrics_duration_outcomes(
+    exporter, collect_metrics, mock_model, outcome, error_type
+):
+    if outcome == "error":
+        with pytest.raises(ValueError):
+            FailingModel().prompt("hi").text()
+    elif outcome == "cancelled":
+        asyncio.run(_cancel_mid_stream())
+    else:
+        mock_model.enqueue(["a", "b"])
+        for _ in mock_model.prompt("hi"):
+            break
+    ((attributes, duration),) = collect_metrics()["gen_ai.client.operation.duration"]
+    assert attributes.get("error.type") == error_type
+    (span,) = chat_spans(exporter)
+    assert span.attributes["llm.response.outcome"] == outcome
+    assert duration.sum == (span.end_time - span.start_time) / 1e9

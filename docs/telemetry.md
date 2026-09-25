@@ -1,7 +1,7 @@
 (telemetry)=
 # OpenTelemetry
 
-LLM emits [OpenTelemetry](https://opentelemetry.io/) spans for every model call and every tool call, following the [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). It depends on `opentelemetry-api` only, so nothing is recorded or exported unless you configure an OpenTelemetry SDK. Without one, every span is a no-op.
+LLM emits [OpenTelemetry](https://opentelemetry.io/) spans for every model call and every tool call, plus metrics for model calls, following the [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). It depends on `opentelemetry-api` only, so nothing is recorded or exported unless you configure an OpenTelemetry SDK. Without one, every span and metric is a no-op.
 
 ## Turning it on
 
@@ -47,6 +47,18 @@ Outcomes:
 - `paused` (tool spans only): the tool raised {ref}`PauseChain <python-api-tools-pause>`. Status unset.
 
 A replayed response, or one loaded from the logs database, does not produce a span.
+
+## Metrics
+
+Each model call also records three histograms, with the bucket boundaries the semantic conventions recommend:
+
+| Metric | Unit | Recorded |
+|---|---|---|
+| `gen_ai.client.token.usage` | `{token}` | Once each for input and output tokens, when the model reports them, with `gen_ai.token.type` set to `input` or `output` |
+| `gen_ai.client.operation.duration` | `s` | Once per call, including failed, cancelled and abandoned calls. Same duration as the `chat` span |
+| `gen_ai.client.operation.time_to_first_chunk` | `s` | Once per streaming call that produced a chunk, matching the span attribute. Not recorded for non-streaming calls |
+
+Their attributes are `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model` and, for the duration of a failed or cancelled call, `error.type`. Metrics never carry IDs. Metrics need a meter provider: `opentelemetry-instrument` configures one for you, controlled by `OTEL_METRICS_EXPORTER`. The duration of an abandoned call runs to the last chunk received.
 
 ## How spans nest
 
