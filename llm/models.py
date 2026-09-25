@@ -1966,12 +1966,13 @@ class Response(_BaseResponse):
 
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
-                if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(
-                        tool.implementation(**implementation_arguments)
-                    )
-                else:
-                    result = tool.implementation(**implementation_arguments)
+                with telemetry.tool_span(tool_call):
+                    if inspect.iscoroutinefunction(tool.implementation):
+                        result = asyncio.run(
+                            tool.implementation(**implementation_arguments)
+                        )
+                    else:
+                        result = tool.implementation(**implementation_arguments)
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
@@ -2358,9 +2359,10 @@ class AsyncResponse(_BaseResponse):
                     attachments = []
 
                     try:
-                        result = await tool.implementation(
-                            **_implementation_arguments(tool, tc)
-                        )
+                        with telemetry.tool_span(tc):
+                            result = await tool.implementation(
+                                **_implementation_arguments(tool, tc)
+                            )
                         if isinstance(result, ToolOutput):
                             attachments.extend(result.attachments)
                             result = result.output
@@ -2426,9 +2428,10 @@ class AsyncResponse(_BaseResponse):
                 attachments = []
 
                 try:
-                    res = tool.implementation(**_implementation_arguments(tool, tc))
-                    if inspect.isawaitable(res):
-                        res = await res
+                    with telemetry.tool_span(tc):
+                        res = tool.implementation(**_implementation_arguments(tool, tc))
+                        if inspect.isawaitable(res):
+                            res = await res
                     if isinstance(res, ToolOutput):
                         attachments.extend(res.attachments)
                         res = res.output

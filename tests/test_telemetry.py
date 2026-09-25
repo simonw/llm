@@ -80,23 +80,6 @@ async def test_async_prompt_and_conversation(exporter, async_mock_model):
     assert span.attributes["llm.response.id"] == response.id
 
 
-def test_chain_one_span_per_round_trip(exporter):
-    def multiply(a: int, b: int) -> int:
-        return a * b
-
-    model = llm.get_model("echo")
-    chain = model.chain(
-        json.dumps(
-            {"tool_calls": [{"name": "multiply", "arguments": {"a": 2, "b": 3}}]}
-        ),
-        tools=[multiply],
-    )
-    chain.text()
-    spans = chat_spans(exporter)
-    assert [s.name for s in spans] == ["chat echo", "chat echo"]
-    assert {s.attributes["gen_ai.provider.name"] for s in spans} == {"echo"}
-
-
 class FailingModel(llm.Model):
     model_id = "failing"
     can_stream = True
@@ -236,3 +219,101 @@ async def test_parent_is_callers_span_and_provider_spans_nest(exporter, is_async
     chat = spans["chat nesting"]
     assert chat.parent.span_id == caller.get_span_context().span_id
     assert spans["http"].parent.span_id == chat.context.span_id
+
+
+def _work(x: int) -> int:
+    with tracer.start_as_current_span("db"):
+        return x * 2
+
+
+def _boom() -> str:
+    raise ValueError("secret tool error")
+
+
+def _pause() -> str:
+    raise llm.PauseChain("waiting")
+
+
+async def _async_work(x: int) -> int:
+    return _work(x)
+
+
+async def _async_boom() -> str:
+    return _boom()
+
+
+async def _async_pause() -> str:
+    return _pause()
+
+
+def _run_chain(mode, calls):
+    is_async, async_tool = mode
+    functions = (
+        (_async_work, _async_boom, _async_pause)
+        if async_tool
+        else (_work, _boom, _pause)
+    )
+    tools = [
+        llm.Tool.function(fn, name=name)
+        for fn, name in zip(functions, ("work", "boom", "pause"))
+    ]
+    model = llm.get_async_model("echo") if is_async else llm.get_model("echo")
+    chain = model.chain(json.dumps({"tool_calls": calls}), tools=tools)
+    with tracer.start_as_current_span("caller") as caller:
+        if is_async:
+            asyncio.run(chain.text())
+        else:
+            chain.text()
+    return chain, caller
+
+
+MODES = pytest.mark.parametrize(
+    "mode",
+    [(False, False), (False, True), (True, False), (True, True)],
+    ids=[
+        "sync-model-sync-tool",
+        "sync-model-async-tool",
+        "async-model-sync-tool",
+        "async-model-async-tool",
+    ],
+)
+
+
+@MODES
+def test_tool_spans(exporter, mode):
+    calls = [{"name": "work", "arguments": {"x": 2}}, {"name": "boom"}]
+    chain, caller = _run_chain(mode, calls)
+    spans = {s.name: s for s in exporter.get_finished_spans()}
+    # One chat span per model round-trip
+    chats = chat_spans(exporter)
+    assert [s.name for s in chats] == ["chat echo", "chat echo"]
+    assert {s.attributes["gen_ai.provider.name"] for s in chats} == {"echo"}
+    work, boom = spans["execute_tool work"], spans["execute_tool boom"]
+    # Tools run between chat spans, so they are children of the caller's span
+    assert work.parent.span_id == caller.get_span_context().span_id
+    assert work.kind == SpanKind.INTERNAL
+    assert spans["db"].parent.span_id == work.context.span_id
+    attributes = dict(work.attributes)
+    assert attributes.pop("gen_ai.tool.call.id").startswith("tc_")
+    assert attributes == {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "work",
+        "llm.tool.outcome": "ok",
+    }
+    assert boom.attributes["llm.tool.outcome"] == "error"
+    assert boom.attributes["error.type"] == "ValueError"
+    assert boom.status.status_code == StatusCode.ERROR
+    assert "secret" not in repr(dict(boom.attributes))
+    outputs = [r.output for r in chain._responses[1].prompt.tool_results]
+    assert outputs == ["4", "Error: secret tool error"]
+
+
+@MODES
+def test_tool_pause_is_not_an_error(exporter, mode):
+    with pytest.raises(llm.PauseChain):
+        _run_chain(mode, [{"name": "pause"}])
+    spans = exporter.get_finished_spans()
+    (span,) = [s for s in spans if s.name.startswith("execute_tool ")]
+    assert span.attributes["llm.tool.outcome"] == "paused"
+    assert span.status.status_code == StatusCode.UNSET
+    assert "error.type" not in span.attributes

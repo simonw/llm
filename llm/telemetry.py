@@ -1,7 +1,7 @@
 """OpenTelemetry spans for llm (``opentelemetry-api`` only; a no-op without
-an SDK): a ``chat {model_id}`` CLIENT span per ``execute()`` call. Never
-records prompt, response or error message text. See docs/telemetry.md for
-span lifetimes and outcomes."""
+an SDK): a ``chat {model_id}`` CLIENT span per ``execute()`` call and an
+``execute_tool {name}`` span per tool call. Never records prompt, response,
+tool argument or error message text. See docs/telemetry.md for lifetimes."""
 
 import asyncio
 import importlib.metadata
@@ -32,6 +32,13 @@ ERROR_TYPE = "error.type"
 LLM_RESPONSE_ID = "llm.response.id"
 # ok | error | cancelled | abandoned
 LLM_RESPONSE_OUTCOME = "llm.response.outcome"
+GEN_AI_TOOL_NAME = "gen_ai.tool.name"
+GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"
+# ok | error | cancelled | paused
+LLM_TOOL_OUTCOME = "llm.tool.outcome"
+
+# Cancellation is a designed way for work to end: outcome cancelled, status UNSET
+_CANCELLED = (asyncio.CancelledError, KeyboardInterrupt)
 
 # Semconv well-known names for plugins whose package name differs.
 _PROVIDER_ALIASES = {
@@ -98,8 +105,7 @@ class ChatSpan:
 
     def fail(self, exception: BaseException) -> None:
         "End as ``cancelled`` (status UNSET) or ``error`` (status ERROR)."
-        cancelled = isinstance(exception, (asyncio.CancelledError, KeyboardInterrupt))
-        outcome = "cancelled" if cancelled else "error"
+        outcome = "cancelled" if isinstance(exception, _CANCELLED) else "error"
         self.end(outcome, error_type=type(exception).__qualname__)
 
     def end(self, outcome: str = "ok", error_type: str | None = None) -> None:
@@ -172,3 +178,36 @@ async def atraced(response: Any, chunks: Any) -> AsyncIterator[Any]:
         chat.fail(exception)
         raise
     chat.end()
+
+
+@contextmanager
+def tool_span(tool_call: Any) -> Iterator[None]:
+    """``execute_tool {name}`` around one tool implementation call. A
+    ``PauseChain`` is outcome ``paused`` with status UNSET, not an error."""
+    from .models import PauseChain
+
+    with tracer.start_as_current_span(
+        f"execute_tool {tool_call.name}",
+        kind=SpanKind.INTERNAL,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        span.set_attributes(
+            {GEN_AI_OPERATION_NAME: "execute_tool", GEN_AI_TOOL_NAME: tool_call.name}
+        )
+        if tool_call.tool_call_id:
+            span.set_attribute(GEN_AI_TOOL_CALL_ID, tool_call.tool_call_id)
+        outcome = "ok"
+        try:
+            yield
+        except PauseChain:
+            outcome = "paused"
+            raise
+        except BaseException as exception:
+            outcome = "cancelled" if isinstance(exception, _CANCELLED) else "error"
+            span.set_attribute(ERROR_TYPE, type(exception).__qualname__)
+            if outcome == "error":
+                span.set_status(Status(StatusCode.ERROR))
+            raise
+        finally:
+            span.set_attribute(LLM_TOOL_OUTCOME, outcome)
