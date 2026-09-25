@@ -31,6 +31,7 @@ from typing import (
 
 import httpx2
 
+from . import telemetry
 from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
@@ -2069,7 +2070,7 @@ class Response(_BaseResponse):
         else:
             raise TypeError("self.model must be a Model or KeyModel")
 
-        for chunk in generator:
+        for chunk in telemetry.traced(self, generator):
             assert chunk is not None
             yield chunk
 
@@ -2531,6 +2532,7 @@ class AsyncResponse(_BaseResponse):
                 )
             else:
                 raise ValueError("self.model must be an AsyncModel or AsyncKeyModel")
+            self._generator = telemetry.atraced(self, self._generator)
 
     async def _async_finalize(self):
         if self.conversation:
