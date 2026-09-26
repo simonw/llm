@@ -466,3 +466,33 @@ class TestNoUndeclaredKeys:
         from llm.serialization import PromptDict
 
         assert set(d["prompt"].keys()) <= _allowed(PromptDict)
+
+
+class TestDatetimeUtcRoundTrip:
+    def test_from_dict_restores_datetime_utc(self, mock_model):
+        mock_model.enqueue(["answer"])
+        r = mock_model.prompt("q")
+        r.text()
+
+        d = r.to_dict()
+        assert d["datetime_utc"], "to_dict() should record the start time"
+
+        restored = llm.Response.from_dict(d)
+        assert restored.datetime_utc() == d["datetime_utc"]
+        assert restored.to_dict()["datetime_utc"] == d["datetime_utc"]
+
+    def test_from_dict_restores_datetime_utc_async(self, async_mock_model):
+        import asyncio
+
+        async_mock_model.enqueue(["answer"])
+
+        async def run():
+            r = async_mock_model.prompt("q")
+            await r.text()
+            return r.to_dict()
+
+        d = asyncio.run(run())
+        assert d["datetime_utc"]
+
+        restored = llm.AsyncResponse.from_dict(d)
+        assert restored.to_dict()["datetime_utc"] == d["datetime_utc"]
