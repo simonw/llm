@@ -152,6 +152,19 @@ def test_similar_prefixed(collection):
     ]
 
 
+def test_similar_prefix_is_not_a_like_pattern():
+    # "_" and "%" are wildcards in SQL LIKE; --prefix is a literal prefix
+    collection = llm.Collection("wild", model_id="embed-demo")
+    collection.embed("my_docs/alpha", "alpha one")
+    collection.embed("myXdocs/beta", "beta two")
+    collection.embed("my docs/gamma", "gamma three")
+    try:
+        results = collection.similar("alpha one", number=10, prefix="my_docs/")
+        assert sorted(entry.id for entry in results) == ["my_docs/alpha"]
+    finally:
+        collection.db.close()
+
+
 def test_similar_by_id(collection):
     results = list(collection.similar_by_id("1"))
     assert results == [
