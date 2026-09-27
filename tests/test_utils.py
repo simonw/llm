@@ -317,6 +317,28 @@ def test_schema_dsl_duplicate_field_name():
     assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
 
 
+def test_schema_dsl_comma_in_description_hint():
+    # A comma inside a description in the comma-separated form is misparsed as
+    # a new field; the error should hint at using the newline-separated form.
+    with pytest.raises(ValueError) as ex:
+        schema_dsl("name: full name, including any suffix")
+    message = str(ex.value)
+    assert message.startswith("Invalid schema DSL: unknown type")
+    assert "newline-separated form" in message
+    # The newline-separated form accepts commas in descriptions.
+    assert schema_dsl("name: full name, including any suffix\nage int: years") == {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "full name, including any suffix",
+            },
+            "age": {"type": "integer", "description": "years"},
+        },
+        "required": ["name", "age"],
+    }
+
+
 def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
     with pytest.raises(click.BadParameter) as ex:
         resolve_schema_input(None, "name, age badtype", load_template=None)

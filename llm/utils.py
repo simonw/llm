@@ -411,10 +411,23 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
             except KeyError:
                 # 'from None' hides the internal mapping KeyError from the
                 # user-facing traceback:
-                raise ValueError(
+                message = (
                     f"Invalid schema DSL: unknown type {type_indicator!r} "
                     f"for field {field_name!r}"
-                ) from None
+                )
+                # A common cause is a comma inside a description while using
+                # the comma-separated form, e.g. "name: full name, or alias".
+                # The comma is treated as a field separator, so the text after
+                # it is parsed as a new field. Point users at the
+                # newline-separated form, which allows commas in descriptions.
+                if "\n" not in schema_dsl and "," in schema_dsl and ":" in schema_dsl:
+                    message += (
+                        ". If this looks like part of a description, note that "
+                        "commas separate fields in the comma-separated form; "
+                        "use the newline-separated form to include commas in a "
+                        "description."
+                    )
+                raise ValueError(message) from None
 
         if field_name in json_schema["properties"]:
             raise ValueError(f"Invalid schema DSL: duplicate field name {field_name!r}")
