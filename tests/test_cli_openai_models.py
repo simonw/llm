@@ -1,6 +1,7 @@
 import json
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 import llm
@@ -151,6 +152,32 @@ def test_effort_shortcut_errors_for_model_without_reasoning():
     # A model that declares no reasoning effort option should reject --effort.
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "echo", "-e", "high", "hi"])
+    assert result.exit_code == 1
+    assert "does not support --effort" in result.output
+
+
+def test_effort_shortcut_saved_in_template(tmpdir, monkeypatch):
+    # The -e/--effort shortcut should be resolved and stored when saving a
+    # template, just like an explicit -o option.
+    user_dir = tmpdir / "user"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-5", "-e", "low", "--save", "effort_tpl"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    template_path = user_dir / "templates" / "effort_tpl.yaml"
+    assert template_path.exists()
+    saved = yaml.safe_load(template_path.read_text("utf-8"))
+    assert saved["options"]["reasoning_effort"] == "low"
+
+
+def test_effort_shortcut_save_errors_for_model_without_reasoning(tmpdir, monkeypatch):
+    monkeypatch.setenv("LLM_USER_PATH", str(tmpdir / "user"))
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "echo", "-e", "high", "--save", "bad_tpl"])
     assert result.exit_code == 1
     assert "does not support --effort" in result.output
 

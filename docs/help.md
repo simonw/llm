@@ -155,6 +155,9 @@ Options:
   --cl, --chain-limit INTEGER     How many chained tool responses to allow,
                                   default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
+  -e, --effort TEXT               Reasoning effort, e.g. low/medium/high.
+                                  Shortcut that maps to the model's reasoning
+                                  effort option.
   --options                       Show options for the selected model
   --schema TEXT                   Schema DSL, JSON schema, filepath or ID
   --schema-multi TEXT             Schema for multiple results
