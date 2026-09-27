@@ -152,6 +152,23 @@ And then adding code to your `.execute()` method that checks for `prompt.schema`
 
 Check the [llm-gemini](https://github.com/simonw/llm-gemini) and [llm-anthropic](https://github.com/simonw/llm-anthropic) plugins for example of this pattern in action.
 
+(advanced-model-plugins-reasoning-effort)=
+
+## Supporting the reasoning effort shortcut
+
+If your model exposes a reasoning-effort option (however it is named), you can opt in to the top-level `llm -e/--effort` shortcut by setting the `reasoning_effort_option` class attribute to the name of that option:
+
+```python
+class MyModel(llm.KeyModel):
+    ...
+    reasoning_effort_option = "thinking_effort"
+
+    class Options(llm.Options):
+        thinking_effort: Optional[str] = None
+```
+
+When the user runs `llm -m mymodel -e high ...`, LLM sets that option (here `thinking_effort`) to `high`. An explicit `-o thinking_effort ...` always takes precedence. Models that leave `reasoning_effort_option` set to `None` (the default) reject `-e` with an error.
+
 (advanced-model-plugins-tools)=
 
 ## Supporting tools

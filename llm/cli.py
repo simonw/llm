@@ -609,6 +609,15 @@ def cli():
     help="key/value options for the model",
 )
 @click.option(
+    "-e",
+    "--effort",
+    "effort",
+    help=(
+        "Reasoning effort, e.g. low/medium/high. Shortcut that maps to the "
+        "model's reasoning effort option."
+    ),
+)
+@click.option(
     "show_model_options",
     "--options",
     is_flag=True,
@@ -696,6 +705,7 @@ def prompt(
     tools_approve,
     chain_limit,
     options,
+    effort,
     show_model_options,
     schema_input,
     schema_multi,
@@ -1008,6 +1018,16 @@ def prompt(
 
     # Validate options
     validated_options = {}
+    # The top-level -e/--effort shortcut maps to the model's reasoning effort
+    # option, if it declares one. An explicit -o for that same option wins.
+    if effort is not None:
+        reasoning_option = getattr(model, "reasoning_effort_option", None)
+        if reasoning_option is None:
+            raise click.ClickException(
+                f"Model {model.model_id} does not support --effort"
+            )
+        if not any(name == reasoning_option for name, _ in options):
+            options = (*options, (reasoning_option, effort))
     if options:
         # Validate with pydantic
         try:

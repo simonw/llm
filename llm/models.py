@@ -3242,6 +3242,12 @@ class _BaseModel(ABC, _get_key_mixin):
     supports_tools = False
     supports_conversation = True
 
+    # Name of the option (on this model's Options class) that controls
+    # reasoning effort, if any. Plugins set this so the top-level
+    # ``llm -e/--effort`` shortcut knows which option to populate. ``None``
+    # means the model has no reasoning-effort concept.
+    reasoning_effort_option: ClassVar[str | None] = None
+
     @property
     def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:
         """Server-side tool classes accepted by this model instance."""
