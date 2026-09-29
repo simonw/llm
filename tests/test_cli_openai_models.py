@@ -1,6 +1,7 @@
 import json
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 import llm
@@ -109,6 +110,76 @@ def test_deprecated_models_are_not_registered(model_id):
         llm.get_model(model_id)
     with pytest.raises(llm.UnknownModelError):
         llm.get_async_model(model_id)
+
+
+def test_effort_shortcut_is_sent_as_reasoning_effort(httpx2_mock):
+    # The top-level -e/--effort shortcut should map to the model's
+    # reasoning_effort option for reasoning-capable OpenAI models.
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-5",
+            "usage": {},
+            "choices": [{"message": {"content": "ok"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5",
+            "-o",
+            "chat_completions",
+            "1",
+            "-e",
+            "low",
+            "--no-stream",
+            "--key",
+            "x",
+            "Say hi",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request_body["reasoning_effort"] == "low"
+
+
+def test_effort_shortcut_errors_for_model_without_reasoning():
+    # A model that declares no reasoning effort option should reject --effort.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "echo", "-e", "high", "hi"])
+    assert result.exit_code == 1
+    assert "does not support --effort" in result.output
+
+
+def test_effort_shortcut_saved_in_template(tmpdir, monkeypatch):
+    # The -e/--effort shortcut should be resolved and stored when saving a
+    # template, just like an explicit -o option.
+    user_dir = tmpdir / "user"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_dir))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-5", "-e", "low", "--save", "effort_tpl"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    template_path = user_dir / "templates" / "effort_tpl.yaml"
+    assert template_path.exists()
+    saved = yaml.safe_load(template_path.read_text("utf-8"))
+    assert saved["options"]["reasoning_effort"] == "low"
+
+
+def test_effort_shortcut_save_errors_for_model_without_reasoning(tmpdir, monkeypatch):
+    monkeypatch.setenv("LLM_USER_PATH", str(tmpdir / "user"))
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "echo", "-e", "high", "--save", "bad_tpl"])
+    assert result.exit_code == 1
+    assert "does not support --effort" in result.output
 
 
 def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx2_mock):

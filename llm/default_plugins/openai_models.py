@@ -1215,6 +1215,11 @@ class _Shared:
                 service_tier=service_tier,
             )
 
+        if reasoning:
+            # Advertise which option the top-level ``llm -e/--effort`` shortcut
+            # should populate for this model.
+            self.reasoning_effort_option = "reasoning_effort"
+
         if vision:
             self.attachment_types.update(
                 {

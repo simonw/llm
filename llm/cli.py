@@ -436,6 +436,24 @@ def _merge_template_options(template, options):
     return merged_options
 
 
+def _apply_effort_option(model, options, effort):
+    """Map the top-level -e/--effort shortcut onto the model's reasoning
+    effort option.
+
+    Returns the (possibly extended) options tuple. Raises a ClickException if
+    the model declares no reasoning effort option. An explicit -o for the same
+    option always takes precedence.
+    """
+    if effort is None:
+        return options
+    reasoning_option = getattr(model, "reasoning_effort_option", None)
+    if reasoning_option is None:
+        raise click.ClickException(f"Model {model.model_id} does not support --effort")
+    if not any(name == reasoning_option for name, _ in options):
+        options = (*tuple(options), (reasoning_option, effort))
+    return options
+
+
 def _merge_template_attachments(template, attachments, attachment_types):
     """Resolve and prepend attachments declared by a loaded template."""
     if template.attachments:
@@ -609,6 +627,15 @@ def cli():
     help="key/value options for the model",
 )
 @click.option(
+    "-e",
+    "--effort",
+    "effort",
+    help=(
+        "Reasoning effort, e.g. low/medium/high. Shortcut that maps to the "
+        "model's reasoning effort option."
+    ),
+)
+@click.option(
     "show_model_options",
     "--options",
     is_flag=True,
@@ -696,6 +723,7 @@ def prompt(
     tools_approve,
     chain_limit,
     options,
+    effort,
     show_model_options,
     schema_input,
     schema_multi,
@@ -890,9 +918,11 @@ def prompt(
                 for a in attachment_types
                 if (a.path or a.url)
             ]
-        if options:
+        if options or effort is not None:
             # Need to validate and convert their types first
             model = get_model(model_id or get_default_model())
+            # Apply the -e/--effort shortcut so saved templates capture it too.
+            options = _apply_effort_option(model, options, effort)
             try:
                 options_model = model.Options(**dict(options))
                 # Use model_dump(mode="json") so Enums become their .value strings
@@ -1008,6 +1038,9 @@ def prompt(
 
     # Validate options
     validated_options = {}
+    # The top-level -e/--effort shortcut maps to the model's reasoning effort
+    # option, if it declares one. An explicit -o for that same option wins.
+    options = _apply_effort_option(model, options, effort)
     if options:
         # Validate with pydantic
         try:
