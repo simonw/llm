@@ -324,8 +324,13 @@ def test_schema_dsl_comma_in_description_hint():
         schema_dsl("name: full name, including any suffix")
     message = str(ex.value)
     assert message.startswith("Invalid schema DSL: unknown type")
-    assert "commas separate fields in the comma-separated form" in message
-    assert "newline-separated form" in message
+    # The hint must explain *why* (commas separate fields) and point at the fix
+    # (the newline-separated form), not merely mention newlines.
+    assert (
+        "If this looks like part of a description, note that commas separate "
+        "fields in the comma-separated form; use the newline-separated form to "
+        "include commas in a description."
+    ) in message
     # The newline-separated form accepts commas in descriptions.
     assert schema_dsl("name: full name, including any suffix\nage int: years") == {
         "type": "object",
