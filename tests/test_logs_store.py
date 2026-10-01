@@ -1610,6 +1610,21 @@ class TestAsyncLogging:
         assert store.load_chain(turn["tip_message_hash"])[1:] == messages
         assert store.verify() == []
 
+    @pytest.mark.asyncio
+    async def test_async_chain_log_to_db(self, store):
+        async def lookup(city: str) -> str:
+            "Look up a city"
+            return "sunny"
+
+        call = {"tool_calls": [{"name": "lookup", "arguments": {"city": "Berlin"}}]}
+        chain = llm.get_async_model("echo").chain(json.dumps(call), tools=[lookup])
+        await chain.text()
+
+        chain.log_to_db(store.db)
+
+        assert store.db["turns"].count == 2
+        assert store.verify() == []
+
 
 # ---- llm logs against the new tables ---------------------------------
 
