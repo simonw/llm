@@ -478,7 +478,8 @@ def decode(binary):
 
 
 def cosine_similarity(a, b):
-    dot_product = sum(x * y for x, y in zip(a, b))
+    """计算同维向量的余弦相似度，维度不同则抛出 ValueError."""
+    dot_product = sum(x * y for x, y in zip(a, b, strict=True))
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(x * x for x in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b)
