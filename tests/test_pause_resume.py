@@ -389,3 +389,142 @@ def test_resumed_tool_can_pause_again():
     assert exc_info.value.tool_call.tool_call_id == "tc_again"
     # No provider call was made: the chain paused before reaching the model
     assert len(chain._responses) == 0
+
+
+# These tests stop at the public model.execute boundary so the real Prompt
+# passed to the provider can be inspected without inventing a provider reply.
+# Echo still executes the pending tool and produces the normal one-response
+# chain; supports_schema is enabled only on each temporary model instance.
+def _schema(name):
+    return {
+        "type": "object",
+        "properties": {"value": {"type": "string"}},
+        "required": ["value"],
+        "title": name,
+    }
+
+
+def test_resume_first_provider_request_keeps_schema_sync(monkeypatch):
+    captured = []
+    hook_calls = []
+    model = llm.get_model("echo")
+    monkeypatch.setattr(model, "supports_schema", True)
+    original_execute = type(model).execute
+
+    def capture_execute(self, prompt, stream, response, conversation=None):
+        captured.append(prompt)
+        yield from original_execute(self, prompt, stream, response, conversation)
+
+    monkeypatch.setattr(type(model), "execute", capture_execute)
+
+    def upper(text: str) -> str:
+        return text.upper()
+
+    def before(tool, tool_call):
+        hook_calls.append(("before", tool_call.name, tool_call.tool_call_id))
+
+    def after(tool, tool_call, tool_result):
+        hook_calls.append(("after", tool_result.name, tool_result.tool_call_id))
+
+    schema = _schema("SyncResume")
+    chain = model.chain(
+        None,
+        messages=_pending_history("tc_schema_sync"),
+        tools=[upper],
+        schema=schema,
+        before_call=before,
+        after_call=after,
+    )
+    chain.text()
+
+    assert [prompt.schema for prompt in captured] == [schema]
+    assert captured[0].tool_results[0].tool_call_id == "tc_schema_sync"
+    assert captured[0].tool_results[0].output == "HELLO"
+    assert hook_calls == [
+        ("before", "upper", "tc_schema_sync"),
+        ("after", "upper", "tc_schema_sync"),
+    ]
+    assert len(chain._responses) == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_first_provider_request_keeps_schema_async(monkeypatch):
+    captured = []
+    hook_calls = []
+    model = llm.get_async_model("echo")
+    monkeypatch.setattr(model, "supports_schema", True)
+    original_execute = type(model).execute
+
+    async def capture_execute(self, prompt, stream, response, conversation=None):
+        captured.append(prompt)
+        async for chunk in original_execute(
+            self, prompt, stream, response, conversation
+        ):
+            yield chunk
+
+    monkeypatch.setattr(type(model), "execute", capture_execute)
+
+    async def upper(text: str) -> str:
+        return text.upper()
+
+    async def before(tool, tool_call):
+        hook_calls.append(("before", tool_call.name, tool_call.tool_call_id))
+
+    async def after(tool, tool_call, tool_result):
+        hook_calls.append(("after", tool_result.name, tool_result.tool_call_id))
+
+    schema = _schema("AsyncResume")
+    chain = model.chain(
+        None,
+        messages=_pending_history("tc_schema_async"),
+        tools=[upper],
+        schema=schema,
+        before_call=before,
+        after_call=after,
+    )
+    await chain.text()
+
+    assert [prompt.schema for prompt in captured] == [schema]
+    assert captured[0].tool_results[0].tool_call_id == "tc_schema_async"
+    assert captured[0].tool_results[0].output == "HELLO"
+    assert hook_calls == [
+        ("before", "upper", "tc_schema_async"),
+        ("after", "upper", "tc_schema_async"),
+    ]
+    assert len(chain._responses) == 1
+
+
+def test_resume_schema_isolation_for_no_schema_and_independent_schemas(monkeypatch):
+    captured = []
+    model = llm.get_model("echo")
+    monkeypatch.setattr(model, "supports_schema", True)
+    original_execute = type(model).execute
+
+    def capture_execute(self, prompt, stream, response, conversation=None):
+        captured.append(prompt)
+        yield from original_execute(self, prompt, stream, response, conversation)
+
+    monkeypatch.setattr(type(model), "execute", capture_execute)
+
+    def upper(text: str) -> str:
+        return text.upper()
+
+    llm.get_model("echo").chain(
+        None, messages=_pending_history("tc_no_schema"), tools=[upper]
+    ).text()
+    schema_a = _schema("IndependentA")
+    model.chain(
+        None,
+        messages=_pending_history("tc_schema_a"),
+        tools=[upper],
+        schema=schema_a,
+    ).text()
+    schema_b = _schema("IndependentB")
+    model.chain(
+        None,
+        messages=_pending_history("tc_schema_b"),
+        tools=[upper],
+        schema=schema_b,
+    ).text()
+
+    assert [prompt.schema for prompt in captured] == [None, schema_a, schema_b]
