@@ -15,6 +15,7 @@ from collections.abc import (
     Iterable,
     Iterator,
 )
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path
@@ -51,6 +52,8 @@ from .utils import (
 )
 
 CONVERSATION_NAME_LENGTH = 32
+
+_sync_tool_executor = ThreadPoolExecutor()
 
 
 @dataclass
@@ -1966,9 +1969,12 @@ class Response(_BaseResponse):
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(
-                        tool.implementation(**implementation_arguments)
-                    )
+                    # A synchronous chain can be called from inside an existing
+                    # event loop (for example, in a notebook). Run the coroutine
+                    # in a worker thread so asyncio.run() gets its own loop.
+                    result = _sync_tool_executor.submit(
+                        asyncio.run, tool.implementation(**implementation_arguments)
+                    ).result()
                 else:
                     result = tool.implementation(**implementation_arguments)
 
@@ -2878,7 +2884,7 @@ class _BaseChainResponse:
     def log_to_db(self, db):
         for response in self._responses:
             if isinstance(response, AsyncResponse):
-                sync_response = asyncio.run(response.to_sync_response())
+                sync_response = response._to_sync_response()
             elif isinstance(response, Response):
                 sync_response = response
             else:

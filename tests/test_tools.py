@@ -364,6 +364,40 @@ def test_tool_use_async_tool_function():
 
 
 @pytest.mark.asyncio
+async def test_tool_use_async_tool_function_inside_running_event_loop():
+    async def hello():
+        return "world"
+
+    chain_response = llm.get_model("echo").chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    chain_response.text()
+    tool_result = chain_response._responses[1].prompt.tool_results[0]
+    assert tool_result.output == "world"
+    assert tool_result.exception is None
+
+
+@pytest.mark.asyncio
+async def test_async_chain_log_to_db_inside_running_event_loop(db_factory):
+    async def lookup(city: str) -> str:
+        return f"weather in {city}: sunny"
+
+    chain = llm.get_async_model("echo").chain(
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"city": "Berlin"}}]}
+        ),
+        tools=[lookup],
+    )
+    await chain.text()
+
+    db = db_factory(memory=True)
+    migrate(db)
+    chain.log_to_db(db)
+
+    assert db["turns"].count == 2
+
+
+@pytest.mark.asyncio
 async def test_async_tools_run_tools_in_parallel():
     start_timestamps = []
 
