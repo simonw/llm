@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextvars
 import dataclasses
 import datetime
 import functools
@@ -54,6 +55,10 @@ from .utils import (
 CONVERSATION_NAME_LENGTH = 32
 
 _sync_tool_executor = ThreadPoolExecutor()
+
+
+def _run_async_tool(coro):
+    return asyncio.run(coro)
 
 
 @dataclass
@@ -1972,8 +1977,11 @@ class Response(_BaseResponse):
                     # A synchronous chain can be called from inside an existing
                     # event loop (for example, in a notebook). Run the coroutine
                     # in a worker thread so asyncio.run() gets its own loop.
+                    context = contextvars.copy_context()
                     result = _sync_tool_executor.submit(
-                        asyncio.run, tool.implementation(**implementation_arguments)
+                        context.run,
+                        _run_async_tool,
+                        tool.implementation(**implementation_arguments),
                     ).result()
                 else:
                     result = tool.implementation(**implementation_arguments)
