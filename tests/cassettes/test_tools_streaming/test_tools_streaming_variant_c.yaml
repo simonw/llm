@@ -1,0 +1,149 @@
+interactions:
+- request:
+    body: '{"messages":[{"role":"user","content":"What is the current llm version?"}],"model":"gpt-4.1-mini","stream":true,"stream_options":{"include_usage":true},"tools":[{"type":"function","function":{"name":"llm_version","description":"Return
+      the installed version of llm","parameters":{"properties":{},"type":"object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '315'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.78.0
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: '
+        data: {"id":"gen-1753248108-FGOxpkEzFEwhNKSPpI4a","provider":"Novita","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248108,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
+
+
+        data: {"id":"gen-1753248108-FGOxpkEzFEwhNKSPpI4a","provider":"Novita","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248108,"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"llm_version:0","type":"function","function":{"name":"llm_version"}}]},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
+
+
+        data: {"id":"gen-1753248108-FGOxpkEzFEwhNKSPpI4a","provider":"Novita","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248108,"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"function":{"arguments":"{}"},"type":"function"}]},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
+
+
+        data: {"id":"gen-1753248108-FGOxpkEzFEwhNKSPpI4a","provider":"Novita","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248108,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"tool_calls","native_finish_reason":"tool_calls","logprobs":null}],"system_fingerprint":"fpv0_170758dd"}
+
+
+        data: {"id":"gen-1753248108-FGOxpkEzFEwhNKSPpI4a","provider":"Novita","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248108,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"usage":{"prompt_tokens":56,"completion_tokens":12,"total_tokens":68,"cost":0.00005952,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0},"cost_details":{"upstream_inference_cost":null},"completion_tokens_details":{"reasoning_tokens":0}}}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Tue, 23 Jul 2025 14:54:09 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages":[{"role":"user","content":"What is the current llm version?"},{"role":"assistant","content":""},{"role":"assistant","tool_calls":[{"type":"function","id":"0","function":{"name":"llm_version","arguments":"{}"}}]},{"role":"tool","tool_call_id":"0","content":"0.fixed-version"}],"model":"gpt-4.1-mini","stream":true,"stream_options":{"include_usage":true},"tools":[{"type":"function","function":{"name":"llm_version","description":"Return
+      the installed version of llm","parameters":{"properties":{},"type":"object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '517'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.78.0
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"The installed"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" version"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" of"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" LL"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"M"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" on"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" this"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" system"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" is"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":" "},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"0"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"."},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"fixed-version"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":"."},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"stop","native_finish_reason":"stop","logprobs":null}]}
+
+
+        data: {"id":"gen-1753248104-uf1xqJDBrAUCJ4g8apK8","provider":"Fireworks","model":"moonshotai/kimi-k2","object":"chat.completion.chunk","created":1753248104,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"usage":{"prompt_tokens":105,"completion_tokens":16,"total_tokens":121,"cost":0.000103,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0},"cost_details":{"upstream_inference_cost":null},"completion_tokens_details":{"reasoning_tokens":0}}}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Tue, 23 Jul 2025 14:54:10 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+    status:
+      code: 200
+      message: OK
+version: 1

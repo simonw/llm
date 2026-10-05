@@ -1,0 +1,1268 @@
+import asyncio
+import json
+import os
+import re
+import time
+from importlib.metadata import version
+
+import pytest
+from click.testing import CliRunner
+from pydantic import BaseModel
+
+import llm
+from llm import CancelToolCall, cli
+from llm.logs import LogStore
+from llm.migrations import migrate
+from llm.tools import llm_time
+
+API_KEY = os.environ.get("PYTEST_OPENAI_API_KEY", None) or "badkey"
+
+
+class DemoServerSideTool(llm.ServerSideTool):
+    "A server-side tool used by the core tests."
+
+    name = "demo_server_tool"
+
+    def __init__(self, value="demo"):
+        self.value = value
+        self.prepare_calls = 0
+
+    def tool_spec(self, model):
+        return {"type": self.name, "value": self.value}
+
+    def prepare_request(self, model, kwargs):
+        self.prepare_calls += 1
+
+
+class ServerToolsOnlyModel(llm.Model):
+    model_id = "server-tools-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
+
+    def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class AsyncServerToolsOnlyModel(llm.AsyncModel):
+    model_id = "async-server-tools-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (DemoServerSideTool,)
+
+    async def execute(self, prompt, stream, response, conversation):
+        yield "done"
+
+
+class MixedToolsModel(ServerToolsOnlyModel):
+    model_id = "mixed-tools"
+    supports_tools = True
+
+
+class RawServerToolOnlyModel(ServerToolsOnlyModel):
+    model_id = "raw-server-tool-only"
+
+    @property
+    def supported_server_side_tools(self):
+        return (llm.ServerSideTool,)
+
+
+def test_server_side_tool_raw_spec_escape_hatch():
+    tool = llm.ServerSideTool({"type": "browser_search"})
+    model = ServerToolsOnlyModel()
+
+    assert tool.tool_spec(model) == {"type": "browser_search"}
+    assert tool.name == "server_side_tool"
+    assert tool._config == {"spec": {"type": "browser_search"}}
+
+    kwargs = {}
+    assert tool.prepare_request(model, kwargs) is None
+    assert kwargs == {}
+
+    with pytest.raises(TypeError, match="raw provider tool spec"):
+        llm.ServerSideTool().tool_spec(model)
+
+
+def test_declared_server_side_tool_does_not_require_function_tool_support():
+    tool = DemoServerSideTool("one")
+    model = ServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert response.text() == "done"
+    assert response.prompt.tools == [tool]
+    # Core transports and validates server-side tools but never invokes
+    # their provider request hook itself.
+    assert tool.prepare_calls == 0
+    assert tool._config == {"value": "one"}
+
+
+def test_unsupported_server_side_tool_fails_before_execution(mock_model):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Model 'mock' does not support server-side tool "
+            "'demo_server_tool'. Run: llm tools -m mock"
+        ),
+    ):
+        mock_model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_declaring_raw_escape_hatch_does_not_claim_every_subclass():
+    model = RawServerToolOnlyModel()
+    assert (
+        model.prompt("hello", tools=[llm.ServerSideTool({"type": "custom"})]).text()
+        == "done"
+    )
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        model.prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_server_side_tool_support_can_vary_by_model_instance():
+    class ConditionalModel(ServerToolsOnlyModel):
+        def __init__(self, enabled):
+            self.enabled = enabled
+
+        @property
+        def supported_server_side_tools(self):
+            return (DemoServerSideTool,) if self.enabled else ()
+
+    assert (
+        ConditionalModel(True).prompt("hello", tools=[DemoServerSideTool()]).text()
+        == "done"
+    )
+    with pytest.raises(ValueError, match="does not support server-side tool"):
+        ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
+
+
+def test_server_side_tool_configuration_is_logged(db_factory):
+    db = db_factory(memory=True)
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    instance = next(iter(db["tool_instances"].rows))
+    assert instance["name"] == "DemoServerSideTool"
+    assert instance["plugin"] is None
+    assert json.loads(instance["arguments"]) == {"value": "configured"}
+    assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
+
+
+def test_logs_expanded_server_side_tool(db_factory, user_path):
+    db = db_factory(str(user_path / "logs.db"))
+    migrate(db)
+    response = ServerToolsOnlyModel().prompt(
+        "hello", tools=[DemoServerSideTool("configured")]
+    )
+    response.text()
+    response.log_to_db(db)
+
+    result = CliRunner().invoke(cli.cli, ["logs", "-cue"], catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert '- `DemoServerSideTool({"value": "configured"})`:' in result.output
+    assert "Arguments: `{}`" in result.output
+
+
+def test_function_tools_still_require_supports_tools():
+    def local_tool():
+        return "local"
+
+    with pytest.raises(ValueError, match="does not support tools"):
+        ServerToolsOnlyModel().prompt("hello", tools=[local_tool])
+
+
+def test_local_executor_ignores_server_side_tools():
+    def local_tool():
+        return "local"
+
+    tool = DemoServerSideTool()
+    response = MixedToolsModel().prompt(
+        "hello", tools=[tool, llm.Tool.function(local_tool)]
+    )
+    response.text()
+
+    results = response.execute_tool_calls(
+        tool_calls_list=[
+            llm.ToolCall(name="local_tool", arguments={}),
+            llm.ToolCall(name=tool.name, arguments={}),
+        ]
+    )
+    assert [result.output for result in results] == [
+        "local",
+        'Error: tool "demo_server_tool" does not exist',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_declared_server_side_tool_and_executor_partition():
+    tool = DemoServerSideTool()
+    model = AsyncServerToolsOnlyModel()
+    response = model.prompt("hello", tools=[tool])
+
+    assert await response.text() == "done"
+    results = await response.execute_tool_calls(
+        tool_calls_list=[llm.ToolCall(name=tool.name, arguments={})]
+    )
+    assert results[0].output == 'Error: tool "demo_server_tool" does not exist'
+
+
+@pytest.mark.vcr
+def test_tool_use_basic(db_factory, vcr):
+    model = llm.get_model("gpt-4o-mini")
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    chain_response = model.chain("What is 1231 * 2331?", tools=[multiply], key=API_KEY)
+
+    output = "".join(chain_response)
+
+    assert output == "The result of \\( 1231 \\times 2331 \\) is \\( 2,869,461 \\)."
+
+    first, second = chain_response._responses
+
+    assert first.prompt.prompt == "What is 1231 * 2331?"
+    assert first.prompt.tools[0].name == "multiply"
+
+    assert len(second.prompt.tool_results) == 1
+    assert second.prompt.tool_results[0].name == "multiply"
+    assert second.prompt.tool_results[0].output == "2869461"
+
+    # Test writing to the database
+    db = db_factory(memory=True)
+    migrate(db)
+    chain_response.log_to_db(db)
+
+    turns = list(db["turns"].rows)
+    assert len(turns) == 2
+    first_turn, second_turn = turns
+
+    tools = list(db["tools"].rows)
+    assert len(tools) == 1
+    assert tools[0]["name"] == "multiply"
+    assert tools[0]["description"] == "Multiply two numbers."
+    assert tools[0]["plugin"] is None
+
+    # The tool call is in the first turn's output parts; the result is
+    # among the second turn's inputs.
+    store = LogStore(db)
+    first_chain = store.load_chain(first_turn["tip_message_hash"])
+    tool_calls = [
+        part
+        for message in first_chain
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolCallPart)
+    ]
+    assert len(tool_calls) == 1
+    assert tool_calls[0].name == "multiply"
+    assert tool_calls[0].arguments == {"a": 1231, "b": 2331}
+
+    second_inputs = store.load_chain(second_turn["parent_message_hash"])
+    tool_results_parts = [
+        part
+        for message in second_inputs
+        for part in message.parts
+        if isinstance(part, llm.parts.ToolResultPart)
+    ]
+    assert len(tool_results_parts) == 1
+    assert tool_results_parts[0].output == "2869461"
+    assert tool_results_parts[0].tool_call_id == tool_calls[0].tool_call_id
+
+
+@pytest.mark.vcr
+def test_tool_use_chain_of_two_calls(vcr):
+    model = llm.get_model("gpt-4o-mini")
+
+    def lookup_population(country: str) -> int:
+        "Returns the current population of the specified fictional country"
+        return 123124
+
+    def can_have_dragons(population: int) -> bool:
+        "Returns True if the specified population can have dragons, False otherwise"
+        return population > 10000
+
+    chain_response = model.chain(
+        "Can the country of Crumpet have dragons? Answer with only YES or NO",
+        tools=[lookup_population, can_have_dragons],
+        stream=False,
+        key=API_KEY,
+    )
+
+    output = chain_response.text()
+    assert output == "YES"
+    assert len(chain_response._responses) == 3
+
+    first, second, third = chain_response._responses
+    assert first.tool_calls()[0].arguments == {"country": "Crumpet"}
+    assert first.prompt.tool_results == []
+    assert second.prompt.tool_results[0].output == "123124"
+    assert second.tool_calls()[0].arguments == {"population": 123124}
+    assert third.prompt.tool_results[0].output == "true"
+    assert third.tool_calls() == []
+
+
+def test_chain_round_separator_is_display_only(db_factory):
+    """The space between chain rounds is synthesized at the chain level
+    for display - it must never become a stored whitespace part."""
+
+    def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    events = list(chain_response.stream_events())
+    text = "".join(e.chunk for e in events if e.type == "text")
+    # The separator reached the streamed output...
+    assert "\n} {\n" in text
+
+    db = db_factory(memory=True)
+    migrate(db)
+    chain_response.log_to_db(db)
+    # ...but no whitespace-only text part was stored.
+    for row in db["parts"].rows:
+        if row["type"] == "text" and row["text"] is not None:
+            assert row["text"].strip(), row
+
+
+def test_tool_use_async_tool_function():
+    async def hello():
+        return "world"
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+    )
+    output = chain_response.text()
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    tool_call_id = objects[1]["tool_results"][0]["tool_call_id"]
+    assert tool_call_id.startswith("tc_")
+    objects[1]["tool_results"][0]["tool_call_id"] = None
+    assert objects == [
+        {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
+        {
+            "prompt": "",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [{"prompt": '{"tool_calls": [{"name": "hello"}]}'}],
+            "tool_results": [
+                {"name": "hello", "output": "world", "tool_call_id": None}
+            ],
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_tools_run_tools_in_parallel():
+    start_timestamps = []
+
+    start_ns = time.monotonic_ns()
+
+    async def hello():
+        start_timestamps.append(("hello", time.monotonic_ns() - start_ns))
+        await asyncio.sleep(0.2)
+        return "world"
+
+    async def hello2():
+        start_timestamps.append(("hello2", time.monotonic_ns() - start_ns))
+        await asyncio.sleep(0.2)
+        return "world2"
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}, {"name": "hello2"}]}),
+        tools=[hello, hello2],
+    )
+    output = await chain_response.text()
+    # Two JSON objects, separated by the chain's round boundary space
+    bits = output.split("\n} {\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    ids = [r["tool_call_id"] for r in objects[1]["tool_results"]]
+    assert all(i.startswith("tc_") for i in ids)
+    assert len(set(ids)) == 2
+    for r in objects[1]["tool_results"]:
+        r["tool_call_id"] = None
+    assert objects == [
+        {"prompt": "", "system": "", "attachments": [], "stream": True, "previous": []},
+        {
+            "prompt": "",
+            "system": "",
+            "attachments": [],
+            "stream": True,
+            "previous": [
+                {"prompt": '{"tool_calls": [{"name": "hello"}, {"name": "hello2"}]}'}
+            ],
+            "tool_results": [
+                {"name": "hello", "output": "world", "tool_call_id": None},
+                {"name": "hello2", "output": "world2", "tool_call_id": None},
+            ],
+        },
+    ]
+    delta_ns = start_timestamps[1][1] - start_timestamps[0][1]
+    # They should have run in parallel so it should be less than 0.02s difference
+    assert delta_ns < (100_000_000 * 0.2)
+
+
+@pytest.mark.asyncio
+async def test_async_toolbox():
+    class Tools(llm.Toolbox):
+        def __init__(self):
+            self.prepared = False
+
+        async def go(self):
+            await asyncio.sleep(0)
+            return "This was async"
+
+        async def prepare_async(self):
+            await asyncio.sleep(0)
+            self.prepared = True
+
+    instance = Tools()
+    assert instance.prepared is False
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "Tools_go"}]}),
+        tools=[instance],
+    )
+    output = await chain_response.text()
+    assert '"output": "This was async"' in output
+    assert instance.prepared is True
+
+
+def test_toolbox_add_tool():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def __init__(self):
+            self.prepared = False
+
+        def original(self):
+            return "Original method"
+
+        def prepare(self):
+            self.prepared = True
+
+    def new_method():
+        return "New method"
+
+    tools = Tools()
+    tools.add_tool(new_method)
+    assert not tools.prepared
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "New method"' in output
+    assert tools.prepared
+
+
+def test_toolbox_add_tool_with_pass_self():
+    model = llm.get_model("echo")
+
+    class Tools(llm.Toolbox):
+        def __init__(self, hotdog):
+            self.hotdog = hotdog
+
+        def original(self):
+            return "Original method"
+
+    def new_method(self):
+        return self.hotdog
+
+    tools = Tools("doghot")
+    tools.add_tool(new_method, pass_self=True)
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "new_method"}]}),
+        tools=[tools],
+    )
+    output = chain_response.text()
+    assert '"output": "doghot"' in output
+
+
+@pytest.mark.vcr
+def test_conversation_with_tools(vcr):
+    import llm
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    def multiply(a: int, b: int) -> int:
+        return a * b
+
+    model = llm.get_model("echo")
+    conversation = model.conversation(tools=[add, multiply])
+
+    output1 = conversation.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "multiply", "arguments": {"a": 5324, "b": 23233}}]}
+        )
+    ).text()
+    assert "123692492" in output1
+    output2 = conversation.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "add", "arguments": {"a": 841758375, "b": 123123}}
+                ]
+            }
+        )
+    ).text()
+    assert "841881498" in output2
+
+
+def test_default_tool_llm_version():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"output": "{}"'.format(version("llm")) in result.output
+
+
+def test_cli_tools_with_options():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "mock",
+            "-o",
+            "max_tokens",
+            "10",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # It just needs not to crash
+    # https://github.com/simonw/llm/issues/1233
+
+
+def test_functions_tool_locals():
+    # https://github.com/simonw/llm/issues/1107
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "--functions",
+            "my_locals = locals",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "locals"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+
+
+def test_default_tool_llm_time():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_time",
+            json.dumps({"tool_calls": [{"name": "llm_time"}]}),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "timezone_offset" in result.output
+
+    # Test it by calling it directly
+    info = llm_time()
+    assert set(info.keys()) == {
+        "timezone_offset",
+        "utc_time_iso",
+        "local_time",
+        "local_timezone",
+        "utc_time",
+        "is_dst",
+    }
+
+
+def test_incorrect_tool_usage():
+    model = llm.get_model("echo")
+
+    def simple(name: str):
+        return name
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "bad_tool"}]}),
+        tools=[simple],
+    )
+    output = chain_response.text()
+    assert 'Error: tool \\"bad_tool\\" does not exist' in output
+
+
+def test_tool_returning_attachment():
+    model = llm.get_model("echo")
+
+    def return_attachment() -> llm.Attachment:
+        return llm.ToolOutput(
+            "Output",
+            attachments=[
+                llm.Attachment(
+                    content=b"This is a test attachment",
+                    type="image/png",
+                )
+            ],
+        )
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "return_attachment"}]}),
+        tools=[return_attachment],
+    )
+    output = chain_response.text()
+    assert '"type": "image/png"' in output
+    assert '"output": "Output"' in output
+
+
+@pytest.mark.asyncio
+async def test_async_tool_returning_attachment():
+    model = llm.get_async_model("echo")
+
+    async def return_attachment() -> llm.Attachment:
+        return llm.ToolOutput(
+            "Output",
+            attachments=[
+                llm.Attachment(
+                    content=b"This is a test attachment",
+                    type="image/png",
+                )
+            ],
+        )
+
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "return_attachment"}]}),
+        tools=[return_attachment],
+    )
+    output = await chain_response.text()
+    assert '"type": "image/png"' in output
+    assert '"output": "Output"' in output
+
+
+def test_tool_conversation_settings():
+    model = llm.get_model("echo")
+    before_collected = []
+    after_collected = []
+
+    def before(*args):
+        before_collected.append(args)
+
+    def after(*args):
+        after_collected.append(args)
+
+    conversation = model.conversation(
+        tools=[llm_time], before_call=before, after_call=after
+    )
+    # Run two things
+    conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    assert len(before_collected) == 2
+    assert len(after_collected) == 2
+
+
+@pytest.mark.asyncio
+async def test_tool_conversation_settings_async():
+    model = llm.get_async_model("echo")
+    before_collected = []
+    after_collected = []
+
+    async def before(*args):
+        before_collected.append(args)
+
+    async def after(*args):
+        after_collected.append(args)
+
+    conversation = model.conversation(
+        tools=[llm_time], before_call=before, after_call=after
+    )
+    await conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    await conversation.chain(json.dumps({"tool_calls": [{"name": "llm_time"}]})).text()
+    assert len(before_collected) == 2
+    assert len(after_collected) == 2
+
+
+def test_provider_managed_tool_execution_uses_response_context():
+    events = []
+    implementation_call = {}
+
+    def lookup(value: str, llm_tool_call: llm.ToolCall) -> dict:
+        implementation_call["tool_call"] = llm_tool_call
+        return {"value": value.upper()}
+
+    def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class ProviderManagedToolModel(llm.Model):
+        model_id = "provider-managed-tool"
+        supports_tools = True
+
+        def execute(self, prompt, stream, response, conversation=None):
+            tool_result = response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = ProviderManagedToolModel().chain(
+        "pelican",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert chain.text() == '{"value": "PELICAN"}'
+    assert len(chain._responses) == 1
+    tool_call = implementation_call["tool_call"]
+    assert tool_call.tool_call_id.startswith("tc_")
+    assert events == [
+        ("before", "lookup", tool_call.tool_call_id),
+        ("after", "lookup", tool_call.tool_call_id, '{"value": "PELICAN"}'),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_provider_managed_tool_execution_uses_response_context():
+    events = []
+
+    async def lookup(value: str) -> str:
+        await asyncio.sleep(0)
+        return value.upper()
+
+    async def before(tool, tool_call):
+        events.append(("before", tool.name, tool_call.tool_call_id))
+
+    async def after(tool, tool_call, tool_result):
+        events.append(
+            (
+                "after",
+                tool.name,
+                tool_call.tool_call_id,
+                tool_result.output,
+            )
+        )
+
+    class AsyncProviderManagedToolModel(llm.AsyncModel):
+        model_id = "async-provider-managed-tool"
+        supports_tools = True
+
+        async def execute(self, prompt, stream, response, conversation=None):
+            tool_result = await response.execute_tool_call(
+                llm.ToolCall(name="lookup", arguments={"value": prompt.prompt})
+            )
+            yield tool_result.output
+
+    chain = AsyncProviderManagedToolModel().chain(
+        "puffin",
+        tools=[lookup],
+        before_call=before,
+        after_call=after,
+    )
+
+    assert await chain.text() == "PUFFIN"
+    assert len(chain._responses) == 1
+    assert events[0][0:2] == ("before", "lookup")
+    assert events[0][2].startswith("tc_")
+    assert events == [
+        ("before", "lookup", events[0][2]),
+        ("after", "lookup", events[0][2], "PUFFIN"),
+    ]
+
+
+ERROR_FUNCTION = """
+def trigger_error(msg: str):
+    raise Exception(msg)
+"""
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_tool_errors(async_):
+    # https://github.com/simonw/llm/issues/1107
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        (
+            [
+                "-m",
+                "echo",
+                "--functions",
+                ERROR_FUNCTION,
+                json.dumps(
+                    {
+                        "tool_calls": [
+                            {"name": "trigger_error", "arguments": {"msg": "Error!"}}
+                        ]
+                    }
+                ),
+            ]
+            + (["--async"] if async_ else [])
+        ),
+    )
+    assert result.exit_code == 0
+    assert '"output": "Error: Error!"' in result.output
+    # llm logs --json output
+    log_json_result = runner.invoke(cli.cli, ["logs", "--json", "-c"])
+    assert log_json_result.exit_code == 0
+    log_data = json.loads(log_json_result.output)
+    assert len(log_data) == 2
+    assert log_data[1]["tool_results"][0]["exception"] == "Exception: Error!"
+    # llm logs -c output
+    log_text_result = runner.invoke(cli.cli, ["logs", "-c"])
+    assert log_text_result.exit_code == 0
+    normalized_log_text = re.sub(r"tc_[0-9a-z]{26}", "tc_TCID", log_text_result.output)
+    assert (
+        "- **trigger_error**: `tc_TCID`  \n"
+        "    ```\n"
+        "    Error: Error!\n"
+        "    ```  \n"
+        "    **Error**: Exception: Error!\n"
+    ) in normalized_log_text
+
+
+def test_chain_sync_cancel_only_first_of_two():
+    model = llm.get_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    def t2() -> str:
+        return "ran2"
+
+    def before(tool, tool_call):
+        if tool.name == "t1":
+            raise CancelToolCall("skip1")
+        # allow t2
+
+    calls = [
+        {"name": "t1"},
+        {"name": "t2"},
+    ]
+    payload = json.dumps({"tool_calls": calls})
+    chain = model.chain(payload, tools=[t1, t2], before_call=before)
+    _ = chain.text()
+
+    # second response has two results
+    second = chain._responses[1]
+    results = second.prompt.tool_results
+    assert len(results) == 2
+
+    # first cancelled, second executed
+    assert results[0].name == "t1"
+    assert results[0].output == "Cancelled: skip1"
+    assert isinstance(results[0].exception, CancelToolCall)
+
+    assert results[1].name == "t2"
+    assert results[1].output == "ran2"
+    assert results[1].exception is None
+
+
+# 2c async equivalent
+@pytest.mark.asyncio
+async def test_chain_async_cancel_only_first_of_two():
+    async_model = llm.get_async_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    async def t2() -> str:
+        return "ran2"
+
+    async def before(tool, tool_call):
+        if tool.name == "t1":
+            raise CancelToolCall("skip1")
+
+    calls = [
+        {"name": "t1"},
+        {"name": "t2"},
+    ]
+    payload = json.dumps({"tool_calls": calls})
+    chain = async_model.chain(payload, tools=[t1, t2], before_call=before)
+    _ = await chain.text()
+
+    second = chain._responses[1]
+    results = second.prompt.tool_results
+    assert len(results) == 2
+
+    assert results[0].name == "t1"
+    assert results[0].output == "Cancelled: skip1"
+    assert isinstance(results[0].exception, CancelToolCall)
+
+    assert results[1].name == "t2"
+    assert results[1].output == "ran2"
+    assert results[1].exception is None
+
+
+def test_tool_function_receives_llm_tool_call():
+    captured = {}
+
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[lookup],
+    )
+    chain_response.text()
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == "lookup"
+    assert tool_call.arguments == {"name": "simon"}
+    second = chain_response._responses[1]
+    assert second.prompt.tool_results[0].output == "result for simon"
+
+
+def test_async_tool_function_receives_llm_tool_call_with_sync_model():
+    captured = {}
+
+    async def lookup(name: str, llm_tool_call: llm.ToolCall) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[lookup],
+    )
+    chain_response.text()
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == "lookup"
+    assert tool_call.arguments == {"name": "simon"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_tool", (False, True))
+async def test_tool_function_receives_llm_tool_call_async_model(async_tool):
+    captured = {}
+
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    async def async_lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        captured["tool_call"] = llm_tool_call
+        return "result for " + name
+
+    fn = async_lookup if async_tool else lookup
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": fn.__name__, "arguments": {"name": "simon"}}]}
+        ),
+        tools=[fn],
+    )
+    output = await chain_response.text()
+    assert '"output": "result for simon"' in output
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.name == fn.__name__
+    assert tool_call.arguments == {"name": "simon"}
+
+
+def test_llm_tool_call_excluded_from_input_schema():
+    def lookup(name: str, llm_tool_call) -> str:
+        "Look up a name"
+        return name
+
+    tool = llm.Tool.function(lookup)
+    assert "llm_tool_call" not in tool.input_schema.get("properties", {})
+    assert "llm_tool_call" not in tool.input_schema.get("required", [])
+    assert "name" in tool.input_schema["properties"]
+
+
+def test_tool_parameter_named_title_is_kept_in_input_schema():
+    def demo_a(title: str, when: str) -> str:
+        "param named title"
+        return ""
+
+    def demo_b(heading: str, when: str) -> str:
+        "same thing, renamed"
+        return ""
+
+    schema_a = llm.Tool.function(demo_a).input_schema
+    schema_b = llm.Tool.function(demo_b).input_schema
+
+    assert list(schema_a["properties"]) == ["title", "when"]
+    assert schema_a["required"] == ["title", "when"]
+    assert schema_a["properties"]["title"] == {"type": "string"}
+    assert schema_a["properties"]["when"] == {"type": "string"}
+
+    assert list(schema_b["properties"]) == ["heading", "when"]
+    assert schema_b["required"] == ["heading", "when"]
+    assert schema_b["properties"]["heading"] == {"type": "string"}
+    assert schema_b["properties"]["when"] == {"type": "string"}
+
+
+def test_nested_model_field_named_title_is_kept_in_input_schema():
+    class Person(BaseModel):
+        title: str
+        name: str
+
+    def demo(person: Person, title: str) -> str:
+        "nested plus top-level title"
+        return ""
+
+    schema = llm.Tool.function(demo).input_schema
+    person = schema["$defs"]["Person"]
+    assert list(schema["properties"]) == ["person", "title"]
+    assert schema["required"] == ["person", "title"]
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert list(person["properties"]) == ["title", "name"]
+    assert person["required"] == ["title", "name"]
+    assert person["properties"]["title"] == {"type": "string"}
+    assert person["properties"]["name"] == {"type": "string"}
+    assert "title" not in person
+
+
+def test_kwargs_only_function_does_not_receive_llm_tool_call():
+    # A tool that accepts **kwargs but does not name llm_tool_call
+    # explicitly should NOT have it injected.
+    captured = {}
+
+    async def impl(**kwargs):
+        captured.update(kwargs)
+        return "ok"
+
+    tool = llm.Tool(
+        name="t",
+        description="A tool",
+        input_schema={"type": "object", "properties": {"name": {"type": "string"}}},
+        implementation=impl,
+    )
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "t", "arguments": {"name": "x"}}]}),
+        tools=[tool],
+    )
+    chain_response.text()
+    assert captured == {"name": "x"}
+
+
+def test_toolbox_method_receives_llm_tool_call():
+    captured = {}
+
+    class Tools(llm.Toolbox):
+        def lookup(self, name: str, llm_tool_call) -> str:
+            captured["tool_call"] = llm_tool_call
+            return "hi " + name
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps(
+            {"tool_calls": [{"name": "Tools_lookup", "arguments": {"name": "simon"}}]}
+        ),
+        tools=[Tools()],
+    )
+    output = chain_response.text()
+    assert '"output": "hi simon"' in output
+
+    tool_call = captured["tool_call"]
+    assert isinstance(tool_call, llm.ToolCall)
+    assert tool_call.arguments == {"name": "simon"}
+
+
+def test_add_tool_call_synthesizes_missing_tool_call_id():
+    model = llm.get_model("echo")
+    response = model.prompt("hello")
+    response.add_tool_call(llm.ToolCall(name="a", arguments={}))
+    response.add_tool_call(llm.ToolCall(name="b", arguments={}, tool_call_id="given"))
+    response.add_tool_call(llm.ToolCall(name="c", arguments={}))
+    ids = [tc.tool_call_id for tc in response._tool_calls]
+    assert ids[0] is not None and ids[0].startswith("tc_")
+    assert ids[1] == "given"
+    assert ids[2] is not None and ids[2].startswith("tc_")
+    assert ids[0] != ids[2]
+
+
+def test_tool_call_ids_guaranteed_through_chain():
+    seen_before_call = []
+    captured = {}
+
+    def first(llm_tool_call) -> str:
+        captured["first_id"] = llm_tool_call.tool_call_id
+        return "one"
+
+    def second() -> str:
+        return "two"
+
+    def before(tool, tool_call):
+        seen_before_call.append(tool_call.tool_call_id)
+
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "first"}, {"name": "second"}]}),
+        tools=[first, second],
+        before_call=before,
+    )
+    chain_response.text()
+
+    assert len(seen_before_call) == 2
+    assert all(i is not None and i.startswith("tc_") for i in seen_before_call)
+    assert seen_before_call[0] != seen_before_call[1]
+    # The implementation saw the same id via llm_tool_call
+    assert captured["first_id"] == seen_before_call[0]
+
+    # ToolResults and the next prompt's tool message carry the same ids
+    second_response = chain_response._responses[1]
+    result_ids = [r.tool_call_id for r in second_response.prompt.tool_results]
+    assert result_ids == seen_before_call
+
+    # The assistant message parts carry the synthesized ids too, so a
+    # persisted-and-replayed history stays correlated
+    from llm.parts import ToolCallPart
+
+    first_response = chain_response._responses[0]
+    part_ids = [
+        p.tool_call_id
+        for p in first_response._messages_now()[0].parts
+        if isinstance(p, ToolCallPart)
+    ]
+    assert part_ids == seen_before_call
+
+
+@pytest.mark.asyncio
+async def test_tool_call_ids_guaranteed_async_model():
+    seen = []
+
+    async def hello() -> str:
+        return "world"
+
+    async def before(tool, tool_call):
+        seen.append(tool_call.tool_call_id)
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}),
+        tools=[hello],
+        before_call=before,
+    )
+    await chain_response.text()
+    assert len(seen) == 1
+    assert seen[0] is not None and seen[0].startswith("tc_")
+
+
+@pytest.mark.asyncio
+async def test_async_missing_tool_produces_error_result():
+    # Async executor parity with sync: a call to a tool that is not in
+    # tools= must produce an error ToolResult, not silently vanish -
+    # otherwise the next provider call has a tool_call with no result.
+    before_calls = []
+
+    async def real_tool() -> str:
+        return "ok"
+
+    async def before(tool, tool_call):
+        # before_call fires even when tool is None, like the sync path
+        before_calls.append((tool.name if tool else None, tool_call.name))
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        before_call=before,
+    )
+    await chain_response.text()
+
+    second = chain_response._responses[1]
+    results = [(r.name, r.output) for r in second.prompt.tool_results]
+    assert results == [
+        ("missing_tool", 'Error: tool "missing_tool" does not exist'),
+        ("real_tool", "ok"),
+    ]
+    assert isinstance(second.prompt.tool_results[0].exception, KeyError)
+    assert (None, "missing_tool") in before_calls
+
+
+@pytest.mark.asyncio
+async def test_async_missing_tool_can_be_cancelled_by_before_call():
+    async def real_tool() -> str:
+        return "ok"
+
+    async def before(tool, tool_call):
+        if tool is None:
+            raise CancelToolCall("no such tool")
+
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "missing_tool"}, {"name": "real_tool"}]}),
+        tools=[real_tool],
+        before_call=before,
+    )
+    await chain_response.text()
+    second = chain_response._responses[1]
+    results = [(r.name, r.output) for r in second.prompt.tool_results]
+    assert results == [
+        ("missing_tool", "Cancelled: no such tool"),
+        ("real_tool", "ok"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_tool_without_implementation_produces_error_result():
+    tool = llm.Tool(
+        name="no_impl",
+        description="A tool with no implementation",
+        input_schema={"type": "object", "properties": {}},
+        implementation=None,
+    )
+    model = llm.get_async_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
+        tools=[tool],
+    )
+    await chain_response.text()
+    second = chain_response._responses[1]
+    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
+        ("no_impl", 'Error: tool "no_impl" has no implementation'),
+    ]

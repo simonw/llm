@@ -1,0 +1,60 @@
+name: Test
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - name: Install dependencies
+      run: |
+        pip install . --group dev
+    - name: Run tests
+      run: |
+        python -m pytest -vv
+    - name: Check if cog needs to be run
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+      run: |
+        cog --check \
+          -p "import sys, os; sys._called_from_test=True; os.environ['LLM_USER_PATH'] = '/tmp'" \
+          docs/**/*.md docs/*.md
+    - name: Run Black
+      if: matrix.os != 'windows-latest'
+      run: |
+        black --check .
+    - name: Run mypy
+      if: matrix.os != 'windows-latest'
+      run: |
+        mypy llm
+    - name: Run ruff
+      if: matrix.os != 'windows-latest'
+      run: |
+        ruff check .
+    - name: Check it builds
+      run: |
+        python -m build
+    - name: Run test-llm-load-plugins.sh
+      if: matrix.os != 'windows-latest'
+      run: |
+        llm install llm-cluster llm-mistral
+        ./tests/test-llm-load-plugins.sh
+    - name: Upload artifact of builds
+      if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v7
+      with:
+        name: dist-${{ matrix.os }}-${{ matrix.python-version }}
+        path: dist/*

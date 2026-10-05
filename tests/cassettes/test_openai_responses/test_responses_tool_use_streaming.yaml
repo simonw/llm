@@ -1,0 +1,393 @@
+interactions:
+- request:
+    body: '{"include":["reasoning.encrypted_content"],"input":[{"role":"user","content":"What
+      is 1231 * 2331? Use the multiply tool."}],"model":"gpt-5.5","reasoning":{"effort":"low"},"store":false,"stream":true,"tools":[{"type":"function","name":"multiply","description":"Multiply
+      two numbers.","parameters":{"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object"}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '399'
+      Content-Type:
+      - application/json
+      Host:
+      - api.openai.com
+      User-Agent:
+      - OpenAI/Python 2.34.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.34.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.11.15
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: 'event: response.created
+
+        data: {"type":"response.created","response":{"id":"resp_00d64fa806f333310169fab1be69d081a08f8285661855594c","object":"response","created_at":1778037182,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5.5-2026-04-23","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"effort":"low","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Multiply
+        two numbers.","name":"multiply","parameters":{"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object","additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+
+        event: response.in_progress
+
+        data: {"type":"response.in_progress","response":{"id":"resp_00d64fa806f333310169fab1be69d081a08f8285661855594c","object":"response","created_at":1778037182,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5.5-2026-04-23","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"effort":"low","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Multiply
+        two numbers.","name":"multiply","parameters":{"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object","additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+
+        event: response.output_item.added
+
+        data: {"type":"response.output_item.added","item":{"id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","type":"function_call","status":"in_progress","arguments":"","call_id":"call_sVidsfFJ6zlzRpelrPkTPlpd","name":"multiply"},"output_index":0,"sequence_number":2}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"ReLAoBL6oNRsXA","output_index":0,"sequence_number":3}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"a","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"oZA1PK3x65X0w51","output_index":0,"sequence_number":4}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"\":","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"WFzXP9CAvnsSdE","output_index":0,"sequence_number":5}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"123","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"3bk9yszS1TEHx","output_index":0,"sequence_number":6}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"1","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"ckqcfb2NtXm34XT","output_index":0,"sequence_number":7}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":",\"","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"cspustnrzHoiSV","output_index":0,"sequence_number":8}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"b","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"HhO4w36skjtIxaU","output_index":0,"sequence_number":9}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"\":","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"SnDoVlFiXfYxtl","output_index":0,"sequence_number":10}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"233","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"arziGMMxMM5qo","output_index":0,"sequence_number":11}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"1","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"obhmaTA5ZilaAQc","output_index":0,"sequence_number":12}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","delta":"}","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","obfuscation":"Mezf0KdDroRLDUI","output_index":0,"sequence_number":13}
+
+
+        event: response.function_call_arguments.done
+
+        data: {"type":"response.function_call_arguments.done","arguments":"{\"a\":1231,\"b\":2331}","item_id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","output_index":0,"sequence_number":14}
+
+
+        event: response.output_item.done
+
+        data: {"type":"response.output_item.done","item":{"id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","type":"function_call","status":"completed","arguments":"{\"a\":1231,\"b\":2331}","call_id":"call_sVidsfFJ6zlzRpelrPkTPlpd","name":"multiply"},"output_index":0,"sequence_number":15}
+
+
+        event: response.completed
+
+        data: {"type":"response.completed","response":{"id":"resp_00d64fa806f333310169fab1be69d081a08f8285661855594c","object":"response","created_at":1778037182,"status":"completed","background":false,"completed_at":1778037183,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5.5-2026-04-23","moderation":null,"output":[{"id":"fc_00d64fa806f333310169fab1bf324481a0852cda3180856290","type":"function_call","status":"completed","arguments":"{\"a\":1231,\"b\":2331}","call_id":"call_sVidsfFJ6zlzRpelrPkTPlpd","name":"multiply"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"effort":"low","summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Multiply
+        two numbers.","name":"multiply","parameters":{"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object","additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":58,"input_tokens_details":{"cached_tokens":0},"output_tokens":23,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":81},"user":null,"metadata":{}},"sequence_number":16}
+
+
+        '
+    headers:
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      cf-ray:
+      - 9f74ce85bdf0cb75-DFW
+      content-type:
+      - text/event-stream; charset=utf-8
+      date:
+      - Wed, 06 May 2026 03:13:02 GMT
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '266'
+      openai-project:
+      - proj_2Y4H7T2XPShczTQx5fqMXdNp
+      openai-version:
+      - '2020-10-01'
+      server:
+      - cloudflare
+      set-cookie:
+      - __cf_bm=dOVwLeU7r7aShRQaxTKiYcu2Y1q8ZJiD8OFt516IQkk-1778037182.353376-1.0.1.1-kDgOFNW1kiTQunazntKDBwpmZh4ai7MGVZI2ZIDLzRXP4MRBfrPevoYSr41Ul_ozGR_VudKgENypl8pRCVaMoqfP66IEVu.Oz7Jz1Le7WzsMCL78NWXm.AbJCZy_KKVD;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 06 May 2026
+        03:43:02 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      transfer-encoding:
+      - chunked
+      x-content-type-options:
+      - nosniff
+      x-ratelimit-limit-requests:
+      - '15000'
+      x-ratelimit-limit-tokens:
+      - '40000000'
+      x-ratelimit-remaining-requests:
+      - '14999'
+      x-ratelimit-remaining-tokens:
+      - '39999493'
+      x-ratelimit-reset-requests:
+      - 4ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_996657ef97514aeb93f449d57303514d
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"include":["reasoning.encrypted_content"],"input":[{"role":"user","content":"What
+      is 1231 * 2331? Use the multiply tool."},{"type":"function_call","call_id":"call_sVidsfFJ6zlzRpelrPkTPlpd","name":"multiply","arguments":"{\"a\":
+      1231, \"b\": 2331}"},{"type":"function_call_output","call_id":"call_sVidsfFJ6zlzRpelrPkTPlpd","output":"2869461"}],"model":"gpt-5.5","reasoning":{"effort":"low"},"store":false,"stream":true,"tools":[{"type":"function","name":"multiply","description":"Multiply
+      two numbers.","parameters":{"properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"],"type":"object"}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '618'
+      Content-Type:
+      - application/json
+      Host:
+      - api.openai.com
+      User-Agent:
+      - OpenAI/Python 2.34.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.34.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.11.15
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "event: response.created\ndata: {\"type\":\"response.created\",\"response\"\
+        :{\"id\":\"resp_0dacb603de1c9e6b0169fab1c2314081a3b1df3cc5c09e0c60\",\"object\"\
+        :\"response\",\"created_at\":1778037186,\"status\":\"in_progress\",\"background\"\
+        :false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\"\
+        :null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\"\
+        :null,\"model\":\"gpt-5.5-2026-04-23\",\"moderation\":null,\"output\":[],\"\
+        parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\"\
+        :null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"24h\",\"reasoning\"\
+        :{\"effort\":\"low\",\"summary\":null},\"safety_identifier\":null,\"service_tier\"\
+        :\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\"\
+        :\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"\
+        type\":\"function\",\"description\":\"Multiply two numbers.\",\"name\":\"\
+        multiply\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"integer\"},\"\
+        b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"],\"type\":\"object\"\
+        ,\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\"\
+        :0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\"\
+        :{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\"\
+        :\"response.in_progress\",\"response\":{\"id\":\"resp_0dacb603de1c9e6b0169fab1c2314081a3b1df3cc5c09e0c60\"\
+        ,\"object\":\"response\",\"created_at\":1778037186,\"status\":\"in_progress\"\
+        ,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\"\
+        :0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\"\
+        :null,\"max_tool_calls\":null,\"model\":\"gpt-5.5-2026-04-23\",\"moderation\"\
+        :null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"\
+        previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\"\
+        :\"24h\",\"reasoning\":{\"effort\":\"low\",\"summary\":null},\"safety_identifier\"\
+        :null,\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\"\
+        :{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\"\
+        :\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Multiply two\
+        \ numbers.\",\"name\":\"multiply\",\"parameters\":{\"properties\":{\"a\":{\"\
+        type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"\
+        ],\"type\":\"object\",\"additionalProperties\":false},\"strict\":true}],\"\
+        top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"\
+        user\":null,\"metadata\":{}},\"sequence_number\":1}\n\nevent: response.output_item.added\n\
+        data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\"\
+        :\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\"\
+        :2}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\"\
+        ,\"content_index\":0,\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"\
+        logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\n\
+        data: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\"\
+        :\"123\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"yJXGKTBmb2UOz\",\"output_index\":0,\"sequence_number\"\
+        :4}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\"1\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"0bPnrPoF6d7HddV\",\"output_index\":0,\"\
+        sequence_number\":5}\n\nevent: response.output_text.delta\ndata: {\"type\"\
+        :\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \xD7\",\"\
+        item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"logprobs\"\
+        :[],\"obfuscation\":\"ft7PFRXyUN31Dr\",\"output_index\":0,\"sequence_number\"\
+        :6}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"HWsKMbb1JWpQBGo\",\"output_index\":0,\"\
+        sequence_number\":7}\n\nevent: response.output_text.delta\ndata: {\"type\"\
+        :\"response.output_text.delta\",\"content_index\":0,\"delta\":\"233\",\"item_id\"\
+        :\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"logprobs\":[],\"\
+        obfuscation\":\"OyardqgvtiISP\",\"output_index\":0,\"sequence_number\":8}\n\
+        \nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\"1\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"M5u2aOAAbIF9HaL\",\"output_index\":0,\"\
+        sequence_number\":9}\n\nevent: response.output_text.delta\ndata: {\"type\"\
+        :\"response.output_text.delta\",\"content_index\":0,\"delta\":\" =\",\"item_id\"\
+        :\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"logprobs\":[],\"\
+        obfuscation\":\"DblLLi7wbRu7Yj\",\"output_index\":0,\"sequence_number\":10}\n\
+        \nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"iiojCebBdYGkO\",\"output_index\":0,\"sequence_number\"\
+        :11}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\"2\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"eJPGA9ScIqJTAvj\",\"output_index\":0,\"\
+        sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\"\
+        :\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\"\
+        :\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"logprobs\":[],\"\
+        obfuscation\":\"pkBo5DcWhNmQVlb\",\"output_index\":0,\"sequence_number\":13}\n\
+        \nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\"869\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"6Z8oUB1RMn3DD\",\"output_index\":0,\"sequence_number\"\
+        :14}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"Bf7uSiaON5ThxbH\",\"output_index\":0,\"\
+        sequence_number\":15}\n\nevent: response.output_text.delta\ndata: {\"type\"\
+        :\"response.output_text.delta\",\"content_index\":0,\"delta\":\"461\",\"item_id\"\
+        :\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"logprobs\":[],\"\
+        obfuscation\":\"qqwxt4JuKvQU6\",\"output_index\":0,\"sequence_number\":16}\n\
+        \nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\"\
+        ,\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"obfuscation\":\"XM0rK6J7j52uLE\",\"output_index\":0,\"\
+        sequence_number\":17}\n\nevent: response.output_text.done\ndata: {\"type\"\
+        :\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"logprobs\":[],\"output_index\":0,\"sequence_number\":18,\"text\":\"1231\
+        \ \xD7 2331 = **2,869,461**\"}\n\nevent: response.content_part.done\ndata:\
+        \ {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\"\
+        :\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\",\"output_index\"\
+        :0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"\
+        text\":\"1231 \xD7 2331 = **2,869,461**\"},\"sequence_number\":19}\n\nevent:\
+        \ response.output_item.done\ndata: {\"type\":\"response.output_item.done\"\
+        ,\"item\":{\"id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\"\
+        ,\"annotations\":[],\"logprobs\":[],\"text\":\"1231 \xD7 2331 = **2,869,461**\"\
+        }],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"\
+        sequence_number\":20}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\"\
+        ,\"response\":{\"id\":\"resp_0dacb603de1c9e6b0169fab1c2314081a3b1df3cc5c09e0c60\"\
+        ,\"object\":\"response\",\"created_at\":1778037186,\"status\":\"completed\"\
+        ,\"background\":false,\"completed_at\":1778037187,\"error\":null,\"frequency_penalty\"\
+        :0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\"\
+        :null,\"max_tool_calls\":null,\"model\":\"gpt-5.5-2026-04-23\",\"moderation\"\
+        :null,\"output\":[{\"id\":\"msg_0dacb603de1c9e6b0169fab1c2e40081a3857ad788023cb7ea\"\
+        ,\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\"\
+        ,\"annotations\":[],\"logprobs\":[],\"text\":\"1231 \xD7 2331 = **2,869,461**\"\
+        }],\"phase\":\"final_answer\",\"role\":\"assistant\"}],\"parallel_tool_calls\"\
+        :true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\"\
+        :null,\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"effort\":\"low\"\
+        ,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\"\
+        ,\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"\
+        },\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\"\
+        :\"function\",\"description\":\"Multiply two numbers.\",\"name\":\"multiply\"\
+        ,\"parameters\":{\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\"\
+        :\"integer\"}},\"required\":[\"a\",\"b\"],\"type\":\"object\",\"additionalProperties\"\
+        :false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\"\
+        :\"disabled\",\"usage\":{\"input_tokens\":94,\"input_tokens_details\":{\"\
+        cached_tokens\":0},\"output_tokens\":18,\"output_tokens_details\":{\"reasoning_tokens\"\
+        :0},\"total_tokens\":112},\"user\":null,\"metadata\":{}},\"sequence_number\"\
+        :21}\n\n"
+    headers:
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      cf-ray:
+      - 9f74ce9d5cec11fd-ORD
+      content-type:
+      - text/event-stream; charset=utf-8
+      date:
+      - Wed, 06 May 2026 03:13:06 GMT
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '353'
+      openai-project:
+      - proj_2Y4H7T2XPShczTQx5fqMXdNp
+      openai-version:
+      - '2020-10-01'
+      server:
+      - cloudflare
+      set-cookie:
+      - __cf_bm=YuSyQqrRg_ripxVBGX9ZnLTFASaREsd8RjcORfPvRSE-1778037186.1373405-1.0.1.1-OTt6GIIb.vqG7KdooMAgro_13UWD_y3xibuJnSKYjofIRRPgkkgl3ivm9KWDf85p3Bq6X.FzVkbHHpoqVRfiGNNvdSjs_gxjjGTIEXa8..L8k11d2g6DXPHMJLp1bXFs;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 06 May 2026
+        03:43:06 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      transfer-encoding:
+      - chunked
+      x-content-type-options:
+      - nosniff
+      x-ratelimit-limit-requests:
+      - '15000'
+      x-ratelimit-limit-tokens:
+      - '40000000'
+      x-ratelimit-remaining-requests:
+      - '14999'
+      x-ratelimit-remaining-tokens:
+      - '39999457'
+      x-ratelimit-reset-requests:
+      - 4ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_808d2a0863014e248d080b21301d5d58
+    status:
+      code: 200
+      message: OK
+version: 1

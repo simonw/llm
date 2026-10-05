@@ -1,0 +1,7 @@
+sphinx==7.2.6
+furo==2023.9.10
+sphinx-autobuild
+sphinx-copybutton
+sphinx-markdown-builder==0.6.8
+myst-parser
+cogapp

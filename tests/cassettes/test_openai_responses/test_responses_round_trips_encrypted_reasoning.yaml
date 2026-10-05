@@ -1,0 +1,356 @@
+interactions:
+- request:
+    body: '{"include":["reasoning.encrypted_content"],"input":[{"role":"user","content":"Pick
+      a clever country name, look up its population, then check whether it can have
+      dragons. Be brief."}],"model":"gpt-5.5","reasoning":{"effort":"high"},"store":false,"stream":false,"tools":[{"type":"function","name":"lookup_population","description":"Returns
+      the current population of the specified fictional country.","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}},{"type":"function","name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons.","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '722'
+      Content-Type:
+      - application/json
+      Host:
+      - api.openai.com
+      User-Agent:
+      - OpenAI/Python 2.34.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.34.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.11.15
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/71XWZOiyhJ+n1/R4fNwApD1vLmhICIqrmcmiAIKRLZiKRUm+r9fwG61e3oi7hJx
+        fTAks3Kp/NL8kl/fXl46vtP5+6WTwRyZpMsIpGjRPMORXZZySIoTXWDRFO9YXUagRM4SBbLbpSyW
+        Z1yGtbnO98ZFYp2gXby7SeIc3uR2BkEBHRM0Oorna1ue5qlWlxegwHljYycRCmF97mZkATvwsgTH
+        TV4uCHN4E/th6MdeLftVP9YCBEqYNfYOPMMwQfVDrXi9BX53+Sk002phliWNZYzDsBW4GUwxjO3S
+        RDAGYVHWSvIvstX58bsz04EF8MP82dKP8yLDduHXl36WR+BqJrhAuDCLJIC/K4skCU0bhB/dRYkD
+        w+ZOHioI9i+WoEmaI0iGoLud+4EMNOGezW6Rask/bWluBXpAm/8ZWEHkHbsBVuRIKHAC6Vo8DQTh
+        hkXrpCgRvEEL8iRuILir6pJlJWrKbCdxAeO2Bbxe8+kjIpOBBrltEBuzWB8YW06R9+t5ni0sbX02
+        gpEZbcg1QKP1hdFJlkulrrgBVzQ4GWMJDa04PRwZbFu5gayRvL86Z4IgWG8ZBZUHT0LXYUdld1EE
+        qrQnSo4ieR0rZ6wOh/mih1fq3jP8rjII0zxBWlAxhaAMVuVAFzyDG9mZWAWrfDTTJolSTg8CvZwY
+        ispr5arAqevK/mouKT6xEbeStcgnV2QtSWuUrOH4pKygI3CcaOpbKVIFo/R6R0nDVzI7L3ejSCMT
+        cb2wgZkJfkokRmH39+RMt/gySgvqgCfunqeWWo514miJs3nXlLtyts1ExdDYfLmQVYK9+Ny+HCn0
+        DBnVGYPteoO7YD4OxghWrBsEG2dJc0FxusrustiQZ6WSNgItCodetNEjOln23TzzTAvtmaWo2Zy6
+        mSJigLfm8mrsaLHf3RCTqZoMp9HZj7dLyByG4s53Np7pLqI9POdaJqiL7kTDO1kdokWyE2Lblvub
+        FR6a9my4WJUWkwuUvhghJw4de7qiMNCwtpH2/aB/1aeYy6mxxpKJdLog3fLMgKTigb5zLrsZmSpL
+        ja+jKMZQVK14zc7OkDxq+lwxB2Sw5emUkg/eKZ76cRisnD2pDFfkvqf0qjklnibqfOcUVUAX/Q07
+        73Nj06MDow8inouW2mYwG1aD3Yq4CvZoA9lpNOyFmryohHBb9WVH2gUkWfbpmW1soozmablUgqWm
+        pjTAWJLmYbDexfR6xubdPvLn+X4Es52Ap5fJsOfLe9mE3rXq2ds5F7NuNZISdLACZ76YHqzrwoWX
+        /gEcJ0MmWJ8YYcLBKEkm5algRHarbk0C9wqXmCribNdjexsc9qsNbywoiSt3l9UIYEtaoQpNQaFH
+        PdHr9tM4To18wkCR7LOKTKuXPOPZ9TCaKWhywaPpXBHOVSz6UARzW3Tko3GaHt3JKPFywvL7Vjo1
+        lHhZDbB2PBxT54DFrehmg+mxIhmtOqPo4DuiOMp54cRN5olzFgZ6PAvKmDXjA9EbTqTzAfqAzRNp
+        oxKMsL+sp0XFBCk3JSR5jC7d5YUcRr1uFYKRM+aOy3kGrEDXS0/qn2bEXPZFchGd8DUsNoeejPJq
+        e1pn6Ulxk5gliMw38DwS0xOp48swJR01NQp/tIl5wmGAkgnmVFxkzhipO3xSK10NUDaGe2kMpGPB
+        cpQ2WZbcmgtjIXaP3bMvkAfE296unpj97nAUT2RtRB/Y6JypYhBg+xJoFwsqRDqX9cE+jHS+2oVD
+        0Ys4czO7hhREU1Zbn8qBHYmz8XhGq7RCQdeezi6LvqtpHEJHTE3plXdxPVJCepTq3o4I+2eKTmfO
+        cjCbBnNjT/bUuSyfWE0Xd9UBu+yWG85PScmp14Ww6suDbjq8rIEgY1afCqMg8LRgi6Gh6BUy9scT
+        WKZ4b/aFx6jNcRSBrCGmf362stfvX8161/7zrAddxiVbEqcYm7YcngI0bTsc+H3WuzhuOa1lqKck
+        /sDZrRJkHo5qDmj1v37UR3BcZOWPzt8/OnrN5kkGfnReH+cb1+Yt6/YnLvnC1TZJIGu8dpIkLuDn
+        hVo+hY9B1GYXJkmAkYkShMMbF94qUn//bPkQgaz2CMOPLFsT9W2VQPWWUlMX/ILta9XZT3Buvi8y
+        twzvTIuy+uJF7dI+QjOA5R91GWz48MbTHZo53uj7waH3NQa6bpK1xHn0vePbZZ/gbtzf95ocuLAo
+        65wa364PP2wxOczOfn2rwn/fi1yAw6Lztm4lGfywUBUwQs0ugVs59VaAAl6LR3J1ahF4PD91SHvu
+        uRE7Z5hZSe635exE0PFx9FjIbkAckzq/Rg1wkXTuivz3zeVzIz6awIG5nfnovbRLWF8gzl+KI3yx
+        cZbVhXl5NMZL4raaHEG7qZfz4vqtPxC+vPXnX/9Of92PNJ0V1dBm+VNRbtjXxawr/1HerqJtmE/i
+        pyvWC2TTEE/K1/vv1++PEM2O6mfQuRfrU4C77OeT0XuQtw39SQMcx79VQn/Ove2Pb5+itzm2C37z
+        H/py/PzHgBm1pxf/MzxP0NkgfjmCM3xxMuDVf8UvgKqPmM0R8+3I/4LTE9p/hMqvl1zv9p7x32H1
+        eWT9/+C6z8YiQWaYeHUhrMYBeReidgyKwk2Q1Ti+V6Pj+DmwwvcXNJwDDz5mhB9/eMsRme+/y59e
+        nX495n89J52HIflhmnx+eRLYrxRf+b3P2Icx1/3gu0gKED60FC/e5xTOP87UuoeAAwrQBHj99vov
+        v/3TYzEPAAA=
+    headers:
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      cf-ray:
+      - 9f74d0b45806549d-ORD
+      content-encoding:
+      - gzip
+      content-type:
+      - application/json
+      date:
+      - Wed, 06 May 2026 03:14:34 GMT
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '2715'
+      openai-project:
+      - proj_2Y4H7T2XPShczTQx5fqMXdNp
+      openai-version:
+      - '2020-10-01'
+      server:
+      - cloudflare
+      set-cookie:
+      - __cf_bm=JaAjlN.SsTHssMfEA38GX9HitAbY0eJ2RFPOYXHE.dM-1778037271.7367537-1.0.1.1-ITxNEO9g5Dnpe0xysdsQx6Pb4UfPCLUH47.8gv2jcppI9YSzDXqxNV1wVH1S0DOjPhkjvEoameT18PZ3jubWSiQeRsWVcFTBf8rKD.riIQ5F_txQnQ76olVhtIu0ZumI;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 06 May 2026
+        03:44:34 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      transfer-encoding:
+      - chunked
+      x-content-type-options:
+      - nosniff
+      x-ratelimit-limit-requests:
+      - '15000'
+      x-ratelimit-limit-tokens:
+      - '40000000'
+      x-ratelimit-remaining-requests:
+      - '14999'
+      x-ratelimit-remaining-tokens:
+      - '40000000'
+      x-ratelimit-reset-requests:
+      - 4ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_83a358e390da43f0af03fb3186d6e121
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"include":["reasoning.encrypted_content"],"input":[{"role":"user","content":"Pick
+      a clever country name, look up its population, then check whether it can have
+      dragons. Be brief."},{"type":"reasoning","id":"rs_0f4809b27460351d0169fab21897dc8196960e8680fb72a88d","encrypted_content":"gAAAAABp-rIaNe6WknTMnPCTW6JIYUOsrQbNUvTkE_mV0UapEUw4P056qF39VaxpCjTGFpDbnqZh4ucbsTpbEIYxdv---5gRmkzgej83d5Ey3QtkLFY-y6107PuJvuLDDsQAuSLYgTi3JClqsopNkz4t8JCSyCP8gT6Ecr9zkSsEMNHoJyKZ82RHTJL7NyStuqffIiSOFJi-V9WFbQsHxpbR0bEoUeGjJSed8669_PWFmL8TygAhFNux0rvRXEmN0o9UQca_r8iq-oTtcBY0MPb7ymqt1ZuHfY71RNsuP-hb9MO3_I3IrWr9JTN5sRQIL-5wi6YyEJ2MpTzvuaWUVu3aOGkGpez5fkkVdR26ktjxIfRtV0vJzFV8298ZAmVPm2oRBfsrg_bpY4R9Nc6LVKp-CuW_RxTX29B3V-HKLoDKmvinWRe4ZD9XidVg_fQmYevsNr8LQ3HNuXILDpQoX8nccIBVSuD_cMDQSyb4s81PQEpdnldcKS1uaNuNVFYBkBxPKu6s1GN50oFjwpPbg_k01nCPXdwXM0qJRN7evsJTD9LbnU5Mve0hNPOJ_C0kW72q1IZgjnKinlkSdY0JDS0YAJAzO19jHLOXdtzk2tBV5OB6G_g2kTBam76mRNVCMDzCXS-x8cEVe5KmDAlNIQz8lWzBIdFXk00yB2McTVmr272IyJkRNLq2auuFFOlkUXn2UM5s3BpiOsYEerX8uKwHDAiIYI_egxzAcWO6n5fzEFopZbkdOQKZbxQfewBZahHD4kUj48H6emooHyjt495WLW_-uAtf-KJ9MXA5AVulBzV7TQ1F6yXwSEaubFSpzpKatPmA9g3BqnnqTsH4e90B5JI2Lwsr75UDmMJpHwuEKOJ8vzn9ie9aOc9dIhTjKhfHEogs-biBbqKTJnRzCuNhZhqdZu9W9frCKhz04NzvpmZid99Es78j6HOodv8CPnMkyn5_nZ-ADHFvZeia5soFVL-48YwUKtz4kq6K-FIGpw3Rw0DmA3zlaEdG6hROrabkPPygFBjM-OIi90QmjuxltVZAIpszWjUrqjJfon5--riTuOm9qj0PuwDq0dLqTtiEVn7-d4aJr8_K9QrdGpLXujLzPLkprGeYFGaFht561NHRy6U6ln8nfh3vi80Zp7cgX4-2B3DEnHINE2Z5mvrL9kkucwkNwbeJ-qOIPCYlmP7zXlD9gm6_VMxl1epK5NUjyCcm9MGGM2L2J1efcKMwQBfNN6pphu1K2Sgwfg0FpPmqPgX-lBv12qMdRCMKkOTY0ALOIIj5NP9XzZuf5W6DOjoy6LxQ8SBIC3qDwUa8Iu5PK8EkkgNkWueTJPzpTYhjaRquY_B8","summary":[]},{"type":"function_call","call_id":"call_uy7tfNVokIN7NjFF6k7OtLyl","name":"lookup_population","arguments":"{\"country\":
+      \"Pundora\"}"},{"type":"function_call_output","call_id":"call_uy7tfNVokIN7NjFF6k7OtLyl","output":"123124"}],"model":"gpt-5.5","reasoning":{"effort":"high"},"store":false,"stream":false,"tools":[{"type":"function","name":"lookup_population","description":"Returns
+      the current population of the specified fictional country.","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}},{"type":"function","name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons.","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2423'
+      Content-Type:
+      - application/json
+      Host:
+      - api.openai.com
+      User-Agent:
+      - OpenAI/Python 2.34.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.34.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.11.15
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/71VS4/jNgy+z68wfJ4Z2M7Te+t5L9ttgW7bXRiyRTuayJKqR7rBIP+9lBS/MhOg
+        2AK9BDE/8SPFj6ReH5IkZTT9kKQajKqydr3PyrrYrbfZapPTLN+WLamLnLTbItvn5bZe53S/o7SE
+        ksKmLdNHTyHrF2jsQCOFgWhvNBALtCIey3e7fbbaIXnAjCXWGe/TyF5xwHPRqSbNsdPSCZ9XS7iB
+        aGacM9Gh7RU/0aDIGbT3p3ACLhV+IHCJgQfKm9CbgILW0nsKx3kwtBr+ciCac6VAEG7PCGbPWcCY
+        GMgqCpYwbuaeTBirXWMZXnpu78n3SjqrnK2sPMJb0ErJq4bwJV0vKXB/p07Zp83z5qnIiu1Ttn4q
+        Vul4QBMfbu4WI6Hlz1CaWKBR2ra5L2zdwH4fhM3qVVm3BdB8vVuvorCBxJ4VBBonwj1D1hN8T8cA
+        Et25HoQN+OvXVEnleEj/a/ohL1Z5sb5Mpz1xFXMOf1/+/n1/5Py3n4yQv3yxL1/++Hnz8fOWTR6C
+        9BCPi+pATiiRJp2XIhy44O+3UCBFNBICX5YdlYu9pbBtUX54R36ETkw6Uw2dHRMcS6803toiZXOA
+        6gjnu5jGyoircGmxPkQ9cUCMFIu+hraVOgzTgXWH611T4/qe6IF+bHRDWrBnzMlztwwWbW1Anxje
+        yrJhUFriuE2v8yc1LCbMQq98c7lgz68FsPDdTslhaj2ZvmftEc7Fsl9TPoGupWGhnGkPlLl+mtAo
+        xEFifh4mzsp0BMzbVr7twqkHKJhGMzWU9jPgBYRJ7AGSxmmNhUmmtktkGxCjoPH1oknLAh/hSYM7
+        x+rz89v24lIenaommumI76wepdVmVpSoPRYTK7+0h90UwtyYZ1fEjeIbYgZexv+XxymEX1pMAx2L
+        dRNgtH2bOQ1Brit7hhBKWazEp3nuoT8ebqKHHMPG9zM0V/3HBfsVmRJ2K89MOhzyxA95ch3y53+x
+        B/6DTjO170rFhIUuPjw/ptUsyP8s17gbrVQVlx0WovYE2WhUYQ2W+2jQqONQjZQyQ2o+vNjOkA6m
+        HcHE4tnLy+LxLTB7TF+n/Y+Lkk6e2WKd3D6nRf4e8B7vuGTvUVtpCZ8zr8Y95cxyp2IPEUos8fyX
+        h8s/3J7RqkIJAAA=
+    headers:
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      cf-ray:
+      - 9f74d0c81c4d2b4b-ORD
+      content-encoding:
+      - gzip
+      content-type:
+      - application/json
+      date:
+      - Wed, 06 May 2026 03:14:36 GMT
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '1077'
+      openai-project:
+      - proj_2Y4H7T2XPShczTQx5fqMXdNp
+      openai-version:
+      - '2020-10-01'
+      server:
+      - cloudflare
+      set-cookie:
+      - __cf_bm=Ff7ZRSpcLAJPDQ.asF9RF4bqWtg97VpC0E51yPz81.U-1778037274.8993971-1.0.1.1-lFBHWH1sK41g3Of_MJ292u9sow8m9djH6vBQSla3pNCvWDtdVwVDdW.ko4QJQaLNA6RhV21md8copjjSWmsVnZJzyKsQgS.IPimoDzj3d9Lt6eQuV2eXHZenOh25fKxo;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 06 May 2026
+        03:44:36 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      transfer-encoding:
+      - chunked
+      x-content-type-options:
+      - nosniff
+      x-ratelimit-limit-requests:
+      - '15000'
+      x-ratelimit-limit-tokens:
+      - '40000000'
+      x-ratelimit-remaining-requests:
+      - '14999'
+      x-ratelimit-remaining-tokens:
+      - '40000000'
+      x-ratelimit-reset-requests:
+      - 4ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_477366fddd32402daba00618a4c16efd
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"include":["reasoning.encrypted_content"],"input":[{"role":"user","content":"Pick
+      a clever country name, look up its population, then check whether it can have
+      dragons. Be brief."},{"type":"reasoning","id":"rs_0f4809b27460351d0169fab21897dc8196960e8680fb72a88d","encrypted_content":"gAAAAABp-rIaNe6WknTMnPCTW6JIYUOsrQbNUvTkE_mV0UapEUw4P056qF39VaxpCjTGFpDbnqZh4ucbsTpbEIYxdv---5gRmkzgej83d5Ey3QtkLFY-y6107PuJvuLDDsQAuSLYgTi3JClqsopNkz4t8JCSyCP8gT6Ecr9zkSsEMNHoJyKZ82RHTJL7NyStuqffIiSOFJi-V9WFbQsHxpbR0bEoUeGjJSed8669_PWFmL8TygAhFNux0rvRXEmN0o9UQca_r8iq-oTtcBY0MPb7ymqt1ZuHfY71RNsuP-hb9MO3_I3IrWr9JTN5sRQIL-5wi6YyEJ2MpTzvuaWUVu3aOGkGpez5fkkVdR26ktjxIfRtV0vJzFV8298ZAmVPm2oRBfsrg_bpY4R9Nc6LVKp-CuW_RxTX29B3V-HKLoDKmvinWRe4ZD9XidVg_fQmYevsNr8LQ3HNuXILDpQoX8nccIBVSuD_cMDQSyb4s81PQEpdnldcKS1uaNuNVFYBkBxPKu6s1GN50oFjwpPbg_k01nCPXdwXM0qJRN7evsJTD9LbnU5Mve0hNPOJ_C0kW72q1IZgjnKinlkSdY0JDS0YAJAzO19jHLOXdtzk2tBV5OB6G_g2kTBam76mRNVCMDzCXS-x8cEVe5KmDAlNIQz8lWzBIdFXk00yB2McTVmr272IyJkRNLq2auuFFOlkUXn2UM5s3BpiOsYEerX8uKwHDAiIYI_egxzAcWO6n5fzEFopZbkdOQKZbxQfewBZahHD4kUj48H6emooHyjt495WLW_-uAtf-KJ9MXA5AVulBzV7TQ1F6yXwSEaubFSpzpKatPmA9g3BqnnqTsH4e90B5JI2Lwsr75UDmMJpHwuEKOJ8vzn9ie9aOc9dIhTjKhfHEogs-biBbqKTJnRzCuNhZhqdZu9W9frCKhz04NzvpmZid99Es78j6HOodv8CPnMkyn5_nZ-ADHFvZeia5soFVL-48YwUKtz4kq6K-FIGpw3Rw0DmA3zlaEdG6hROrabkPPygFBjM-OIi90QmjuxltVZAIpszWjUrqjJfon5--riTuOm9qj0PuwDq0dLqTtiEVn7-d4aJr8_K9QrdGpLXujLzPLkprGeYFGaFht561NHRy6U6ln8nfh3vi80Zp7cgX4-2B3DEnHINE2Z5mvrL9kkucwkNwbeJ-qOIPCYlmP7zXlD9gm6_VMxl1epK5NUjyCcm9MGGM2L2J1efcKMwQBfNN6pphu1K2Sgwfg0FpPmqPgX-lBv12qMdRCMKkOTY0ALOIIj5NP9XzZuf5W6DOjoy6LxQ8SBIC3qDwUa8Iu5PK8EkkgNkWueTJPzpTYhjaRquY_B8","summary":[]},{"type":"function_call","call_id":"call_uy7tfNVokIN7NjFF6k7OtLyl","name":"lookup_population","arguments":"{\"country\":
+      \"Pundora\"}"},{"type":"function_call_output","call_id":"call_uy7tfNVokIN7NjFF6k7OtLyl","output":"123124"},{"type":"function_call","call_id":"call_jwY8kllWAsnoSXtjXZQ5KR6i","name":"can_have_dragons","arguments":"{\"population\":
+      123124}"},{"type":"function_call_output","call_id":"call_jwY8kllWAsnoSXtjXZQ5KR6i","output":"true"}],"model":"gpt-5.5","reasoning":{"effort":"high"},"store":false,"stream":false,"tools":[{"type":"function","name":"lookup_population","description":"Returns
+      the current population of the specified fictional country.","parameters":{"properties":{"country":{"type":"string"}},"required":["country"],"type":"object"}},{"type":"function","name":"can_have_dragons","description":"Returns
+      True if the specified population can have dragons.","parameters":{"properties":{"population":{"type":"integer"}},"required":["population"],"type":"object"}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2645'
+      Content-Type:
+      - application/json
+      Host:
+      - api.openai.com
+      User-Agent:
+      - OpenAI/Python 2.34.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - 'false'
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.34.0
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.11.15
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/71Wy47bOBC8z1cQOs8MJFm27P2KINhbNhAosWVzhyIZPpwYgf89TcqSKHtmDwmw
+        N6uLrCa7qpv++URIxln2F8kMWN3kfbXPD21ZV7t8sy1YXuwOPW3LoisZq/bFYXfYtvuS9mULXdHW
+        fZ49BwrV/gudm2iUtDDGOwPUAWtowIq63uebuqx3EbOOOm/Dnk4NWgCuGze1tHs7GuVlOFdPhYUx
+        zIXg8oixn/iJAU0vYMJ+BmcQSuMHAtcx8UR5l7qOKBijwk7phYiB3sA3D7K7NBokFe6CYP6aR4zL
+        iaxh4CgXNt3JpXXGd47jpdP4QH80yjvtXePUGzyCTinRdFSs6QbFQIQ7HbV72b5uX8q83L3k1Uu5
+        yeYFhoZ06bYxE0a+xNKMBZqlHezxP5Rl9SYPyrZ1Ve9hAzsGHc1bGvNFFnfREHnAWnqEBfhIwgh2
+        SjqQy6HSg61opzLBDzfvjguolMrRqbRfvq5AoY7aqPYdJBIh7yd0kDKUnKgllGilvYhkRPWkKDfP
+        RVmRf3yZFxWhkpEL2GfCHemoxC1nIMzQI6Z+zWby6+3XnC/TSB4v0XP0TUOl/Y42nGGjRESptRyL
+        hdV4mngiB3rYoAVArO2Ajho9r7Gd0Jbwji0ROnPlbTN1XBPFni2BxRm0Q8ruBM0bXD7EDASZRkNl
+        ZXUafYaNa5Vc9Rv0vTKxsid+PN0umVk/DNRM9HMDWtqDu+CZAnfPYdVuFsyZ460cnxq4p16M6qOp
+        lIFV5zsYdDC9j/HiVoCbzLfD4dEGunwn9orrxrLfjnwG0yrLYznR1Iz7YZkcoxAnheeLynmnshmw
+        jy02pem9jFNgEZ+B7QzXU2k/A15AWuJOQDpvDBbmzpQBsRq6UC9Geh75qCAdzkJnLq8LtaRDTCqU
+        evO6WWiWJcFZA0prbFKUUXssJlZ+HY8NG9PchZMr4qQLhkjA69IaSwtmYZhyA2zV+kmCOZb07TIN
+        xqckQShjfKzEp/Ts0R9Pd9njGeNLFHooVf33BfsbmQi/lyeR7nFiPAiFS5qwpLkt+ROdErU/lIrj
+        7D2OD+LvaZUk+Z/lmmejU7pJpnw+B3Ucg4f9GDCo41SNjHFLWzH9k/DxuZpnBJer57gs6+dHIHnk
+        Z8vEQcmWnflqnNw/82X1HvAe7zxkP6J2+P6JhHlbzHPK2/VMRQ9RRh0N/Nen6y8ML4eS2gkAAA==
+    headers:
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      cf-ray:
+      - 9f74d0cfcf8b2b4b-ORD
+      content-encoding:
+      - gzip
+      content-type:
+      - application/json
+      date:
+      - Wed, 06 May 2026 03:14:37 GMT
+      openai-organization:
+      - user-r3e61fpak04cbaokp5buoae4
+      openai-processing-ms:
+      - '1306'
+      openai-project:
+      - proj_2Y4H7T2XPShczTQx5fqMXdNp
+      openai-version:
+      - '2020-10-01'
+      server:
+      - cloudflare
+      set-cookie:
+      - __cf_bm=QSHgROUcoFXh6zyyvGCnOLGXX2c4b7S8nJowB4RJhtI-1778037276.1270735-1.0.1.1-m3I6gMTwPPLlpeHgduEBRKmVIQGDDZcoItTTaVkwIUQXMOTcCG5_fl8MQIwjyawnDJPGxUthuGFfjTpsPX1OSBOXGmAUziyOhJ04qWwyUzM7fMtNEWtTmOgvh4au55D0;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 06 May 2026
+        03:44:37 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      transfer-encoding:
+      - chunked
+      x-content-type-options:
+      - nosniff
+      x-ratelimit-limit-requests:
+      - '15000'
+      x-ratelimit-limit-tokens:
+      - '40000000'
+      x-ratelimit-remaining-requests:
+      - '14999'
+      x-ratelimit-remaining-tokens:
+      - '40000000'
+      x-ratelimit-reset-requests:
+      - 4ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_e20848e56750417e9dd0940f7c4fc82e
+    status:
+      code: 200
+      message: OK
+version: 1
