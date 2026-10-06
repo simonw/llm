@@ -26,9 +26,7 @@ if embedding_model.supports_binary:
 ```
 The `embedding_model.supports_text` property indicates if the model supports text input.
 
-Models can also advertise typed attachment support through their
-`attachment_types` collection. Passing an `Attachment` preserves the MIME type
-and its path or URL in addition to providing access to the bytes:
+Models can also advertise typed attachment support through their `attachment_types` collection. Passing an `Attachment` preserves the MIME type and its path or URL in addition to providing access to the bytes:
 
 ```python
 import llm
@@ -38,9 +36,7 @@ if attachment.resolve_type() in embedding_model.attachment_types:
     vector = embedding_model.embed(attachment)
 ```
 
-When a model supports binary data but does not declare any `attachment_types`,
-LLM passes the attachment's content to that model as bytes for backwards
-compatibility.
+When a model supports binary data but does not declare any `attachment_types`, LLM passes the attachment's content to that model as bytes for backwards compatibility.
 
 Many embeddings models are more efficient when you embed multiple strings or binary strings at once. To embed multiple strings at once, use the `.embed_multi()` method:
 ```python

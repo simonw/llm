@@ -91,9 +91,7 @@ If your model accepts binary, your `.embed_batch()` model may be called with a l
 
 ## Embedding typed attachments
 
-Binary strings do not include a MIME type or information about where they came
-from. Models that need that information can declare the attachment MIME types
-they support using `attachment_types`:
+Binary strings do not include a MIME type or information about where they came from. Models that need that information can declare the attachment MIME types they support using `attachment_types`:
 
 ```python
 class MultimodalEmbeddingModel(llm.EmbeddingModel):
@@ -111,15 +109,8 @@ class MultimodalEmbeddingModel(llm.EmbeddingModel):
                 ...
 ```
 
-An embedding model with a non-empty `attachment_types` collection receives
-matching inputs as `llm.Attachment` objects. Attachments provide `type`, `path`,
-`url`, and `content` attributes, along with `resolve_type()` and
-`content_bytes()` methods.
+An embedding model with a non-empty `attachment_types` collection receives matching inputs as `llm.Attachment` objects. Attachments provide `type`, `path`, `url`, and `content` attributes, along with `resolve_type()` and `content_bytes()` methods.
 
-The CLI accepts typed attachments using `-a/--attachment`, which detects the
-MIME type, or `--at/--attachment-type PATH MIME`, which sets it explicitly.
+The CLI accepts typed attachments using `-a/--attachment`, which detects the MIME type, or `--at/--attachment-type PATH MIME`, which sets it explicitly.
 
-For backwards compatibility, a model with `supports_binary = True` and no
-declared `attachment_types` receives the attachment's content as bytes. This
-allows existing binary embedding plugins to work with the typed attachment CLI
-without modification.
+For backwards compatibility, a model with `supports_binary = True` and no declared `attachment_types` receives the attachment's content as bytes. This allows existing binary embedding plugins to work with the typed attachment CLI without modification.
