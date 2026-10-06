@@ -7,6 +7,24 @@ import llm
 from llm.embeddings import Entry
 
 
+class TypedAttachmentEmbeddingModel(llm.EmbeddingModel):
+    model_id = "typed-attachments"
+    attachment_types = frozenset({"audio/wav", "image/png"})
+
+    def __init__(self):
+        self.embedded_content = []
+
+    def embed_batch(self, items):
+        for item in items:
+            self.embedded_content.append(item)
+            if isinstance(item, str):
+                yield [0.5, 0.5]
+            elif item.resolve_type() == "image/png":
+                yield [1.0, 0.0]
+            else:
+                yield [0.0, 1.0]
+
+
 def test_demo_plugin():
     model = llm.get_embedding_model("embed-demo")
     assert model.embed("hello world") == [5, 5] + [0] * 14
@@ -70,6 +88,49 @@ def test_embed_huge_list(batch_size, expected_batches):
     assert model.batch_count == expected_batches
 
 
+def test_embed_typed_attachments():
+    model = TypedAttachmentEmbeddingModel()
+    attachment = llm.Attachment(type="image/png", content=b"png")
+
+    assert model.embed(attachment) == [1.0, 0.0]
+    assert list(model.embed_multi(["caption", attachment])) == [
+        [0.5, 0.5],
+        [1.0, 0.0],
+    ]
+    assert model.embedded_content == [attachment, "caption", attachment]
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "This model does not support attachments of type 'video/mp4', "
+            "only audio/wav, image/png"
+        ),
+    ):
+        model.embed(llm.Attachment(type="video/mp4", content=b"video"))
+
+    with pytest.raises(ValueError, match="does not support binary data"):
+        model.embed(b"untyped")
+
+
+def test_embed_attachment_legacy_binary_fallback(embed_demo):
+    attachment = llm.Attachment(type="image/png", content=b"hello world")
+
+    embed_demo.embed(attachment)
+    list(embed_demo.embed_multi([attachment]))
+
+    assert embed_demo.embedded_content == [b"hello world", b"hello world"]
+
+    with pytest.raises(ValueError, match="Attachment has no content"):
+        embed_demo.embed(llm.Attachment(type="image/png"))
+
+
+def test_embed_attachment_rejected_without_attachment_or_binary_support():
+    model = llm.get_embedding_model("embed-text-only")
+
+    with pytest.raises(ValueError, match="This model does not support attachments"):
+        model.embed(llm.Attachment(type="image/png", content=b"png"))
+
+
 def test_embed_store(collection):
     collection.embed("3", "hello world again", store=True)
     assert collection.db["embeddings"].count == 3
@@ -119,6 +180,7 @@ def test_collection(collection):
             "embedding": llm.encode([5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": collection.content_hash("hello world"),
             "metadata": None,
             "updated": ANY,
@@ -129,6 +191,7 @@ def test_collection(collection):
             "embedding": llm.encode([7, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": collection.content_hash("goodbye world"),
             "metadata": None,
             "updated": ANY,
@@ -196,6 +259,85 @@ def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
     assert all(row["content_hash"] is not None for row in rows)
     # Check batch count
     assert collection.model().batch_count == expected_batches
+
+
+def test_collection_typed_attachments(db_factory):
+    model = TypedAttachmentEmbeddingModel()
+    collection = llm.Collection("typed", db_factory(memory=True), model=model)
+    image = llm.Attachment(type="image/png", content=b"same bytes")
+    audio = llm.Attachment(type="audio/wav", content=b"same bytes")
+
+    collection.embed_multi(
+        [("image", image), ("audio", audio)], store=True, batch_size=2
+    )
+
+    rows = {row["id"]: row for row in collection.db["embeddings"].rows}
+    assert rows["image"]["content_blob"] == b"same bytes"
+    assert rows["image"]["content_type"] == "image/png"
+    assert rows["audio"]["content_blob"] == b"same bytes"
+    assert rows["audio"]["content_type"] == "audio/wav"
+    assert rows["image"]["content_hash"] != rows["audio"]["content_hash"]
+    assert model.embedded_content == [image, audio]
+
+    entries = {entry.id: entry for entry in collection.similar_by_vector([1.0, 0.0])}
+    assert entries["image"].content is None
+    assert entries["image"].content_type == "image/png"
+    assert entries["audio"].content is None
+    assert entries["audio"].content_type == "audio/wav"
+
+
+def test_collection_attachment_type_stored_without_payload(db_factory):
+    collection = llm.Collection(
+        "typed", db_factory(memory=True), model=TypedAttachmentEmbeddingModel()
+    )
+    collection.embed(
+        "image", llm.Attachment(type="image/png", content=b"png"), store=False
+    )
+
+    row = collection.db["embeddings"].get((collection.id, "image"))
+    assert row["content_blob"] is None
+    assert row["content_type"] == "image/png"
+
+
+def test_collection_materializes_url_attachment_once(db_factory, httpx2_mock):
+    httpx2_mock.add_response(
+        method="HEAD",
+        url="https://example.com/image",
+        headers={"content-type": "image/png"},
+    )
+    httpx2_mock.add_response(
+        url="https://example.com/image",
+        content=b"png",
+    )
+    model = TypedAttachmentEmbeddingModel()
+    collection = llm.Collection("typed", db_factory(memory=True), model=model)
+
+    collection.embed(
+        "image", llm.Attachment(url="https://example.com/image"), store=True
+    )
+
+    assert [
+        (request.method, str(request.url)) for request in httpx2_mock.get_requests()
+    ] == [
+        ("HEAD", "https://example.com/image"),
+        ("GET", "https://example.com/image"),
+    ]
+    embedded = model.embedded_content[0]
+    assert embedded == llm.Attachment(
+        type="image/png",
+        url="https://example.com/image",
+        content=b"png",
+    )
+
+
+def test_attachment_content_hash_includes_type():
+    image = llm.Attachment(type="image/png", content=b"same bytes")
+    audio = llm.Attachment(type="audio/wav", content=b"same bytes")
+
+    assert llm.Collection.content_hash(image) != llm.Collection.content_hash(audio)
+    assert llm.Collection.content_hash(image) != llm.Collection.content_hash(
+        b"same bytes"
+    )
 
 
 def test_collection_delete(collection):
