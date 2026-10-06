@@ -904,6 +904,10 @@ Options:
   -d, --database FILE
   -c, --content TEXT              Content to embed
   --binary                        Treat input as binary data
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
   --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
@@ -917,7 +921,7 @@ Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
 
   Store embeddings for multiple strings at once in the specified collection.
 
-  Input data can come from one of three sources:
+  Input data can come from one of four sources:
 
   1. A CSV, TSV, JSON or JSONL file:
      - CSV/TSV: First column is ID, remaining columns concatenated as content
@@ -946,24 +950,36 @@ Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
        llm embed-multi images --files photos '*.jpg' --binary
        llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
 
+  4. Typed attachments:
+     - Each path or URL becomes one embedding
+     - Use --at PATH MIME-TYPE to supply an explicit MIME type
+
+     Examples:
+       llm embed-multi media -a photo.jpg -a recording.wav
+       llm embed-multi media --at recording.data audio/wav
+
 Options:
-  --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
-  --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
-                               and glob pattern
-  --encoding TEXT              Encodings to try when reading --files
-  --binary                     Treat --files as binary data
-  --sql TEXT                   Read input using this SQL query
-  --attach <TEXT FILE>...      Additional databases to attach - specify alias
-                               and file path
-  --batch-size INTEGER         Batch size to use when running embeddings
-  --prefix TEXT                Prefix to add to the IDs
-  -m, --model TEXT             Embedding model to use
-  --key TEXT                   API key to use
-  --prepend TEXT               Prepend this string to all content before
-                               embedding
-  --store                      Store the text itself in the database
+  --format [json|csv|tsv|nl]      Format of input file - defaults to auto-detect
+  --files <DIRECTORY TEXT>...     Embed files in this directory - specify
+                                  directory and glob pattern
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  --encoding TEXT                 Encodings to try when reading --files
+  --binary                        Treat --files as binary data
+  --sql TEXT                      Read input using this SQL query
+  --attach <TEXT FILE>...         Additional databases to attach - specify alias
+                                  and file path
+  --batch-size INTEGER            Batch size to use when running embeddings
+  --prefix TEXT                   Prefix to add to the IDs
+  -m, --model TEXT                Embedding model to use
+  --key TEXT                      API key to use
+  --prepend TEXT                  Prepend this string to all content before
+                                  embedding
+  --store                         Store the text itself in the database
   -d, --database FILE
-  -h, --help                   Show this message and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 (help-similar)=
@@ -982,14 +998,18 @@ Usage: llm similar [OPTIONS] COLLECTION [ID]
       llm similar my-collection 1234
 
 Options:
-  -i, --input PATH      File to embed for comparison
-  -c, --content TEXT    Content to embed for comparison
-  --binary              Treat input as binary data
-  -n, --number INTEGER  Number of results to return
-  -p, --plain           Output in plain text format
+  -i, --input PATH                File to embed for comparison
+  -c, --content TEXT              Content to embed for comparison
+  --binary                        Treat input as binary data
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  -n, --number INTEGER            Number of results to return
+  -p, --plain                     Output in plain text format
   -d, --database FILE
-  --prefix TEXT         Just IDs with this prefix
-  -h, --help            Show this message and exit.
+  --prefix TEXT                   Just IDs with this prefix
+  -h, --help                      Show this message and exit.
 ```
 
 (help-embed-models)=

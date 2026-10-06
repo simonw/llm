@@ -230,6 +230,7 @@ CREATE TABLE "embeddings" (
    "embedding" BLOB,
    "content" TEXT,
    "content_blob" BLOB,
+   "content_type" TEXT,
    "content_hash" BLOB,
    "metadata" TEXT,
    "updated" INTEGER,
