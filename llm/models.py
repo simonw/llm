@@ -43,8 +43,8 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict, create_model
 
 from .utils import (
-    Fragment,
     MIME_TYPE_FIXES,
+    Fragment,
     mimetype_from_path,
     mimetype_from_string,
     monotonic_ulid,
