@@ -201,6 +201,7 @@ Options:
   -o, --option <TEXT TEXT>...   key/value options for the model
   -d, --database FILE           Path to log database
   --no-stream                   Do not stream output
+  -n, --no-log                  Don't log to database
   -R, --hide-reasoning          Hide reasoning output
   --key TEXT                    API key to use
   -T, --tool TEXT               Name of a tool to make available to the model
