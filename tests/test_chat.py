@@ -356,3 +356,33 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
+
+class _InterruptedStream(list):
+    "Yields its items, then raises KeyboardInterrupt as if Ctrl+C was pressed"
+
+    def __iter__(self):
+        yield from super().__iter__()
+        raise KeyboardInterrupt
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_ctrl_c_interrupts_response(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(_InterruptedStream(["one ", "two"]))
+    mock_model.enqueue(["still here"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nHi again\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert (
+        "\n> Hi\none two\nResponse interrupted\n> Hi again\nstill here\n> quit\n"
+        in (result.output)
+    )
+    # The interrupted response is not logged or added to the conversation
+    assert [row["prompt"] for row in logged_rows(logs_db)] == ["Hi again"]
+    prompt = mock_model.history[-1][0]
+    assert [m.role for m in prompt.messages] == ["user"]
