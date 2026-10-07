@@ -444,6 +444,41 @@ Example output:
 }
 ```
 
+(schemas-strict-openai)=
+
+## Strict mode for OpenAI models
+
+OpenAI models support an opt-in **strict** Structured Outputs mode that guarantees the response conforms to the JSON schema - the model cannot return invalid JSON that happens to pass a first-pass parse. Without it, a schema request is best-effort: responses can include extra properties, drop required fields, or return the wrong types, and the failure only surfaces later when you try to validate the JSON yourself.
+
+Enable it with the `strict_schema` option:
+
+```bash
+llm -m gpt-4o -o strict_schema 1 --schema 'name, age int' 'invent a cool dog'
+```
+
+Or from the {ref}`Python API <python-api-schemas>`:
+
+```python
+model.prompt(
+    "invent a cool dog",
+    schema=Dog,
+    strict_schema=True,
+)
+```
+
+OpenAI's strict mode only accepts a restricted JSON Schema subset. LLM automatically rewrites your schema to a compatible form:
+
+- Every object gains `additionalProperties: false`.
+- Every property is marked as required.
+- `$defs`/`$ref` definitions are inlined.
+- Optional-style `anyOf: [T, {type: null}]` unions are preserved.
+
+Keywords OpenAI strict mode cannot enforce - `minItems`, `maxItems`, `allOf`, `multipleOf` and similar - result in a clear error instead of being silently ignored, since dropping them would weaken the schema you asked for. Remove the keyword or turn `strict_schema` off to proceed with the looser default behaviour.
+
+The option only applies when a schema is supplied; using it without `--schema` raises an error.
+
+Strict mode is supported on both the Responses API and the Chat Completions `json_schema` response format for OpenAI models.
+
 (schemas-specify)=
 
 ## Ways to specify a schema
