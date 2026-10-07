@@ -530,6 +530,8 @@ your queries.
 
 Type `quit` or `exit` followed by `<enter>` to end a chat session.
 
+Press `Ctrl+C` while a response is streaming to stop it and return to the prompt. The interrupted response is not logged or included in the rest of the conversation.
+
 Sometimes you may want to paste multiple lines of text into a chat at once - for example when debugging an error message.
 
 To do that, type `!multi` to start a multi-line input. Type or paste your text, then type `!end` and hit `<enter>` to finish.

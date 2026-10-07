@@ -210,10 +210,14 @@ def _run_chat(
             prompt = transform_prompt(prompt)
 
         response = prompt_callback(prompt, fragments, attachments)
-        display_stream_events(
-            response.stream_events(),
-            show_reasoning=show_reasoning,
-        )
+        events = response.stream_events()
+        try:
+            display_stream_events(events, show_reasoning=show_reasoning)
+        except KeyboardInterrupt:
+            # Ctrl+C stops the current response but keeps the chat going
+            events.close()
+            click.echo("\nResponse interrupted", err=True)
+            continue
         if after_response is not None:
             after_response(response)
         print()
