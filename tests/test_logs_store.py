@@ -1044,7 +1044,9 @@ class TestConcurrentWriters:
         self, db_factory, tmp_path, mock_model, monkeypatch, existing_thread
     ):
         path = str(tmp_path / "logs.db")
-        store = LogStore(db_factory(path))
+        # Each db_factory call opens a separate connection to the same file.
+        logger_db = db_factory(path)
+        store = LogStore(logger_db)  # Wraps the existing connection.
         competitor = db_factory(path)
         competitor.execute("PRAGMA busy_timeout=0")
         assert store.db.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
