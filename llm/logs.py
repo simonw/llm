@@ -457,8 +457,22 @@ class LogStore:
         timings, usage, which model answered - goes on the turn, because
         message rows are shared and so cannot carry provenance.
         """
-        with self.db.atomic():
-            return self._log_in_transaction(response, thread_id)
+        if self.db.conn.in_transaction:
+            # Leave a caller-owned transaction open, using a savepoint so a
+            # failed log write does not roll back the caller's other work.
+            with self.db.atomic():
+                return self._log_in_transaction(response, thread_id)
+
+        # Reserve the writer before reading. A deferred transaction can fail
+        # immediately when upgrading a read lock, bypassing the busy timeout.
+        self.db.conn.execute("BEGIN IMMEDIATE")
+        try:
+            turn_id = self._log_in_transaction(response, thread_id)
+            self.db.conn.commit()
+        except BaseException:
+            self.db.conn.rollback()
+            raise
+        return turn_id
 
     def _log_in_transaction(self, response, thread_id: str | None) -> str:
         if thread_id is None:

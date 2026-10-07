@@ -1006,8 +1006,92 @@ class TestAtomicWrites:
         assert store.db["turns"].count == 1
         assert store.verify() == []
 
+    def test_log_does_not_commit_outer_transaction(self, store, mock_model):
+        mock_model.enqueue(["reply"])
+        response = mock_model.prompt("hello")
+        response.text()
+        store.db.conn.execute("BEGIN")
+        store.log(response)
+        assert store.db.conn.in_transaction
+        assert store.db["turns"].count == 1
+        store.db.conn.rollback()
+        assert store.db["turns"].count == 0
+        assert store.db["messages"].count == 0
+        assert store.db["threads"].count == 0
+
+    def test_failed_log_preserves_outer_transaction(
+        self, store, mock_model, monkeypatch
+    ):
+        mock_model.enqueue(["reply"])
+        response = mock_model.prompt("hello")
+        response.text()
+        store.db.conn.execute("BEGIN")
+        existing_thread = store.create_thread(name="caller's work")
+        monkeypatch.setattr("llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql")
+        with pytest.raises(sqlite3.OperationalError):
+            store.log(response)
+        assert store.db.conn.in_transaction
+        assert store.db["turns"].count == 0
+        assert store.db["messages"].count == 0
+        assert [r["id"] for r in store.db["threads"].rows] == [existing_thread]
+        store.db.conn.commit()
+        assert store.db["threads"].count == 1
+
 
 class TestConcurrentWriters:
+    @pytest.mark.parametrize("existing_thread", [False, True])
+    def test_log_reserves_writer_before_reading(
+        self, db_factory, tmp_path, mock_model, monkeypatch, existing_thread
+    ):
+        path = str(tmp_path / "logs.db")
+        # Each db_factory call opens a separate connection to the same file.
+        logger_db = db_factory(path)
+        store = LogStore(logger_db)  # Wraps the existing connection.
+        competitor_db = db_factory(path)
+        competitor_db.execute("PRAGMA busy_timeout=0")
+        assert store.db.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+        thread_id = store.create_thread() if existing_thread else None
+        mock_model.enqueue(["reply"])
+        response = mock_model.prompt("hello")
+        response.text()
+
+        original_count = sqlite_utils.db.Table.count_where
+        attempted = []
+        blocked = []
+
+        # Patch count_where() to try starting a competing writer on the other
+        # connection just after the logger's first read, before its first write.
+        def count_where(table, *args, **kwargs):
+            result = original_count(table, *args, **kwargs)
+            if (
+                table.db is store.db
+                and table.name == ("messages" if existing_thread else "threads")
+                and not attempted
+            ):
+                attempted.append(True)
+                try:
+                    competitor_db.execute("BEGIN IMMEDIATE")
+                    competitor_db.execute(
+                        "INSERT INTO threads(id) VALUES ('competing-writer')"
+                    )
+                except sqlite3.OperationalError as ex:
+                    assert str(ex) == "database is locked"
+                    blocked.append(True)
+            return result
+
+        monkeypatch.setattr(sqlite_utils.db.Table, "count_where", count_where)
+        try:
+            store.log(response, thread_id=thread_id)
+        finally:
+            competitor_db.conn.rollback()
+
+        assert attempted == [True]
+        assert blocked == [True]
+        assert store.db["turns"].count == 1
+        assert store.db["threads"].count == 1
+        assert not store.db.conn.in_transaction
+        assert store.verify() == []
+
     def test_losing_the_insert_race_neither_raises_nor_duplicates(
         self, db_factory, tmp_path, monkeypatch
     ):
