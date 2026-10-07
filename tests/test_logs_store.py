@@ -1059,6 +1059,8 @@ class TestConcurrentWriters:
         attempted = []
         blocked = []
 
+        # Patch count_where() to try starting a competing writer on the other
+        # connection just after the logger's first read, before its first write.
         def count_where(table, *args, **kwargs):
             result = original_count(table, *args, **kwargs)
             if (
@@ -1067,9 +1069,6 @@ class TestConcurrentWriters:
                 and not attempted
             ):
                 attempted.append(True)
-                # Force a second writer into the gap between logging's read
-                # and write. A deferred transaction lets it acquire the lock,
-                # making the original logger's subsequent INSERT fail.
                 try:
                     competitor_db.execute("BEGIN IMMEDIATE")
                     competitor_db.execute(
