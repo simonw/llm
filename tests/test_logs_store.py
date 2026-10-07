@@ -1047,8 +1047,8 @@ class TestConcurrentWriters:
         # Each db_factory call opens a separate connection to the same file.
         logger_db = db_factory(path)
         store = LogStore(logger_db)  # Wraps the existing connection.
-        competitor = db_factory(path)
-        competitor.execute("PRAGMA busy_timeout=0")
+        competitor_db = db_factory(path)
+        competitor_db.execute("PRAGMA busy_timeout=0")
         assert store.db.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
         thread_id = store.create_thread() if existing_thread else None
         mock_model.enqueue(["reply"])
@@ -1071,8 +1071,8 @@ class TestConcurrentWriters:
                 # and write. A deferred transaction lets it acquire the lock,
                 # making the original logger's subsequent INSERT fail.
                 try:
-                    competitor.execute("BEGIN IMMEDIATE")
-                    competitor.execute(
+                    competitor_db.execute("BEGIN IMMEDIATE")
+                    competitor_db.execute(
                         "INSERT INTO threads(id) VALUES ('competing-writer')"
                     )
                 except sqlite3.OperationalError as ex:
@@ -1084,7 +1084,7 @@ class TestConcurrentWriters:
         try:
             store.log(response, thread_id=thread_id)
         finally:
-            competitor.conn.rollback()
+            competitor_db.conn.rollback()
 
         assert attempted == [True]
         assert blocked == [True]
