@@ -237,3 +237,19 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+@pytest.mark.parametrize("a,b", [([1.0, 0.0], [1.0]), ([1.0], [1.0, 0.0])])
+def test_cosine_similarity_rejects_different_dimensions(a, b):
+    with pytest.raises(ValueError):
+        llm.cosine_similarity(a, b)
+
+
+def test_collection_rejects_mismatched_query_vector(collection):
+    import sqlite3
+
+    with pytest.raises(
+        sqlite3.OperationalError, match="user-defined function raised exception"
+    ):
+        collection.similar_by_vector([1.0])
+    assert len(collection.similar_by_vector([5.0, 5.0] + [0.0] * 14)) == 2
