@@ -1637,6 +1637,19 @@ class TestAsyncLogging:
         assert store.verify() == []
 
     @pytest.mark.asyncio
+    async def test_async_chain_log_to_db_inside_running_event_loop(
+        self, store, async_mock_model
+    ):
+        async_mock_model.enqueue(["answer"])
+        chain = async_mock_model.chain("question")
+        await chain.text()
+
+        chain.log_to_db(store.db)
+
+        assert store.db["turns"].count == 1
+        assert store.verify() == []
+
+    @pytest.mark.asyncio
     async def test_async_response_log_to_db_requires_completion(
         self, store, async_mock_model
     ):
