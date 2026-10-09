@@ -13,7 +13,7 @@ content are equal.
 
 import base64
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from .models import Attachment
 from .serialization import (
@@ -63,6 +63,12 @@ class Part:
 
     @staticmethod
     def from_dict(d: PartDict) -> "Part":
+        if "type" not in d:
+            text_part = cast(TextPartDict, d)
+            return TextPart(
+                text=text_part["text"],
+                provider_metadata=text_part.get("provider_metadata"),
+            )
         if d["type"] == "text":
             return TextPart(
                 text=d["text"],
