@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`.
+
 (v0_36)=
 ## 0.36 (2026-09-22)
 

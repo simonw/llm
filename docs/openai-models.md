@@ -77,7 +77,7 @@ See [the OpenAI models documentation](https://platform.openai.com/docs/models) f
 
 [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) use the Responses API by default and support `-o reasoning_effort` values of `none`, `low`, `medium`, `high`, `xhigh` and `max`. If you opt into Chat Completions with `-o chat_completions 1`, function calling requires `-o reasoning_effort none`.
 
-`gpt-5.6-luna` is one of the less expensive models, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
+`gpt-6-luna` is OpenAI's cheapest frontier model, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
 
 ## Model features
 
@@ -95,7 +95,7 @@ The following features work with OpenAI models:
 Models that use the OpenAI Responses API can search the web using the `WebSearch` server-side tool:
 
 ```bash
-llm -m gpt-5.6-luna -T WebSearch 'Search the web for a positive news story from today'
+llm -m gpt-6-luna -T WebSearch 'Search the web for a positive news story from today'
 ```
 
 The model decides whether to search based on the prompt. The Python API accepts the same tool:
@@ -104,7 +104,7 @@ The model decides whether to search based on the prompt. The Python API accepts 
 import llm
 from llm.default_plugins.openai_models import WebSearch
 
-response = llm.get_model("gpt-5.6-luna").prompt(
+response = llm.get_model("gpt-6-luna").prompt(
     "Search the web for a positive news story from today",
     tools=[WebSearch(include_sources=True)],
 )
@@ -145,7 +145,7 @@ See [OpenAI's Web Search documentation](https://developers.openai.com/api/docs/g
 Models that use the OpenAI Responses API can run Python in an OpenAI-managed container using the `CodeInterpreter` server-side tool:
 
 ```bash
-llm -m gpt-5.6-luna -T 'CodeInterpreter(memory_limit="4g")' 'Run this calculation'
+llm -m gpt-6-luna -T 'CodeInterpreter(memory_limit="4g")' 'Run this calculation'
 ```
 
 The same tool can be used from Python:
@@ -154,7 +154,7 @@ The same tool can be used from Python:
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt(
     "Use the python tool to calculate 111111 * 333333",
     tools=[CodeInterpreter()],

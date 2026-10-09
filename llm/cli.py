@@ -3051,13 +3051,13 @@ def aliases_set(alias, model_id, query):
     Example usage:
 
     \b
-        llm aliases set luna gpt-5.6-luna
+        llm aliases set luna gpt-6-luna
 
     Alternatively you can omit the model ID and specify one or more -q options.
     The first model matching all of those query strings will be used.
 
     \b
-        llm aliases set luna -q gpt -q luna
+        llm aliases set luna -q gpt-6 -q luna
     """
     if not model_id:
         if not query:
