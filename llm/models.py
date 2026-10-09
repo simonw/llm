@@ -1943,8 +1943,13 @@ class Response(_BaseResponse):
                     )
                     continue
 
-            if tool is None:
-                msg = f'tool "{tool_call.name}" does not exist'
+            if tool is None or not tool.implementation:
+                # Mirror the async executor: append an error ToolResult so
+                # the provider still receives a result for every tool
+                # call, including a call pending in a rehydrated response
+                # whose tools have no implementation.
+                reason = "does not exist" if tool is None else "has no implementation"
+                msg = f'tool "{tool_call.name}" {reason}'
                 tool_results.append(
                     ToolResult(
                         name=tool_call.name,
@@ -1954,11 +1959,6 @@ class Response(_BaseResponse):
                     )
                 )
                 continue
-
-            if not tool.implementation:
-                raise ValueError(
-                    f"No implementation available for tool: {tool_call.name}"
-                )
 
             attachments = []
             exception = None
