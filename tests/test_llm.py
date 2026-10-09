@@ -118,7 +118,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-5.6-luna"
+    assert row["model"] == "gpt-6-luna"
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
 
@@ -132,7 +132,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             # prompt_json and response_json are no longer recorded: the
@@ -142,7 +142,7 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-5.6-luna",
+            "conversation_model": "gpt-6-luna",
         }.items()
     )
 
@@ -647,8 +647,8 @@ def test_model_defaults(tmpdir, monkeypatch):
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
-    assert llm.get_default_model() == "gpt-5.6-luna"
-    assert llm.get_model().model_id == "gpt-5.6-luna"
+    assert llm.get_default_model() == "gpt-6-luna"
+    assert llm.get_model().model_id == "gpt-6-luna"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"

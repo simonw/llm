@@ -66,13 +66,13 @@ Example output:
 The `llm aliases set <alias> <model-id>` command can be used to add a new alias:
 
 ```bash
-llm aliases set luna gpt-5.6-luna
+llm aliases set luna gpt-6-luna
 ```
 You can also pass one or more `-q search` options to set an alias on the first model matching those search terms:
 ```bash
-llm aliases set luna -q gpt -q luna
+llm aliases set luna -q gpt-6 -q luna
 ```
-Now you can run the `gpt-5.6-luna` model using the `luna` alias like this:
+Now you can run the `gpt-6-luna` model using the `luna` alias like this:
 ```bash
 llm -m luna 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
 ```

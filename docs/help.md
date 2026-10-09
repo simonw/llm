@@ -718,12 +718,12 @@ Usage: llm aliases set [OPTIONS] ALIAS [MODEL_ID]
 
   Example usage:
 
-      llm aliases set luna gpt-5.6-luna
+      llm aliases set luna gpt-6-luna
 
   Alternatively you can omit the model ID and specify one or more -q options.
   The first model matching all of those query strings will be used.
 
-      llm aliases set luna -q gpt -q luna
+      llm aliases set luna -q gpt-6 -q luna
 
 Options:
   -q, --query TEXT  Set alias for model matching these strings

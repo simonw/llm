@@ -7,12 +7,12 @@ Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
-To run a prompt against the `gpt-5.6-luna` model, run this:
+To run a prompt against the `gpt-6-luna` model, run this:
 
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 # key= is optional, you can configure the key in other ways
 response = model.prompt(
     "Five surprising names for a pet pelican",
@@ -26,7 +26,7 @@ If you inspect the response before it has been evaluated it will look like this:
 
     <Response prompt='Your prompt' text='... not yet done ...'>
 
-The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-5.6-luna` if you have not changed the default.
+The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-6-luna` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
 
@@ -68,7 +68,7 @@ This example shows two attachments - one from a file path and one from a URL:
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt(
     "Describe these images",
     attachments=[
@@ -87,7 +87,7 @@ Use `llm.Attachment(content=b"binary image content here")` to pass binary conten
 You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
 
 ```python
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 print(model.attachment_types)
 # {'image/gif', 'image/png', 'image/jpeg', 'image/webp'}
 
@@ -322,7 +322,7 @@ For example, OpenAI Responses models support {ref}`Web Search <openai-models-web
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter
 
-response = llm.get_model("gpt-5.6-luna").prompt(
+response = llm.get_model("gpt-6-luna").prompt(
     "Use the python tool to calculate the first 20 Fibonacci numbers",
     tools=[CodeInterpreter(memory_limit="4g")],
 )
@@ -440,7 +440,7 @@ class Dog(BaseModel):
     name: str
     age: int
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("Describe a nice dog", schema=Dog)
 dog = json.loads(response.text())
 print(dog)
@@ -521,7 +521,7 @@ print(model.prompt("Names for otters", options={"temperature": 0.2}))
 Models that accept API keys should take an additional `key=` parameter to their `model.prompt()` method:
 
 ```python
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 print(model.prompt("Names for beavers", key="sk-..."))
 ```
 
@@ -562,16 +562,16 @@ You can access this JSON data as a Python dictionary using the `response.json()`
 import llm
 from pprint import pprint
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("3 names for an otter")
 json_data = response.json()
 pprint(json_data)
 ```
-Here's an abbreviated example of that output from GPT-5.6 Luna:
+Here's an abbreviated example of that output from GPT-6 Luna:
 ```python
 {'created_at': 1785451200.0,
  'id': 'resp_...',
- 'model': 'gpt-5.6-luna',
+ 'model': 'gpt-6-luna',
  'object': 'response',
  'output': [
      # Reasoning and message items are abbreviated here
@@ -943,7 +943,7 @@ Example usage:
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("a poem about a hippo")
 response.on_done(lambda response: print(response.usage()))
 print(response.text())
@@ -960,7 +960,7 @@ Or using an `asyncio` model, where you need to `await response.on_done(done)` to
 import asyncio, llm
 
 async def run():
-    model = llm.get_async_model("gpt-5.6-luna")
+    model = llm.get_async_model("gpt-6-luna")
     response = model.prompt("a short poem about a brick")
     async def done(response):
         print(await response.usage())
@@ -982,7 +982,7 @@ The `llm.set_alias()` function can be used to define a new alias:
 ```python
 import llm
 
-llm.set_alias("mini", "gpt-5.6-luna")
+llm.set_alias("mini", "gpt-6-luna")
 ```
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
@@ -1012,7 +1012,7 @@ llm.set_default_model("claude-5-sonnet")
 
 ### get_default_model()
 
-This returns the currently configured default model, or `gpt-5.6-luna` if no default has been set.
+This returns the currently configured default model, or `gpt-6-luna` if no default has been set.
 
 ```python
 import llm
