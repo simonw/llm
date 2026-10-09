@@ -2910,6 +2910,7 @@ class _BaseChainResponse:
         return Prompt(
             "",
             self.model,
+            schema=prompt.schema,
             tools=prompt.tools,
             tool_results=tool_results,
             messages=next_chain,
