@@ -207,6 +207,24 @@ The result starts like this:
       "article_date": "2023-10-15"
     },
 ```
+
+:::{warning}
+The `article_date` above is incorrect, even though it matches the requested format. A schema describes the shape of the output; it does not establish that the extracted facts are correct.
+
+The [investigation of this example](https://github.com/simonw/llm/issues/808) found that `strip-tags` removed the publication-date metadata, while the visible date was left as a placeholder. Check the text supplied to the model as well as the JSON it returns.
+:::
+
+To keep the article's date metadata, retain `<meta>` tags with `strip-tags -t meta`:
+
+```bash
+curl 'https://apnews.com/article/bezos-katy-perry-blue-origin-launch-4a074e534baa664abfa6538159c12987' | \
+  uvx strip-tags -t meta | \
+  llm --schema 3b7702e71da3dd791d9e17b76c88730e \
+    --system 'extract people mentioned in this article'
+```
+
+This preserves fields such as `article:published_time` and `article:modified_time` when they are present in the HTML. Compare the extracted publication date with `article:published_time`, and check the other extracted details against the source too. Keeping the metadata supplies evidence to the model; it does not guarantee a correct extraction.
+
 One more trick: let's turn our schema and system prompt combination into a {ref}`template <prompt-templates>`.
 
 ```bash
