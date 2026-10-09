@@ -186,6 +186,15 @@ Ranking uses [SQLite FTS5](https://www.sqlite.org/fts5.html) relevance scores, w
 llm logs -q '"pet pelican"'
 ```
 
+For a phrase that contains punctuation, use `--phrase` to avoid escaping the
+FTS5 syntax yourself. For example, this finds a UUID in a prompt or response:
+```bash
+llm logs --phrase 'CFF90D7C-A2EC-4437-AEBF-5BA515430241'
+```
+Like other FTS5 phrase searches, this matches consecutive words after
+tokenization; punctuation is treated as a separator. `--phrase` cannot be
+combined with `--query`.
+
 To switch to sorting with most recent first, add `-l/--latest`. This can be combined with `-n` to limit the number of results shown:
 ```bash
 llm logs -q 'cheesecake' -l -n 3

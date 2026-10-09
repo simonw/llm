@@ -371,6 +371,8 @@ Options:
   -d, --database FILE         Path to log database
   -m, --model TEXT            Filter by model or model alias
   -q, --query TEXT            Search for logs matching this string
+  --phrase TEXT               Search for a phrase without using FTS5 query
+                              syntax
   -f, --fragment TEXT         Filter for prompts using these fragments
   -T, --tool TEXT             Filter for prompts with results from these tools
   --tools                     Filter for prompts with results from any tools
