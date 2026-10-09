@@ -200,6 +200,8 @@ class Collection:
         import llm
 
         batch_size = min(batch_size, (self.model().batch_size or batch_size))
+        if batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
         iterator = iter(entries)
         collection_id = self.id
         while True:

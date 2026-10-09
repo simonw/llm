@@ -3565,6 +3565,8 @@ class EmbeddingModel(ABC, _get_key_mixin):
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
         effective_batch_size = self.batch_size if batch_size is None else batch_size
+        if effective_batch_size is not None and effective_batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
         if (not self.supports_binary) or (not self.supports_text):
 
             def checking_iter(inner_items):
