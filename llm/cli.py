@@ -153,6 +153,7 @@ def _run_chat(
         click.echo(
             "Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments"
         )
+    click.echo("Type '!attach <url-or-path>' to attach a file")
 
     argument_fragments = list(initial_fragments or [])
     argument_attachments = list(initial_attachments or [])
@@ -166,13 +167,6 @@ def _run_chat(
         prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
         fragments = []
         attachments = []
-        if argument_fragments:
-            fragments += argument_fragments
-            # Fragments from command options are added to the first message only.
-            argument_fragments = []
-        if argument_attachments:
-            attachments = argument_attachments
-            argument_attachments = []
         if prompt.strip().startswith("!multi"):
             in_multi = True
             bits = prompt.strip().split()
@@ -186,7 +180,26 @@ def _run_chat(
                 continue
             prompt = edited_prompt.strip()
         if db is not None and prompt.strip().startswith("!fragment "):
-            prompt, fragments, attachments = process_fragments_in_chat(db, prompt)
+            prompt, extra_fragments, fragment_attachments = process_fragments_in_chat(
+                db, prompt
+            )
+            fragments += extra_fragments
+            attachments += fragment_attachments
+
+        try:
+            prompt, extra_attachments = process_attachments_in_chat(prompt)
+        except click.ClickException as ex:
+            # Invalid attachments should not terminate an interactive session.
+            click.echo(f"Error: {ex.format_message()}", err=True)
+            continue
+        if extra_attachments and not in_multi and not prompt.strip():
+            # A standalone !attach command queues attachments for the next
+            # actual message instead of sending an empty prompt immediately.
+            argument_attachments.extend(extra_attachments)
+            noun = "Attachment" if len(extra_attachments) == 1 else "Attachments"
+            click.echo(f"{noun} queued for next message")
+            continue
+        attachments += extra_attachments
 
         if in_multi:
             if prompt.strip() == end_token:
@@ -208,6 +221,13 @@ def _run_chat(
             break
         if transform_prompt is not None:
             prompt = transform_prompt(prompt)
+
+        # Command-line fragments and attachments, plus standalone !attach
+        # commands, remain pending until an actual message is sent.
+        fragments = argument_fragments + fragments
+        attachments = argument_attachments + attachments
+        argument_fragments = []
+        argument_attachments = []
 
         response = prompt_callback(prompt, fragments, attachments)
         display_stream_events(
@@ -327,6 +347,29 @@ def process_fragments_in_chat(
         else:
             prompt_lines.append(line)
     return "\n".join(prompt_lines), fragments, attachments
+
+
+def process_attachments_in_chat(prompt: str) -> tuple[str, list[Attachment]]:
+    """
+    Process any !attach commands in a chat prompt and return the modified prompt plus resolved attachments.
+    """
+    prompt_lines = []
+    attachments = []
+    for line in prompt.splitlines():
+        stripped_line = line.strip()
+        if stripped_line == "!attach":
+            raise click.ClickException("Usage: !attach <url-or-path>")
+        if stripped_line.startswith("!attach "):
+            attachment_value = stripped_line.removeprefix("!attach ").strip()
+            if not attachment_value:
+                raise click.ClickException("Usage: !attach <url-or-path>")
+            try:
+                attachments.append(resolve_attachment(attachment_value))
+            except AttachmentError as ex:
+                raise click.ClickException(str(ex))
+        else:
+            prompt_lines.append(line)
+    return "\n".join(prompt_lines), attachments
 
 
 class AttachmentError(Exception):
