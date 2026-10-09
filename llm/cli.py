@@ -1802,6 +1802,7 @@ def logs_json_for_response_ids(db, ids):
 )
 @click.option("-m", "--model", help="Filter by model or model alias")
 @click.option("-q", "--query", help="Search for logs matching this string")
+@click.option("--phrase", help="Search for a phrase without using FTS5 query syntax")
 @click.option(
     "fragments",
     "--fragment",
@@ -1886,6 +1887,7 @@ def logs_list(
     database,
     model,
     query,
+    phrase,
     fragments,
     tools,
     any_tools,
@@ -1910,6 +1912,14 @@ def logs_list(
     expand,
 ) -> None:
     "Show logged prompts and their responses"
+    if phrase is not None:
+        if query is not None:
+            raise click.UsageError("Cannot use --query and --phrase together")
+        if not phrase.strip():
+            raise click.BadParameter("must contain text", param_hint="--phrase")
+        # FTS5 phrases use doubled double quotes to escape literal quotes.
+        query = '"' + phrase.replace('"', '""') + '"'
+
     if database and not path:
         path = database
     path = pathlib.Path(path or logs_db_path())
