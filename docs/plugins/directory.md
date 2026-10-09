@@ -55,6 +55,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-tools-sqlite](https://github.com/simonw/llm-tools-sqlite)** can run read-only SQL queries against local SQLite databases.
 - **[llm-tools-datasette](https://github.com/simonw/llm-tools-datasette)** can run SQL queries against a remote [Datasette](https://datasette.io/) instance.
 - **[llm-tools-exa](https://github.com/daturkel/llm-tools-exa)** by Dan Turkel can perform web searches and question-answering using [exa.ai](https://exa.ai/).
+- **[llm-tools-baizhi](https://github.com/ct-jaryn/llm-tools-baizhi)** adds public web search, page reading and field extraction through Baizhi's hosted MCP service. Requires a Baizhi API key and credits.
 - **[llm-tools-rag](https://github.com/daturkel/llm-tools-rag)** by Dan Turkel can perform searches over your LLM embedding collections for simple RAG.
 
 (plugin-directory-loaders)=
