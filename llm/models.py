@@ -1327,7 +1327,7 @@ class _BaseResponse:
         split into one parts-list per distinct index, in first-seen
         order.
 
-        Events sharing a part_index group into one Part. Mixing
+        Events sharing a part_index within one message group into one Part. Mixing
         families (text vs tool_call vs reasoning vs tool_result) at the
         same index is a plugin bug — raises ValueError instead of
         silently dropping content.
@@ -1366,26 +1366,21 @@ class _BaseResponse:
                 )
             return [fallback_parts] if fallback_parts else []
 
-        # Group events by their (resolved) part_index, preserving the
-        # order in which each index was first seen. Then build one Part
-        # per group. This handles non-adjacent same-index events (e.g.
-        # text → tool_call → text where the plugin pinned both text
-        # bursts to part_index=0) by merging them into one Part. Each
-        # group belongs to the message of its first event.
-        groups: dict[int, list[Any]] = {}
-        order: list[int] = []
-        group_message: dict[int, int] = {}
+        # Group events by message_index and resolved part_index, preserving
+        # first-seen order. Non-adjacent events pinned to the same part merge
+        # within a message, while another message can reuse that part_index.
+        groups: dict[tuple[int, int], list[Any]] = {}
+        order: list[tuple[int, int]] = []
         for event in self._stream_events:
-            pi = event.part_index
-            if pi not in groups:
-                groups[pi] = []
-                order.append(pi)
-                group_message[pi] = event.message_index
-            groups[pi].append(event)
+            group_key = (event.message_index, event.part_index)
+            if group_key not in groups:
+                groups[group_key] = []
+                order.append(group_key)
+            groups[group_key].append(event)
 
         built: list[tuple[int, Any]] = []
-        for pi in order:
-            evs = groups[pi]
+        for mi, pi in order:
+            evs = groups[(mi, pi)]
             fam_first = self._event_family(evs[0].type)
             for e in evs:
                 if self._event_family(e.type) != fam_first:
@@ -1403,7 +1398,6 @@ class _BaseResponse:
                         merged[k] = v
                     pm_merged = merged
 
-            mi = group_message[pi]
             if fam_first == "text":
                 text = "".join(e.chunk for e in evs)
                 if text:

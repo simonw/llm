@@ -1544,6 +1544,32 @@ class TestAddToolCallWithStreamEvents:
 
 
 class TestMessageIndexAssembly:
+    @pytest.mark.parametrize("second_type", ["text", "reasoning"])
+    def test_explicit_part_indices_are_scoped_to_each_message(
+        self, mock_model, second_type
+    ):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="text", chunk="first", part_index=0, message_index=0
+                ),
+                llm.parts.StreamEvent(
+                    type=second_type, chunk="second", part_index=0, message_index=1
+                ),
+            ]
+        )
+        response = mock_model.prompt("go")
+        response.text()
+        second_part = (
+            llm.parts.TextPart(text="second")
+            if second_type == "text"
+            else llm.parts.ReasoningPart(text="second")
+        )
+        assert response.messages() == [
+            llm.assistant("first"),
+            llm.assistant(second_part),
+        ]
+
     def test_message_index_splits_assistant_messages(self, mock_model):
         mock_model.enqueue(
             [
