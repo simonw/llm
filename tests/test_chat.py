@@ -356,3 +356,44 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
+
+class TestBindCursorKeys:
+    """`_bind_cursor_keys` -- see issue #1639.
+
+    The previous Windows branch called
+    `parse_and_bind("bind -x '\e[D: backward-char'")`. pyreadline3 matches a
+    binding line against `\s*(\S+)\s*:\s*([-a-zA-Z]+)\s*$`, which that string
+    does not satisfy, so it was parsed as unknown and dropped -- a silent no-op.
+    The GNU escape-sequence form is not usable there either: pyreadline3 names
+    keys `left`/`right` and raises `IndexError: Not a valid key: '\e[d'`.
+    """
+
+    def test_windows_binds_nothing(self, monkeypatch):
+        """pyreadline3 already binds left/right, so there is nothing to do."""
+        calls = []
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(llm.cli.readline, "parse_and_bind", calls.append)
+        llm.cli._bind_cursor_keys()
+        assert calls == []
+
+    def test_posix_binds_the_arrow_keys(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(llm.cli.readline, "parse_and_bind", calls.append)
+        llm.cli._bind_cursor_keys()
+        assert calls == ["\e[D: backward-char", "\e[C: forward-char"]
+
+    def test_a_readline_that_rejects_the_syntax_does_not_stop_chat(self, monkeypatch):
+        """Binding cursor keys is a convenience, not a reason to fail to start.
+
+        This is the case the issue reports: a readline shim that raises on the
+        binding syntax took `llm chat` down with it.
+        """
+
+        def boom(_spec):
+            raise IndexError(r"Not a valid key: '\e[d'")
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(llm.cli.readline, "parse_and_bind", boom)
+        llm.cli._bind_cursor_keys()  # must not raise
