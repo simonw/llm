@@ -290,7 +290,7 @@ def resolve_fragments(
                 # Now try path
                 path = pathlib.Path(fragment)
                 if path.exists():
-                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
+                    resolved.append(Fragment(_read_text_file(path), str(path.resolve())))
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
@@ -4240,6 +4240,15 @@ def _parse_yaml_template(name, content):
         raise LoadTemplateError(msg)
 
 
+def _read_text_file(path: pathlib.Path) -> str:
+    "Read a text file as UTF-8, falling back to the locale default encoding"
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # Not UTF-8 - read it using the default encoding for this system
+        return path.read_text()
+
+
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
@@ -4271,7 +4280,7 @@ def load_template(name: str) -> Template:
         path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
-    content = path.read_text()
+    content = _read_text_file(path)
     template_obj = _parse_yaml_template(name, content)
     # We trust functions here because they came from the filesystem
     template_obj._functions_is_trusted = True
@@ -4284,7 +4293,7 @@ def _tools_from_code(code_or_path: str) -> list[Tool]:
     """
     if "\n" not in code_or_path and code_or_path.endswith(".py"):
         try:
-            code_or_path = pathlib.Path(code_or_path).read_text()
+            code_or_path = _read_text_file(pathlib.Path(code_or_path))
         except FileNotFoundError:
             raise click.ClickException(f"File not found: {code_or_path}")
     namespace: dict[str, Any] = {}
