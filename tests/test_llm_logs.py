@@ -1499,3 +1499,20 @@ def test_logs_truncate_markdown_new_store(logs_db, mock_model):
     result = runner.invoke(cli, ["logs", "-t"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Response\n\nhello" in result.output
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
+    db = db_factory(schema_log_path)
+    db["schemas"].update(
+        SINGLE_ID,
+        {"content": json.dumps({"type": "object", "properties": {"value": allowed}})},
+    )
+    result = CliRunner().invoke(cli, ["schemas", "list", "-d", schema_log_path])
+    assert result.exit_code == 0, result.exception
+    assert "{value}" in result.output
+    # Summary rendering does not modify the schema's validation semantics.
+    assert (
+        json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
+        is allowed
+    )
