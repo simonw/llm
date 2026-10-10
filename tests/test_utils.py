@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -630,3 +633,37 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_redirect_stdout_to_stderr():
+    env = os.environ.copy()
+    env.pop("PYTHONUNBUFFERED", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os
+import sys
+
+from llm.utils import redirect_stdout_to_stderr
+
+print("model-output-before")
+with redirect_stdout_to_stderr():
+    sys.stdout.flush()
+    print("python-noise")
+    os.write(1, b"native-noise\\n")
+print("model-output-after")
+""",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "model-output-before",
+        "model-output-after",
+    ]
+    assert result.stderr.splitlines() == ["native-noise", "python-noise"]
