@@ -1241,6 +1241,7 @@ def prompt(
     help="Path to log database",
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
+@click.option("-n", "--no-log", is_flag=True, help="Don't log to database")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
 @click.option("--key", help="API key to use")
 @tool_options
@@ -1255,6 +1256,7 @@ def chat(
     param,
     options,
     no_stream,
+    no_log,
     hide_reasoning,
     key,
     database,
@@ -1407,7 +1409,7 @@ def chat(
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
+        after_response=(None if no_log else lambda response: response.log_to_db(db)),
         show_reasoning=not hide_reasoning,
     )
 

@@ -356,3 +356,20 @@ def test_chat_fragments(tmpdir):
     ).output
     assert '"prompt": "one' in output
     assert '"prompt": "two"' in output
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_no_log(mock_model, logs_db):
+    runner = CliRunner()
+    mock_model.enqueue(["one world"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock", "--no-log"],
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # Nothing should have been written to the logs database
+    assert logs_db["threads"].count == 0
+    assert logs_db["responses"].count == 0
+    assert logs_db["conversations"].count == 0

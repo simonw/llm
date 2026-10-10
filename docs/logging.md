@@ -19,6 +19,11 @@ To avoid logging an individual prompt, pass `--no-log` or `-n` to the command:
 llm 'Ten names for cheesecakes' -n
 ```
 
+This works for `llm chat` too:
+```bash
+llm chat -m gpt-5 -n
+```
+
 To turn logging by default off:
 
 ```bash
