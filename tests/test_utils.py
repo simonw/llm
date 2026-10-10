@@ -630,3 +630,23 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+@pytest.mark.parametrize("nested", [False, True])
+def test_schema_summary_boolean_properties(allowed, nested):
+    schema = {"type": "object", "properties": {"value": allowed}}
+    expected = "{value}"
+    if nested:
+        schema = {"type": "object", "properties": {"nested": schema}}
+        expected = "{nested: {value}}"
+    assert llm.utils.schema_summary(schema) == expected
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schema_summary_boolean_array_items(allowed):
+    schema = {
+        "type": "object",
+        "properties": {"values": {"type": "array", "items": allowed}},
+    }
+    assert llm.utils.schema_summary(schema) == "{values: []}"
