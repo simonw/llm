@@ -3637,6 +3637,7 @@ def embed_multi(
                         for encoding in encodings:
                             try:
                                 content = path.read_text(encoding=encoding)
+                                break
                             except UnicodeDecodeError:
                                 continue
                     if content is None:
