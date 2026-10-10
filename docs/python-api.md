@@ -627,6 +627,14 @@ The `response.text()` method described earlier does this for you - it runs throu
 
 If a response has been evaluated, `response.text()` will continue to return the same string.
 
+To measure how long a response took to generate, call `response.duration_ms()`. This returns the response generation time in milliseconds:
+
+```python
+response = model.prompt("Five surprising names for a pet pelican")
+print(response.duration_ms())
+# 1234
+```
+
 ```{eval-rst}
 .. autoclass:: llm.Response
    :members: text, json, usage, tool_calls, on_done
@@ -770,6 +778,14 @@ async for chunk in model.prompt(
     "Five surprising names for a pet pelican"
 ):
     print(chunk, end="", flush=True)
+```
+
+To measure response generation time in an asynchronous context, await `response.duration_ms()`:
+
+```python
+response = model.prompt("Five surprising names for a pet pelican")
+print(await response.duration_ms())
+# 1234
 ```
 
 ```{eval-rst}
