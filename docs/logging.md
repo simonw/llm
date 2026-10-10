@@ -85,6 +85,10 @@ Or `-n 0` to see everything that has ever been logged:
 ```bash
 llm logs -n 0
 ```
+Use `--count` to output the number of logs matching the current filters:
+```bash
+llm logs --tools --count
+```
 You can truncate the display of the prompts and responses using the `-t/--truncate` option. This can help make the JSON output more readable - though the `--short` option is usually better.
 ```bash
 llm logs -n 1 -t --json
