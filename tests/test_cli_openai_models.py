@@ -737,3 +737,208 @@ def test_gpt4o_mini_sync_and_async(
     store = LogStore(db)
     chain = store.load_chain(turn["tip_message_hash"])
     assert chain[-1].parts[0].text == "Ho ho ho"
+
+
+def test_openai_chat_completions_strict_schema_is_sent(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o",
+            "usage": {},
+            "choices": [{"message": {"content": '{"name": "Cleo"}'}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o",
+            "-o",
+            "strict_schema",
+            "1",
+            "--schema",
+            "name, age int",
+            "--no-stream",
+            "--key",
+            "x",
+            "Invent a dog",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request_body["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "output",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+                "required": ["name", "age"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    }
+    assert "strict_schema" not in request_body
+
+
+def test_openai_chat_completions_schema_default_is_not_strict(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o",
+            "usage": {},
+            "choices": [{"message": {"content": '{"name": "Cleo"}'}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o",
+            "--schema",
+            "name, age int",
+            "--no-stream",
+            "--key",
+            "x",
+            "Invent a dog",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert "strict" not in request_body["response_format"]["json_schema"]
+
+
+def test_openai_responses_strict_schema_is_sent(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_test_1",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": '{"items": [{"name": "Cleo"}]}',
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {
+                "input_tokens": 5,
+                "output_tokens": 3,
+                "total_tokens": 8,
+            },
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-5",
+            "-o",
+            "strict_schema",
+            "1",
+            "--schema-multi",
+            "name, age int",
+            "--no-stream",
+            "--key",
+            "x",
+            "Invent dogs",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request_body["text"]["format"] == {
+        "type": "json_schema",
+        "name": "output",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer"},
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["items"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+    assert "strict_schema" not in request_body
+
+
+def test_openai_strict_schema_without_schema_raises(httpx2_mock):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o",
+            "-o",
+            "strict_schema",
+            "1",
+            "--no-stream",
+            "--key",
+            "x",
+            "Hi",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 1
+    assert "strict_schema option requires a schema" in result.output
+
+
+def test_openai_strict_schema_rejects_unsupported_keywords(httpx2_mock):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o",
+            "-o",
+            "strict_schema",
+            "1",
+            "--schema",
+            '{"type": "array", "items": {"type": "string"}, "minItems": 1}',
+            "--no-stream",
+            "--key",
+            "x",
+            "Hi",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 1
+    assert "minItems" in result.output
