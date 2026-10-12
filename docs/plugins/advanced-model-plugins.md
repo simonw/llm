@@ -322,6 +322,8 @@ def _attachment(attachment):
 ```
 As you can see, it uses `attachment.url` if that is available and otherwise falls back to using the `base64_content()` method to embed the image directly in the JSON sent to the API. For the OpenAI API audio attachments are always included as base64-encoded strings.
 
+If your plugin uses the default OpenAI `Chat`, `AsyncChat`, `Responses` or `AsyncResponses` classes for an API that cannot fetch image URLs, pass `supports_url_attachments=False` to the model constructor. Remote images will then be downloaded and embedded using `base64_content()`. The default is `True`, so existing models continue to pass URLs through. The same setting can be configured in `extra-openai-models.yaml`, as described in {ref}`other-models`.
+
 ### Attachments from previous conversations
 
 Conversation history — including attachments from prior turns — is available on the canonical `prompt.messages` list. See the [next section](#structured-messages-streaming) for how that works.
