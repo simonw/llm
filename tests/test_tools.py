@@ -1266,3 +1266,97 @@ async def test_async_tool_without_implementation_produces_error_result():
     assert [(r.name, r.output) for r in second.prompt.tool_results] == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]
+
+
+def test_chain_limit_finishes_within_limit():
+    def get_weather(location: str) -> str:
+        return "sunny"
+
+    model = llm.get_model("echo")
+    conv = model.conversation()
+
+    # 1. Chain with no tool calls finishes on turn 1 with chain_limit=1 without raising
+    chain = conv.chain("just text", chain_limit=1)
+    assert "just text" in chain.text()
+
+    # 2. Chain with 1 tool call finishes on turn 2 with chain_limit=2 without raising
+    chain2 = conv.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "get_weather", "arguments": {"location": "Paris"}}
+                ]
+            }
+        ),
+        tools=[get_weather],
+        chain_limit=2,
+    )
+    # The echo model responds with the tool call on turn 1, then echoes the tool result on turn 2
+    output = chain2.text()
+    assert len(chain2._responses) == 2
+    assert "sunny" in output
+
+    # 3. Chain that needs another turn exceeding limit raises
+    chain3 = conv.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "get_weather", "arguments": {"location": "Paris"}}
+                ]
+            }
+        ),
+        tools=[get_weather],
+        chain_limit=1,
+    )
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        chain3.text()
+
+
+@pytest.mark.asyncio
+async def test_async_chain_limit_finishes_within_limit():
+    async def get_weather(location: str) -> str:
+        return "sunny"
+
+    model = llm.get_async_model("echo")
+    conv = model.conversation()
+
+    # 1. Chain with no tool calls finishes on turn 1 with chain_limit=1 without raising
+    chain = conv.chain("just text", chain_limit=1)
+    assert "just text" in await chain.text()
+
+    # 2. Chain with 1 tool call finishes on turn 2 with chain_limit=2 without raising
+    chain2 = conv.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "get_weather", "arguments": {"location": "Paris"}}
+                ]
+            }
+        ),
+        tools=[get_weather],
+        chain_limit=2,
+    )
+    output = await chain2.text()
+    assert len(chain2._responses) == 2
+    assert "sunny" in output
+
+    # 3. Chain that needs another turn exceeding limit raises
+    chain3 = conv.chain(
+        json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "get_weather", "arguments": {"location": "Paris"}}
+                ]
+            }
+        ),
+        tools=[get_weather],
+        chain_limit=1,
+    )
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        await chain3.text()
+
+
+def test_model_chain_supports_chain_limit():
+    model = llm.get_model("echo")
+    chain = model.chain("hi", chain_limit=1)
+    assert "hi" in chain.text()
