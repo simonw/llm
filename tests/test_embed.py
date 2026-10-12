@@ -237,3 +237,39 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+def test_embed_multi_detects_wrong_embedding_count(db_factory):
+    # Issue: embed_multi_with_metadata() zips the model output with the
+    # filtered batch, so a plugin returning fewer embeddings silently drops
+    # entries and extra embeddings are silently discarded. The mismatch
+    # should be an error instead.
+    class IncompleteModel(llm.EmbeddingModel):
+        model_id = "incomplete-demo"
+        batch_size = 10
+
+        def embed_batch(self, texts):
+            # Only embed the first item of every batch
+            for item in list(texts)[:1]:
+                yield [float(len(item))]
+
+    class ExtraModel(llm.EmbeddingModel):
+        model_id = "extra-demo"
+        batch_size = 10
+
+        def embed_batch(self, texts):
+            texts = list(texts)
+            yield [float(len(texts[0]))]
+            yield [1.0, 2.0]
+
+    db = db_factory(memory=True)
+
+    collection = llm.Collection("incomplete", db, model=IncompleteModel())
+    with pytest.raises(ValueError, match="expected 2 embeddings, got 1"):
+        collection.embed_multi([("1", "hello"), ("2", "world")], store=True)
+    # Nothing from the failed batch should have been written
+    assert collection.count() == 0
+
+    collection2 = llm.Collection("extra", db, model=ExtraModel())
+    with pytest.raises(ValueError, match="expected 1 embeddings, got 2"):
+        collection2.embed_multi([("1", "hello")], store=True)

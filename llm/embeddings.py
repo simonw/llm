@@ -224,6 +224,12 @@ class Collection:
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )
+            if len(embeddings) != len(filtered_batch):
+                raise ValueError(
+                    "embed_multi() expected {} embeddings, got {}".format(
+                        len(filtered_batch), len(embeddings)
+                    )
+                )
             with self.db.atomic():
                 cast(Table, self.db["embeddings"]).insert_all(
                     (
