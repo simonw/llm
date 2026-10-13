@@ -2964,7 +2964,11 @@ class ChainResponse(_BaseChainResponse):
             count += 1
             yield current_response
             self._responses.append(current_response)
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
@@ -3103,7 +3107,11 @@ class AsyncChainResponse(_BaseChainResponse):
             yield current_response
             self._responses.append(current_response)
 
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and await current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
