@@ -2874,6 +2874,16 @@ class _BaseChainResponse:
         self.chain_limit = chain_limit
         self.before_call = before_call
         self.after_call = after_call
+        self._response_callbacks: list[Callable] = []
+
+    def on_response(self, callback):
+        """Register a callback for each subsequent completed response.
+
+        Called before the chain limit is checked or tools are executed.
+        Async chains also accept async callbacks and await them. Register
+        before consuming the chain; earlier responses are not replayed.
+        """
+        self._response_callbacks.append(callback)
 
     def log_to_db(self, db):
         for response in self._responses:
@@ -2962,6 +2972,8 @@ class ChainResponse(_BaseChainResponse):
         current_response: Response | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
             if self.chain_limit and count >= self.chain_limit:
@@ -3100,6 +3112,8 @@ class AsyncChainResponse(_BaseChainResponse):
         current_response: AsyncResponse | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                await current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
 
