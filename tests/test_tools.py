@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+from contextlib import contextmanager
 from importlib.metadata import version
 
 import pytest
@@ -606,6 +607,43 @@ def test_default_tool_llm_time():
         "utc_time",
         "is_dst",
     }
+
+
+@contextmanager
+def fixed_timezone(tz: str):
+    "Run the block with TZ set to a POSIX timezone string, then restore it."
+    original = os.environ.get("TZ")
+    os.environ["TZ"] = tz
+    time.tzset()
+    try:
+        yield
+    finally:
+        if original is None:
+            del os.environ["TZ"]
+        else:
+            os.environ["TZ"] = original
+        time.tzset()
+
+
+# A POSIX TZ string is "std offset" where the offset sign is inverted, so
+# "EST5" is UTC-05:00 and "IST-5:30" is UTC+05:30. These are fixed-offset
+# with no DST rules, so the expected string does not depend on today's date.
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="requires time.tzset()")
+@pytest.mark.parametrize(
+    "tz,expected",
+    (
+        ("UTC", "UTC+00:00"),
+        ("EST5", "UTC-05:00"),
+        ("NST3:30", "UTC-03:30"),
+        ("IST-5:30", "UTC+05:30"),
+        ("XXX-5:45", "UTC+05:45"),
+    ),
+)
+def test_llm_time_timezone_offset(tz, expected):
+    # A west-of-UTC offset used to render as "UTC-5:00" (the ":02d" format
+    # does not pad the sign) and floor division rounded -03:30 to -04:30.
+    with fixed_timezone(tz):
+        assert llm_time()["timezone_offset"] == expected
 
 
 def test_incorrect_tool_usage():
