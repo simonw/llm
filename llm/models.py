@@ -2877,13 +2877,7 @@ class _BaseChainResponse:
 
     def log_to_db(self, db):
         for response in self._responses:
-            if isinstance(response, AsyncResponse):
-                sync_response = asyncio.run(response.to_sync_response())
-            elif isinstance(response, Response):
-                sync_response = response
-            else:
-                assert False, "Should have been a Response or AsyncResponse"
-            sync_response.log_to_db(db)
+            response.log_to_db(db)
 
     def _pending_tool_calls(self) -> list[ToolCall]:
         """Unresolved tool calls at the end of this chain's history.
