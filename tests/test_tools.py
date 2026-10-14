@@ -1248,6 +1248,25 @@ async def test_async_missing_tool_can_be_cancelled_by_before_call():
     ]
 
 
+def test_tool_without_implementation_produces_error_result():
+    tool = llm.Tool(
+        name="no_impl",
+        description="A tool with no implementation",
+        input_schema={"type": "object", "properties": {}},
+        implementation=None,
+    )
+    model = llm.get_model("echo")
+    chain_response = model.chain(
+        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
+        tools=[tool],
+    )
+    chain_response.text()
+    second = chain_response._responses[1]
+    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
+        ("no_impl", 'Error: tool "no_impl" has no implementation'),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_async_tool_without_implementation_produces_error_result():
     tool = llm.Tool(
