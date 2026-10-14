@@ -2170,7 +2170,8 @@ def logs_list(
                 if row["tool_calls"]:
                     obj["tool_calls"] = [
                         "{}({})".format(
-                            tool_call["name"], json.dumps(tool_call["arguments"])
+                            tool_call["name"],
+                            truncate_string(json.dumps(tool_call["arguments"])),
                         )
                         for tool_call in row["tool_calls"]
                     ]

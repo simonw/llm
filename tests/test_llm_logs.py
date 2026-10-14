@@ -11,7 +11,7 @@ import yaml
 from click.testing import CliRunner
 from ulid import ULID
 
-from llm import Fragment
+from llm import Fragment, ToolCall
 from llm.cli import cli
 from llm.migrations import migrate
 from llm.utils import monotonic_ulid
@@ -1245,6 +1245,37 @@ def test_logs_tool_call_argument_formatting(logs_db):
         "    timeout: `120`\n"
         '    options: ``["`tick`"]``\n'
     ) in normalized_output
+
+
+@pytest.mark.parametrize("arg", ("-s", "--short"))
+@pytest.mark.parametrize(
+    "arguments,expected",
+    (
+        ({}, "{}"),
+        ({"text": "short"}, '{"text": "short"}'),
+        ({"text": "x" * 88}, '{"text": "' + "x" * 88 + '"}'),
+        ({"text": "x" * 89}, '{"text": "' + "x" * 87 + "..."),
+        (
+            {"nested": {"text": "x" * 10_000}},
+            '{"nested": {"text": "' + "x" * 76 + "...",
+        ),
+    ),
+)
+def test_logs_short_tool_call_arguments(logs_db, mock_model, arg, arguments, expected):
+    response = mock_model.prompt("Run demo")
+    response.add_tool_call(ToolCall(name="demo", arguments=arguments))
+    response.text()
+    response.log_to_db(logs_db)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", arg], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert yaml.safe_load(result.output)[0]["tool_calls"] == [f"demo({expected})"]
+
+    # The full arguments remain available in JSON output.
+    result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["tool_calls"][0]["arguments"] == arguments
 
 
 def test_logs_server_side_tool_results(logs_db, mock_model):
