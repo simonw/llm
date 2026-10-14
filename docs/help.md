@@ -175,6 +175,7 @@ Options:
   --async                         Run prompt asynchronously
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
+  -r, --repeat                    Repeat piped input before the response
   --xl, --extract-last            Extract last fenced code block
   --json                          Output the response as JSON, same format as
                                   llm logs --json
