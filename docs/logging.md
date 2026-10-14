@@ -3,10 +3,6 @@
 
 `llm` defaults to logging all prompts and responses to a SQLite database.
 
-Each completed model response is saved immediately, including intermediate responses in a tool chain. If the chain limit is reached, a later request fails, or you press Ctrl+C, earlier completed responses remain available in `llm logs`. This applies to both `llm prompt` and `llm chat`.
-
-A response interrupted while it is still streaming is not saved. Tool results are saved with the next completed model response, so results from tools executed just before an interruption may also be missing.
-
 You can find the location of that database using the `llm logs path` command:
 
 ```bash
