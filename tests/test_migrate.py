@@ -116,6 +116,7 @@ def test_migrations_for_embeddings(db_factory):
         "embedding": bytes,
         "content": str,
         "content_blob": bytes,
+        "content_type": str,
         "content_hash": bytes,
         "metadata": str,
         "updated": int,

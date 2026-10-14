@@ -267,6 +267,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
   * [Writing plugins to add new embedding models](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html)
     * [`EmbeddingModel`](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html#llm.EmbeddingModel)
     * [Embedding binary content](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html#embedding-binary-content)
+    * [Embedding typed attachments](https://llm.datasette.io/en/stable/embeddings/writing-plugins.html#embedding-typed-attachments)
   * [Embedding storage format](https://llm.datasette.io/en/stable/embeddings/storage.html)
 * [Plugins](https://llm.datasette.io/en/stable/plugins/index.html)
   * [Installing plugins](https://llm.datasette.io/en/stable/plugins/installing-plugins.html)

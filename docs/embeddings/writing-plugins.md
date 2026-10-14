@@ -88,3 +88,29 @@ class ClipEmbeddingModel(llm.EmbeddingModel):
 If your model accepts binary, your `.embed_batch()` model may be called with a list of Python bytestrings. These may be mixed with regular strings if the model accepts both types of input.
 
 [llm-clip](https://github.com/simonw/llm-clip) is an example of a model that can embed both binary and text content.
+
+## Embedding typed attachments
+
+Binary strings do not include a MIME type or information about where they came from. Models that need that information can declare the attachment MIME types they support using `attachment_types`:
+
+```python
+class MultimodalEmbeddingModel(llm.EmbeddingModel):
+    model_id = "multimodal"
+    attachment_types = frozenset({"image/png", "image/jpeg", "audio/wav"})
+
+    def embed_batch(self, items, *, key=None):
+        for item in items:
+            if isinstance(item, llm.Attachment):
+                mimetype = item.resolve_type()
+                content = item.content_bytes()
+                # Decode content according to mimetype, then embed it
+            else:
+                # Embed text strings as usual
+                ...
+```
+
+An embedding model with a non-empty `attachment_types` collection receives matching inputs as `llm.Attachment` objects. Attachments provide `type`, `path`, `url`, and `content` attributes, along with `resolve_type()` and `content_bytes()` methods.
+
+The CLI accepts typed attachments using `-a/--attachment`, which detects the MIME type, or `--at/--attachment-type PATH MIME`, which sets it explicitly.
+
+For backwards compatibility, a model with `supports_binary = True` and no declared `attachment_types` receives the attachment's content as bytes. This allows existing binary embedding plugins to work with the typed attachment CLI without modification.

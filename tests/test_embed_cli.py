@@ -6,8 +6,31 @@ from unittest.mock import ANY
 import pytest
 from click.testing import CliRunner
 
-from llm import Collection
+from llm import Attachment, Collection
 from llm.cli import cli
+
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"
+    b"\x02\x03\x00\x00\x00\xe6\x99\xc4^\x00\x00\x00\tPLTE\xff\xff\xff"
+    b"\x00\xff\x00\xfe\x01\x00\x12t\x01J\x00\x00\x00GIDATx\xda\xed\xd81\x11"
+    b"\x000\x08\xc0\xc0.]\xea\xaf&Q\x89\x04V\xe0>\xf3+\xc8\x91Z\xf4\xa2\x08EQ\x14E"
+    b"Q\x14EQ\x14EQ\xd4B\x91$I3\xbb\xbf\x08EQ\x14EQ\x14EQ\x14E\xd1\xa5"
+    b"\xd4\x17\x91\xc6\x95\x05\x15\x0f\x9f\xc5\t\x9f\xa4\x00\x00\x00\x00IEND\xaeB`"
+    b"\x82"
+)
+
+
+def capture_typed_attachments(monkeypatch, embed_demo):
+    captured = []
+    embed_demo.attachment_types = frozenset({"image/png", "audio/wav"})
+
+    def embed_batch(items):
+        for item in items:
+            captured.append(item)
+            yield [1.0] + [0.0] * 15
+
+    monkeypatch.setattr(embed_demo, "embed_batch", embed_batch)
+    return captured
 
 
 @pytest.mark.parametrize(
@@ -123,6 +146,7 @@ def test_embed_store(db_factory, user_path, metadata, metadata_error):
             ),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": Collection.content_hash("hello"),
             "metadata": expected_metadata,
             "updated": ANY,
@@ -168,11 +192,75 @@ def test_embed_store_binary(db_factory, user_path):
             ),
             "content": None,
             "content_blob": b"\x00\x01\x02",
+            "content_type": None,
             "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
             "metadata": None,
             "updated": ANY,
         }
     ]
+
+
+@pytest.mark.parametrize("typed_option", ("detected", "explicit"))
+def test_embed_typed_attachment_cli(monkeypatch, embed_demo, tmp_path, typed_option):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+    args = ["embed", "-m", "embed-demo"]
+    if typed_option == "detected":
+        args.extend(("-a", str(image_path)))
+    else:
+        args.extend(("--at", str(image_path), "image/png"))
+
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [1.0] + [0.0] * 15
+    assert captured == [Attachment(type="image/png", path=str(image_path.resolve()))]
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    (
+        ("-c", "hello"),
+        ("--binary",),
+    ),
+)
+def test_embed_typed_attachment_conflicts(tmp_path, extra_args):
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        ["embed", "-m", "embed-demo", "-a", str(image_path), *extra_args],
+    )
+
+    assert result.exit_code == 2
+    assert (
+        "Attachments cannot be combined with --content, --input or --binary"
+        in result.output
+    )
+
+
+def test_embed_rejects_multiple_typed_attachments(tmp_path):
+    paths = [tmp_path / "one.png", tmp_path / "two.png"]
+    for path in paths:
+        path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed",
+            "-m",
+            "embed-demo",
+            "-a",
+            str(paths[0]),
+            "-a",
+            str(paths[1]),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Only one attachment can be embedded at a time" in result.output
 
 
 def test_embed_key_option(embed_key_demo):
@@ -350,6 +438,114 @@ def test_similar_by_content_prefixed(
     assert json.loads(result.output) == expected_result
 
 
+@pytest.mark.parametrize("typed_option", ("detected", "explicit"))
+def test_similar_by_typed_attachment_cli(
+    monkeypatch,
+    embed_demo,
+    tmp_path,
+    user_path_with_embeddings,
+    typed_option,
+):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    image_path = tmp_path / "query.png"
+    image_path.write_bytes(TINY_PNG)
+    args = ["similar", "demo", "-n", "1"]
+    if typed_option == "detected":
+        args.extend(("-a", str(image_path)))
+    else:
+        args.extend(("--at", str(image_path), "image/png"))
+
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["id"] in {"1", "2"}
+    assert [(item.type, item.path) for item in captured] == [
+        ("image/png", str(image_path.resolve()))
+    ]
+
+
+def test_similar_json_includes_attachment_content_type(
+    db_factory, monkeypatch, embed_demo, tmp_path
+):
+    capture_typed_attachments(monkeypatch, embed_demo)
+    db_path = tmp_path / "embeddings.db"
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+    attachment = Attachment(type="image/png", path=str(image_path.resolve()))
+    collection = Collection("media", db_factory(str(db_path)), model_id="embed-demo")
+    collection.embed("photo", attachment)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "similar",
+            "media",
+            "-d",
+            str(db_path),
+            "-n",
+            "1",
+            "-a",
+            str(image_path),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "id": "photo",
+        "score": pytest.approx(1.0),
+        "content": None,
+        "content_type": "image/png",
+        "metadata": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    (
+        ("-c", "hello"),
+        ("--binary",),
+        ("1",),
+    ),
+)
+def test_similar_typed_attachment_conflicts(
+    tmp_path, user_path_with_embeddings, extra_args
+):
+    image_path = tmp_path / "query.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        ["similar", "demo", "-a", str(image_path), *extra_args],
+    )
+
+    assert result.exit_code == 2
+    assert "Attachments cannot be combined with" in result.output
+
+
+def test_similar_rejects_multiple_typed_attachments(
+    tmp_path, user_path_with_embeddings
+):
+    paths = [tmp_path / "one.png", tmp_path / "two.png"]
+    for path in paths:
+        path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "similar",
+            "demo",
+            "-a",
+            str(paths[0]),
+            "-a",
+            str(paths[1]),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Only one attachment can be used for comparison" in result.output
+
+
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
@@ -424,10 +620,80 @@ def test_embed_multi_files_binary_store(db_factory, tmpdir):
         ),
         "content": None,
         "content_blob": b"\x00\x01\x02",
+        "content_type": None,
         "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
         "metadata": None,
         "updated": ANY,
     }
+
+
+def test_embed_multi_typed_attachments(db_factory, monkeypatch, embed_demo, tmp_path):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    db_path = tmp_path / "embeddings.db"
+    image_path = tmp_path / "photo.png"
+    audio_path = tmp_path / "recording.data"
+    image_path.write_bytes(TINY_PNG)
+    audio_path.write_bytes(b"not a complete wav")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "media",
+            "-d",
+            str(db_path),
+            "-m",
+            "embed-demo",
+            "-a",
+            str(image_path),
+            "--at",
+            str(audio_path),
+            "audio/wav",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert [(item.type, item.path) for item in captured] == [
+        ("image/png", str(image_path.resolve())),
+        ("audio/wav", str(audio_path.resolve())),
+    ]
+    db = db_factory(str(db_path))
+    assert [row["id"] for row in db["embeddings"].rows] == [
+        "photo.png",
+        "recording.data",
+    ]
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_error",
+    (
+        (("--binary",), "Attachments cannot be combined with --binary"),
+        (
+            ("--files", ".", "*.png"),
+            "Attachments cannot be combined with an input path, --sql, --files or --format",
+        ),
+    ),
+)
+def test_embed_multi_typed_attachment_conflicts(tmp_path, extra_args, expected_error):
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "media",
+            "-m",
+            "embed-demo",
+            "-a",
+            str(image_path),
+            *extra_args,
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert expected_error in result.output
 
 
 @pytest.mark.parametrize("use_other_db", (True, False))
