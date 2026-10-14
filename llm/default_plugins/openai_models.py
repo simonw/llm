@@ -244,7 +244,7 @@ def register_models(register):
         ),
     )
     # GPT-5.2
-    for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
+    for model_id in ("gpt-5.2",):
         register(
             Responses(
                 model_id,

@@ -54,7 +54,6 @@ OpenAI Responses: gpt-5-mini-2025-08-07
 OpenAI Responses: gpt-5-nano-2025-08-07
 OpenAI Responses: gpt-5.1
 OpenAI Responses: gpt-5.2
-OpenAI Responses: gpt-5.2-chat-latest
 OpenAI Responses: gpt-5.4
 OpenAI Responses: gpt-5.4-2026-03-05
 OpenAI Responses: gpt-5.4-mini
