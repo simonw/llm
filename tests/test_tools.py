@@ -930,6 +930,39 @@ async def test_chain_async_cancel_only_first_of_two():
     assert results[1].exception is None
 
 
+def test_chain_limit_allows_final_response():
+    model = llm.get_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    payload = json.dumps({"tool_calls": [{"name": "t1"}]})
+    chain = model.conversation(chain_limit=2).chain(payload, tools=[t1])
+    chain.text()
+    assert len(chain._responses) == 2
+
+    chain = model.conversation(chain_limit=1).chain(payload, tools=[t1])
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        chain.text()
+
+
+@pytest.mark.asyncio
+async def test_chain_async_limit_allows_final_response():
+    async_model = llm.get_async_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    payload = json.dumps({"tool_calls": [{"name": "t1"}]})
+    chain = async_model.conversation(chain_limit=2).chain(payload, tools=[t1])
+    await chain.text()
+    assert len(chain._responses) == 2
+
+    chain = async_model.conversation(chain_limit=1).chain(payload, tools=[t1])
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        await chain.text()
+
+
 def test_tool_function_receives_llm_tool_call():
     captured = {}
 
