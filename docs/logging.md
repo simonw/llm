@@ -1,7 +1,7 @@
 (logging)=
 # Logging to SQLite
 
-`llm` defaults to logging all prompts and responses to a SQLite database.
+The `llm` command-line tool defaults to logging all prompts and responses to a SQLite database. The Python API does not log automatically; see {ref}`logging-message-store-python` for how to log responses explicitly.
 
 You can find the location of that database using the `llm logs path` command:
 
