@@ -332,6 +332,9 @@ def schema_summary(schema: dict) -> str:
         prop_summaries = []
 
         for name, prop_schema in props.items():
+            if isinstance(prop_schema, bool):
+                prop_summaries.append(name)
+                continue
             prop_type = prop_schema.get("type", "")
 
             if prop_type == "array":
