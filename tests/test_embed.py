@@ -198,6 +198,66 @@ def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+@pytest.mark.parametrize("result_count", (0, 1, 3))
+@pytest.mark.parametrize("with_metadata", (False, True))
+def test_embed_multi_rejects_wrong_result_count(
+    db_factory, monkeypatch, result_count, with_metadata
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    collection.embed("1", "original content", metadata={"keep": True}, store=True)
+    original_rows = list(collection.db["embeddings"].rows)
+    model = collection.model()
+    original_embed_batch = model.embed_batch
+
+    def wrong_count(items):
+        embeddings = list(original_embed_batch(items))
+        return iter((embeddings + embeddings[:1])[:result_count])
+
+    monkeypatch.setattr(model, "embed_batch", wrong_count)
+    entries = [("1", "hello world"), ("2", "goodbye world")]
+    if with_metadata:
+        entries = [(id, text, {"source": id}) for id, text in entries]
+    method = (
+        collection.embed_multi_with_metadata
+        if with_metadata
+        else collection.embed_multi
+    )
+
+    with pytest.raises(
+        ValueError, match=f"^Expected 2 embeddings, received {result_count}$"
+    ):
+        method(entries, store=True)
+
+    assert list(collection.db["embeddings"].rows) == original_rows
+
+
+def test_embed_multi_wrong_result_count_preserves_completed_batches(
+    db_factory, monkeypatch
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    model = collection.model()
+    original_embed_batch = model.embed_batch
+
+    def incomplete_final_batch(items):
+        embeddings = list(original_embed_batch(items))
+        return iter(embeddings if len(embeddings) == 2 else [])
+
+    monkeypatch.setattr(model, "embed_batch", incomplete_final_batch)
+
+    with pytest.raises(ValueError, match="^Expected 1 embeddings, received 0$"):
+        collection.embed_multi(
+            [("1", "hello world"), ("2", "goodbye world"), ("3", "another entry")],
+            batch_size=2,
+            store=True,
+        )
+
+    rows = list(collection.db["embeddings"].rows)
+    assert [(row["id"], row["content"]) for row in rows] == [
+        ("1", "hello world"),
+        ("2", "goodbye world"),
+    ]
+
+
 def test_collection_delete(collection):
     db = collection.db
     assert db["embeddings"].count == 2
