@@ -141,7 +141,6 @@ def _run_chat(
     initial_fragments=None,
     initial_attachments=None,
     transform_prompt=None,
-    after_response=None,
     show_reasoning=True,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
@@ -214,8 +213,6 @@ def _run_chat(
             response.stream_events(),
             show_reasoning=show_reasoning,
         )
-        if after_response is not None:
-            after_response(response)
         print()
 
 
@@ -1075,35 +1072,46 @@ def prompt(
     if hide_reasoning:
         kwargs["hide_reasoning"] = True
 
+    # Commit each completed response before the chain does any more work.
+    log_db = None
+    if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database.
+        log_db = _cli_database(memory=True)
+        migrate(log_db)
+
+    def log_response(response):
+        response.log_to_db(log_db)
+
     try:
+        response = prompt_method(
+            prompt,
+            fragments=resolved_fragments,
+            attachments=resolved_attachments,
+            system=system,
+            schema=schema,
+            system_fragments=resolved_system_fragments,
+            **kwargs,
+        )
+        if log_db is not None:
+            if isinstance(response, _BaseChainResponse):
+                response.on_response(log_response)
+            elif not isinstance(response, AsyncResponse):
+                response.on_done(log_response)
+
         if async_:
 
             async def inner():
+                if log_db is not None and isinstance(response, AsyncResponse):
+                    await response.on_done(log_response)
                 if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     await display_async_stream_events(
                         response.astream_events(),
                         show_reasoning=not hide_reasoning,
                     )
                     print()
                 else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -1111,19 +1119,9 @@ def prompt(
                         )
                     if not json_output:
                         print(text)
-                return response
 
-            response = asyncio.run(inner())
+            asyncio.run(inner())
         else:
-            response = prompt_method(
-                prompt,
-                fragments=resolved_fragments,
-                attachments=resolved_attachments,
-                system=system,
-                schema=schema,
-                system_fragments=resolved_system_fragments,
-                **kwargs,
-            )
             if should_stream:
                 display_stream_events(
                     response.stream_events(),
@@ -1162,22 +1160,6 @@ def prompt(
                 ),
                 err=True,
             )
-
-    # Log responses to the database
-    log_db = None
-    if (logs_on() or log) and not no_log:
-        log_db = db
-    elif json_output:
-        # --json needs logged rows, so use a temporary in-memory database
-        log_db = _cli_database(memory=True)
-        migrate(log_db)
-
-    if log_db is not None:
-        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
-        # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(log_db)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1394,6 +1376,7 @@ def chat(
             system=system,
             **kwargs,
         )
+        response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -1407,7 +1390,6 @@ def chat(
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
     )
 
