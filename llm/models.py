@@ -2976,8 +2976,6 @@ class ChainResponse(_BaseChainResponse):
                 current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
-            if self.chain_limit and count >= self.chain_limit:
-                raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
             tool_results = current_response.execute_tool_calls(
@@ -2987,6 +2985,9 @@ class ChainResponse(_BaseChainResponse):
             for tool_result in tool_results:
                 attachments.extend(tool_result.attachments)
             if tool_results:
+                # Limit applies to further turns, not the response that ends the chain.
+                if self.chain_limit and count >= self.chain_limit:
+                    raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
                 # Pre-bake the full chain for the tool-result turn so
                 # response.prompt.messages is what gets sent — carries
                 # thoughtSignatures, thinking signatures, and everything
@@ -3117,14 +3118,14 @@ class AsyncChainResponse(_BaseChainResponse):
             yield current_response
             self._responses.append(current_response)
 
-            if self.chain_limit and count >= self.chain_limit:
-                raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
-
             # This could raise llm.CancelToolCall:
             tool_results = await current_response.execute_tool_calls(
                 before_call=self.before_call, after_call=self.after_call
             )
             if tool_results:
+                # Limit applies to further turns, not the response that ends the chain.
+                if self.chain_limit and count >= self.chain_limit:
+                    raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
                 attachments = []
                 for tool_result in tool_results:
                     attachments.extend(tool_result.attachments)
