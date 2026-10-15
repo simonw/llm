@@ -563,6 +563,27 @@ def test_cli_tools_with_options():
     # https://github.com/simonw/llm/issues/1233
 
 
+@pytest.mark.parametrize("async_", (False, True))
+def test_cli_tools_with_usage(async_):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+            "--usage",
+        ]
+        + (["--async"] if async_ else []),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # One line for each response in the chain
+    assert result.stderr.count("Token usage:") == 2
+
+
 def test_functions_tool_locals():
     # https://github.com/simonw/llm/issues/1107
     runner = CliRunner()
