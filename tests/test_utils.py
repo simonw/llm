@@ -506,6 +506,25 @@ def test_instantiate_valid(spec, expected_cls, expected_attrs):
         assert getattr(obj, key) == val
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize(
+    "spec, expected_attrs",
+    [
+        (
+            'ValueFlag({\n"value": [1, 2],\n"flag": true\n})',
+            {"value": [1, 2], "flag": True},
+        ),
+        ("ValueFlag([\n1,\n2\n])", {"value": [1, 2], "flag": False}),
+        ("ValueFlag(\nvalue=[1,\n2],\nflag=true\n)", {"value": [1, 2], "flag": True}),
+        ("ValueFlag(\ntrue\n)", {"value": True, "flag": False}),
+        ("ValueFlag(\n)", {"value": None, "flag": False}),
+    ],
+)
+def test_instantiate_multiline(spec, expected_attrs, newline):
+    obj = instantiate_from_spec({"ValueFlag": ValueFlag}, spec.replace("\n", newline))
+    assert vars(obj) == expected_attrs
+
+
 @pytest.mark.parametrize(
     "spec",
     [
@@ -516,6 +535,10 @@ def test_instantiate_valid(spec, expected_cls, expected_attrs):
         "Files(.)",
         "Files(this is invalid)",
         "ValueFlag(value=123, flag=falseTypo)",
+        'ValueFlag({\n"value":\n})',
+        'ValueFlag("literal\nnewline")',
+        "ValueFlag(\nvalue=[1,\n)2]\n)",
+        "ValueFlag()\nValueFlag()",
     ],
 )
 def test_instantiate_invalid(spec):
