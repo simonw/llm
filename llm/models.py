@@ -1590,13 +1590,27 @@ class _BaseResponse:
         system_fragments = [
             row["content"] for row in all_fragments if row["fragment_type"] == "system"
         ]
+        # Restore attachments before constructing the prompt so its messages
+        # include them when the response or a continued conversation reads them.
+        attachments = [
+            Attachment.from_row(attachment_row)
+            for attachment_row in db.query(
+                """
+                select attachments.* from attachments
+                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
+                where prompt_attachments.response_id = ?
+                order by prompt_attachments."order"
+            """,
+                [row["id"]],
+            )
+        ]
         response = cls(
             model=model,
             prompt=Prompt(
                 prompt=row["prompt"],
                 model=model,
                 fragments=fragments,
-                attachments=[],
+                attachments=attachments,
                 system=row["system"],
                 schema=schema,
                 tools=tools,
@@ -1612,19 +1626,7 @@ class _BaseResponse:
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
         response._chunks = [row["response"]]
-        # Attachments
-        response.attachments = [
-            Attachment.from_row(attachment_row)
-            for attachment_row in db.query(
-                """
-                select attachments.* from attachments
-                join prompt_attachments on attachments.id = prompt_attachments.attachment_id
-                where prompt_attachments.response_id = ?
-                order by prompt_attachments."order"
-            """,
-                [row["id"]],
-            )
-        ]
+        response.attachments = attachments
         # Tool calls
         response._tool_calls = [
             ToolCall(
