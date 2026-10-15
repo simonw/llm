@@ -971,7 +971,7 @@ async def run():
 asyncio.run(run())
 ```
 
-For a tool chain, use `chain.on_response(callback)` to register a callback for each completed model response. Register it before consuming the chain. The callback runs before checking the chain limit or executing that response's tool calls, so it can save completed rounds even if later work fails:
+For a tool chain, use `chain.on_response(callback)` to register a callback for each completed model response. This callback runs before checking the chain limit or executing that response's tool calls, so it can save completed rounds even if later work fails:
 
 ```python
 import llm
@@ -986,7 +986,9 @@ chain.on_response(lambda response: response.log_to_db(db))
 print(chain.text())
 ```
 
-`AsyncChainResponse.on_response()` also accepts async callbacks and awaits them before continuing the chain. Registration itself is synchronous: call `chain.on_response(callback)` without `await`. Callbacks receive the completed `Response` or `AsyncResponse`; earlier completed rounds are not replayed. Callback exceptions propagate and stop the chain.
+`AsyncChainResponse.on_response()` also accepts async callbacks and awaits them before continuing the chain.
+
+Callback exceptions propagate and stop the chain.
 
 ## Other functions
 
