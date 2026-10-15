@@ -529,6 +529,73 @@ def test_logs_search_bad_query_is_a_clean_error(logs_db):
     assert "Invalid search query" in result.output
 
 
+def test_logs_search_phrase_handles_punctuation_in_both_log_formats(
+    logs_db, mock_model, user_path
+):
+    identifier = "CFF90D7C-A2EC-4437-AEBF-5BA515430241"
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": f"Legacy reference {identifier}",
+            "response": "found",
+            "model": "example",
+        }
+    )
+    mock_model.enqueue(["found"])
+    response = mock_model.prompt(f"Current reference {identifier}")
+    response.text()
+    response.log_to_db(logs_db)
+
+    result = CliRunner().invoke(
+        cli,
+        ["logs", "-d", str(user_path / "logs.db"), "--phrase", identifier, "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    assert {row["prompt"] for row in json.loads(result.output)} == {
+        f"Legacy reference {identifier}",
+        f"Current reference {identifier}",
+    }
+
+    # Quotes in user input are escaped, not treated as FTS5 syntax.
+    quoted = CliRunner().invoke(
+        cli,
+        [
+            "logs",
+            "-d",
+            str(user_path / "logs.db"),
+            "--phrase",
+            f'Current reference "{identifier}"',
+            "--json",
+        ],
+    )
+    assert quoted.exit_code == 0, quoted.output
+    assert [row["prompt"] for row in json.loads(quoted.output)] == [
+        f"Current reference {identifier}"
+    ]
+
+
+def test_logs_search_phrase_rejects_query_combination(logs_db, user_path):
+    migrate(logs_db)
+    result = CliRunner().invoke(
+        cli,
+        ["logs", "-d", str(user_path / "logs.db"), "-q", "a OR b", "--phrase", "a"],
+    )
+    assert result.exit_code != 0
+    assert "Cannot use --query and --phrase together" in result.output
+
+
+def test_logs_search_phrase_rejects_empty_input(logs_db, user_path):
+    migrate(logs_db)
+    result = CliRunner().invoke(
+        cli, ["logs", "-d", str(user_path / "logs.db"), "--phrase", "  "]
+    )
+    assert result.exit_code != 0
+    assert "--phrase" in result.output
+    assert "must contain text" in result.output
+
+
 @pytest.mark.parametrize(
     "query,extra_args,expected",
     (
