@@ -737,3 +737,40 @@ def test_gpt4o_mini_sync_and_async(
     store = LogStore(db)
     chain = store.load_chain(turn["tip_message_hash"])
     assert chain[-1].parts[0].text == "Ho ho ho"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("response_usage", ("missing", "null"))
+def test_gpt4o_mini_sync_and_async_without_usage(httpx2_mock, async_, response_usage):
+    response = {
+        "id": "chatcmpl-AQT9a30kxEaM1bqxRPepQsPlCyGJh",
+        "object": "chat.completion",
+        "created": 1730871958,
+        "model": "gpt-4o-mini",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Ho ho ho",
+                    "refusal": None,
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "system_fingerprint": "fp_49254d0e9b",
+    }
+    if response_usage == "null":
+        response["usage"] = None
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json=response,
+        headers={"Content-Type": "application/json"},
+    )
+    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    if async_:
+        args.append("--async")
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "Ho ho ho\n"
