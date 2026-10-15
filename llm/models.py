@@ -2976,7 +2976,11 @@ class ChainResponse(_BaseChainResponse):
                 current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
@@ -3117,7 +3121,11 @@ class AsyncChainResponse(_BaseChainResponse):
             yield current_response
             self._responses.append(current_response)
 
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and await current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
@@ -3364,6 +3372,7 @@ class _Model(_BaseModel):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        chain_limit: int | None = None,
         before_call: BeforeCallSync | None = None,
         after_call: AfterCallSync | None = None,
         key: str | None = None,
@@ -3381,6 +3390,7 @@ class _Model(_BaseModel):
             schema=schema,
             tools=tools,
             tool_results=tool_results,
+            chain_limit=chain_limit,
             before_call=before_call,
             after_call=after_call,
             key=key,
@@ -3489,6 +3499,7 @@ class _AsyncModel(_BaseModel):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        chain_limit: int | None = None,
         before_call: BeforeCallAsync | None = None,
         after_call: AfterCallAsync | None = None,
         key: str | None = None,
@@ -3506,6 +3517,7 @@ class _AsyncModel(_BaseModel):
             schema=schema,
             tools=tools,
             tool_results=tool_results,
+            chain_limit=chain_limit,
             before_call=before_call,
             after_call=after_call,
             key=key,
