@@ -181,6 +181,19 @@ Other keys you can use here:
 - `supports_schema: true` for models that support JSON structured schema output
 - `vision: true` for models that can accept images as input
 - `audio: true` for models that accept audio attachments
+- `supports_url_attachments: false` for models that require remote images to be sent as base64 data URLs instead of external URLs. Images are downloaded by LLM before the model request. The default is `true`, which passes image URLs through. This works with both Chat Completions and Responses models.
+
+For example, configure a local vision model that accepts embedded images but cannot fetch URLs itself:
+
+```yaml
+- model_id: local-vision
+  model_name: vision-model
+  api_base: "http://localhost:1234/v1"
+  vision: true
+  supports_url_attachments: false
+```
+
+You can then pass an image URL using `llm -m local-vision -a https://example.com/image.jpg 'Describe this image'`. LLM must be able to download the image; the model server receives its base64-encoded content. Audio and PDF attachments retain their existing base64 behavior.
 
 Having configured the model like this, run `llm models --options -m MODEL_ID` to check that it installed correctly. You can then run prompts against it like so:
 
