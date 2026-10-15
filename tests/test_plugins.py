@@ -1076,10 +1076,16 @@ def test_toolbox_multiline_configuration(tmp_path, newline):
             ],
         )
         assert result.exit_code == 0, result.output
-        tool_results = json.loads(
-            "[" + result.output.split('"tool_results": [')[1].rsplit("]", 1)[0] + "]"
-        )
-        assert tool_results == [
+        # The echo model emits one JSON document per turn.
+        decoder = json.JSONDecoder()
+        responses = []
+        output = result.output.strip()
+        while output:
+            response, end = decoder.raw_decode(output)
+            responses.append(response)
+            output = output[end:].lstrip()
+        assert len(responses) == 2
+        assert responses[1]["tool_results"] == [
             {
                 "name": "Filesystem_list_files",
                 "output": json.dumps([str(directory / "example.txt")]),
