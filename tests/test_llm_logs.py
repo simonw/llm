@@ -1351,6 +1351,108 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     assert "shell: 17711" in short_result.output
 
 
+def test_logs_legacy_tool_result_attachment_bytes(logs_db):
+    """A legacy tool result can record its attachment bytes as a BLOB.
+    Aggregating that row into JSON must not fail, and the byte count
+    should render the same way the store's attachments do."""
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01legacyblobaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": "describe this image",
+            "response": "it is a pelican",
+            "model": "gpt-4o",
+            "datetime_utc": "2025-01-01T00:00:00",
+        },
+        alter=True,
+    )
+    logs_db["tools"].insert(
+        {
+            "id": 1,
+            "name": "view_image",
+            "description": "View an image",
+            "input_schema": "{}",
+            "plugin": "llm",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["tool_results"].insert(
+        {
+            "id": 1,
+            "response_id": "01legacyblobaaaaaaaaaaaaaa",
+            "tool_id": 1,
+            "name": "view_image",
+            "output": "ok",
+            "tool_call_id": "call_1",
+            "instance_id": None,
+            "exception": None,
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert(
+        {
+            "id": "att1",
+            "type": "image/png",
+            "path": None,
+            "url": None,
+            "content": b"hello",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert_all(
+        [
+            {
+                "id": "att2",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": None,
+            },
+            {
+                "id": "att3",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": b"",
+            },
+        ],
+        pk="id",
+        alter=True,
+    )
+    logs_db["tool_results_attachments"].insert_all(
+        [
+            {"tool_result_id": 1, "attachment_id": "att1", "order": 0},
+            {"tool_result_id": 1, "attachment_id": "att2", "order": 1},
+            {"tool_result_id": 1, "attachment_id": "att3", "order": 2},
+        ]
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "- **view_image**: `call_1`" in result.output
+    assert "- image/png: <5 bytes>" in result.output
+
+    json_result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert json_result.exit_code == 0
+    row = json.loads(json_result.output)[0]
+    (tool_result,) = row["tool_results"]
+    stored, empty_content, no_content = tool_result["attachments"]
+    # The bytes are not in the JSON, just a marker and the byte count -
+    # the same shape log_row_extras produces for stored attachments
+    assert stored["content"] is True
+    assert stored["content_length"] == 5
+    # a zero length blob and a null content both report no content
+    assert empty_content["content"] is None
+    assert empty_content["content_length"] is None
+    assert no_content["content"] is None
+    assert no_content["content_length"] is None
+
+
 def test_logs_backup(logs_db, tmp_path, monkeypatch):
     assert not logs_db.tables
     runner = CliRunner()
