@@ -4214,6 +4214,8 @@ def _parse_yaml_template(name, content):
         raise LoadTemplateError(f"Invalid YAML: {ex!s}")
     if isinstance(loaded, str):
         return Template(name=name, prompt=loaded)
+    if not isinstance(loaded, dict):
+        raise LoadTemplateError("Template must be a string or a mapping")
     loaded["name"] = name
     try:
         return Template(**loaded)
