@@ -1,11 +1,14 @@
+import ast
 import json
 import os
 import pathlib
+import re
+import sys
+from importlib import metadata
 from importlib.metadata import version
 from unittest import mock
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 from pydantic import BaseModel
 
@@ -16,15 +19,14 @@ from llm.models import Usage
 
 def test_version():
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["--version"])
-        assert result.exit_code == 0
-        assert result.output.startswith("cli, version ")
+    result = runner.invoke(cli, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.startswith("cli, version ")
 
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
-    mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
+    db_factory, mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
 ):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
@@ -43,7 +45,7 @@ def test_llm_prompt_creates_log_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 1
+    assert db_factory(db_path)["turns"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -60,11 +62,17 @@ def test_llm_prompt_creates_log_database(
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai_responses, use_stdin, user_path, logs_off, logs_args, should_log
+    db_factory,
+    mocked_openai_responses,
+    use_stdin,
+    user_path,
+    logs_off,
+    logs_args,
+    should_log,
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -110,7 +118,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-5.6-luna"
+    assert row["model"] == "gpt-6-luna"
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
 
@@ -124,7 +132,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             # prompt_json and response_json are no longer recorded: the
@@ -134,14 +142,16 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-5.6-luna",
+            "conversation_model": "gpt-6-luna",
         }.items()
     )
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async_):
+def test_llm_prompt_continue(
+    db_factory, httpx2_mock, mock_openai_responses, user_path, async_
+):
     mock_openai_responses(
         text="Bob, Alice, Eve",
         response_id="resp_first",
@@ -154,7 +164,7 @@ def test_llm_prompt_continue(httpx_mock, mock_openai_responses, user_path, async
     )
 
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -209,6 +219,36 @@ def test_extract_fenced_code(
         assert "```" in output
 
 
+def test_extract_fenced_code_crlf(httpx2_mock):
+    """The CLI extracts fenced code when the model response uses CRLF."""
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": 'Code:\r\n\r\n```python\r\nprint("ok")\r\n```\r\nDone.'
+                    }
+                }
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code", "--extract"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    # Windows stdout translates CRLF to CRCRLF, which Click only partially
+    # normalizes. test_utils.py verifies that extraction preserves CRLF.
+    assert result.output.replace("\r\n", "\n") == 'print("ok")\n\n'
+
+
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
@@ -216,9 +256,9 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     assert result.output == "Hi.\n"
 
 
-def test_openai_completion(mocked_openai_completion, user_path):
+def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -306,10 +346,10 @@ def test_openai_completion_system_prompt_error():
 
 
 def test_openai_completion_logprobs_stream(
-    mocked_openai_completion_logprobs_stream, user_path
+    db_factory, mocked_openai_completion_logprobs_stream, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -335,10 +375,10 @@ def test_openai_completion_logprobs_stream(
 
 
 def test_openai_completion_logprobs_nostream(
-    mocked_openai_completion_logprobs, user_path
+    db_factory, mocked_openai_completion_logprobs, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -376,9 +416,9 @@ EXTRA_MODELS_YAML = """
 """
 
 
-def test_openai_localai_configuration(mocked_localai, user_path):
+def test_openai_localai_configuration(db_factory, mocked_localai, user_path):
     log_path = user_path / "logs.db"
-    sqlite_utils.Database(str(log_path))
+    db_factory(str(log_path))
     # Write the configuration file
     config_path = user_path / "extra-openai-models.yaml"
     config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
@@ -607,8 +647,8 @@ def test_model_defaults(tmpdir, monkeypatch):
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
-    assert llm.get_default_model() == "gpt-5.6-luna"
-    assert llm.get_model().model_id == "gpt-5.6-luna"
+    assert llm.get_default_model() == "gpt-6-luna"
+    assert llm.get_model().model_id == "gpt-6-luna"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
@@ -699,7 +739,7 @@ def test_model_environment_variable(monkeypatch):
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
-def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
+def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filename):
     user_path = tmpdir / "user"
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
@@ -719,7 +759,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     assert result.output == '{"name": "Cleo", "age": 10}\n'
     # Should have created user_path and put a logs.db in it
     assert (user_path / "logs.db").exists()
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert rows == [
         {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
     ]
@@ -766,7 +806,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
         ),
     ),
 )
-def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
+def test_schema_using_dsl(db_factory, mock_model, tmpdir, monkeypatch, args, expected):
     user_path = tmpdir / "user"
     mock_model.enqueue([json.dumps(dog)])
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -778,8 +818,23 @@ def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
     )
     assert result.exit_code == 0
     assert result.output == '{"name": "Cleo", "age": 10}\n'
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert json.loads(rows[0]["content"]) == expected
+
+
+def test_schema_using_invalid_dsl(tmpdir, monkeypatch):
+    monkeypatch.setenv("LLM_USER_PATH", str(tmpdir / "user"))
+    result = CliRunner().invoke(
+        cli,
+        ["prompt", "--schema", "name, age badtype", "test"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert (
+        "Error: Invalid value: Invalid schema DSL: unknown type 'badtype' "
+        "for field 'age'"
+    ) in result.output
+    assert "Traceback" not in result.output
 
 
 @pytest.mark.asyncio
@@ -857,9 +912,10 @@ def test_schemas_dsl():
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
+    db_factory,
     tmpdir,
     monkeypatch,
-    httpx_mock,
+    httpx2_mock,
     mock_openai_responses,
     user_path,
     custom_database_path,
@@ -902,7 +958,7 @@ def test_llm_prompt_continue_with_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 2
+    assert db_factory(db_path)["turns"].count == 2
 
 
 @pytest.mark.parametrize("async_", (False, True))
@@ -985,3 +1041,55 @@ def test_default_exports():
     "Check key exports in the llm __all__ list"
     for name in ("Model", "AsyncModel", "get_model", "get_async_model", "schema_dsl"):
         assert name in llm.__all__, f"{name} not in llm.__all__"
+
+
+def test_all_third_party_imports_are_declared():
+    """Every third-party module imported by llm/ must be a declared dependency.
+
+    httpx was imported by four modules but only arrived transitively via openai,
+    so it vanished when openai 3.0 moved to httpx2 and every fresh install broke.
+    This catches the next one in CI instead of on a user's machine.
+    """
+    llm_dir = pathlib.Path(llm.__file__).parent
+
+    imported = set()
+    for path in sorted(llm_dir.rglob("*.py")):
+        # Source under llm/ contains non-ASCII, so don't trust the platform
+        # default encoding - that would fail on the Windows CI runners.
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.add(alias.name.split(".")[0])
+            # level > 0 is a relative import, so it's internal to llm
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                imported.add(node.module.split(".")[0])
+
+    third_party = imported - sys.stdlib_module_names - {"llm"}
+
+    def normalize(name):
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    declared = set()
+    for requirement in metadata.requires("llm") or []:
+        # Skip anything gated behind an extra - those aren't guaranteed installed
+        if "extra ==" in requirement:
+            continue
+        declared.add(normalize(re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0]))
+
+    module_to_distributions = metadata.packages_distributions()
+
+    undeclared = set()
+    for module in third_party:
+        distributions = module_to_distributions.get(module)
+        if not distributions:
+            # Not installed in this environment, so we can't map it to a
+            # distribution to check. Don't guess.
+            continue
+        if not any(normalize(dist) in declared for dist in distributions):
+            undeclared.add(module)
+
+    assert not undeclared, (
+        "these modules are imported by llm/ but are not declared in "
+        "pyproject.toml dependencies: " + ", ".join(sorted(undeclared))
+    )

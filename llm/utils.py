@@ -10,7 +10,7 @@ import time
 from typing import Any, Final
 
 import click
-import httpx
+import httpx2
 import puremagic
 import sqlite_utils
 from ulid import ULID
@@ -93,18 +93,18 @@ def remove_dict_none_values(d):
     return new_dict
 
 
-class _LogResponse(httpx.Response):
+class _LogResponse(httpx2.Response):
     def iter_bytes(self, *args, **kwargs):
         for chunk in super().iter_bytes(*args, **kwargs):
             click.echo(chunk.decode(), err=True)
             yield chunk
 
 
-class _LogTransport(httpx.BaseTransport):
-    def __init__(self, transport: httpx.BaseTransport):
+class _LogTransport(httpx2.BaseTransport):
+    def __init__(self, transport: httpx2.BaseTransport):
         self.transport = transport
 
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
+    def handle_request(self, request: httpx2.Request) -> httpx2.Response:
         response = self.transport.handle_request(request)
         return _LogResponse(
             status_code=response.status_code,
@@ -114,11 +114,11 @@ class _LogTransport(httpx.BaseTransport):
         )
 
 
-def _no_accept_encoding(request: httpx.Request):
+def _no_accept_encoding(request: httpx2.Request):
     request.headers.pop("accept-encoding", None)
 
 
-def _log_response(response: httpx.Response):
+def _log_response(response: httpx2.Response):
     request = response.request
     click.echo(f"Request: {request.method} {request.url}", err=True)
     click.echo("  Headers:", err=True)
@@ -145,9 +145,9 @@ def _log_response(response: httpx.Response):
     click.echo("  Body:", err=True)
 
 
-def logging_client() -> httpx.Client:
-    return httpx.Client(
-        transport=_LogTransport(httpx.HTTPTransport()),
+def logging_client() -> httpx2.Client:
+    return httpx2.Client(
+        transport=_LogTransport(httpx2.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
     )
 
@@ -200,13 +200,13 @@ def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
     # - ^ or \n ensures that the fence is at the start of a line
     # - (`{3,}) captures the opening backticks (at least three)
     # - (\w+)? optionally captures the language tag
-    # - \n matches the newline after the opening fence
+    # - \r?\n matches the newline after the opening fence
     # - (.*?) non-greedy match for the code block content
     # - (?P=fence) ensures that the closing fence has the same number of backticks
     # - [ ]* allows for optional spaces between the closing fence and newline
-    # - (?=\n|$) ensures that the closing fence is followed by a newline or end of string
+    # - (?=\r?\n|$) ensures that the closing fence is followed by a newline or end of string
     pattern = re.compile(
-        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\n|$)""",
+        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\r?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\r?\n|$)""",
         re.DOTALL,
     )
     matches = list(pattern.finditer(text))
@@ -292,7 +292,10 @@ def resolve_schema_input(db, schema_input, load_template):
             pass
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
-        return schema_dsl(schema_input)
+        try:
+            return schema_dsl(schema_input)
+        except ValueError as e:
+            raise click.BadParameter(str(e)) from None
     # Is it a file on disk?
     path = pathlib.Path(schema_input)
     if path.exists():
@@ -403,8 +406,18 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         # If type is specified, use it
         if len(field_parts) > 1:
             type_indicator = field_parts[1].strip()
-            if type_indicator in type_mapping:
+            try:
                 field_type = type_mapping[type_indicator]
+            except KeyError:
+                # 'from None' hides the internal mapping KeyError from the
+                # user-facing traceback:
+                raise ValueError(
+                    f"Invalid schema DSL: unknown type {type_indicator!r} "
+                    f"for field {field_name!r}"
+                ) from None
+
+        if field_name in json_schema["properties"]:
+            raise ValueError(f"Invalid schema DSL: duplicate field name {field_name!r}")
 
         # Add field to properties
         json_schema["properties"][field_name] = {"type": field_type}
@@ -712,8 +725,9 @@ def monotonic_ulid() -> ULID:
     other ULID returned by this function inside the same process.
 
     It works the same way the reference JavaScript `monotonicFactory` does:
-    * If the current call happens in the same millisecond as the previous
-        one, the 80-bit randomness part is incremented by exactly one.
+    * If the current call reads a millisecond that is not later than the
+        previous one, the 80-bit randomness part is incremented by exactly
+        one and the previous timestamp is reused.
     * As soon as the system clock moves forward, a brand-new ULID with
         cryptographically secure randomness is generated.
     * If more than 2**80 ULIDs are requested within a single millisecond
@@ -732,8 +746,10 @@ def monotonic_ulid() -> ULID:
         # Decode timestamp from the last ULID we handed out
         last_ms = int.from_bytes(_last[:TIMESTAMP_LEN], "big")
 
-        # If the millisecond is the same, increment the randomness
-        if now_ms == last_ms:
+        # If the clock did not move forward, increment the randomness and keep
+        # the previous timestamp. `time.time_ns()` is read outside the lock and
+        # the wall clock can step backwards, so now_ms may be below last_ms.
+        if now_ms <= last_ms:
             rand_int = int.from_bytes(_last[TIMESTAMP_LEN:], "big") + 1
             if rand_int >= 1 << (RANDOMNESS_LEN * 8):
                 raise OverflowError(

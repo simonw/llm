@@ -2,7 +2,7 @@ import os
 import sys
 from unittest.mock import ANY
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -100,13 +100,13 @@ def test_attachment_no_file_descriptor_leak(tmp_path):
     assert _count_open_fds() <= baseline + 5
 
 
-def test_attachment_content_bytes_follows_redirects(httpx_mock):
-    httpx_mock.add_response(
+def test_attachment_content_bytes_follows_redirects(httpx2_mock):
+    httpx2_mock.add_response(
         url="https://example.com/redirected.png",
         status_code=301,
         headers={"Location": "https://example.com/actual.png"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         url="https://example.com/actual.png",
         content=TINY_PNG,
     )
@@ -114,29 +114,29 @@ def test_attachment_content_bytes_follows_redirects(httpx_mock):
     assert attachment.content_bytes() == TINY_PNG
 
 
-def test_attachment_content_bytes_limits_redirects(httpx_mock):
+def test_attachment_content_bytes_limits_redirects(httpx2_mock):
     for redirect in range(4):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url=f"https://example.com/redirect-{redirect}",
             status_code=301,
             headers={"Location": f"https://example.com/redirect-{redirect + 1}"},
         )
 
     attachment = llm.Attachment(url="https://example.com/redirect-0")
-    with pytest.raises(httpx.TooManyRedirects):
+    with pytest.raises(httpx2.TooManyRedirects):
         attachment.content_bytes()
 
-    assert len(httpx_mock.get_requests()) == 4
+    assert len(httpx2_mock.get_requests()) == 4
 
 
-def test_attachment_resolve_type_follows_redirects(httpx_mock):
-    httpx_mock.add_response(
+def test_attachment_resolve_type_follows_redirects(httpx2_mock):
+    httpx2_mock.add_response(
         method="HEAD",
         url="https://example.com/redirected.png",
         status_code=301,
         headers={"Location": "https://example.com/actual.png"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="HEAD",
         url="https://example.com/actual.png",
         headers={"content-type": "image/png"},
@@ -145,9 +145,9 @@ def test_attachment_resolve_type_follows_redirects(httpx_mock):
     assert attachment.resolve_type() == "image/png"
 
 
-def test_attachment_resolve_type_limits_redirects(httpx_mock):
+def test_attachment_resolve_type_limits_redirects(httpx2_mock):
     for redirect in range(4):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             method="HEAD",
             url=f"https://example.com/redirect-{redirect}",
             status_code=301,
@@ -155,7 +155,112 @@ def test_attachment_resolve_type_limits_redirects(httpx_mock):
         )
 
     attachment = llm.Attachment(url="https://example.com/redirect-0")
-    with pytest.raises(httpx.TooManyRedirects):
+    with pytest.raises(httpx2.TooManyRedirects):
         attachment.resolve_type()
 
-    assert len(httpx_mock.get_requests()) == 4
+    assert len(httpx2_mock.get_requests()) == 4
+
+
+UNSUPPORTED_ATTACHMENT_CASES = (
+    ((), "This model does not support attachments"),
+    (
+        ("audio/wav",),
+        "This model does not support attachments of type 'image/png', only audio/wav",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "attachment_types,expected_message", UNSUPPORTED_ATTACHMENT_CASES
+)
+def test_conversation_prompt_rejects_unsupported_attachment_before_execute(
+    mock_model, attachment_types, expected_message
+):
+    mock_model.attachment_types = frozenset(attachment_types)
+    mock_model.enqueue(["sent"])
+    conversation = mock_model.conversation()
+    attachment = llm.Attachment(type="image/png", content=TINY_PNG)
+
+    with pytest.raises(ValueError) as ex:
+        conversation.prompt("describe", attachments=[attachment]).text()
+
+    assert str(ex.value) == expected_message
+    assert mock_model.history == []
+    assert conversation.responses == []
+
+
+@pytest.mark.parametrize(
+    "attachment_types,expected_message", UNSUPPORTED_ATTACHMENT_CASES
+)
+@pytest.mark.asyncio
+async def test_async_conversation_prompt_rejects_unsupported_attachment_before_execute(
+    async_mock_model, attachment_types, expected_message
+):
+    async_mock_model.attachment_types = frozenset(attachment_types)
+    async_mock_model.enqueue(["sent"])
+    conversation = async_mock_model.conversation()
+    attachment = llm.Attachment(type="image/png", content=TINY_PNG)
+
+    with pytest.raises(ValueError) as ex:
+        await conversation.prompt("describe", attachments=[attachment]).text()
+
+    assert str(ex.value) == expected_message
+    assert async_mock_model.history == []
+    assert conversation.responses == []
+
+
+def test_conversation_prompt_preserves_supported_attachment_in_follow_up_chain(
+    mock_model,
+):
+    mock_model.enqueue(["describe"])
+    mock_model.enqueue(["follow up"])
+    conversation = mock_model.conversation()
+    attachment = llm.Attachment(type="image/png", content=TINY_PNG)
+
+    assert (
+        conversation.prompt("describe", attachments=[attachment]).text() == "describe"
+    )
+    assert conversation.prompt("follow up").text() == "follow up"
+
+    assert mock_model.history[0][0].attachments == [attachment]
+    assert mock_model.history[1][0].messages == [
+        llm.Message(
+            role="user",
+            parts=[
+                llm.parts.TextPart(text="describe"),
+                llm.parts.AttachmentPart(attachment=attachment),
+            ],
+        ),
+        llm.assistant("describe"),
+        llm.user("follow up"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_conversation_prompt_preserves_supported_attachment_in_follow_up_chain(
+    async_mock_model,
+):
+    async_mock_model.attachment_types = frozenset({"image/png"})
+    async_mock_model.enqueue(["describe"])
+    async_mock_model.enqueue(["follow up"])
+    conversation = async_mock_model.conversation()
+    attachment = llm.Attachment(type="image/png", content=TINY_PNG)
+
+    assert (
+        await conversation.prompt("describe", attachments=[attachment]).text()
+        == "describe"
+    )
+    assert await conversation.prompt("follow up").text() == "follow up"
+
+    assert async_mock_model.history[0][0].attachments == [attachment]
+    assert async_mock_model.history[1][0].messages == [
+        llm.Message(
+            role="user",
+            parts=[
+                llm.parts.TextPart(text="describe"),
+                llm.parts.AttachmentPart(attachment=attachment),
+            ],
+        ),
+        llm.assistant("describe"),
+        llm.user("follow up"),
+    ]

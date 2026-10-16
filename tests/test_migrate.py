@@ -26,8 +26,8 @@ EXPECTED = {
 }
 
 
-def test_migrate_blank():
-    db = sqlite_utils.Database(memory=True)
+def test_migrate_blank(db_factory):
+    db = db_factory(memory=True)
     migrate(db)
     assert set(db.table_names()).issuperset(
         {"_llm_migrations", "conversations", "responses", "responses_fts"}
@@ -57,8 +57,8 @@ def test_migrate_blank():
 
 
 @pytest.mark.parametrize("has_record", [True, False])
-def test_migrate_from_original_schema(has_record):
-    db = sqlite_utils.Database(memory=True)
+def test_migrate_from_original_schema(db_factory, has_record):
+    db = db_factory(memory=True)
     if has_record:
         db["log"].insert(
             {
@@ -99,15 +99,15 @@ def test_migrate_from_original_schema(has_record):
     }
 
 
-def test_migrations_with_legacy_alter_table():
+def test_migrations_with_legacy_alter_table(db_factory):
     # https://github.com/simonw/llm/issues/162
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     db.execute("pragma legacy_alter_table=on")
     migrate(db)
 
 
-def test_migrations_for_embeddings():
-    db = sqlite_utils.Database(memory=True)
+def test_migrations_for_embeddings(db_factory):
+    db = db_factory(memory=True)
     embeddings_migrations.apply(db)
     assert db["collections"].columns_dict == {"id": int, "name": str, "model": str}
     assert db["embeddings"].columns_dict == {
@@ -124,8 +124,8 @@ def test_migrations_for_embeddings():
     assert db["embeddings"].foreign_keys[0].other_table == "collections"
 
 
-def test_backfill_content_hash():
-    db = sqlite_utils.Database(memory=True)
+def test_backfill_content_hash(db_factory):
+    db = db_factory(memory=True)
     # Run migrations up to but not including m004_store_content_hash
     embeddings_migrations.apply(db, stop_before="m004_store_content_hash")
     assert "content_hash" not in db["embeddings"].columns_dict

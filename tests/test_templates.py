@@ -153,14 +153,16 @@ def test_templates_list(templates_path, args):
         ),
     ),
 )
-def test_templates_prompt_save(templates_path, args, expected, expected_error):
+def test_templates_prompt_save(
+    templates_path, args, expected, expected_error, tmp_path, monkeypatch
+):
     assert not (templates_path / "saved.yaml").exists()
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Create a file to test attachment
-        pathlib.Path("a.txt").write_text("attachment", "utf-8")
-        pathlib.Path("b.txt").write_text("attachment type", "utf-8")
-        result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
+    monkeypatch.chdir(tmp_path)
+    # Create a file to test attachment
+    pathlib.Path("a.txt").write_text("attachment", "utf-8")
+    pathlib.Path("b.txt").write_text("attachment type", "utf-8")
+    result = runner.invoke(cli, args + ["--save", "saved"], catch_exceptions=False)
     if not expected_error:
         assert result.exit_code == 0
         yaml_data = yaml.safe_load((templates_path / "saved.yaml").read_text("utf-8"))
@@ -237,7 +239,7 @@ def test_templates_error_on_missing_schema(templates_path):
             ],
             None,
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2_mock(),
         ),
         pytest.param(
             "prompt: 'Say $hello'",
@@ -247,7 +249,7 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             "Error: Missing variables: hello",
             None,
-            marks=pytest.mark.httpx_mock(),
+            marks=pytest.mark.httpx2_mock(),
         ),
         # Template generated prompt should combine with CLI prompt
         (
@@ -345,6 +347,50 @@ def test_execute_prompt_with_a_template(
         mocked_openai_chat.reset()
 
 
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+def test_execute_prompt_with_multiple_templates_in_order(
+    templates_path, mocked_openai_chat
+):
+    (templates_path / "configuration.yaml").write_text(
+        "model: gpt-4\noptions:\n  temperature: 0.5", "utf-8"
+    )
+    (templates_path / "instruction.yaml").write_text(
+        "prompt: 'Summarize this: $input'", "utf-8"
+    )
+    (templates_path / "wrapper.yaml").write_text(
+        "prompt: 'Be concise. $input'", "utf-8"
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--no-stream",
+            "-t",
+            "configuration",
+            "-t",
+            "instruction",
+            "-t",
+            "wrapper",
+            "Input text",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    request = mocked_openai_chat.get_requests()[-1]
+    assert json.loads(request.content) == {
+        "model": "gpt-4",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Be concise. Summarize this: Input text",
+            }
+        ],
+        "stream": False,
+        "temperature": 0.5,
+    }
+
+
 @pytest.mark.parametrize(
     "template,expected",
     (
@@ -375,8 +421,8 @@ def test_execute_prompt_with_a_template(
         ),
     ),
 )
-def test_execute_prompt_from_template_url(httpx_mock, template, expected):
-    httpx_mock.add_response(
+def test_execute_prompt_from_template_url(httpx2_mock, template, expected):
+    httpx2_mock.add_response(
         url="https://example.com/prompt.yaml",
         method="GET",
         text=template,
@@ -395,24 +441,23 @@ def test_execute_prompt_from_template_url(httpx_mock, template, expected):
         assert result.output.strip() == expected
 
 
-def test_execute_prompt_from_template_path():
+def test_execute_prompt_from_template_path(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem() as temp_dir:
-        path = pathlib.Path(temp_dir) / "my-template.yaml"
-        path.write_text("system: system\nprompt: prompt", "utf-8")
-        result = runner.invoke(
-            cli,
-            ["-t", str(path), "-m", "echo"],
-            catch_exceptions=False,
-        )
-        assert result.exit_code == 0, result.output
-        assert json.loads(result.output) == {
-            "prompt": "prompt",
-            "system": "system",
-            "attachments": [],
-            "stream": True,
-            "previous": [],
-        }
+    path = tmp_path / "my-template.yaml"
+    path.write_text("system: system\nprompt: prompt", "utf-8")
+    result = runner.invoke(
+        cli,
+        ["-t", str(path), "-m", "echo"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "prompt": "prompt",
+        "system": "system",
+        "attachments": [],
+        "stream": True,
+        "previous": [],
+    }
 
 
 def test_template_respects_cli_extract_flag(
@@ -464,7 +509,7 @@ class GreetingsPlugin:
     ),
 )
 def test_tools_in_templates(
-    source, expected_tool_success, expected_functions_success, httpx_mock, tmpdir
+    source, expected_tool_success, expected_functions_success, httpx2_mock, tmpdir
 ):
     template_yaml = textwrap.dedent("""
     name: test
@@ -491,7 +536,7 @@ def test_tools_in_templates(
         (tmpdir / "test.yaml").write_text(template_yaml, "utf-8")
         args = ["-t", str(tmpdir / "test.yaml")]
     elif source == "url":
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             url="https://example.com/test.yaml",
             method="GET",
             text=template_yaml,

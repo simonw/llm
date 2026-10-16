@@ -6,8 +6,8 @@ import time
 from importlib.metadata import version
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
+from pydantic import BaseModel
 
 import llm
 from llm import CancelToolCall, cli
@@ -136,8 +136,8 @@ def test_server_side_tool_support_can_vary_by_model_instance():
         ConditionalModel(False).prompt("hello", tools=[DemoServerSideTool()])
 
 
-def test_server_side_tool_configuration_is_logged():
-    db = sqlite_utils.Database(memory=True)
+def test_server_side_tool_configuration_is_logged(db_factory):
+    db = db_factory(memory=True)
     migrate(db)
     response = ServerToolsOnlyModel().prompt(
         "hello", tools=[DemoServerSideTool("configured")]
@@ -152,8 +152,8 @@ def test_server_side_tool_configuration_is_logged():
     assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
 
 
-def test_logs_expanded_server_side_tool(user_path):
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+def test_logs_expanded_server_side_tool(db_factory, user_path):
+    db = db_factory(str(user_path / "logs.db"))
     migrate(db)
     response = ServerToolsOnlyModel().prompt(
         "hello", tools=[DemoServerSideTool("configured")]
@@ -212,7 +212,7 @@ async def test_async_declared_server_side_tool_and_executor_partition():
 
 
 @pytest.mark.vcr
-def test_tool_use_basic(vcr):
+def test_tool_use_basic(db_factory, vcr):
     model = llm.get_model("gpt-4o-mini")
 
     def multiply(a: int, b: int) -> int:
@@ -235,7 +235,7 @@ def test_tool_use_basic(vcr):
     assert second.prompt.tool_results[0].output == "2869461"
 
     # Test writing to the database
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
 
@@ -307,7 +307,7 @@ def test_tool_use_chain_of_two_calls(vcr):
     assert third.tool_calls() == []
 
 
-def test_chain_round_separator_is_display_only():
+def test_chain_round_separator_is_display_only(db_factory):
     """The space between chain rounds is synthesized at the chain level
     for display - it must never become a stored whitespace part."""
 
@@ -323,7 +323,7 @@ def test_chain_round_separator_is_display_only():
     # The separator reached the streamed output...
     assert "\n} {\n" in text
 
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     migrate(db)
     chain_response.log_to_db(db)
     # ...but no whitespace-only text part was stored.
@@ -1019,6 +1019,50 @@ def test_llm_tool_call_excluded_from_input_schema():
     assert "llm_tool_call" not in tool.input_schema.get("properties", {})
     assert "llm_tool_call" not in tool.input_schema.get("required", [])
     assert "name" in tool.input_schema["properties"]
+
+
+def test_tool_parameter_named_title_is_kept_in_input_schema():
+    def demo_a(title: str, when: str) -> str:
+        "param named title"
+        return ""
+
+    def demo_b(heading: str, when: str) -> str:
+        "same thing, renamed"
+        return ""
+
+    schema_a = llm.Tool.function(demo_a).input_schema
+    schema_b = llm.Tool.function(demo_b).input_schema
+
+    assert list(schema_a["properties"]) == ["title", "when"]
+    assert schema_a["required"] == ["title", "when"]
+    assert schema_a["properties"]["title"] == {"type": "string"}
+    assert schema_a["properties"]["when"] == {"type": "string"}
+
+    assert list(schema_b["properties"]) == ["heading", "when"]
+    assert schema_b["required"] == ["heading", "when"]
+    assert schema_b["properties"]["heading"] == {"type": "string"}
+    assert schema_b["properties"]["when"] == {"type": "string"}
+
+
+def test_nested_model_field_named_title_is_kept_in_input_schema():
+    class Person(BaseModel):
+        title: str
+        name: str
+
+    def demo(person: Person, title: str) -> str:
+        "nested plus top-level title"
+        return ""
+
+    schema = llm.Tool.function(demo).input_schema
+    person = schema["$defs"]["Person"]
+    assert list(schema["properties"]) == ["person", "title"]
+    assert schema["required"] == ["person", "title"]
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert list(person["properties"]) == ["title", "name"]
+    assert person["required"] == ["title", "name"]
+    assert person["properties"]["title"] == {"type": "string"}
+    assert person["properties"]["name"] == {"type": "string"}
+    assert "title" not in person
 
 
 def test_kwargs_only_function_does_not_receive_llm_tool_call():

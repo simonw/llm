@@ -4,10 +4,11 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
-from typing import Any, ClassVar, Literal
+from functools import cache
+from typing import Any, ClassVar, Literal, cast
 
 import click
-import httpx
+import httpx2
 import openai
 import sqlite_utils
 import yaml
@@ -350,6 +351,36 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
+    # GPT-6
+    for model_id in (
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-6.1-sol",
+        "chat-latest",
+    ):
+        register(
+            Responses(
+                model_id,
+                vision=True,
+                reasoning=True,
+                verbosity=True,
+                image_detail_original=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+            AsyncResponses(
+                model_id,
+                vision=True,
+                reasoning=True,
+                verbosity=True,
+                image_detail_original=True,
+                service_tier=True,
+                supports_schema=True,
+                supports_tools=True,
+            ),
+        )
 
     # The -instruct completion model
     register(
@@ -480,14 +511,16 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.openai_model_id = openai_model_id
         self.dimensions = dimensions
 
-    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
+    def embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
             "model": self.openai_model_id,
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
-        client = openai.OpenAI(api_key=self.get_key())
+        client = openai.OpenAI(api_key=key)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
 
@@ -654,12 +687,11 @@ def register_commands(cli):
             # database can resolve stored schema IDs; all other schema input
             # is resolved using a temporary in-memory database.
             log_path = logs_db_path()
-            if log_path.exists():
-                schema_db = sqlite_utils.Database(log_path)
-            else:
-                schema_db = sqlite_utils.Database(memory=True)
-            migrate(schema_db)
-            schema = resolve_schema_input(schema_db, schema_input, load_template)
+            with sqlite_utils.Database(
+                log_path if log_path.exists() else ":memory:"
+            ) as schema_db:
+                migrate(schema_db)
+                schema = resolve_schema_input(schema_db, schema_input, load_template)
             if schema_multi:
                 schema = multi_schema(schema)
 
@@ -823,7 +855,7 @@ def register_commands(cli):
         from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")
-        response = httpx.get(
+        response = httpx2.get(
             "https://api.openai.com/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -975,6 +1007,7 @@ def enum_values_sentence(enum_class):
     return "{}, and {}".format(", ".join(values[:-1]), values[-1])
 
 
+@cache
 def build_options_class(
     *,
     reasoning=False,
@@ -1256,7 +1289,9 @@ class _Shared:
         out.append(entry)
         return current_system
 
-    def build_messages(self, prompt, conversation, image_detail=None):
+    def build_messages(
+        self, prompt, conversation, image_detail=None
+    ) -> list[dict[str, Any]]:
         """Translate prompt.messages into OpenAI's wire format."""
         messages: list[dict[str, Any]] = []
         if image_detail is not None:
@@ -1850,7 +1885,9 @@ class _SharedResponses(_Shared):
             "allows_system_prompt": self.allows_system_prompt,
         }
 
-    def _build_responses_input(self, prompt, image_detail=None):
+    def _build_responses_input(
+        self, prompt, image_detail=None
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Translate prompt.messages into a (input_items, instructions) tuple
         for the Responses API.
 
@@ -1954,8 +1991,10 @@ class _SharedResponses(_Shared):
 
         return items, instructions
 
-    def _build_responses_kwargs(self, prompt, stream):
+    def _build_responses_kwargs(self, prompt, stream) -> dict[str, Any]:
         """Build the keyword arguments for client.responses.create()."""
+        # This mixin is used by both concrete Responses model classes.
+        model = cast("Responses | AsyncResponses", self)
         opts = dict(not_nulls(prompt.options))
         # Strip options that are either internal to llm or not accepted by
         # the Responses API.
@@ -1971,8 +2010,8 @@ class _SharedResponses(_Shared):
         seed = opts.pop("seed", None)
 
         kwargs: dict[str, Any] = {}
-        if max_tokens is None and self.default_max_tokens is not None:
-            max_tokens = self.default_max_tokens
+        if max_tokens is None and model.default_max_tokens is not None:
+            max_tokens = model.default_max_tokens
         if max_tokens is not None:
             kwargs["max_output_tokens"] = max_tokens
         if temperature is not None:
@@ -1981,12 +2020,12 @@ class _SharedResponses(_Shared):
             kwargs["top_p"] = top_p
         if seed is not None:
             kwargs["seed"] = seed
-        if self._reasoning:
+        if model._reasoning:
             reasoning = {}
             if not getattr(prompt, "hide_reasoning", False):
                 if reasoning_summary is not None:
                     reasoning["summary"] = reasoning_summary
-                elif self._reasoning_summary:
+                elif model._reasoning_summary:
                     reasoning["summary"] = "auto"
             if reasoning_effort:
                 reasoning["effort"] = reasoning_effort
@@ -2013,7 +2052,7 @@ class _SharedResponses(_Shared):
             kwargs["text"] = text
 
         if prompt.tools:
-            _partition_tools(self, prompt.tools)
+            _partition_tools(model, prompt.tools)
             kwargs["tools"] = [
                 (
                     {
@@ -2023,7 +2062,7 @@ class _SharedResponses(_Shared):
                         "parameters": tool.input_schema,
                     }
                     if isinstance(tool, llm.Tool)
-                    else tool.tool_spec(self)
+                    else tool.tool_spec(model)
                 )
                 for tool in prompt.tools
             ]
@@ -2074,7 +2113,7 @@ class _SharedResponses(_Shared):
                     bits.append(text)
         return "".join(bits)
 
-    def _reasoning_event(self, item, *, include_text=True):
+    def _reasoning_event(self, item, *, include_text=True) -> StreamEvent:
         """Build a redacted-reasoning StreamEvent that carries the opaque
         ``id`` and ``encrypted_content`` from a Responses-API reasoning
         item. Echoing this metadata back on the next request via
@@ -2139,7 +2178,7 @@ class _SharedResponses(_Shared):
                 )
         return events
 
-    def _server_tool_events(self, item, message_index):
+    def _server_tool_events(self, item, message_index) -> list[StreamEvent]:
         """StreamEvents for a server-side tool call output item
         (web_search_call / code_interpreter_call), or [] for other
         item types. The call and its result both carry
@@ -2151,7 +2190,7 @@ class _SharedResponses(_Shared):
         events: list[StreamEvent] = []
         if item_type == "web_search_call":
             action = getattr(item, "action", None)
-            if hasattr(action, "model_dump"):
+            if action is not None and hasattr(action, "model_dump"):
                 action = action.model_dump()
             events.append(
                 StreamEvent(
@@ -2243,7 +2282,9 @@ class _SharedResponses(_Shared):
                 if final_event is not None:
                     prior_event.chunk = final_event.chunk
 
-    def _non_streaming_output_events(self, output, response):
+    def _non_streaming_output_events(
+        self, output, response
+    ) -> tuple[list[StreamEvent], bool]:
         """Translate a non-streaming Responses ``output`` item list into
         StreamEvents. Returns ``(events, had_reasoning)``.
 

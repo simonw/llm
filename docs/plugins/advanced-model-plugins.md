@@ -7,6 +7,7 @@ Features to consider for your model plugin include:
 
 - {ref}`Accepting API keys <advanced-model-plugins-api-keys>` using the standard mechanism that incorporates `llm keys set`, environment variables and support for passing an explicit key to the model.
 - Including support for {ref}`Async models <advanced-model-plugins-async>` that can be used with Python's `asyncio` library.
+- Declaring {ref}`single-turn models <advanced-model-plugins-conversations>` that cannot handle conversations.
 - Support for {ref}`structured output <advanced-model-plugins-schemas>` using JSON schemas.
 - Support for {ref}`tools <advanced-model-plugins-tools>`.
 - Handling {ref}`attachments <advanced-model-plugins-attachments>` (images, audio and more) for multi-modal models.
@@ -114,6 +115,26 @@ The `prompt` object passed to your `execute()` method is an instance of {class}`
    :exclude-members: model, options
 ```
 
+(advanced-model-plugins-conversations)=
+
+## Models that do not support conversations
+
+Models support conversations by default. If your model only accepts single-turn prompts, set `supports_conversation = False` on its class:
+
+```python
+class SingleTurnModel(llm.Model):
+    model_id = "single-turn"
+    supports_conversation = False
+
+    def execute(self, prompt, stream, response, conversation):
+        yield "A response to this prompt"
+```
+If your plugin registers both sync and async models, set it on both classes.
+
+LLM raises `llm.ConversationNotSupported`, a subclass of `ValueError`, before calling `execute()` if `prompt.messages` contains an `assistant` or `tool` message.
+
+On the command line, attempts to continue an existing conversation using `llm -c` or `llm --cid ID` report an error. `llm chat` rejects these models before starting an interactive session.
+
 (advanced-model-plugins-schemas)=
 
 ## Supporting schemas
@@ -123,7 +144,7 @@ If your model supports {ref}`structured output <schemas>` against a defined JSON
 ```python
 class MyModel(llm.KeyModel):
     ...
-    support_schema = True
+    supports_schema = True
 ```
 And then adding code to your `.execute()` method that checks for `prompt.schema` and, if it is present, uses that to prompt the model.
 

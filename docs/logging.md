@@ -673,6 +673,15 @@ print(response.text())
 response.log_to_db(db)
 ```
 
+For an `AsyncResponse`, wait for the response before logging it:
+
+```python
+async_model = llm.get_async_model("gpt-5.5")
+response = async_model.prompt("A short pelican fact")
+print(await response.text())
+response.log_to_db(db)
+```
+
 `log_to_db()` takes a `sqlite_utils.Database` and records the response's thread, turn, messages, parts, fragments, attachments and tools in the content-addressed tables. It applies any outstanding migrations itself, so it is safe to call against a brand new database file or one created by an older version of LLM. The underlying `LogStore` class is internal and its API may change - `log_to_db()` and the table schema documented on this page are the supported interfaces.
 
 (logging-sql-schema)=

@@ -5,7 +5,6 @@ import textwrap
 from unittest.mock import ANY
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 
 import llm.cli
@@ -248,7 +247,9 @@ def test_chat_multi(mock_model, logs_db, input, expected):
 
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
-def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path):
+def test_llm_chat_creates_log_database(
+    db_factory, tmpdir, monkeypatch, custom_database_path
+):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -270,7 +271,7 @@ def test_llm_chat_creates_log_database(tmpdir, monkeypatch, custom_database_path
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 2
+    assert db_factory(db_path)["turns"].count == 2
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

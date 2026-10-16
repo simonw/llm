@@ -19,7 +19,7 @@ from runpy import run_module
 from typing import Any, cast
 
 import click
-import httpx
+import httpx2
 import pydantic
 import sqlite_utils
 import yaml
@@ -141,7 +141,6 @@ def _run_chat(
     initial_fragments=None,
     initial_attachments=None,
     transform_prompt=None,
-    after_response=None,
     show_reasoning=True,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
@@ -214,8 +213,6 @@ def _run_chat(
             response.stream_events(),
             show_reasoning=show_reasoning,
         )
-        if after_response is not None:
-            after_response(response)
         print()
 
 
@@ -254,7 +251,7 @@ def resolve_fragments(
         if fragment.startswith(("http://", "https://")):
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
-            client = httpx.Client(
+            client = httpx2.Client(
                 follow_redirects=True, max_redirects=3, headers=headers
             )
             response = client.get(fragment)
@@ -354,10 +351,10 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx2.head(value)
             response.raise_for_status()
             mimetype = response.headers.get("content-type")
-        except httpx.HTTPError as ex:
+        except httpx2.HTTPError as ex:
             raise AttachmentError(str(ex))
         return Attachment(type=mimetype, path=None, url=value, content=None)
 
@@ -478,7 +475,7 @@ def schema_option(fn):
     click.option(
         "schema_input",
         "--schema",
-        help="JSON schema, filepath or ID",
+        help="Schema DSL, JSON schema, filepath or ID",
     )(fn)
     return fn
 
@@ -617,7 +614,7 @@ def cli():
 @schema_option
 @click.option(
     "--schema-multi",
-    help="JSON schema to use for multiple results",
+    help="Schema for multiple results",
 )
 @click.option(
     "fragments",
@@ -633,7 +630,12 @@ def cli():
     multiple=True,
     help="Fragment to add to system prompt",
 )
-@click.option("-t", "--template", help="Template to use")
+@click.option(
+    "-t",
+    "--template",
+    multiple=True,
+    help="Template to use; can be repeated to combine templates",
+)
 @click.option(
     "-p",
     "--param",
@@ -733,6 +735,29 @@ def prompt(
         # With an explicit mimetype:
         cat image | llm 'describe image' --at - image/jpeg
 
+    Structured output schemas:
+
+    Use --schema to request one JSON object, or --schema-multi to request
+    multiple objects returned in an "items" array. Both options accept a
+    concise schema DSL. Define each field as NAME [TYPE]: DESCRIPTION, with
+    the type and description both optional. Separate fields with commas:
+
+    \b
+        llm --schema 'name, age int, active bool' 'Invent a dog'
+
+    Supported types are str, int, float and bool. The default is str and every
+    listed field is required. Descriptions provide extra instructions to the
+    model. Use one field per line if descriptions contain commas:
+
+    \b
+        llm --schema-multi '
+        name: the dog's name
+        age int: the dog's age in years
+        bio: a short bio, no more than three sentences
+        ' 'Invent three dogs'
+
+    JSON Schema is also accepted.
+
     The -x/--extract option returns just the content of the first ``` fenced code
     block, if one is present. If none are present it returns the full response.
 
@@ -768,7 +793,7 @@ def prompt(
 
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
+    db = _cli_database(log_path)
     migrate(db)
 
     if schema_multi:
@@ -888,32 +913,49 @@ def prompt(
 
     if template:
         params = dict(param)
-        # Cannot be used with system
-        try:
-            template_obj = load_template(template)
-        except LoadTemplateError as ex:
-            raise click.ClickException(str(ex))
-        if not (extract or extract_last):
-            extract = template_obj.extract
-            extract_last = template_obj.extract_last
-        # Combine with template fragments/system_fragments
-        if template_obj.fragments:
-            fragments = [*template_obj.fragments, *fragments]
-        if template_obj.system_fragments:
-            system_fragments = [*template_obj.system_fragments, *system_fragments]
-        if template_obj.schema_object:
-            schema = template_obj.schema_object
-        tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
-        if template_obj.options:
-            options = _merge_template_options(template_obj, options)
-        if "input" in template_obj.vars():
+        template_objs = []
+        for template_name in template:
+            try:
+                template_objs.append(load_template(template_name))
+            except LoadTemplateError as ex:
+                raise click.ClickException(str(ex))
+
+        # Prepend list-valued fields in template order, ahead of CLI values
+        for template_obj in reversed(template_objs):
+            if template_obj.fragments:
+                fragments = [*template_obj.fragments, *fragments]
+            if template_obj.system_fragments:
+                system_fragments = [
+                    *template_obj.system_fragments,
+                    *system_fragments,
+                ]
+            tools, python_tools = _merge_template_tools(
+                template_obj, tools, python_tools
+            )
+
+        # Read stdin before applying the first template so templates compose
+        # from left to right, with each one receiving the previous result.
+        if any("input" in template_obj.vars() for template_obj in template_objs):
             prompt = read_prompt()
-        prompt, system = _apply_template(template_obj, prompt, params, system)
-        if model_id is None and template_obj.model:
-            model_id = template_obj.model
-        attachments, attachment_types = _merge_template_attachments(
-            template_obj, attachments, attachment_types
-        )
+
+        for template_obj in template_objs:
+            if not (extract or extract_last):
+                extract = template_obj.extract
+                extract_last = template_obj.extract_last
+            if template_obj.schema_object:
+                schema = template_obj.schema_object
+            if template_obj.options:
+                options = _merge_template_options(template_obj, options)
+            prompt, system = _apply_template(template_obj, prompt, params, system)
+            if model_id is None and template_obj.model:
+                model_id = template_obj.model
+
+        # Like fragments and tools, template attachments precede CLI values
+        # and retain the order in which their templates were specified.
+        for template_obj in reversed(template_objs):
+            attachments, attachment_types = _merge_template_attachments(
+                template_obj, attachments, attachment_types
+            )
     if extract or extract_last or json_output:
         no_stream = True
 
@@ -1030,35 +1072,46 @@ def prompt(
     if hide_reasoning:
         kwargs["hide_reasoning"] = True
 
+    # Commit each completed response before the chain does any more work.
+    log_db = None
+    if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database.
+        log_db = _cli_database(memory=True)
+        migrate(log_db)
+
+    def log_response(response):
+        response.log_to_db(log_db)
+
     try:
+        response = prompt_method(
+            prompt,
+            fragments=resolved_fragments,
+            attachments=resolved_attachments,
+            system=system,
+            schema=schema,
+            system_fragments=resolved_system_fragments,
+            **kwargs,
+        )
+        if log_db is not None:
+            if isinstance(response, _BaseChainResponse):
+                response.on_response(log_response)
+            elif not isinstance(response, AsyncResponse):
+                response.on_done(log_response)
+
         if async_:
 
             async def inner():
+                if log_db is not None and isinstance(response, AsyncResponse):
+                    await response.on_done(log_response)
                 if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     await display_async_stream_events(
                         response.astream_events(),
                         show_reasoning=not hide_reasoning,
                     )
                     print()
                 else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -1066,19 +1119,9 @@ def prompt(
                         )
                     if not json_output:
                         print(text)
-                return response
 
-            response = asyncio.run(inner())
+            asyncio.run(inner())
         else:
-            response = prompt_method(
-                prompt,
-                fragments=resolved_fragments,
-                attachments=resolved_attachments,
-                system=system,
-                schema=schema,
-                system_fragments=resolved_system_fragments,
-                **kwargs,
-            )
             if should_stream:
                 display_stream_events(
                     response.stream_events(),
@@ -1117,22 +1160,6 @@ def prompt(
                 ),
                 err=True,
             )
-
-    # Log responses to the database
-    log_db = None
-    if (logs_on() or log) and not no_log:
-        log_db = db
-    elif json_output:
-        # --json needs logged rows, so use a temporary in-memory database
-        log_db = sqlite_utils.Database(memory=True)
-        migrate(log_db)
-
-    if log_db is not None:
-        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
-        # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(log_db)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1231,7 +1258,7 @@ def chat(
         readline.parse_and_bind("bind -x '\\e[C: forward-char'")
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
+    db = _cli_database(log_path)
     migrate(db)
 
     conversation = None
@@ -1268,6 +1295,9 @@ def chat(
         model = get_model(model_id)
     except KeyError:
         raise click.ClickException(f"'{model_id}' is not a known model")
+
+    if not model.supports_conversation:
+        raise click.ClickException(f"{model} does not support conversations")
 
     if conversation is None:
         # Start a fresh conversation for this chat
@@ -1346,6 +1376,7 @@ def chat(
             system=system,
             **kwargs,
         )
+        response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -1359,7 +1390,6 @@ def chat(
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
     )
 
@@ -1370,125 +1400,127 @@ def load_conversation(
     database=None,
 ) -> _BaseConversation | None:
     log_path = pathlib.Path(database) if database else logs_db_path()
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    if conversation_id is None:
-        # Most recent conversation from either generation of tables -
-        # thread ids are conversation ids, so the union dedupes rows
-        # from the dual-write era.
-        matches = list(db.query("""
-                select id from (
-                    select id from threads
-                    union
-                    select id from conversations
-                ) order by id desc limit 1
-                """))
-        if matches:
-            conversation_id = matches[0]["id"]
-        else:
-            return None
-    try:
-        row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
-    except sqlite_utils.db.NotFoundError:
-        # No legacy record - reconstruct the equivalent from the thread
-        # and its most recent turn's model.
-        try:
-            thread_row = cast(sqlite_utils.db.Table, db["threads"]).get(conversation_id)
-        except sqlite_utils.db.NotFoundError:
-            raise click.ClickException(
-                f"No conversation found with id={conversation_id}"
-            )
-        model_match = next(
-            db.query(
-                "select model from turns where thread_id = ? order by id desc limit 1",
-                [conversation_id],
-            ),
-            None,
-        )
-        if model_match is None:
-            raise click.ClickException(
-                f"No conversation found with id={conversation_id}"
-            )
-        row = {
-            "id": conversation_id,
-            "name": thread_row["name"],
-            "model": model_match["model"],
-        }
-    # Inflate that conversation
-    conversation_class = AsyncConversation if async_ else Conversation
-    response_class = AsyncResponse if async_ else Response
-    conversation = conversation_class.from_row(row)
-    for response in db["responses"].rows_where(
-        "conversation_id = ?", [conversation_id], order_by="id"
-    ):
-        response_obj = response_class.from_row(db, response)
-        if conversation.responses:
-            previous_response = conversation.responses[-1]
-            # SQLite rows store each response's legacy current-turn inputs
-            # (prompt text, attachments, tool_results), not the full
-            # prompt.messages chain. Rebuild that chain here so follow-up
-            # prompts via `llm -c` satisfy the Prompt.messages invariant.
-            response_obj.prompt._explicit_messages = (
-                list(previous_response.prompt.messages)
-                + list(previous_response._messages_now())
-                + list(response_obj.prompt.messages)
-            )
-        conversation.responses.append(response_obj)
-
-    # If this conversation has a thread in the content-addressed tables,
-    # take the history from there. That chain is the exact message list
-    # that was sent and returned, so reasoning signatures and provider
-    # metadata survive - unlike the rebuild above, which can only work
-    # from the flattened legacy columns.
-    try:
-        conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
-    except KeyError:
-        pass
-
-    # Plugin and server-side tools recorded against the first turn, for
-    # the same reuse-on-continue behaviour the rebuilt responses provide.
-    # Configured instances are collapsed into a single spec string like
-    # Datasette({"url": "..."}) - the same format -T accepts - so the
-    # instance can be reconstructed with its configuration.
-    loaded_tools = []
-    seen_instance_ids = set()
-    supported_server_side_tool_names = {
-        tool_class.__name__
-        for tool_class in conversation.model.supported_server_side_tools
-    }
-    for tool_row in db.query(
-        """
-        select tools.name, tools.plugin, turn_tools.instance_id,
-            tool_instances.name as instance_name,
-            tool_instances.arguments as instance_arguments
-        from tools
-        join turn_tools on turn_tools.tool_id = tools.id
-        left join tool_instances on tool_instances.id = turn_tools.instance_id
-        where turn_tools.turn_id = (
-            select id from turns where thread_id = ? order by id limit 1
-        )
-        """,
-        [conversation_id],
-    ):
-        if (
-            tool_row["plugin"] is None
-            and tool_row["instance_name"] not in supported_server_side_tool_names
-        ):
-            continue
-        if tool_row["instance_id"] is None:
-            loaded_tools.append(tool_row["name"])
-        elif tool_row["instance_id"] not in seen_instance_ids:
-            seen_instance_ids.add(tool_row["instance_id"])
-            arguments = tool_row["instance_arguments"]
-            if arguments and arguments != "{}":
-                loaded_tools.append(
-                    "{}({})".format(tool_row["instance_name"], arguments)
-                )
+    with sqlite_utils.Database(log_path) as db:
+        migrate(db)
+        if conversation_id is None:
+            # Most recent conversation from either generation of tables -
+            # thread ids are conversation ids, so the union dedupes rows
+            # from the dual-write era.
+            matches = list(db.query("""
+                    select id from (
+                        select id from threads
+                        union
+                        select id from conversations
+                    ) order by id desc limit 1
+                    """))
+            if matches:
+                conversation_id = matches[0]["id"]
             else:
-                loaded_tools.append(tool_row["instance_name"])
-    conversation.loaded_tools = loaded_tools
+                return None
+        try:
+            row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
+        except sqlite_utils.db.NotFoundError:
+            # No legacy record - reconstruct the equivalent from the thread
+            # and its most recent turn's model.
+            try:
+                thread_row = cast(sqlite_utils.db.Table, db["threads"]).get(
+                    conversation_id
+                )
+            except sqlite_utils.db.NotFoundError:
+                raise click.ClickException(
+                    f"No conversation found with id={conversation_id}"
+                )
+            model_match = next(
+                db.query(
+                    "select model from turns where thread_id = ? order by id desc limit 1",
+                    [conversation_id],
+                ),
+                None,
+            )
+            if model_match is None:
+                raise click.ClickException(
+                    f"No conversation found with id={conversation_id}"
+                )
+            row = {
+                "id": conversation_id,
+                "name": thread_row["name"],
+                "model": model_match["model"],
+            }
+        # Inflate that conversation
+        conversation_class = AsyncConversation if async_ else Conversation
+        response_class = AsyncResponse if async_ else Response
+        conversation = conversation_class.from_row(row)
+        for response in db["responses"].rows_where(
+            "conversation_id = ?", [conversation_id], order_by="id"
+        ):
+            response_obj = response_class.from_row(db, response)
+            if conversation.responses:
+                previous_response = conversation.responses[-1]
+                # SQLite rows store each response's legacy current-turn inputs
+                # (prompt text, attachments, tool_results), not the full
+                # prompt.messages chain. Rebuild that chain here so follow-up
+                # prompts via `llm -c` satisfy the Prompt.messages invariant.
+                response_obj.prompt._explicit_messages = (
+                    list(previous_response.prompt.messages)
+                    + list(previous_response._messages_now())
+                    + list(response_obj.prompt.messages)
+                )
+            conversation.responses.append(response_obj)
 
-    return conversation
+        # If this conversation has a thread in the content-addressed tables,
+        # take the history from there. That chain is the exact message list
+        # that was sent and returned, so reasoning signatures and provider
+        # metadata survive - unlike the rebuild above, which can only work
+        # from the flattened legacy columns.
+        try:
+            conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
+        except KeyError:
+            pass
+
+        # Plugin and server-side tools recorded against the first turn, for
+        # the same reuse-on-continue behaviour the rebuilt responses provide.
+        # Configured instances are collapsed into a single spec string like
+        # Datasette({"url": "..."}) - the same format -T accepts - so the
+        # instance can be reconstructed with its configuration.
+        loaded_tools = []
+        seen_instance_ids = set()
+        supported_server_side_tool_names = {
+            tool_class.__name__
+            for tool_class in conversation.model.supported_server_side_tools
+        }
+        for tool_row in db.query(
+            """
+            select tools.name, tools.plugin, turn_tools.instance_id,
+                tool_instances.name as instance_name,
+                tool_instances.arguments as instance_arguments
+            from tools
+            join turn_tools on turn_tools.tool_id = tools.id
+            left join tool_instances on tool_instances.id = turn_tools.instance_id
+            where turn_tools.turn_id = (
+                select id from turns where thread_id = ? order by id limit 1
+            )
+            """,
+            [conversation_id],
+        ):
+            if (
+                tool_row["plugin"] is None
+                and tool_row["instance_name"] not in supported_server_side_tool_names
+            ):
+                continue
+            if tool_row["instance_id"] is None:
+                loaded_tools.append(tool_row["name"])
+            elif tool_row["instance_id"] not in seen_instance_ids:
+                seen_instance_ids.add(tool_row["instance_id"])
+                arguments = tool_row["instance_arguments"]
+                if arguments and arguments != "{}":
+                    loaded_tools.append(
+                        "{}({})".format(tool_row["instance_name"], arguments)
+                    )
+                else:
+                    loaded_tools.append(tool_row["instance_name"])
+        conversation.loaded_tools = loaded_tools
+
+        return conversation
 
 
 @cli.group(
@@ -1593,7 +1625,7 @@ def logs_status():
         click.echo("Logging is ON for all prompts".format())
     else:
         click.echo("Logging is OFF".format())
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
     click.echo(f"Found log database at {path}")
     click.echo("Number of threads logged:\t{}".format(db["threads"].count))
@@ -1612,7 +1644,7 @@ def backup(path):
     "Backup your logs database to this file"
     logs_path = logs_db_path()
     path = pathlib.Path(path)
-    db = sqlite_utils.Database(logs_path)
+    db = _cli_database(logs_path)
     try:
         db.execute("vacuum into ?", [str(path)])
     except Exception as ex:  # noqa: BLE001
@@ -1664,6 +1696,7 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
             "_output_parts",
             "_parent_message_hash",
             "_input_message_hashes",
+            "_output_message_hashes",
             "_tip_message_hash",
             "_legacy",
             "_search_rank",
@@ -1857,14 +1890,14 @@ def logs_list(
     id_gte,
     json_output,
     expand,
-):
+) -> None:
     "Show logged prompts and their responses"
     if database and not path:
         path = database
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     if schema_multi:
@@ -1970,7 +2003,9 @@ def logs_list(
                 if data_ids:
                     for item in new_items:
                         item[find_unused_key(item, "response_id")] = row["id"]
-                        item[find_unused_key(item, "conversation_id")] = row["id"]
+                        item[find_unused_key(item, "conversation_id")] = row[
+                            "conversation_id"
+                        ]
                 to_output.extend(new_items)
             except ValueError:
                 pass
@@ -2036,6 +2071,46 @@ def logs_list(
                 return details
             return usage
 
+        def _duration_usage_markdown(duration_ms):
+            total_seconds = duration_ms // 1000
+            hours, remainder = divmod(total_seconds, 60 * 60)
+            minutes, seconds = divmod(remainder, 60)
+            if hours:
+                human_duration = f"{hours}h {minutes}m {seconds}s"
+            elif minutes:
+                human_duration = f"{minutes}m {seconds}s"
+            else:
+                human_duration = f"{seconds}s"
+            return f"{duration_ms}ms ({human_duration})"
+
+        def _display_tool_results(tool_results):
+            for tool_result in tool_results:
+                attachments = ""
+                for attachment in tool_result["attachments"]:
+                    desc = ""
+                    if attachment.get("type"):
+                        desc += attachment["type"] + ": "
+                    if attachment.get("path"):
+                        desc += attachment["path"]
+                    elif attachment.get("url"):
+                        desc += attachment["url"]
+                    elif attachment.get("content"):
+                        desc += f"<{attachment['content_length']:,} bytes>"
+                    attachments += f"\n    - {desc}"
+                click.echo(
+                    "- **{}**: `{}`  \n{}{}{}".format(
+                        tool_result["name"],
+                        tool_result["tool_call_id"],
+                        _fenced_block(tool_result["output"]),
+                        (
+                            "  \n    **Error**: {}\n".format(tool_result["exception"])
+                            if tool_result["exception"]
+                            else ""
+                        ),
+                        attachments,
+                    )
+                )
+
         def _display_fragments(fragments, title):
             if not fragments:
                 return
@@ -2071,12 +2146,14 @@ def logs_list(
                 obj = {
                     "model": row["model"],
                     "datetime": row["datetime_utc"].split(".")[0],
+                    "duration_ms": row["duration_ms"],
                     "conversation": cid,
                 }
                 if row["tool_calls"]:
                     obj["tool_calls"] = [
                         "{}({})".format(
-                            tool_call["name"], json.dumps(tool_call["arguments"])
+                            tool_call["name"],
+                            truncate_string(json.dumps(tool_call["arguments"])),
                         )
                         for tool_call in row["tool_calls"]
                     ]
@@ -2145,7 +2222,8 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
-            if row["options_json"]:
+            # .get(): annotate_log_rows removes the *_json keys under -t
+            if row.get("options_json"):
                 options = row["options_json"]
                 if isinstance(options, str):
                     options = json.loads(options)
@@ -2159,7 +2237,7 @@ def logs_list(
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             _display_fragments(row["system_fragments"], "System fragments")
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
@@ -2191,8 +2269,8 @@ def logs_list(
                 for tool in row["tools"]:
                     instance = tool.get("instance")
                     if instance:
-                        key = (instance["name"], instance["arguments"])
-                        by_instance.setdefault(key, []).append(tool)
+                        instance_key = (instance["name"], instance["arguments"])
+                        by_instance.setdefault(instance_key, []).append(tool)
                     else:
                         plain_tools.append(tool)
                 for tool in plain_tools:
@@ -2206,36 +2284,22 @@ def logs_list(
                     )
                     for tool in instance_tools:
                         echo_tool(tool, "    ")
-            if row["tool_results"]:
+            # Results the model was given arrived with the prompt;
+            # server-executed results happened during the response and
+            # render there instead.
+            local_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if not tool_result.get("server_executed")
+            ]
+            server_tool_results = [
+                tool_result
+                for tool_result in row["tool_results"]
+                if tool_result.get("server_executed")
+            ]
+            if local_tool_results:
                 click.echo("\n### Tool results\n")
-                for tool_result in row["tool_results"]:
-                    attachments = ""
-                    for attachment in tool_result["attachments"]:
-                        desc = ""
-                        if attachment.get("type"):
-                            desc += attachment["type"] + ": "
-                        if attachment.get("path"):
-                            desc += attachment["path"]
-                        elif attachment.get("url"):
-                            desc += attachment["url"]
-                        elif attachment.get("content"):
-                            desc += f"<{attachment['content_length']:,} bytes>"
-                        attachments += f"\n    - {desc}"
-                    click.echo(
-                        "- **{}**: `{}`  \n{}{}{}".format(
-                            tool_result["name"],
-                            tool_result["tool_call_id"],
-                            _fenced_block(tool_result["output"]),
-                            (
-                                "  \n    **Error**: {}\n".format(
-                                    tool_result["exception"]
-                                )
-                                if tool_result["exception"]
-                                else ""
-                            ),
-                            attachments,
-                        )
-                    )
+                _display_tool_results(local_tool_results)
             attachments = attachments_by_id.get(row["id"])
             if attachments:
                 click.echo("\n### Attachments\n")
@@ -2262,14 +2326,18 @@ def logs_list(
 
             # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
             response = row["response"]
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 try:
                     parsed = json.loads(response)
                     response = f"```json\n{json.dumps(parsed, indent=2)}\n```"
                 except ValueError:
                     pass
             if row.get("reasoning"):
-                click.echo("\n## Reasoning\n\n{}".format(row["reasoning"].rstrip()))
+                click.echo(
+                    "\n## Reasoning\n\n<details><summary>Reasoning trace</summary>\n\n{}\n\n</details>".format(
+                        row["reasoning"].rstrip()
+                    )
+                )
             click.echo("\n## Response\n")
             if row["tool_calls"]:
                 click.echo("### Tool calls\n")
@@ -2282,6 +2350,10 @@ def logs_list(
                         )
                     )
                 click.echo("")
+            if server_tool_results:
+                click.echo("### Tool results\n")
+                _display_tool_results(server_tool_results)
+                click.echo("")
             if response:
                 click.echo(f"{response}\n")
             if usage:
@@ -2290,8 +2362,14 @@ def logs_list(
                     row["output_tokens"],
                     json.loads(row["token_details"]) if row["token_details"] else None,
                 )
-                if token_usage:
-                    click.echo(f"## Token usage\n\n{token_usage}\n")
+                usage_lines = [token_usage] if token_usage else []
+                if row["duration_ms"] is not None:
+                    usage_lines.append(
+                        f"Duration: {_duration_usage_markdown(row['duration_ms'])}"
+                    )
+                if usage_lines:
+                    usage_markdown = "\n\n".join(usage_lines)
+                    click.echo(f"## Token usage\n\n{usage_markdown}\n")
 
 
 @cli.group(
@@ -2439,6 +2517,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
                 "can_stream": model.can_stream,
                 "supports_schema": model.supports_schema,
                 "supports_tools": model.supports_tools,
+                "supports_conversation": model.supports_conversation,
                 "supports_async": model_with_aliases.async_model is not None,
                 "attachment_types": sorted(model.attachment_types),
                 "server_side_tools": [
@@ -2614,7 +2693,7 @@ def schemas_list(path, database, queries, full, json_, nl):
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     params = []
@@ -2690,7 +2769,7 @@ def schemas_show(schema_id, path, database):
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     try:
@@ -2733,7 +2812,7 @@ def tools():
     help="Python code block or file path defining functions to register as tools",
     multiple=True,
 )
-def tools_list(tool_defs, json_, model_id, python_tools):
+def tools_list(tool_defs, json_, model_id, python_tools) -> None:
     "List available tools, optionally including tools supported by a model"
 
     model = None
@@ -2743,7 +2822,7 @@ def tools_list(tool_defs, json_, model_id, python_tools):
         except UnknownModelError as ex:
             raise click.ClickException(str(ex))
 
-    server_side_tools = []
+    server_side_tools: list[dict[str, Any]] = []
     if model is not None:
         for tool_class in model.supported_server_side_tools:
             try:
@@ -2782,24 +2861,22 @@ def tools_list(tool_defs, json_, model_id, python_tools):
         return methods
 
     toolbox_specs: dict[int, str] = {}
+    tools: dict[str, Tool | Toolbox | ServerSideTool | type[Toolbox]] = {}
     if tool_defs:
-        tools = {}
         gathered = _gather_tools(tool_defs, python_tools)
         # _gather_tools returns --functions tools first, then one per spec
         specs = [None] * (len(gathered) - len(tool_defs)) + list(tool_defs)
-        for spec, tool in zip(specs, gathered):
-            if hasattr(tool, "name"):
-                tools[tool.name] = tool
-            else:
-                tools[tool.__class__.__name__] = tool
-            if spec is not None and isinstance(tool, Toolbox):
-                toolbox_specs[id(tool)] = spec
+        for spec, gathered_tool in zip(specs, gathered):
+            name = gathered_tool.name or gathered_tool.__class__.__name__
+            tools[name] = gathered_tool
+            if spec is not None and isinstance(gathered_tool, Toolbox):
+                toolbox_specs[id(gathered_tool)] = spec
     else:
-        tools = get_tools()
+        tools.update(get_tools())
         if python_tools:
             for code_or_path in python_tools:
-                for tool in _tools_from_code(code_or_path):
-                    tools[tool.name] = tool
+                for code_tool in _tools_from_code(code_or_path):
+                    tools[code_tool.name] = code_tool
 
     output_tools = []
     output_toolboxes = []
@@ -2929,6 +3006,8 @@ def aliases_list(json_):
             json.dumps({key: value for key, value, type_ in to_output}, indent=4)
         )
         return
+    if not to_output:
+        return
     max_alias_length = max(len(a) for a, _, _ in to_output)
     fmt = "{alias:<" + str(max_alias_length) + "} : {model_id}{type_}"
     for alias, model_id, type_ in to_output:
@@ -2955,13 +3034,13 @@ def aliases_set(alias, model_id, query):
     Example usage:
 
     \b
-        llm aliases set luna gpt-5.6-luna
+        llm aliases set luna gpt-6-luna
 
     Alternatively you can omit the model ID and specify one or more -q options.
     The first model matching all of those query strings will be used.
 
     \b
-        llm aliases set luna -q gpt -q luna
+        llm aliases set luna -q gpt-6 -q luna
     """
     if not model_id:
         if not query:
@@ -3036,7 +3115,7 @@ def fragments():
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def fragments_list(queries, aliases, json_):
     "List current fragments"
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     params = {}
     where_bits = []
@@ -3103,7 +3182,7 @@ def fragments_set(alias, fragment):
     \b
         llm fragments set mydocs ./docs.md
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     try:
         resolved = resolve_fragments(db, [fragment])[0]
@@ -3130,7 +3209,7 @@ def fragments_show(alias_or_hash):
     \b
         llm fragments show mydocs
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     try:
         resolved = resolve_fragments(db, [alias_or_hash])[0]
@@ -3150,7 +3229,7 @@ def fragments_remove(alias):
     \b
         llm fragments remove docs
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     db.execute("delete from fragment_aliases where alias = :alias", {"alias": alias})
 
@@ -3261,6 +3340,7 @@ def uninstall(packages, yes):
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option("--store", is_flag=True, help="Store the text itself in the database")
 @click.option(
     "-d",
@@ -3287,7 +3367,17 @@ def uninstall(packages, yes):
     help="Output format",
 )
 def embed(
-    collection, id, input, model, store, database, content, binary, metadata, format_
+    collection,
+    id,
+    input,
+    model,
+    key,
+    store,
+    database,
+    content,
+    binary,
+    metadata,
+    format_,
 ):
     """Embed text and store or return the result"""
     if collection and not id:
@@ -3299,9 +3389,9 @@ def embed(
     # Lazy load this because we do not need it for -c or -i versions
     def get_db():
         if database:
-            return sqlite_utils.Database(database)
+            return _cli_database(database)
         else:
-            return sqlite_utils.Database(user_dir() / "embeddings.db")
+            return _cli_database(user_dir() / "embeddings.db")
 
     collection_obj = None
     model_obj = None
@@ -3351,9 +3441,11 @@ def embed(
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(id, content, metadata=metadata, store=store)
+        embedding = collection_obj.embed(
+            id, content, metadata=metadata, store=store, key=key
+        )
     else:
-        embedding = model_obj.embed(content)
+        embedding = model_obj.embed(content, key=key)
 
     if show_output:
         if format_ == "json" or format_ is None:
@@ -3405,6 +3497,7 @@ def embed(
 @click.option(
     "-m", "--model", help="Embedding model to use", envvar="LLM_EMBEDDING_MODEL"
 )
+@click.option("--key", help="API key to use")
 @click.option(
     "--prepend",
     help="Prepend this string to all content before embedding",
@@ -3428,6 +3521,7 @@ def embed_multi(
     batch_size,
     prefix,
     model,
+    key,
     prepend,
     store,
     database,
@@ -3481,9 +3575,9 @@ def embed_multi(
         raise click.UsageError("Cannot use --files with --sql, input path or --format")
 
     if database:
-        db = sqlite_utils.Database(database)
+        db = _cli_database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = _cli_database(user_dir() / "embeddings.db")
 
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
@@ -3585,7 +3679,7 @@ def embed_multi(
                     content = prepend + content
                 yield id, content or ""
 
-        embed_kwargs = {"store": store}
+        embed_kwargs = {"store": store, "key": key}
         if batch_size:
             embed_kwargs["batch_size"] = batch_size
         collection_obj.embed_multi(tuples(), **embed_kwargs)
@@ -3631,9 +3725,9 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
         raise click.ClickException("Must provide content or an ID for the comparison")
 
     if database:
-        db = sqlite_utils.Database(database)
+        db = _cli_database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = _cli_database(user_dir() / "embeddings.db")
 
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
@@ -3756,7 +3850,7 @@ def collections_path():
 def embed_db_collections(database, json_):
     "View a list of collections"
     database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    db = _cli_database(str(database))
     if not db["collections"].exists():
         raise click.ClickException(f"No collections table found in {database}")
     rows = db.query("""
@@ -3801,7 +3895,7 @@ def collections_delete(collection, database):
         llm collections delete my-collection
     """
     database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    db = _cli_database(str(database))
     try:
         collection_obj = Collection(collection, db, create=False)
     except Collection.DoesNotExist:
@@ -3952,6 +4046,14 @@ def template_dir():
     return path
 
 
+def _cli_database(*args, **kwargs):
+    """Open a database owned by the current Click command."""
+    ctx = click.get_current_context()
+    db = sqlite_utils.Database(*args, **kwargs)
+    ctx.call_on_close(db.close)
+    return db
+
+
 def logs_db_path():
     return user_dir() / "logs.db"
 
@@ -3960,19 +4062,19 @@ def get_history(chat_id):
     if chat_id is None:
         return None, []
     log_path = logs_db_path()
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    if chat_id == -1:
-        # Return the most recent chat
-        last_row = list(db["logs"].rows_where(order_by="-id", limit=1))
-        if last_row:
-            chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
-        else:  # Database is empty
-            return None, []
-    rows = db["logs"].rows_where(
-        "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
-    )
-    return chat_id, rows
+    with sqlite_utils.Database(log_path) as db:
+        migrate(db)
+        if chat_id == -1:
+            # Return the most recent chat
+            last_row = list(db["logs"].rows_where(order_by="-id", limit=1))
+            if last_row:
+                chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
+            else:  # Database is empty
+                return None, []
+        rows = db["logs"].rows_where(
+            "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
+        )
+        return chat_id, list(rows)
 
 
 def render_errors(errors):
@@ -4124,10 +4226,10 @@ def _parse_yaml_template(name, content):
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
-        response = httpx.get(name)
+        response = httpx2.get(name)
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as ex:
+        except httpx2.HTTPStatusError as ex:
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
         return _parse_yaml_template(name, response.text)
 

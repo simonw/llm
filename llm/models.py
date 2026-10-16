@@ -11,6 +11,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Generator,
     Iterable,
     Iterator,
 )
@@ -28,13 +29,13 @@ from typing import (
     get_type_hints,
 )
 
-import httpx
+import httpx2
 
-from .errors import NeedsKeyException
+from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
-    from .parts import StreamEvent
+    from .parts import Message, StreamEvent
 import inspect
 import json
 from abc import ABC, abstractmethod
@@ -92,7 +93,7 @@ class Attachment:
         if self.path:
             return mimetype_from_path(self.path)
         if self.url:
-            with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+            with httpx2.Client(follow_redirects=True, max_redirects=3) as client:
                 response = client.head(self.url)
             response.raise_for_status()
             return response.headers.get("content-type")
@@ -107,7 +108,7 @@ class Attachment:
             if self.path:
                 content = Path(self.path).read_bytes()
             elif self.url:
-                with httpx.Client(follow_redirects=True, max_redirects=3) as client:
+                with httpx2.Client(follow_redirects=True, max_redirects=3) as client:
                     response = client.get(self.url)
                 response.raise_for_status()
                 content = response.content
@@ -466,7 +467,7 @@ class PauseChain(Exception):
     calls.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         super().__init__(*args)
         self.tool_call: ToolCall | None = None
         self.tool_results: list[ToolResult] = []
@@ -479,7 +480,7 @@ class Prompt:
     _prompt: str | None
     model: "Model"
     fragments: list[str | Fragment] | None
-    attachments: list[Attachment] | None
+    attachments: list[Attachment]
     _system: str | None
     system_fragments: list[str | Fragment] | None
     prompt_json: str | None
@@ -518,7 +519,7 @@ class Prompt:
         self.schema = schema
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
-        self.options = options or {}
+        self.options = options or model.Options()
         self.hide_reasoning = hide_reasoning
         # Explicit messages= list, if the caller supplied one. Copied so
         # later mutation by the caller doesn't alter the Prompt.
@@ -535,7 +536,7 @@ class Prompt:
         return _combine_system(self._system, self.system_fragments)
 
     @property
-    def messages(self):
+    def messages(self) -> list["Message"]:
         """Canonical list of Message objects for this prompt.
 
         **Invariant:** this property returns exactly what the model
@@ -837,6 +838,7 @@ class Conversation(_BaseConversation):
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "Response":
+        self.model._validate_attachments(attachments)
         merged = _merge_options(options, kwargs)
         # Build the authoritative chain so response.prompt.messages
         # equals exactly what the model sees for this turn.
@@ -1023,6 +1025,7 @@ class AsyncConversation(_BaseConversation):
         hide_reasoning: bool = False,
         **kwargs,
     ) -> "AsyncResponse":
+        self.model._validate_attachments(attachments)
         merged = _merge_options(options, kwargs)
         chain = self._build_full_chain(
             prompt=prompt,
@@ -1107,6 +1110,7 @@ class _BaseResponse:
 
     id: str
     prompt: "Prompt"
+    _loaded_messages: list["Message"]
     stream: bool
     resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
@@ -1166,6 +1170,13 @@ class _BaseResponse:
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
+
+        if not self.model.supports_conversation and any(
+            message.role in ("assistant", "tool") for message in self.prompt.messages
+        ):
+            raise ConversationNotSupported(
+                f"{self.model} does not support conversations"
+            )
 
         function_tools, _ = _partition_tools(self.model, self.prompt.tools)
         if function_tools and not self.model.supports_tools:
@@ -2136,6 +2147,19 @@ class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
+    def log_to_db(self, db):
+        """Record this completed response in a log database.
+
+        Call this after awaiting the response, for example with
+        ``await response.text()``. Like the synchronous response API, this
+        performs the database write immediately.
+        """
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before log_to_db()"
+            )
+        self._to_sync_response().log_to_db(db)
+
     async def reply(
         self,
         prompt: str | None = None,
@@ -2558,7 +2582,8 @@ class AsyncResponse(_BaseResponse):
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]
         finally:
-            pass
+            if not self._done:
+                await self._generator.aclose()
 
     async def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
@@ -2627,6 +2652,9 @@ class AsyncResponse(_BaseResponse):
 
     async def to_sync_response(self) -> Response:
         await self._force()
+        return self._to_sync_response()
+
+    def _to_sync_response(self) -> Response:
         # This conversion might be tricky if the model is AsyncModel,
         # as Response expects a sync Model. For simplicity, we'll assume
         # the primary use case is data transfer after completion.
@@ -2666,6 +2694,10 @@ class AsyncResponse(_BaseResponse):
         # part's provider_metadata are lost. The CLI converts before
         # logging, so that loss would apply to every async response.
         response._stream_events = list(self._stream_events)
+        # Deserialized responses keep their structured output here instead
+        # of reconstructing it from stream events.
+        if hasattr(self, "_loaded_messages"):
+            response._loaded_messages = list(self._loaded_messages)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response
@@ -2842,6 +2874,16 @@ class _BaseChainResponse:
         self.chain_limit = chain_limit
         self.before_call = before_call
         self.after_call = after_call
+        self._response_callbacks: list[Callable] = []
+
+    def on_response(self, callback):
+        """Register a callback for each subsequent completed response.
+
+        Called before the chain limit is checked or tools are executed.
+        Async chains also accept async callbacks and await them. Register
+        before consuming the chain; earlier responses are not replayed.
+        """
+        self._response_callbacks.append(callback)
 
     def log_to_db(self, db):
         for response in self._responses:
@@ -2930,6 +2972,8 @@ class ChainResponse(_BaseChainResponse):
         current_response: Response | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
             if self.chain_limit and count >= self.chain_limit:
@@ -3068,6 +3112,8 @@ class AsyncChainResponse(_BaseChainResponse):
         current_response: AsyncResponse | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                await current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
 
@@ -3208,6 +3254,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
+    supports_conversation = True
 
     @property
     def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:
@@ -3513,13 +3560,21 @@ class EmbeddingModel(ABC, _get_key_mixin):
                 "This model does not support text strings, only binary data"
             )
 
-    def embed(self, item: str | bytes) -> list[float]:
+    def embed(self, item: str | bytes, *, key: str | None = None) -> list[float]:
         "Embed a single text string or binary blob, return a list of floats"
         self._check(item)
-        return next(iter(self.embed_batch([item])))
+        iterator = self._embed_batch([item], key=key)
+        try:
+            return next(iterator)
+        finally:
+            iterator.close()
 
     def embed_multi(
-        self, items: Iterable[str | bytes], batch_size: int | None = None
+        self,
+        items: Iterable[str | bytes],
+        batch_size: int | None = None,
+        *,
+        key: str | None = None,
     ) -> Iterator[list[float]]:
         "Embed multiple items in batches according to the model batch_size"
         iter_items = iter(items)
@@ -3533,16 +3588,37 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
             iter_items = checking_iter(items)
         if effective_batch_size is None:
-            yield from self.embed_batch(iter_items)
+            yield from self._embed_batch(iter_items, key=key)
             return
         while True:
             batch_items = list(islice(iter_items, effective_batch_size))
             if not batch_items:
                 break
-            yield from self.embed_batch(batch_items)
+            yield from self._embed_batch(batch_items, key=key)
+
+    def _embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Generator[list[float], None, None]:
+        resolved_key = self.get_key(key)
+        try:
+            inspect.signature(self.embed_batch).bind(items, key=resolved_key)
+        except (TypeError, ValueError):
+            # Backwards compatibility for plugins whose embed_batch() method
+            # predates the key= parameter. self.key is shared mutable state, so
+            # new plugins should accept key= instead.
+            previous_key = self.key
+            self.key = resolved_key
+            try:
+                yield from self.embed_batch(items)
+            finally:
+                self.key = previous_key
+        else:
+            yield from self.embed_batch(items, key=resolved_key)
 
     @abstractmethod
-    def embed_batch(self, items: Iterable[str | bytes]) -> Iterator[list[float]]:
+    def embed_batch(
+        self, items: Iterable[str | bytes], *, key: str | None = None
+    ) -> Iterator[list[float]]:
         """
         Embed a batch of strings or blobs, return a list of lists of floats
         """
@@ -3617,16 +3693,15 @@ def _ensure_dict_schema(schema):
 
 
 def _remove_titles_recursively(obj):
-    """Recursively remove all 'title' fields from a nested dictionary."""
+    """Recursively remove JSON Schema 'title' annotations from a nested dictionary."""
     if isinstance(obj, dict):
-        # Remove title if present
-        obj.pop("title", None)
-
-        # Recursively process all values
+        # JSON Schema "title" is a string. A property or $defs entry named
+        # "title" has an object value and must be kept.
+        if isinstance(obj.get("title"), str):
+            obj.pop("title")
         for value in obj.values():
             _remove_titles_recursively(value)
     elif isinstance(obj, list):
-        # Process each item in lists
         for item in obj:
             _remove_titles_recursively(item)
 

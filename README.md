@@ -57,7 +57,7 @@ Or with Homebrew (see [warning note](https://llm.datasette.io/en/stable/setup.ht
 brew install llm
 ```
 
-Or with [pipx](https://pypa.github.io/pipx/):
+Or with [pipx](https://pipx.pypa.io/):
 
 ```bash
 pipx install llm
@@ -89,7 +89,7 @@ If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you ca
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt (with the default gpt-5.6-luna model)
+# Run a prompt (with the default gpt-6-luna model)
 llm "Ten fun names for a pet pelican"
 
 # Extract text from an image
@@ -305,6 +305,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
     * [Tip: lazily load expensive dependencies](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#tip-lazily-load-expensive-dependencies)
     * [Models that accept API keys](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#models-that-accept-api-keys)
     * [Async models](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#async-models)
+    * [Models that do not support conversations](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#models-that-do-not-support-conversations)
     * [Supporting schemas](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-schemas)
     * [Supporting tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-tools)
     * [Supporting server-side tools](https://llm.datasette.io/en/stable/plugins/advanced-model-plugins.html#supporting-server-side-tools)
