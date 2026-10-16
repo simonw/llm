@@ -14,6 +14,10 @@ Or using [uv](https://docs.astral.sh/uv/guides/tools/) ({ref}`more tips below <s
 ```bash
 uv tool install llm
 ```
+Or using [Pixi](https://pixi.sh/latest/):
+```bash
+pixi global install llm
+```
 Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
@@ -32,6 +36,10 @@ pipx upgrade llm
 For `uv`:
 ```bash
 uv tool upgrade llm
+```
+For `pixi`:
+```bash
+pixi global update llm
 ```
 For Homebrew:
 ```bash
