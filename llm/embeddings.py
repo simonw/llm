@@ -282,7 +282,7 @@ class Collection:
             where_bits.append("id LIKE ? || '%'")
             where_args.append(prefix)
 
-        if skip_id:
+        if skip_id is not None:
             where_bits.append("id != ?")
             where_args.append(skip_id)
 
