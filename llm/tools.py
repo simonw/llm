@@ -20,12 +20,12 @@ def llm_time() -> dict:
 
     # Calculate offset
     offset_seconds = -time.timezone if not is_dst else -time.altzone
-    offset_hours = offset_seconds // 3600
-    offset_minutes = (offset_seconds % 3600) // 60
+    abs_seconds = abs(offset_seconds)
+    offset_hours = abs_seconds // 3600
+    offset_minutes = (abs_seconds % 3600) // 60
+    sign = "+" if offset_seconds >= 0 else "-"
 
-    timezone_offset = (
-        f"UTC{'+' if offset_hours >= 0 else ''}{offset_hours:02d}:{offset_minutes:02d}"
-    )
+    timezone_offset = f"UTC{sign}{offset_hours:02d}:{offset_minutes:02d}"
 
     return {
         "utc_time": utc_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
