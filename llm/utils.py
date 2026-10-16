@@ -104,6 +104,9 @@ class _LogTransport(httpx2.BaseTransport):
     def __init__(self, transport: httpx2.BaseTransport):
         self.transport = transport
 
+    def close(self) -> None:
+        self.transport.close()
+
     def handle_request(self, request: httpx2.Request) -> httpx2.Response:
         response = self.transport.handle_request(request)
         return _LogResponse(
