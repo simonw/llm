@@ -279,8 +279,11 @@ class Collection:
         where_args = [str(self.id)]
 
         if prefix:
-            where_bits.append("id LIKE ? || '%'")
-            where_args.append(prefix)
+            # Escape LIKE's own wildcards so the prefix matches literally
+            where_bits.append("id LIKE ? || '%' ESCAPE '\\'")
+            where_args.append(
+                prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
 
         if skip_id:
             where_bits.append("id != ?")
