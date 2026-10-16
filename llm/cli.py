@@ -2787,7 +2787,7 @@ def schemas_dsl_debug(input, multi):
     Convert LLM's schema DSL to a JSON schema
 
     \b
-        llm schema dsl 'name, age int, bio: their bio'
+        llm schemas dsl 'name, age int, bio: their bio'
     """
     schema = schema_dsl(input, multi)
     click.echo(json.dumps(schema, indent=2))
