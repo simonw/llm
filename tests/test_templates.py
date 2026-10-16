@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import pathlib
@@ -345,6 +346,98 @@ def test_execute_prompt_with_a_template(
         assert result.exit_code == 1
         assert result.output.strip() == expected_error
         mocked_openai_chat.reset()
+
+
+@mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
+@pytest.mark.parametrize("attachment_source", ("file", "url"))
+@pytest.mark.parametrize(
+    "template_field,cli_option,expected_order",
+    (
+        ("attachments", None, ("template",)),
+        ("attachments", "-a", ("template", "cli")),
+        ("attachments", "--at", ("template", "cli")),
+        ("attachment_types", None, ("template",)),
+        ("attachment_types", "-a", ("cli", "template")),
+        ("attachment_types", "--at", ("template", "cli")),
+    ),
+)
+def test_execute_prompt_with_template_attachments(
+    templates_path,
+    mocked_openai_chat,
+    tmp_path,
+    attachment_source,
+    template_field,
+    cli_option,
+    expected_order,
+):
+    """Untyped attachments precede explicitly typed attachments in the request."""
+    attachment_values = {}
+    expected_urls = {}
+    for attachment_name in expected_order:
+        uses_explicit_type = (
+            template_field == "attachment_types"
+            if attachment_name == "template"
+            else cli_option == "--at"
+        )
+        mimetype = "image/jpeg" if uses_explicit_type else "image/png"
+        if attachment_source == "url":
+            value = f"https://images.example.test/{attachment_name}.png"
+            expected_urls[attachment_name] = value
+            if not uses_explicit_type:
+                mocked_openai_chat.add_response(
+                    method="HEAD",
+                    url=value,
+                    headers={"Content-Type": mimetype},
+                )
+        else:
+            image_bytes = b"\x89PNG\r\n\x1a\n" + attachment_name.encode("ascii")
+            image_path = tmp_path / f"{attachment_name}.png"
+            image_path.write_bytes(image_bytes)
+            value = str(image_path)
+            expected_urls[attachment_name] = "data:{};base64,{}".format(
+                mimetype, base64.b64encode(image_bytes).decode("ascii")
+            )
+        attachment_values[attachment_name] = value
+
+    template = {"prompt": "Describe these images", "model": "gpt-4o-mini"}
+    if template_field == "attachments":
+        template[template_field] = [attachment_values["template"]]
+    else:
+        template[template_field] = [
+            {"type": "image/jpeg", "value": attachment_values["template"]}
+        ]
+    (templates_path / "template.yaml").write_text(yaml.safe_dump(template), "utf-8")
+    args = ["--no-stream", "-t", "template"]
+    if cli_option:
+        args.extend([cli_option, attachment_values["cli"]])
+        if cli_option == "--at":
+            args.append("image/jpeg")
+
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert result.output == "Bob, Alice, Eve\n"
+    requests = mocked_openai_chat.get_requests(method="POST")
+    assert len(requests) == 1
+    assert json.loads(requests[0].content) == {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe these images"},
+                    *[
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": expected_urls[attachment_name]},
+                        }
+                        for attachment_name in expected_order
+                    ],
+                ],
+            }
+        ],
+        "stream": False,
+    }
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
