@@ -79,6 +79,50 @@ def test_embed_store(collection):
     )
 
 
+@pytest.mark.parametrize("batch_size", (0, -1))
+@pytest.mark.parametrize("model_default", (False, True))
+def test_model_embed_multi_rejects_nonpositive_batch_size(batch_size, model_default):
+    model = llm.get_embedding_model("embed-demo")
+    items = iter(["hello world"])
+    kwargs = {}
+    if model_default:
+        model.batch_size = batch_size
+    else:
+        kwargs["batch_size"] = batch_size
+
+    with pytest.raises(ValueError, match="^batch_size must be greater than zero$"):
+        list(model.embed_multi(items, **kwargs))
+
+    assert next(items) == "hello world"
+    assert getattr(model, "batch_count", 0) == 0
+
+
+@pytest.mark.parametrize("batch_size", (0, -1))
+@pytest.mark.parametrize("with_metadata", (False, True))
+def test_collection_embed_multi_rejects_nonpositive_batch_size(
+    db_factory, batch_size, with_metadata
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    entry = (
+        ("1", "hello world", {"source": "test"})
+        if with_metadata
+        else ("1", "hello world")
+    )
+    entries = iter([entry])
+    method = (
+        collection.embed_multi_with_metadata
+        if with_metadata
+        else collection.embed_multi
+    )
+
+    with pytest.raises(ValueError, match="^batch_size must be greater than zero$"):
+        method(entries, batch_size=batch_size)
+
+    assert next(entries) == entry
+    assert collection.count() == 0
+    assert getattr(collection.model(), "batch_count", 0) == 0
+
+
 def test_embed_metadata(collection):
     collection.embed("3", "hello yet again", metadata={"foo": "bar"}, store=True)
     assert collection.db["embeddings"].count == 3
