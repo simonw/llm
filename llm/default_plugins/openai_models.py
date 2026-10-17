@@ -1339,6 +1339,11 @@ class _Shared:
             )
         return messages
 
+    def _set_resolved_model(self, response: Response | AsyncResponse):
+        model = (response.response_json or {}).get("model")
+        if isinstance(model, str) and model and model != self.model_id:
+            response.set_resolved_model(model)
+
     def set_usage(self, response, usage):
         if not usage:
             return
@@ -1518,6 +1523,7 @@ class Chat(_Shared, KeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
+        self._set_resolved_model(response)
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
@@ -1634,6 +1640,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     type="text",
                     chunk=completion.choices[0].message.content,
                 )
+        self._set_resolved_model(response)
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
@@ -2684,6 +2691,7 @@ class Responses(_SharedResponses, KeyModel):
             )
             yield from events
 
+        self._set_resolved_model(response)
         self._set_usage_responses(response, usage)
         # Fallback: usage said reasoning happened but the API gave us no
         # reasoning items to harvest encrypted_content from. Emit the
@@ -2934,6 +2942,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             for event in events:
                 yield event
 
+        self._set_resolved_model(response)
         self._set_usage_responses(response, usage)
         if (
             not had_reasoning
@@ -3018,6 +3027,7 @@ class Completion(Chat):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].text
+        self._set_resolved_model(response)
         response._prompt_json = redact_data({"messages": messages})
 
 
