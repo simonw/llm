@@ -171,6 +171,7 @@ Options:
   -c, --continue                  Continue the most recent conversation.
   --cid, --conversation TEXT      Continue the conversation with the given ID.
   --key TEXT                      API key to use
+  --name TEXT                     Set the conversation name
   --save TEXT                     Save prompt with this template name
   --async                         Run prompt asynchronously
   -u, --usage                     Show token usage

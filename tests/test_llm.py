@@ -24,6 +24,60 @@ def test_version():
     assert result.output.startswith("cli, version ")
 
 
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("no_stream", (False, True))
+def test_prompt_conversation_name(
+    mock_model, async_mock_model, logs_db, async_, no_stream
+):
+    runner = CliRunner()
+    args = ["-m", "mock", "--name", "Research — notes", "First prompt"]
+    if async_:
+        args.append("--async")
+    if no_stream:
+        args.append("--no-stream")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    thread = next(logs_db["threads"].rows)
+    assert thread["name"] == "Research — notes"
+
+    # Continuing without --name preserves the stored name and thread.
+    result = runner.invoke(
+        cli, ["-m", "mock", "-c", "Second prompt"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    assert logs_db["threads"].get(thread["id"])["name"] == "Research — notes"
+    assert logs_db["threads"].count == 1
+
+    # An explicit name on continuation renames that same thread.
+    result = runner.invoke(
+        cli,
+        ["-m", "mock", "--cid", thread["id"], "--name", "Renamed", "Third prompt"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert logs_db["threads"].get(thread["id"])["name"] == "Renamed"
+    assert logs_db["threads"].count == 1
+    assert logs_db["turns"].count == 3
+
+
+def test_prompt_default_conversation_name(mock_model, logs_db):
+    result = CliRunner().invoke(
+        cli, ["-m", "mock", "First\nprompt"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    assert next(logs_db["threads"].rows)["name"] == "First prompt"
+
+
+def test_prompt_name_without_logging(mock_model, logs_db):
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "--name", "Private", "--no-log", "Hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert logs_db["threads"].count == 0
+
+
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
     db_factory, mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
