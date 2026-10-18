@@ -62,7 +62,7 @@ from llm import (
     set_default_model,
     user_dir,
 )
-from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
+from llm.models import _BaseChainResponse, _BaseConversation
 
 from .logs import (
     LogStore,
@@ -135,7 +135,7 @@ async def display_async_stream_events(events, *, show_reasoning=True):
 
 def _display_token_usage(response):
     responses = (
-        response._responses if isinstance(response, ChainResponse) else [response]
+        response._responses if isinstance(response, _BaseChainResponse) else [response]
     )
     for response_object in responses:
         click.echo(
@@ -156,7 +156,6 @@ def _run_chat(
     initial_fragments=None,
     initial_attachments=None,
     transform_prompt=None,
-    after_response=None,
     show_reasoning=True,
     show_usage=False,
 ):
@@ -230,8 +229,6 @@ def _run_chat(
             response.stream_events(),
             show_reasoning=show_reasoning,
         )
-        if after_response is not None:
-            after_response(response)
         print()
         if show_usage:
             _display_token_usage(response)
@@ -1093,35 +1090,46 @@ def prompt(
     if hide_reasoning:
         kwargs["hide_reasoning"] = True
 
+    # Commit each completed response before the chain does any more work.
+    log_db = None
+    if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database.
+        log_db = _cli_database(memory=True)
+        migrate(log_db)
+
+    def log_response(response):
+        response.log_to_db(log_db)
+
     try:
+        response = prompt_method(
+            prompt,
+            fragments=resolved_fragments,
+            attachments=resolved_attachments,
+            system=system,
+            schema=schema,
+            system_fragments=resolved_system_fragments,
+            **kwargs,
+        )
+        if log_db is not None:
+            if isinstance(response, _BaseChainResponse):
+                response.on_response(log_response)
+            elif not isinstance(response, AsyncResponse):
+                response.on_done(log_response)
+
         if async_:
 
             async def inner():
+                if log_db is not None and isinstance(response, AsyncResponse):
+                    await response.on_done(log_response)
                 if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     await display_async_stream_events(
                         response.astream_events(),
                         show_reasoning=not hide_reasoning,
                     )
                     print()
                 else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -1129,19 +1137,9 @@ def prompt(
                         )
                     if not json_output:
                         print(text)
-                return response
 
-            response = asyncio.run(inner())
+            asyncio.run(inner())
         else:
-            response = prompt_method(
-                prompt,
-                fragments=resolved_fragments,
-                attachments=resolved_attachments,
-                system=system,
-                schema=schema,
-                system_fragments=resolved_system_fragments,
-                **kwargs,
-            )
             if should_stream:
                 display_stream_events(
                     response.stream_events(),
@@ -1167,22 +1165,6 @@ def prompt(
 
     if usage:
         _display_token_usage(response)
-
-    # Log responses to the database
-    log_db = None
-    if (logs_on() or log) and not no_log:
-        log_db = db
-    elif json_output:
-        # --json needs logged rows, so use a temporary in-memory database
-        log_db = _cli_database(memory=True)
-        migrate(log_db)
-
-    if log_db is not None:
-        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
-        # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(log_db)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1403,6 +1385,7 @@ def chat(
             system=system,
             **kwargs,
         )
+        response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -1416,7 +1399,6 @@ def chat(
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
         show_usage=usage,
     )
@@ -2180,7 +2162,8 @@ def logs_list(
                 if row["tool_calls"]:
                     obj["tool_calls"] = [
                         "{}({})".format(
-                            tool_call["name"], json.dumps(tool_call["arguments"])
+                            tool_call["name"],
+                            truncate_string(json.dumps(tool_call["arguments"])),
                         )
                         for tool_call in row["tool_calls"]
                     ]
@@ -3382,6 +3365,23 @@ def uninstall(packages, yes):
 )
 @click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "--metadata",
     help="JSON object metadata to store",
     callback=json_validator("metadata"),
@@ -3403,6 +3403,8 @@ def embed(
     database,
     content,
     binary,
+    attachments,
+    attachment_types,
     metadata,
     format_,
 ):
@@ -3412,6 +3414,14 @@ def embed(
 
     if store and not collection:
         raise click.ClickException("Must provide collection when using --store")
+
+    resolved_attachments = [*attachments, *attachment_types]
+    if len(resolved_attachments) > 1:
+        raise click.UsageError("Only one attachment can be embedded at a time")
+    if resolved_attachments and (content is not None or input is not None or binary):
+        raise click.UsageError(
+            "Attachments cannot be combined with --content, --input or --binary"
+        )
 
     # Lazy load this because we do not need it for -c or -i versions
     def get_db():
@@ -3453,8 +3463,10 @@ def embed(
     if collection and (format_ is None):
         show_output = False
 
-    # Resolve input text
-    if not content:
+    # Resolve input text, binary data or a typed attachment
+    if resolved_attachments:
+        content = resolved_attachments[0]
+    elif not content:
         if not input or input == "-":
             # Read from stdin
             input_source = sys.stdin.buffer if binary else sys.stdin
@@ -3504,6 +3516,23 @@ def embed(
     help="Embed files in this directory - specify directory and glob pattern",
 )
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "encodings",
     "--encoding",
     help="Encodings to try when reading --files",
@@ -3541,6 +3570,8 @@ def embed_multi(
     input_path,
     format,
     files,
+    attachments,
+    attachment_types,
     encodings,
     binary,
     sql,
@@ -3556,7 +3587,7 @@ def embed_multi(
     """
     Store embeddings for multiple strings at once in the specified collection.
 
-    Input data can come from one of three sources:
+    Input data can come from one of four sources:
 
     \b
     1. A CSV, TSV, JSON or JSONL file:
@@ -3590,13 +3621,34 @@ def embed_multi(
          llm embed-multi docs --files docs '**/*.md'
          llm embed-multi images --files photos '*.jpg' --binary
          llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
+
+    \b
+    4. Typed attachments:
+       - Each path or URL becomes one embedding
+       - Use --at PATH MIME-TYPE to supply an explicit MIME type
+
+    \b
+       Examples:
+         llm embed-multi media -a photo.jpg -a recording.wav
+         llm embed-multi media --at recording.data audio/wav
     """
+    resolved_attachments = [*attachments, *attachment_types]
+    if resolved_attachments and binary:
+        raise click.UsageError("Attachments cannot be combined with --binary")
+    if resolved_attachments and (input_path or sql or files or format):
+        raise click.UsageError(
+            "Attachments cannot be combined with an input path, --sql, --files or --format"
+        )
+    if resolved_attachments and encodings:
+        raise click.UsageError("Attachments cannot be combined with --encoding")
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
     if binary and encodings:
         raise click.UsageError("--binary cannot be used with --encoding")
-    if not input_path and not sql and not files:
-        raise click.UsageError("Either --sql or input path or --files is required")
+    if not input_path and not sql and not files and not resolved_attachments:
+        raise click.UsageError(
+            "Either --sql, input path, --files or an attachment is required"
+        )
 
     if files and (input_path or sql or format):
         raise click.UsageError("Cannot use --files with --sql, input path or --format")
@@ -3620,7 +3672,21 @@ def embed_multi(
         )
 
     expected_length = None
-    if files:
+    if resolved_attachments:
+        expected_length = len(resolved_attachments)
+
+        def attachment_id(attachment: Attachment) -> str:
+            if attachment.path:
+                return pathlib.Path(attachment.path).name
+            if attachment.url:
+                return attachment.url
+            return attachment.id()
+
+        rows = (
+            {"id": attachment_id(attachment), "content": attachment}
+            for attachment in resolved_attachments
+        )
+    elif files:
         encodings = encodings or ("utf-8", "latin-1")
 
         def count_files():
@@ -3693,12 +3759,14 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples() -> Iterable[tuple[str, bytes | str]]:
+        def tuples() -> Iterable[tuple[str, Attachment | bytes | str]]:
             for row in rows:
                 values = list(row.values())
                 id: str = prefix + str(values[0])
-                content: bytes | str | None = None
-                if binary:
+                content: Attachment | bytes | str | None = None
+                if isinstance(values[1], Attachment):
+                    content = values[1]
+                elif binary:
                     content = cast(bytes, values[1])
                 else:
                     content = " ".join(v or "" for v in values[1:])
@@ -3724,6 +3792,23 @@ def embed_multi(
 @click.option("-c", "--content", help="Content to embed for comparison")
 @click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
 @click.option("-p", "--plain", is_flag=True, help="Output in plain text format")
@@ -3734,7 +3819,19 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option("--prefix", help="Just IDs with this prefix", default="")
-def similar(collection, id, input, content, binary, number, plain, database, prefix):
+def similar(
+    collection,
+    id,
+    input,
+    content,
+    binary,
+    attachments,
+    attachment_types,
+    number,
+    plain,
+    database,
+    prefix,
+):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -3748,7 +3845,17 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
     \b
         llm similar my-collection 1234
     """
-    if not id and not content and not input:
+    resolved_attachments = [*attachments, *attachment_types]
+    if len(resolved_attachments) > 1:
+        raise click.UsageError("Only one attachment can be used for comparison")
+    if resolved_attachments and (
+        id or content is not None or input is not None or binary
+    ):
+        raise click.UsageError(
+            "Attachments cannot be combined with an ID, --content, --input or --binary"
+        )
+
+    if not id and not content and not input and not resolved_attachments:
         raise click.ClickException("Must provide content or an ID for the comparison")
 
     if database:
@@ -3770,8 +3877,10 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
-        # Resolve input text
-        if not content:
+        # Resolve input text, binary data or a typed attachment
+        if resolved_attachments:
+            content = resolved_attachments[0]
+        elif not content:
             if not input or input == "-":
                 # Read from stdin
                 input_source = sys.stdin.buffer if binary else sys.stdin
@@ -3793,7 +3902,10 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
                 click.echo(textwrap.indent(json.dumps(result.metadata), "  "))
             click.echo("")
         else:
-            click.echo(json.dumps(asdict(result)))
+            result_dict = asdict(result)
+            if result_dict.get("content_type") is None:
+                result_dict.pop("content_type", None)
+            click.echo(json.dumps(result_dict))
 
 
 @cli.group(
