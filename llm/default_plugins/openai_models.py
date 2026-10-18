@@ -19,6 +19,7 @@ from llm import (
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    Attachment,
     Conversation,
     EmbeddingModel,
     KeyModel,
@@ -497,7 +498,10 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.dimensions = dimensions
 
     def embed_batch(
-        self, items: Iterable[str | bytes], *, key: str | None = None
+        self,
+        items: Iterable[str | bytes | Attachment],
+        *,
+        key: str | None = None,
     ) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
