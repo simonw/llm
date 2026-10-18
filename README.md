@@ -259,6 +259,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
     * [llm similar](https://llm.datasette.io/en/stable/embeddings/cli.html#llm-similar)
     * [llm embed-models](https://llm.datasette.io/en/stable/embeddings/cli.html#llm-embed-models)
     * [llm collections list](https://llm.datasette.io/en/stable/embeddings/cli.html#llm-collections-list)
+    * [llm collections show](https://llm.datasette.io/en/stable/embeddings/cli.html#llm-collections-show)
     * [llm collections delete](https://llm.datasette.io/en/stable/embeddings/cli.html#llm-collections-delete)
   * [Using embeddings from Python](https://llm.datasette.io/en/stable/embeddings/python-api.html)
     * [Working with collections](https://llm.datasette.io/en/stable/embeddings/python-api.html#working-with-collections)
