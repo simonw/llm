@@ -1248,40 +1248,29 @@ async def test_async_missing_tool_can_be_cancelled_by_before_call():
     ]
 
 
-def test_tool_without_implementation_produces_error_result():
+def test_tool_without_implementation_error_matches_sync_and_async():
     tool = llm.Tool(
         name="no_impl",
         description="A tool with no implementation",
         input_schema={"type": "object", "properties": {}},
         implementation=None,
     )
-    model = llm.get_model("echo")
-    chain_response = model.chain(
-        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
-        tools=[tool],
-    )
-    chain_response.text()
-    second = chain_response._responses[1]
-    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
-        ("no_impl", 'Error: tool "no_impl" has no implementation'),
-    ]
+    prompt = json.dumps({"tool_calls": [{"name": "no_impl"}]})
 
+    sync_chain = llm.get_model("echo").chain(prompt, tools=[tool])
+    sync_chain.text()
 
-@pytest.mark.asyncio
-async def test_async_tool_without_implementation_produces_error_result():
-    tool = llm.Tool(
-        name="no_impl",
-        description="A tool with no implementation",
-        input_schema={"type": "object", "properties": {}},
-        implementation=None,
-    )
-    model = llm.get_async_model("echo")
-    chain_response = model.chain(
-        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
-        tools=[tool],
-    )
-    await chain_response.text()
-    second = chain_response._responses[1]
-    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
+    async def run_async():
+        async_chain = llm.get_async_model("echo").chain(prompt, tools=[tool])
+        await async_chain.text()
+        return async_chain
+
+    async_chain = asyncio.run(run_async())
+
+    def tool_results(chain):
+        return [(r.name, r.output) for r in chain._responses[1].prompt.tool_results]
+
+    assert tool_results(sync_chain) == tool_results(async_chain)
+    assert tool_results(sync_chain) == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]
