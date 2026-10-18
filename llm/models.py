@@ -1910,15 +1910,11 @@ class Response(_BaseResponse):
             tool_calls_list = self.tool_calls()
 
         # Run prepare() on all Toolbox instances that need it
-        instances_to_prepare: list[Toolbox] = []
         for tool_to_prep in tools_by_name.values():
             inst = _get_instance(tool_to_prep.implementation)
             if isinstance(inst, Toolbox) and not getattr(inst, "_prepared", False):
-                instances_to_prepare.append(inst)
-
-        for inst in instances_to_prepare:
-            inst.prepare()
-            inst._prepared = True
+                inst.prepare()
+                inst._prepared = True
 
         for tool_call in tool_calls_list:
             tool: Tool | None = tools_by_name.get(tool_call.name)
@@ -2269,17 +2265,13 @@ class AsyncResponse(_BaseResponse):
         }
 
         # Run async prepare_async() on all Toolbox instances that need it
-        instances_to_prepare: list[Toolbox] = []
         for tool_to_prep in tools_by_name.values():
             inst = _get_instance(tool_to_prep.implementation)
             if isinstance(inst, Toolbox) and not getattr(
                 inst, "_async_prepared", False
             ):
-                instances_to_prepare.append(inst)
-
-        for inst in instances_to_prepare:
-            await inst.prepare_async()
-            inst._async_prepared = True
+                await inst.prepare_async()
+                inst._async_prepared = True
 
         indexed_results: list[tuple[int, ToolResult]] = []
         async_tasks: list[asyncio.Task] = []

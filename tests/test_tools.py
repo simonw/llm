@@ -442,6 +442,97 @@ async def test_async_toolbox():
     assert instance.prepared is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_toolbox_prepared_once_per_instance(async_):
+    events = []
+
+    class Tools(llm.Toolbox):
+        def __init__(self, label):
+            self.label = label
+
+        def prepare(self):
+            events.append((self.label, "prepare"))
+
+        async def prepare_async(self):
+            events.append((self.label, "prepare_async"))
+
+        def first(self):
+            events.append((self.label, "first"))
+            return self.label
+
+        def second(self):
+            events.append((self.label, "second"))
+            return self.label
+
+    first = Tools("a")
+    second = Tools("b")
+    # Distinct names allow two instances of the same toolbox in one prompt.
+    tools = [
+        llm.Tool.function(first.first, name="a_first"),
+        llm.Tool.function(second.first, name="b_first"),
+        llm.Tool.function(first.second, name="a_second"),
+        llm.Tool.function(second.second, name="b_second"),
+    ]
+    model = (llm.get_async_model if async_ else llm.get_model)("echo")
+    for name, expected in (("a_first", "a"), ("b_second", "b"), ("a_second", "a")):
+        # Reuse the toolbox instances across responses as well as tool calls.
+        response = model.prompt("", tools=tools)
+        result = response.execute_tool_call(llm.ToolCall(name=name, arguments={}))
+        if async_:
+            result = await result
+        assert result.output == expected
+        assert result.exception is None
+
+    prepare = "prepare_async" if async_ else "prepare"
+    assert events == [
+        ("a", prepare),
+        ("b", prepare),
+        ("a", "first"),
+        ("b", "second"),
+        ("a", "second"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_toolbox_preparation_failure_can_retry(async_):
+    events = []
+
+    class Tools(llm.Toolbox):
+        def prepare(self):
+            events.append("prepare")
+            if len(events) == 1:
+                raise RuntimeError("setup failed")
+
+        async def prepare_async(self):
+            self.prepare()
+
+        def first(self):
+            events.append("first")
+            return "first"
+
+        def second(self):
+            return "second"
+
+    tools = Tools()
+    model = (llm.get_async_model if async_ else llm.get_model)("echo")
+    response = model.prompt("", tools=[tools])
+    tool_call = llm.ToolCall(name="Tools_first", arguments={})
+    with pytest.raises(RuntimeError, match="setup failed"):
+        result = response.execute_tool_call(tool_call)
+        if async_:
+            await result
+    assert events == ["prepare"]
+
+    result = response.execute_tool_call(tool_call)
+    if async_:
+        result = await result
+    assert result.output == "first"
+    assert result.exception is None
+    assert events == ["prepare", "prepare", "first"]
+
+
 def test_toolbox_add_tool():
     model = llm.get_model("echo")
 
