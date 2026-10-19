@@ -738,16 +738,18 @@ def test_model_environment_variable(monkeypatch):
     }
 
 
-@pytest.mark.parametrize("use_filename", (True, False))
-def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filename):
+@pytest.mark.parametrize(
+    "filename", (None, "schema.json", "my schema.json", "schema,one.json")
+)
+def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, filename):
     user_path = tmpdir / "user"
-    schema_path = tmpdir / "schema.json"
+    schema_path = tmpdir / (filename or "schema.json")
     mock_model.enqueue([json.dumps(dog)])
     schema_value = '{"schema": "one"}'
     with open(schema_path, "w") as f:
         f.write(schema_value)
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
-    if use_filename:
+    if filename:
         schema_value = str(schema_path)
     runner = CliRunner()
     result = runner.invoke(
@@ -763,7 +765,7 @@ def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filenam
     assert rows == [
         {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
     ]
-    if use_filename:
+    if filename:
         # Run it again to check that the ID option works now it's in the DB
         result2 = runner.invoke(
             cli,
