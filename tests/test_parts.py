@@ -1390,6 +1390,45 @@ class TestSqliteRehydrateMessages:
             )
         ]
 
+    def test_from_row_restores_token_usage(self, db_factory, mock_model, tmp_path):
+        """Token usage recorded in the row must survive rehydration -
+        otherwise usage() on a loaded response reports all-None even
+        though the counts are in the database."""
+
+        from llm.migrations import migrate
+
+        db = db_factory(str(tmp_path / "logs.db"))
+        migrate(db)
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "model": "mock",
+                "prompt": "q1",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "answer text",
+                "response_json": None,
+                "conversation_id": None,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+                "input_tokens": 123,
+                "output_tokens": 45,
+                "token_details": '{"reasoning_tokens": 12}',
+            },
+            alter=True,
+        )
+
+        row = next(db["responses"].rows)
+        rehydrated = llm.Response.from_row(db, row)
+        assert rehydrated.usage() == llm.Usage(
+            input=123, output=45, details={"reasoning_tokens": 12}
+        )
+        assert (
+            rehydrated.token_usage() == '123 input, 45 output, {"reasoning_tokens": 12}'
+        )
+
     def test_llm_dash_c_chain_preserves_prior_assistant_turn(
         self, db_factory, mock_model, tmp_path
     ):

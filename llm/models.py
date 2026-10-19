@@ -1641,6 +1641,16 @@ class _BaseResponse:
                 [row["id"]],
             )
         ]
+        # Token usage recorded against the row - without this a
+        # rehydrated response reports usage() as all-None even though
+        # the counts are in the database. token_details is stored as
+        # a JSON string.
+        response.input_tokens = row["input_tokens"]
+        response.output_tokens = row["output_tokens"]
+        token_details = row["token_details"]
+        if isinstance(token_details, str):
+            token_details = json.loads(token_details)
+        response.token_details = token_details
 
         return response
 
