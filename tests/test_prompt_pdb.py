@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from unittest.mock import Mock
@@ -6,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from llm.cli import cli
+from llm.plugins import load_plugins
 
 
 @pytest.mark.parametrize("explicit", [False, True])
@@ -34,6 +36,7 @@ def test_prompt_pdb_original_traceback(
     monkeypatch.setattr(model, "execute", async_execute if async_ else execute)
     post_mortem = Mock()
     monkeypatch.setattr("pdb.post_mortem", post_mortem)
+    load_plugins()
     monkeypatch.delattr(sys, "_called_from_test")
     monkeypatch.delenv("LLM_RAISE_ERRORS", raising=False)
 
@@ -147,6 +150,7 @@ cli(["hello", "-m", "pdb-test", "--pdb"])
         text=True,
         timeout=15,
         check=False,
+        env={**os.environ, "LLM_LOAD_PLUGINS": ""},
     )
     assert result.returncode == 1
     assert "(Pdb)" in result.stdout
