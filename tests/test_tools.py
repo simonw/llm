@@ -442,6 +442,97 @@ async def test_async_toolbox():
     assert instance.prepared is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_toolbox_prepared_once_per_instance(async_):
+    events = []
+
+    class Tools(llm.Toolbox):
+        def __init__(self, label):
+            self.label = label
+
+        def prepare(self):
+            events.append((self.label, "prepare"))
+
+        async def prepare_async(self):
+            events.append((self.label, "prepare_async"))
+
+        def first(self):
+            events.append((self.label, "first"))
+            return self.label
+
+        def second(self):
+            events.append((self.label, "second"))
+            return self.label
+
+    first = Tools("a")
+    second = Tools("b")
+    # Distinct names allow two instances of the same toolbox in one prompt.
+    tools = [
+        llm.Tool.function(first.first, name="a_first"),
+        llm.Tool.function(second.first, name="b_first"),
+        llm.Tool.function(first.second, name="a_second"),
+        llm.Tool.function(second.second, name="b_second"),
+    ]
+    model = (llm.get_async_model if async_ else llm.get_model)("echo")
+    for name, expected in (("a_first", "a"), ("b_second", "b"), ("a_second", "a")):
+        # Reuse the toolbox instances across responses as well as tool calls.
+        response = model.prompt("", tools=tools)
+        result = response.execute_tool_call(llm.ToolCall(name=name, arguments={}))
+        if async_:
+            result = await result
+        assert result.output == expected
+        assert result.exception is None
+
+    prepare = "prepare_async" if async_ else "prepare"
+    assert events == [
+        ("a", prepare),
+        ("b", prepare),
+        ("a", "first"),
+        ("b", "second"),
+        ("a", "second"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_toolbox_preparation_failure_can_retry(async_):
+    events = []
+
+    class Tools(llm.Toolbox):
+        def prepare(self):
+            events.append("prepare")
+            if len(events) == 1:
+                raise RuntimeError("setup failed")
+
+        async def prepare_async(self):
+            self.prepare()
+
+        def first(self):
+            events.append("first")
+            return "first"
+
+        def second(self):
+            return "second"
+
+    tools = Tools()
+    model = (llm.get_async_model if async_ else llm.get_model)("echo")
+    response = model.prompt("", tools=[tools])
+    tool_call = llm.ToolCall(name="Tools_first", arguments={})
+    with pytest.raises(RuntimeError, match="setup failed"):
+        result = response.execute_tool_call(tool_call)
+        if async_:
+            await result
+    assert events == ["prepare"]
+
+    result = response.execute_tool_call(tool_call)
+    if async_:
+        result = await result
+    assert result.output == "first"
+    assert result.exception is None
+    assert events == ["prepare", "prepare", "first"]
+
+
 def test_toolbox_add_tool():
     model = llm.get_model("echo")
 
@@ -561,6 +652,27 @@ def test_cli_tools_with_options():
     assert result.exit_code == 0
     # It just needs not to crash
     # https://github.com/simonw/llm/issues/1233
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_cli_tools_with_usage(async_):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            "llm_version",
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+            "--usage",
+        ]
+        + (["--async"] if async_ else []),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    # One line for each response in the chain
+    assert result.stderr.count("Token usage:") == 2
 
 
 def test_functions_tool_locals():
@@ -930,6 +1042,39 @@ async def test_chain_async_cancel_only_first_of_two():
     assert results[1].exception is None
 
 
+def test_chain_limit_allows_final_response():
+    model = llm.get_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    payload = json.dumps({"tool_calls": [{"name": "t1"}]})
+    chain = model.conversation(chain_limit=2).chain(payload, tools=[t1])
+    chain.text()
+    assert len(chain._responses) == 2
+
+    chain = model.conversation(chain_limit=1).chain(payload, tools=[t1])
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        chain.text()
+
+
+@pytest.mark.asyncio
+async def test_chain_async_limit_allows_final_response():
+    async_model = llm.get_async_model("echo")
+
+    def t1() -> str:
+        return "ran1"
+
+    payload = json.dumps({"tool_calls": [{"name": "t1"}]})
+    chain = async_model.conversation(chain_limit=2).chain(payload, tools=[t1])
+    await chain.text()
+    assert len(chain._responses) == 2
+
+    chain = async_model.conversation(chain_limit=1).chain(payload, tools=[t1])
+    with pytest.raises(ValueError, match="Chain limit of 1 exceeded"):
+        await chain.text()
+
+
 def test_tool_function_receives_llm_tool_call():
     captured = {}
 
@@ -1248,21 +1393,29 @@ async def test_async_missing_tool_can_be_cancelled_by_before_call():
     ]
 
 
-@pytest.mark.asyncio
-async def test_async_tool_without_implementation_produces_error_result():
+def test_tool_without_implementation_error_matches_sync_and_async():
     tool = llm.Tool(
         name="no_impl",
         description="A tool with no implementation",
         input_schema={"type": "object", "properties": {}},
         implementation=None,
     )
-    model = llm.get_async_model("echo")
-    chain_response = model.chain(
-        json.dumps({"tool_calls": [{"name": "no_impl"}]}),
-        tools=[tool],
-    )
-    await chain_response.text()
-    second = chain_response._responses[1]
-    assert [(r.name, r.output) for r in second.prompt.tool_results] == [
+    prompt = json.dumps({"tool_calls": [{"name": "no_impl"}]})
+
+    sync_chain = llm.get_model("echo").chain(prompt, tools=[tool])
+    sync_chain.text()
+
+    async def run_async():
+        async_chain = llm.get_async_model("echo").chain(prompt, tools=[tool])
+        await async_chain.text()
+        return async_chain
+
+    async_chain = asyncio.run(run_async())
+
+    def tool_results(chain):
+        return [(r.name, r.output) for r in chain._responses[1].prompt.tool_results]
+
+    assert tool_results(sync_chain) == tool_results(async_chain)
+    assert tool_results(sync_chain) == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]

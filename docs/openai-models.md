@@ -69,6 +69,8 @@ OpenAI Responses: gpt-5.6-luna
 OpenAI Responses: gpt-6-astra
 OpenAI Responses: gpt-6-sol
 OpenAI Responses: gpt-6-luna
+OpenAI Responses: gpt-6.1-sol
+OpenAI Responses: chat-latest
 OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->

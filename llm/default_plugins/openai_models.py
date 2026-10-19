@@ -19,6 +19,7 @@ from llm import (
     AsyncConversation,
     AsyncKeyModel,
     AsyncResponse,
+    Attachment,
     Conversation,
     EmbeddingModel,
     KeyModel,
@@ -352,7 +353,13 @@ def register_models(register):
             ),
         )
     # GPT-6
-    for model_id in ("gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
+    for model_id in (
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-6.1-sol",
+        "chat-latest",
+    ):
         register(
             Responses(
                 model_id,
@@ -497,7 +504,10 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         self.dimensions = dimensions
 
     def embed_batch(
-        self, items: Iterable[str | bytes], *, key: str | None = None
+        self,
+        items: Iterable[str | bytes | Attachment],
+        *,
+        key: str | None = None,
     ) -> Iterator[list[float]]:
         kwargs = {
             "input": items,
