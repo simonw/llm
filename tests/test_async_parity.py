@@ -391,3 +391,17 @@ async def test_async_reply_chains_three_turns():
     assert texts[0] == "q1"
     assert texts[2] == "q2"
     assert texts[4] == "q3"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_conversation_prompt_uses_conversation_tools(async_):
+    def my_tool(x: int) -> int:
+        "Double the input."
+        return x * 2
+
+    get_model = llm.get_async_model if async_ else llm.get_model
+    conversation = get_model("echo").conversation(
+        tools=[llm.Tool.function(my_tool, name="my_tool")]
+    )
+    response = conversation.prompt("hello")
+    assert [tool.name for tool in response.prompt.tools] == ["my_tool"]
