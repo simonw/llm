@@ -3,6 +3,7 @@ import contextvars
 import json
 import os
 import re
+import threading
 import time
 from importlib.metadata import version
 
@@ -362,6 +363,23 @@ def test_tool_use_async_tool_function():
             ],
         },
     ]
+
+
+def test_async_tool_function_runs_on_calling_thread():
+    caller = str(threading.get_ident())
+
+    async def hello():
+        return str(threading.get_ident())
+
+    chain_response = llm.get_model("echo").chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}),
+        tools=[hello],
+    )
+    output = chain_response.text()
+    bits = output.split("\n} {\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    assert objects[1]["tool_results"][0]["output"] == caller
 
 
 @pytest.mark.asyncio
