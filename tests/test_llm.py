@@ -256,6 +256,83 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     assert result.output == "Hi.\n"
 
 
+@pytest.mark.parametrize(
+    "model_id,async_,url,response",
+    (
+        (
+            "gpt-4o-mini",
+            False,
+            "https://api.openai.com/v1/chat/completions",
+            {
+                "model": "gpt-4o-mini",
+                "usage": {},
+                "choices": [{"message": {"content": "Hello"}}],
+            },
+        ),
+        (
+            "gpt-4o-mini",
+            True,
+            "https://api.openai.com/v1/chat/completions",
+            {
+                "model": "gpt-4o-mini",
+                "usage": {},
+                "choices": [{"message": {"content": "Hello"}}],
+            },
+        ),
+        (
+            "gpt-3.5-turbo-instruct",
+            False,
+            "https://api.openai.com/v1/completions",
+            {
+                "id": "cmpl-stop-test",
+                "object": "text_completion",
+                "created": 1,
+                "model": "gpt-3.5-turbo-instruct",
+                "choices": [{"text": "Hello", "index": 0, "finish_reason": "stop"}],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            },
+        ),
+    ),
+)
+def test_openai_stop_json_array_is_sent_as_array(
+    db_factory, httpx2_mock, user_path, model_id, async_, url, response
+):
+    httpx2_mock.add_response(
+        method="POST",
+        url=url,
+        json=response,
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    args = [
+        "-m",
+        model_id,
+        "--key",
+        "x",
+        "--no-stream",
+        "-o",
+        "stop",
+        '["END", "STOP"]',
+        "Say hi",
+    ]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request_body["stop"] == ["END", "STOP"]
+
+    db = db_factory(str(user_path / "logs.db"))
+    turn = next(db["turns"].rows)
+    stored_options = json.loads(turn["options_json"])
+    assert stored_options["stop"] == ["END", "STOP"]
+    assert llm.get_model(model_id).Options(**stored_options).stop == ["END", "STOP"]
+
+
 def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
     log_db = db_factory(str(log_path))
@@ -504,8 +581,10 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Number between -2.0 and 2.0. Positive values penalize new tokens based
       on whether they appear in the text so far, increasing the model's
       likelihood to talk about new topics.
-    stop: str
-      A string where the API will stop generating further tokens.
+    stop: str, array
+      A string or a list of up to four strings where the API will stop
+      generating further tokens. Pass a JSON array for multiple stop
+      sequences.
     logit_bias: dict, str
       Modify the likelihood of specified tokens appearing in the completion.
       Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'

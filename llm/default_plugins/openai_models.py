@@ -5,7 +5,7 @@ import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
 from functools import cache
-from typing import Any, ClassVar, Literal, cast
+from typing import Annotated, Any, ClassVar, Literal, cast
 
 import click
 import httpx2
@@ -950,8 +950,11 @@ class SharedOptions(llm.Options):
         le=2,
         default=None,
     )
-    stop: str | None = Field(
-        description=("A string where the API will stop generating further tokens."),
+    stop: str | Annotated[list[str], Field(max_length=4)] | None = Field(
+        description=(
+            "A string or a list of up to four strings where the API will stop "
+            "generating further tokens. Pass a JSON array for multiple stop sequences."
+        ),
         default=None,
     )
     logit_bias: dict | str | None = Field(
@@ -965,6 +968,17 @@ class SharedOptions(llm.Options):
         description="Integer seed to attempt to sample deterministically",
         default=None,
     )
+
+    @field_validator("stop", mode="before")
+    def validate_stop(cls, stop):
+        if isinstance(stop, str):
+            try:
+                parsed = json.loads(stop)
+            except json.JSONDecodeError:
+                return stop
+            if isinstance(parsed, list):
+                return parsed
+        return stop
 
     @field_validator("logit_bias")
     def validate_logit_bias(cls, logit_bias):
