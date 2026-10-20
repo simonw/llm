@@ -1970,15 +1970,21 @@ class Response(_BaseResponse):
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    # A synchronous chain can be called from inside an existing
-                    # event loop (for example, in a notebook). Run the coroutine
-                    # in a worker thread so asyncio.run() gets its own loop.
-                    context = contextvars.copy_context()
-                    result = _sync_tool_executor.submit(
-                        context.run,
-                        _run_async_tool,
-                        tool.implementation(**implementation_arguments),
-                    ).result()
+                    coro = tool.implementation(**implementation_arguments)
+                    try:
+                        asyncio.get_running_loop()
+                    except RuntimeError:
+                        result = asyncio.run(coro)
+                    else:
+                        # A synchronous chain can be called from inside an existing
+                        # event loop (for example, in a notebook). Run the coroutine
+                        # in a worker thread so asyncio.run() gets its own loop.
+                        context = contextvars.copy_context()
+                        result = _sync_tool_executor.submit(
+                            context.run,
+                            _run_async_tool,
+                            coro,
+                        ).result()
                 else:
                     result = tool.implementation(**implementation_arguments)
 
