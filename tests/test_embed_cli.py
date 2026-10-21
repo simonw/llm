@@ -346,6 +346,15 @@ def test_similar_errors(args, expected_error, user_path_with_embeddings):
     assert expected_error in result.output
 
 
+def test_similar_by_id_cli_min_score(user_path_with_embeddings):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["similar", "demo", "1", "--min-score", "0.99"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert result.output == ""
+
+
 def test_similar_by_id_cli(user_path_with_embeddings):
     runner = CliRunner()
     result = runner.invoke(cli, ["similar", "demo", "1"], catch_exceptions=False)
