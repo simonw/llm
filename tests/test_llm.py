@@ -446,6 +446,29 @@ def test_openai_localai_configuration(db_factory, mocked_localai, user_path):
     }
 
 
+@pytest.mark.parametrize("responses_api", (False, True))
+@pytest.mark.parametrize("supports_urls", (None, True, False))
+def test_extra_openai_models_url_attachment_configuration(
+    user_path, responses_api, supports_urls
+):
+    config = {
+        "model_id": "local-vision",
+        "model_name": "vision-model",
+        "api_base": "http://localai.localhost/v1",
+        "vision": True,
+        "responses": responses_api,
+    }
+    if supports_urls is not None:
+        config["supports_url_attachments"] = supports_urls
+    (user_path / "extra-openai-models.yaml").write_text(json.dumps([config]), "utf-8")
+    for model in (llm.get_model("local-vision"), llm.get_async_model("local-vision")):
+        assert model.supports_url_attachments is (supports_urls is not False)
+        if responses_api:
+            assert model._delegate_chat_kwargs()["supports_url_attachments"] is (
+                supports_urls is not False
+            )
+
+
 def test_extra_openai_models_async(user_path):
     from llm.default_plugins.openai_models import AsyncChat
 

@@ -1,13 +1,134 @@
+import base64
 import json
 
+import httpx2
 import pytest
 from pytest_httpx2 import IteratorStream
 
 import llm
-from llm.default_plugins.openai_models import Chat
+from llm.default_plugins.openai_models import AsyncChat, AsyncResponses, Chat, Responses
 from llm.models import Prompt
 
 API_KEY = "badkey"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_class,chat_completions",
+    (
+        (Chat, False),
+        (AsyncChat, False),
+        (Responses, False),
+        (AsyncResponses, False),
+        (Responses, True),
+        (AsyncResponses, True),
+    ),
+)
+@pytest.mark.parametrize("supports_urls", (None, True, False))
+async def test_url_attachment_transport(
+    model_class, supports_urls, chat_completions, httpx2_mock
+):
+    image_url = "https://images.example.test/picture.png"
+    image_bytes = b"\x89PNG\r\n\x1a\nexample image"
+    kwargs = (
+        {} if supports_urls is None else {"supports_url_attachments": supports_urls}
+    )
+    model = model_class("test-vision", vision=True, **kwargs)
+    expected_url = image_url
+    if supports_urls is False:
+        httpx2_mock.add_response(method="GET", url=image_url, content=image_bytes)
+        expected_url = "data:image/png;base64,{}".format(
+            base64.b64encode(image_bytes).decode("ascii")
+        )
+    responses_api = (
+        isinstance(model, (Responses, AsyncResponses)) and not chat_completions
+    )
+    if responses_api:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json={
+                "id": "resp_test",
+                "object": "response",
+                "created_at": 1,
+                "model": "test-vision",
+                "output": [
+                    {
+                        "type": "message",
+                        "id": "msg_test",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {"type": "output_text", "text": "ok", "annotations": []}
+                        ],
+                    }
+                ],
+                "status": "completed",
+            },
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "test-vision",
+                "usage": {},
+                "choices": [{"message": {"content": "ok"}}],
+            },
+        )
+    options = {"image_detail": "high"}
+    if chat_completions and isinstance(model, (Responses, AsyncResponses)):
+        options["chat_completions"] = True
+    response = model.prompt(
+        "describe",
+        attachments=[llm.Attachment(type="image/png", url=image_url)],
+        stream=False,
+        key=API_KEY,
+        **options,
+    )
+    text = (
+        await response.text()
+        if isinstance(response, llm.AsyncResponse)
+        else response.text()
+    )
+    assert text == "ok"
+    assert len(httpx2_mock.get_requests(method="GET")) == (
+        1 if supports_urls is False else 0
+    )
+    request = httpx2_mock.get_requests(method="POST")[0]
+    payload = json.loads(request.content)
+    assert payload["model"] == "test-vision"
+    if responses_api:
+        assert payload["input"][0]["content"][1] == {
+            "type": "input_image",
+            "image_url": expected_url,
+            "detail": "high",
+        }
+    else:
+        assert payload["messages"][0]["content"][1] == {
+            "type": "image_url",
+            "image_url": {"url": expected_url, "detail": "high"},
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_class", (Chat, AsyncChat, Responses, AsyncResponses))
+async def test_url_attachment_download_failure(model_class, httpx2_mock):
+    image_url = "https://images.example.test/missing.png"
+    httpx2_mock.add_response(method="GET", url=image_url, status_code=404)
+    model = model_class("test-vision", vision=True, supports_url_attachments=False)
+    response = model.prompt(
+        "describe",
+        attachments=[llm.Attachment(type="image/png", url=image_url)],
+        key=API_KEY,
+        stream=False,
+    )
+    with pytest.raises(httpx2.HTTPStatusError, match="404"):
+        if isinstance(response, llm.AsyncResponse):
+            await response.text()
+        else:
+            response.text()
+    assert not httpx2_mock.get_requests(method="POST")
 
 
 def _sse(delta, finish_reason=None, usage=None, tool_calls=None):

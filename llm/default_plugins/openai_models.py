@@ -418,6 +418,8 @@ def register_models(register):
             kwargs["audio"] = True
         if extra_model.get("service_tier") is True:
             kwargs["service_tier"] = True
+        if extra_model.get("supports_url_attachments") is False:
+            kwargs["supports_url_attachments"] = False
         if extra_model.get("completion"):
             klass = Completion
             async_klass = None
@@ -1132,10 +1134,14 @@ def build_options_class(
     return create_model("Options", __base__=SharedOptions, **fields)
 
 
-def _attachment(attachment, image_detail=None):
+def _attachment(attachment, image_detail=None, supports_url_attachments=True):
     url = attachment.url
     base64_content = ""
-    if not url or attachment.resolve_type().startswith("audio/"):
+    if (
+        not url
+        or not supports_url_attachments
+        or attachment.resolve_type().startswith("audio/")
+    ):
         base64_content = attachment.base64_content()
         url = f"data:{attachment.resolve_type()};base64,{base64_content}"
     if attachment.resolve_type() == "application/pdf":
@@ -1200,6 +1206,7 @@ class _Shared:
         supports_schema=False,
         supports_tools=False,
         allows_system_prompt=True,
+        supports_url_attachments=True,
     ):
         self.model_id = model_id
         self.key = key
@@ -1214,6 +1221,7 @@ class _Shared:
         self.can_stream = can_stream
         self.vision = vision
         self.allows_system_prompt = allows_system_prompt
+        self.supports_url_attachments = supports_url_attachments
 
         self.attachment_types = set()
 
@@ -1271,7 +1279,11 @@ class _Shared:
                 text_bits.append(part.text)
             elif isinstance(part, AttachmentPart) and part.attachment:
                 attachment_items.append(
-                    _attachment(part.attachment, image_detail=image_detail)
+                    _attachment(
+                        part.attachment,
+                        image_detail=image_detail,
+                        supports_url_attachments=self.supports_url_attachments,
+                    )
                 )
             elif isinstance(part, ToolCallPart):
                 tool_calls.append(
@@ -1646,11 +1658,15 @@ class AsyncChat(_Shared, AsyncKeyModel):
         response._prompt_json = redact_data({"messages": messages})
 
 
-def _responses_attachment(attachment, image_detail=None):
+def _responses_attachment(attachment, image_detail=None, supports_url_attachments=True):
     """Translate an llm Attachment into a Responses-API content part."""
     url = attachment.url
     base64_content = ""
-    if not url or attachment.resolve_type().startswith("audio/"):
+    if (
+        not url
+        or not supports_url_attachments
+        or attachment.resolve_type().startswith("audio/")
+    ):
         base64_content = attachment.base64_content()
         url = f"data:{attachment.resolve_type()};base64,{base64_content}"
     if attachment.resolve_type() == "application/pdf":
@@ -1959,6 +1975,7 @@ class _SharedResponses(_Shared):
             "supports_schema": self.supports_schema,
             "supports_tools": self.supports_tools,
             "allows_system_prompt": self.allows_system_prompt,
+            "supports_url_attachments": self.supports_url_attachments,
         }
 
     def _build_responses_input(
@@ -2001,7 +2018,9 @@ class _SharedResponses(_Shared):
                 elif isinstance(part, AttachmentPart) and part.attachment:
                     attachment_items.append(
                         _responses_attachment(
-                            part.attachment, image_detail=image_detail
+                            part.attachment,
+                            image_detail=image_detail,
+                            supports_url_attachments=self.supports_url_attachments,
                         )
                     )
                 elif isinstance(part, ToolCallPart):
@@ -2483,6 +2502,7 @@ class Responses(_SharedResponses, KeyModel):
         supports_tools=False,
         allows_system_prompt=True,
         reasoning_summary=True,
+        supports_url_attachments=True,
     ):
         super().__init__(
             model_id,
@@ -2503,6 +2523,7 @@ class Responses(_SharedResponses, KeyModel):
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
+            supports_url_attachments=supports_url_attachments,
         )
         self._reasoning = reasoning
         self._reasoning_summary = reasoning_summary
@@ -2729,6 +2750,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         supports_tools=False,
         allows_system_prompt=True,
         reasoning_summary=True,
+        supports_url_attachments=True,
     ):
         super().__init__(
             model_id,
@@ -2749,6 +2771,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             supports_schema=supports_schema,
             supports_tools=supports_tools,
             allows_system_prompt=allows_system_prompt,
+            supports_url_attachments=supports_url_attachments,
         )
         self._reasoning = reasoning
         self._reasoning_summary = reasoning_summary
