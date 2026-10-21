@@ -32,6 +32,111 @@ def logged_rows(db):
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.parametrize("usage_flag", [None, "-u", "--usage"])
+@pytest.mark.parametrize("no_stream", [False, True])
+def test_chat_usage(mock_model, logs_db, usage_flag, no_stream):
+    mock_model.enqueue(["one world"])
+    mock_model.enqueue(["one", " again"])
+    args = ["chat", "-m", "mock"]
+    if usage_flag:
+        args.append(usage_flag)
+    if no_stream:
+        args.append("--no-stream")
+    runner = CliRunner()
+    result = runner.invoke(
+        llm.cli.cli, args, input="Hi\nHi two\nquit\n", catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert "\n> Hi\none world\n> Hi two\none again\n> quit\n" in result.stdout
+    assert result.stderr == (
+        "Token usage: 1 input, 1 output\nToken usage: 2 input, 2 output\n"
+        if usage_flag
+        else ""
+    )
+    assert [row["input_tokens"] for row in logged_rows(logs_db)] == [1, 2]
+    assert [row["output_tokens"] for row in logged_rows(logs_db)] == [1, 2]
+    assert all(stream == (not no_stream) for _, stream, _, _ in mock_model.history)
+
+    # Continuing a chat reports only the new turn, not the logged history.
+    mock_model.enqueue(["continued"])
+    continued = runner.invoke(
+        llm.cli.cli,
+        args + ["-c"],
+        input="Continue\nquit\n",
+        catch_exceptions=False,
+    )
+    assert continued.exit_code == 0
+    assert continued.stderr == (
+        "Token usage: 1 input, 1 output\n" if usage_flag else ""
+    )
+    assert len(logged_rows(logs_db)) == 3
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.parametrize("no_stream", [False, True])
+def test_chat_usage_tool_chain(mock_model, logs_db, monkeypatch, no_stream):
+    def execute(prompt, stream, response, conversation):
+        if not prompt.tool_results:
+            response.add_tool_call(llm.ToolCall(name="hello", arguments={}))
+            response.set_usage(input=1000, output=20)
+        else:
+            assert prompt.tool_results[0].output == "Hello"
+            response.set_usage(input=1100, output=30)
+            yield "Done"
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+    args = [
+        "chat",
+        "-m",
+        "mock",
+        "-u",
+        "--functions",
+        "def hello():\n    return 'Hello'",
+    ]
+    if no_stream:
+        args.append("--no-stream")
+    result = CliRunner().invoke(
+        llm.cli.cli, args, input="Say hello\nquit\n", catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert "\nDone\n" in result.stdout
+    assert result.stderr == (
+        "Token usage: 1,000 input, 20 output\n" "Token usage: 1,100 input, 30 output\n"
+    )
+    assert [row["input_tokens"] for row in logged_rows(logs_db)] == [1000, 1100]
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.parametrize(
+    "usage,expected",
+    [
+        (None, ""),
+        ({"input": 0, "output": 0}, "0 input, 0 output"),
+        (
+            {"input": 10, "output": 5, "details": {"cached_tokens": 3}},
+            '10 input, 5 output, {"cached_tokens": 3}',
+        ),
+    ],
+)
+def test_chat_usage_optional_counts(mock_model, logs_db, monkeypatch, usage, expected):
+    def execute(prompt, stream, response, conversation):
+        yield "Hello"
+        if usage is not None:
+            response.set_usage(**usage)
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock", "--usage"],
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.stderr == f"Token usage: {expected}\n"
+    assert len(logged_rows(logs_db)) == 1
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_basic(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["one world"])

@@ -202,6 +202,7 @@ Options:
   -d, --database FILE           Path to log database
   --no-stream                   Do not stream output
   -R, --hide-reasoning          Hide reasoning output
+  -u, --usage                   Show token usage after each chat turn
   --key TEXT                    API key to use
   -T, --tool TEXT               Name of a tool to make available to the model
   --functions TEXT              Python code block or file path defining

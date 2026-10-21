@@ -133,6 +133,21 @@ async def display_async_stream_events(events, *, show_reasoning=True):
             click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
 
 
+def _display_token_usage(response):
+    responses = (
+        response._responses if isinstance(response, _BaseChainResponse) else [response]
+    )
+    for response_object in responses:
+        click.echo(
+            click.style(
+                f"Token usage: {response_object.token_usage()}",
+                fg="yellow",
+                bold=True,
+            ),
+            err=True,
+        )
+
+
 def _run_chat(
     model_label,
     prompt_callback,
@@ -142,6 +157,7 @@ def _run_chat(
     initial_attachments=None,
     transform_prompt=None,
     show_reasoning=True,
+    show_usage=False,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
     click.echo(f"Chatting with {model_label}")
@@ -214,6 +230,8 @@ def _run_chat(
             show_reasoning=show_reasoning,
         )
         print()
+        if show_usage:
+            _display_token_usage(response)
 
 
 def validate_fragment_alias(ctx, param, value):
@@ -1146,20 +1164,7 @@ def prompt(
         raise click.ClickException(str(ex))
 
     if usage:
-        if isinstance(response, _BaseChainResponse):
-            responses = response._responses
-        else:
-            responses = [response]
-        for response_object in responses:
-            # Show token usage to stderr in yellow
-            click.echo(
-                click.style(
-                    f"Token usage: {response_object.token_usage()}",
-                    fg="yellow",
-                    bold=True,
-                ),
-                err=True,
-            )
+        _display_token_usage(response)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1224,6 +1229,9 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
+@click.option(
+    "-u", "--usage", is_flag=True, help="Show token usage after each chat turn"
+)
 @click.option("--key", help="API key to use")
 @tool_options
 def chat(
@@ -1238,6 +1246,7 @@ def chat(
     options,
     no_stream,
     hide_reasoning,
+    usage,
     key,
     database,
     tools,
@@ -1391,6 +1400,7 @@ def chat(
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
         show_reasoning=not hide_reasoning,
+        show_usage=usage,
     )
 
 

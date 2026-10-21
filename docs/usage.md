@@ -530,6 +530,14 @@ your queries.
 
 Type `quit` or `exit` followed by `<enter>` to end a chat session.
 
+Use `-u` or `--usage` to display token usage on standard error after each chat turn:
+
+```bash
+llm chat -u
+```
+
+This uses the same format as `llm -u`, for example `Token usage: 10 input, 20 output`. If a turn makes multiple model calls using tools, usage is shown separately for each response.
+
 Sometimes you may want to paste multiple lines of text into a chat at once - for example when debugging an error message.
 
 To do that, type `!multi` to start a multi-line input. Type or paste your text, then type `!end` and hit `<enter>` to finish.
