@@ -312,6 +312,7 @@ class Collection:
         number: int = 10,
         skip_id: str | None = None,
         prefix: str | None = None,
+        min_score: float | None = None,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given vector.
@@ -321,6 +322,8 @@ class Collection:
             number (int, optional): Number of similar items to return
             skip_id (str, optional): An ID to exclude from the results
             prefix: (str, optional): Filter results to IDs witih this prefix
+            min_score (float, optional): Only return items with a score at or
+                above this cosine similarity
 
         Returns:
             list: List of Entry objects
@@ -334,7 +337,7 @@ class Collection:
         self.db.register_function(distance_score, replace=True)
 
         where_bits = ["collection_id = ?"]
-        where_args = [str(self.id)]
+        where_args: list[str | float] = [str(self.id)]
 
         if prefix:
             where_bits.append("id LIKE ? || '%'")
@@ -343,6 +346,11 @@ class Collection:
         if skip_id:
             where_bits.append("id != ?")
             where_args.append(skip_id)
+
+        having = ""
+        if min_score is not None:
+            having = "and distance_score(embedding) >= ?"
+            where_args.append(min_score)
 
         return [
             Entry(
@@ -357,10 +365,11 @@ class Collection:
             select id, content, content_type, metadata,
                 distance_score(embedding) as score
             from embeddings
-            where {where}
+            where {where} {having}
             order by score desc limit {number}
         """.format(
                     where=" and ".join(where_bits),
+                    having=having,
                     number=number,
                 ),
                 where_args,
@@ -368,7 +377,11 @@ class Collection:
         ]
 
     def similar_by_id(
-        self, id: str, number: int = 10, prefix: str | None = None
+        self,
+        id: str,
+        number: int = 10,
+        prefix: str | None = None,
+        min_score: float | None = None,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given ID.
@@ -393,7 +406,7 @@ class Collection:
         embedding = matches[0]["embedding"]
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(
-            comparison_vector, number, skip_id=id, prefix=prefix
+            comparison_vector, number, skip_id=id, prefix=prefix, min_score=min_score
         )
 
     def similar(
@@ -401,6 +414,7 @@ class Collection:
         value: str | bytes | Attachment,
         number: int = 10,
         prefix: str | None = None,
+        min_score: float | None = None,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given value.
@@ -409,12 +423,15 @@ class Collection:
             value (str, bytes or Attachment): value to search by
             number (int, optional): Number of similar items to return
             prefix: (str, optional): Filter results to IDs with this prefix
+            min_score (float, optional): Only return items scoring at least this
 
         Returns:
             list: List of Entry objects
         """
         comparison_vector = self.model().embed(self._materialize(value))
-        return self.similar_by_vector(comparison_vector, number, prefix=prefix)
+        return self.similar_by_vector(
+            comparison_vector, number, prefix=prefix, min_score=min_score
+        )
 
     @classmethod
     def exists(cls, db: Database, name: str) -> bool:
