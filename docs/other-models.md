@@ -7,20 +7,61 @@ LLM supports OpenAI models by default. You can install {ref}`plugins <plugins>` 
 
 {ref}`LLM plugins <plugins>` can provide local models that run on your machine.
 
-To install **[llm-gpt4all](https://github.com/simonw/llm-gpt4all)**, providing 17 models from the [GPT4All](https://gpt4all.io/) project, run this:
+The most convenient options run the model in a separate server process, so it stays loaded in memory between `llm` calls instead of being reloaded every time:
+
+- **[llm-ollama](https://github.com/taketwo/llm-ollama)** uses [Ollama](https://ollama.com/), which has installers for macOS, Windows and Linux and manages model downloads for you.
+- **[llm-llama-server](https://github.com/simonw/llm-llama-server)** uses the `llama-server` binary from [llama.cpp](https://github.com/ggml-org/llama.cpp), which can serve any GGUF model from Hugging Face.
+
+On a Mac, **[llm-mlx](https://github.com/simonw/llm-mlx)** runs models directly inside LLM using Apple's MLX framework. There is no server to run, but the model is loaded fresh for each `llm` invocation.
+
+### Ollama
+
+Install [Ollama](https://ollama.com/download), then pull a model and install the plugin:
 
 ```bash
-llm install llm-gpt4all
+ollama pull gemma3
+llm install llm-ollama
 ```
-Run `llm models` to see the expanded list of available models.
 
-To run a prompt through one of the models from GPT4All specify it using `-m/--model`:
+The plugin discovers every model available on the Ollama server and registers it with LLM. Run `llm ollama models` to see them, along with their capabilities. Models with a `:latest` tag also get a shorter alias, so these are equivalent:
+
 ```bash
-llm -m orca-mini-3b-gguf2-q4_0 'What is the capital of France?'
+llm -m gemma3:latest 'What is the capital of France?'
+llm -m gemma3 'What is the capital of France?'
 ```
-The model will be downloaded and cached the first time you use it.
 
-Check the {ref}`plugin directory <plugin-directory>` for the latest list of available plugins for other models.
+Ollama models that support images, tools, structured output or embeddings can use the corresponding LLM features. See the [llm-ollama README](https://github.com/taketwo/llm-ollama) for details, including how to connect to a remote Ollama server.
+
+### llama-server
+
+Install `llama-server` (on a Mac, `brew install llama.cpp`) and start it with a model from Hugging Face. This example downloads a 3.2GB GGUF version of Gemma 3 4B:
+
+```bash
+llama-server -hf unsloth/gemma-3-4b-it-GGUF:Q4_K_XL
+```
+
+Then install the plugin and run prompts against the `llama-server` model, which talks to the server on port 8080:
+
+```bash
+llm install llm-llama-server
+llm -m llama-server 'What is the capital of France?'
+```
+
+Use `llama-server-vision` for image attachments and `llama-server-tools` for {ref}`tools <tools>`. The tools model requires `llama-server` to have been started with the `--jinja` flag. The [llm-llama-server README](https://github.com/simonw/llm-llama-server) has more.
+
+### MLX (Mac only)
+
+Install the plugin, then download a model from the [mlx-community](https://huggingface.co/mlx-community) organization on Hugging Face. This example is a 1.8GB download:
+
+```bash
+llm install llm-mlx
+llm mlx download-model mlx-community/Llama-3.2-3B-Instruct-4bit
+llm -m mlx-community/Llama-3.2-3B-Instruct-4bit 'What is the capital of France?'
+```
+
+The [llm-mlx README](https://github.com/simonw/llm-mlx) lists other models that work well, plus the model options you can set.
+
+Check the {ref}`plugin directory <plugin-directory-local-models>` for the full list of plugins that provide local models.
 
 (openai-compatible-models)=
 
