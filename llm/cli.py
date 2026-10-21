@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import csv
 import inspect
 import io
 import json
@@ -13,6 +14,7 @@ import sys
 import textwrap
 import warnings
 from collections.abc import Iterable
+from contextlib import closing
 from dataclasses import asdict
 from importlib.metadata import version
 from runpy import run_module
@@ -42,6 +44,7 @@ from llm import (
     Tool,
     Toolbox,
     UnknownModelError,
+    decode,
     encode,
     get_async_model,
     get_default_embedding_model,
@@ -4013,6 +4016,86 @@ def embed_db_collections(database, json_):
                     row["num_embeddings"], "s" if row["num_embeddings"] != 1 else ""
                 )
             )
+
+
+@collections.command(name="show")
+@click.argument("collection")
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(dir_okay=False),
+    envvar="LLM_EMBEDDINGS_DB",
+    help="Path to embeddings database",
+)
+@click.option(
+    "format_",
+    "--format",
+    type=click.Choice(["json", "csv", "tsv", "nl"]),
+    default="json",
+    show_default=True,
+    help="Output format (nl is newline-delimited JSON)",
+)
+def collections_show(collection, database, format_):
+    """Export the stored entries in an embedding collection."""
+    database = pathlib.Path(database) if database else (user_dir() / "embeddings.db")
+    if not database.exists():
+        raise click.ClickException(f"Database '{database}' does not exist")
+    # Do not migrate the database or load its model just to inspect stored data.
+    try:
+        connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    except sqlite3.Error as ex:
+        raise click.ClickException(str(ex)) from ex
+    with closing(connection) as conn:
+        conn.row_factory = sqlite3.Row
+        try:
+            collection_row = conn.execute(
+                "select id from collections where name = ?", [collection]
+            ).fetchone()
+            if collection_row is None:
+                raise click.ClickException(f"Collection '{collection}' does not exist")
+            rows = conn.execute(
+                "select * from embeddings where collection_id = ? order by id",
+                [collection_row["id"]],
+            )
+        except sqlite3.Error as ex:
+            raise click.ClickException(str(ex)) from ex
+
+        fields = ["id", "embedding", "content", "content_blob", "metadata", "updated"]
+        writer = None
+        if format_ in ("csv", "tsv"):
+            writer = csv.DictWriter(
+                sys.stdout,
+                fieldnames=fields,
+                delimiter="," if format_ == "csv" else "\t",
+                lineterminator="\n",
+            )
+            writer.writeheader()
+        elif format_ == "json":
+            click.echo("[", nl=False)
+        first = True
+        for raw_row in rows:
+            stored = dict(raw_row)
+            row = {field: stored.get(field) for field in fields}
+            row["embedding"] = list(decode(row["embedding"]))
+            if row["metadata"] is not None:
+                row["metadata"] = json.loads(row["metadata"])
+            if row["content_blob"] is not None:
+                row["content_blob"] = base64.b64encode(row["content_blob"]).decode(
+                    "ascii"
+                )
+            if writer is not None:
+                row["embedding"] = json.dumps(row["embedding"])
+                if row["metadata"] is not None:
+                    row["metadata"] = json.dumps(row["metadata"], ensure_ascii=False)
+                writer.writerow(row)
+            elif format_ == "nl":
+                click.echo(json.dumps(row, ensure_ascii=False))
+            else:
+                click.echo("" if first else ",", nl=False)
+                click.echo(json.dumps(row, ensure_ascii=False), nl=False)
+            first = False
+        if format_ == "json":
+            click.echo("]")
 
 
 @collections.command(name="delete")

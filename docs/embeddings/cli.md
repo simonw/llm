@@ -474,6 +474,41 @@ Add `-d/--database` to specify a different database file:
 ```bash
 llm collections list -d my-embeddings.db
 ```
+## llm collections show
+
+Export the stored entries in a collection as a JSON array:
+
+```bash
+llm collections show my-collection > collection.json
+```
+
+Use `--format` to select JSON, newline-delimited JSON (`nl`), CSV, or TSV:
+
+```bash
+llm collections show my-collection --format nl > collection.jsonl
+llm collections show my-collection --format csv > collection.csv
+llm collections show my-collection --format tsv > collection.tsv
+llm collections show my-collection -d my-embeddings.db
+```
+
+`LLM_EMBEDDINGS_DB` can also select the database. Entries are ordered by ID.
+Each entry contains `id`, `embedding` (an array of numbers), `content`,
+`content_blob` (Base64-encoded binary content), `metadata`, and `updated`
+(a Unix timestamp). Content that was not stored is `null` in JSON. In CSV
+and TSV, missing values are empty cells, and arrays and objects are JSON
+strings inside cells.
+
+The command reads the database without modifying it or loading the embedding
+model. It streams entries, so it does not need to load the entire collection
+into memory. An empty collection produces `[]` for JSON, no lines for `nl`,
+or just the header for CSV and TSV.
+
+These formats match the format choices accepted by `llm embed-multi`, but the
+export is not a directly re-importable backup: `embed-multi` computes new
+embeddings from input content rather than restoring these vectors. The export
+does not include the collection's model configuration. Keep the embeddings
+database itself if you need a complete backup.
+
 ## llm collections delete
 
 To delete a collection from the database, run this:
