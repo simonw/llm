@@ -682,6 +682,9 @@ def cli():
 @click.option("--key", help="API key to use")
 @click.option("--save", help="Save prompt with this template name")
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
+@click.option(
+    "--pdb", "debug", is_flag=True, help="Enter debugger on prompt execution errors"
+)
 @click.option("-u", "--usage", is_flag=True, help="Show token usage")
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
@@ -727,6 +730,7 @@ def prompt(
     key,
     save,
     async_,
+    debug,
     usage,
     extract,
     extract_last,
@@ -1152,10 +1156,14 @@ def prompt(
                     text = extract_fenced_code_block(text, last=extract_last) or text
                 if not json_output:
                     print(text)
-    # List of exceptions that should never be raised in pytest:
-    except (ValueError, NotImplementedError) as ex:
-        raise click.ClickException(str(ex))
     except Exception as ex:
+        if debug:
+            import pdb  # noqa: T100 - Explicitly requested by --pdb.
+
+            pdb.post_mortem(ex.__traceback__)
+        # These exceptions should always be shown as Click errors.
+        if isinstance(ex, (ValueError, NotImplementedError)):
+            raise click.ClickException(str(ex))
         # All other exceptions should raise in pytest, show to user otherwise
         if getattr(sys, "_called_from_test", False) or os.environ.get(
             "LLM_RAISE_ERRORS", None
