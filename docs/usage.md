@@ -49,6 +49,22 @@ Will run a prompt of:
 ```
 For models that support them, {ref}`system prompts <usage-system-prompts>` are a better tool for this kind of prompting.
 
+(usage-repeat-input)=
+### Repeating piped input
+
+Use `-r` or `--repeat` to output the original piped text before the model response:
+
+```bash
+cat code.py | llm --repeat 'Write tests for this code'
+```
+
+The input is copied as-is, without adding a newline. Only piped prompt text is
+repeated, not command-line prompt arguments or binary attachments. This can be
+useful when filtering selected text in an editor and keeping the original text.
+With `--extract`, only the model response is processed for code blocks.
+`--repeat` cannot be combined with `--json`, and produces no output when saving
+a template with `--save`. Stored prompts and responses are unchanged.
+
 (usage-model-options)=
 ### Model options
 

@@ -685,6 +685,9 @@ def cli():
 @click.option("-u", "--usage", is_flag=True, help="Show token usage")
 @click.option("-x", "--extract", is_flag=True, help="Extract first fenced code block")
 @click.option(
+    "-r", "--repeat", is_flag=True, help="Repeat piped input before the response"
+)
+@click.option(
     "extract_last",
     "--xl",
     "--extract-last",
@@ -731,6 +734,7 @@ def prompt(
     extract,
     extract_last,
     json_output,
+    repeat,
 ):
     """
     Execute a prompt
@@ -784,6 +788,8 @@ def prompt(
     """
     if log and no_log:
         raise click.ClickException("--log and --no-log are mutually exclusive")
+    if repeat and json_output:
+        raise click.ClickException("--repeat and --json are mutually exclusive")
 
     if queries and not model_id:
         # Use -q options to find model with shortest model_id
@@ -823,8 +829,10 @@ def prompt(
         # Convert that schema into multiple "items" of the same schema
         schema = multi_schema(schema)
 
+    repeated_stdin = ""
+
     def read_prompt():
-        nonlocal prompt, schema
+        nonlocal prompt, schema, repeated_stdin
 
         # Is there extra prompt available on stdin?
         stdin_prompt = None
@@ -832,6 +840,7 @@ def prompt(
             stdin_prompt = sys.stdin.read()
 
         if stdin_prompt:
+            repeated_stdin = stdin_prompt
             bits = [stdin_prompt]
             if prompt:
                 bits.append(prompt)
@@ -1090,6 +1099,8 @@ def prompt(
     if hide_reasoning:
         kwargs["hide_reasoning"] = True
 
+    if repeat and repeated_stdin:
+        click.echo(repeated_stdin, nl=False, color=True)
     # Commit each completed response before the chain does any more work.
     log_db = None
     if (logs_on() or log) and not no_log:

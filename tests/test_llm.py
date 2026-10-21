@@ -24,6 +24,138 @@ def test_version():
     assert result.output.startswith("cli, version ")
 
 
+@pytest.mark.parametrize("repeat", (None, "-r", "--repeat"))
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("no_stream", (False, True))
+@pytest.mark.parametrize(
+    "stdin,argument",
+    (
+        ("lots of code selected\n", "Please write tests for this."),
+        ("lots of code selected\n", None),
+        ("no trailing newline", "Explain this"),
+        ("  café = 1\t\n\n", "Explain this"),
+        ("\x1b[31mcolored text\x1b[0m\n", "Explain this"),
+        ("", "Explain this"),
+        (None, "Explain this"),
+    ),
+)
+def test_repeat_stdin(
+    mock_model, async_mock_model, repeat, async_, no_stream, stdin, argument
+):
+    model = async_mock_model if async_ else mock_model
+    model.enqueue(["The ", "response"])
+    args = ["-m", "mock", "-s", "System instructions"]
+    if repeat:
+        args.append(repeat)
+    if async_:
+        args.append("--async")
+    if no_stream:
+        args.append("--no-stream")
+    if argument:
+        args.append(argument)
+    runner = CliRunner()
+    result = runner.invoke(cli, args, input=stdin, catch_exceptions=False)
+    assert result.exit_code == 0
+    expected_prefix = (stdin or "") if repeat else ""
+    assert result.stdout == expected_prefix + "The response\n"
+    assert result.stderr == ""
+    expected_prompt = " ".join(part for part in (stdin, argument) if part)
+    prompt, stream, _, _ = model.history[0]
+    assert prompt.prompt == expected_prompt
+    assert prompt.system == "System instructions"
+    assert stream is not no_stream
+
+    # Repeating stdin must not alter the recorded prompt or response.
+    logs = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    row = json.loads(logs.output)[0]
+    assert row["prompt"] == expected_prompt
+    assert row["response"] == "The response"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_repeat_stdin_with_template(
+    mock_model, async_mock_model, templates_path, async_
+):
+    (templates_path / "repeat-example.yaml").write_text(
+        'prompt: "Write tests for $input"', encoding="utf-8"
+    )
+    model = async_mock_model if async_ else mock_model
+    model.enqueue(["The response"])
+    args = ["-m", "mock", "-t", "repeat-example", "--repeat"]
+    if async_:
+        args.append("--async")
+    result = CliRunner().invoke(cli, args, input="code\n", catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "code\nThe response\n"
+    assert model.history[0][0].prompt == "Write tests for code\n"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_repeat_stdin_with_extract(mock_model, async_mock_model, async_):
+    model = async_mock_model if async_ else mock_model
+    model.enqueue(["Here are your tests:\n```python\nassert True\n```"])
+    args = ["-m", "mock", "--repeat", "--extract"]
+    if async_:
+        args.append("--async")
+    result = CliRunner().invoke(cli, args, input="code\n", catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "code\nassert True\n\n"
+
+
+def test_repeat_stdin_not_attachment(mock_model):
+    mock_model.enqueue(["The response"])
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "--repeat", "describe", "--at", "-", "image/png"],
+        input=b"\x89PNG\r\n\x1a\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.stdout == "The response\n"
+    assert mock_model.history[0][0].attachments[0].content == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.parametrize("tty", (False, True))
+def test_repeat_stdin_does_not_add_reads(mock_model, tty):
+    mock_model.enqueue(["The response"])
+    with CliRunner().isolation(input="code\n") as (stdout, _, _):
+        with (
+            mock.patch.object(sys.stdin, "isatty", return_value=tty),
+            mock.patch.object(sys.stdin, "read", wraps=sys.stdin.read) as read,
+        ):
+            cli.main(
+                args=["-m", "mock", "--repeat", "Write tests"],
+                standalone_mode=False,
+            )
+            sys.stdout.flush()
+        assert read.call_count == (0 if tty else 1)
+        assert stdout.getvalue() == (b"" if tty else b"code\n") + b"The response\n"
+
+
+@pytest.mark.parametrize(
+    "args,exit_code",
+    (
+        (["--save", "saved"], 0),
+        (["--json"], 1),
+        (["-o", "max_tokens", "invalid"], 1),
+        (["-f", "missing-fragment"], 1),
+        (["-T", "missing-tool"], 1),
+    ),
+)
+def test_repeat_stdin_no_output_without_response(mock_model, args, exit_code):
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "--repeat"] + args,
+        input="code\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == exit_code
+    assert result.stdout == ""
+    assert mock_model.history == []
+    if "--json" in args:
+        assert result.stderr == "Error: --repeat and --json are mutually exclusive\n"
+
+
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
     db_factory, mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
