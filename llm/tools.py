@@ -18,14 +18,16 @@ def llm_time() -> dict:
     local_tz_name = time.tzname[time.localtime().tm_isdst]
     is_dst = bool(time.localtime().tm_isdst)
 
-    # Calculate offset
+    # Calculate offset. Compute the magnitude with divmod() rather than
+    # floor-dividing a negative value, which rounds -3:30 down to -4:00,
+    # and apply the sign separately so the hours are always zero-padded
+    # to two digits (":02d" does not pad the sign of a negative number).
     offset_seconds = -time.timezone if not is_dst else -time.altzone
-    offset_hours = offset_seconds // 3600
-    offset_minutes = (offset_seconds % 3600) // 60
+    offset_sign = "+" if offset_seconds >= 0 else "-"
+    offset_hours, offset_remainder = divmod(abs(offset_seconds), 3600)
+    offset_minutes = offset_remainder // 60
 
-    timezone_offset = (
-        f"UTC{'+' if offset_hours >= 0 else ''}{offset_hours:02d}:{offset_minutes:02d}"
-    )
+    timezone_offset = f"UTC{offset_sign}{offset_hours:02d}:{offset_minutes:02d}"
 
     return {
         "utc_time": utc_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
