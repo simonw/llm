@@ -2600,16 +2600,37 @@ def templates_list():
                 text.append(f" prompt: {template.prompt}")
         else:
             text = [template.prompt if template.prompt else ""]
-        pairs.append((name, "".join(text).replace("\n", " ")))
+        pairs.append(
+            (name, "".join(text).replace("\n", " "), _template_markers(template))
+        )
     try:
         max_name_len = max(len(p[0]) for p in pairs)
     except ValueError:
         return
     else:
-        fmt = "{name:<" + str(max_name_len) + "} : {prompt}"
-        for name, prompt in sorted(pairs):
-            text = fmt.format(name=name, prompt=prompt)
-            click.echo(display_truncated(text))
+        fmt = "{name:<" + str(max_name_len) + "} : "
+        for name, prompt, markers in sorted(pairs):
+            click.echo(
+                display_truncated(prompt, prefix=fmt.format(name=name), suffix=markers)
+            )
+
+
+def _template_markers(template):
+    # Short markers for settings a template pins, shown by `llm templates`
+    markers = []
+    if template.model:
+        markers.append(f"[model: {template.model}]")
+    if template.schema_object:
+        markers.append("[schema]")
+    if template.tools:
+        tools = ", ".join(template.tools)
+        if len(tools) > 30:
+            # Toolbox specs can be long, show a count instead
+            tools = str(len(template.tools))
+        markers.append(f"[tools: {tools}]")
+    if template.functions:
+        markers.append("[functions]")
+    return " ".join(markers).replace("\n", " ")
 
 
 @templates.command(name="show")
@@ -3278,12 +3299,17 @@ def plugins_list(all, hooks):
     click.echo(json.dumps(plugins, indent=2))
 
 
-def display_truncated(text):
-    console_width = shutil.get_terminal_size()[0]
-    if len(text) > console_width:
-        return text[: console_width - 3] + "..."
-    else:
-        return text
+def display_truncated(text, prefix="", suffix=""):
+    # prefix and suffix are always shown in full, text is truncated to make room
+    if suffix:
+        suffix = " " + suffix
+    width = shutil.get_terminal_size()[0] - len(prefix) - len(suffix)
+    if len(text) > width:
+        text = text[: max(width - 3, 0)] + "..."
+    line = prefix + text
+    if suffix:
+        line = line.rstrip()
+    return line + suffix
 
 
 @cli.command()
