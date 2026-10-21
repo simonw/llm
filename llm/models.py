@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextvars
 import dataclasses
 import datetime
 import functools
@@ -15,6 +16,7 @@ from collections.abc import (
     Iterable,
     Iterator,
 )
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path
@@ -51,6 +53,12 @@ from .utils import (
 )
 
 CONVERSATION_NAME_LENGTH = 32
+
+_sync_tool_executor = ThreadPoolExecutor()
+
+
+def _run_async_tool(coro):
+    return asyncio.run(coro)
 
 
 @dataclass
@@ -1962,9 +1970,21 @@ class Response(_BaseResponse):
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(
-                        tool.implementation(**implementation_arguments)
-                    )
+                    coro = tool.implementation(**implementation_arguments)
+                    try:
+                        asyncio.get_running_loop()
+                    except RuntimeError:
+                        result = asyncio.run(coro)
+                    else:
+                        # A synchronous chain can be called from inside an existing
+                        # event loop (for example, in a notebook). Run the coroutine
+                        # in a worker thread so asyncio.run() gets its own loop.
+                        context = contextvars.copy_context()
+                        result = _sync_tool_executor.submit(
+                            context.run,
+                            _run_async_tool,
+                            coro,
+                        ).result()
                 else:
                     result = tool.implementation(**implementation_arguments)
 
