@@ -182,7 +182,7 @@ class Collection:
                     value.resolve_type() if isinstance(value, Attachment) else None
                 ),
                 "content_hash": content_hash,
-                "metadata": json.dumps(metadata) if metadata else None,
+                "metadata": json.dumps(metadata) if metadata is not None else None,
                 "updated": int(time.time()),
             },
             replace=True,
@@ -284,7 +284,9 @@ class Collection:
                                 else None
                             ),
                             "content_hash": self.content_hash(value),
-                            "metadata": json.dumps(metadata) if metadata else None,
+                            "metadata": (
+                                json.dumps(metadata) if metadata is not None else None
+                            ),
                             "updated": int(time.time()),
                         }
                         for (embedding, (id, value, metadata)) in zip(

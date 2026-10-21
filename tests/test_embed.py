@@ -152,6 +152,25 @@ def test_embed_metadata(collection):
     assert entry.content == "hello yet again"
 
 
+@pytest.mark.parametrize("bulk", [False, True])
+@pytest.mark.parametrize("metadata", [{}, {"label": "example"}, None])
+def test_embed_metadata_roundtrip(collection, bulk, metadata):
+    if bulk:
+        collection.embed_multi_with_metadata([("3", "empty metadata", metadata)])
+    else:
+        collection.embed("3", "empty metadata", metadata=metadata)
+    row = next(collection.db["embeddings"].rows_where("id = ?", ["3"]))
+    if metadata is None:
+        assert row["metadata"] is None
+    else:
+        assert row["metadata"] is not None
+        assert json.loads(row["metadata"]) == metadata
+    entry = next(
+        item for item in collection.similar("empty metadata") if item.id == "3"
+    )
+    assert entry.metadata == metadata
+
+
 def test_collection_embed_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
     request.addfinalizer(collection.db.close)
