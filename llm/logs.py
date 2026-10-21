@@ -1955,7 +1955,8 @@ select responses.id,
                     'type', a.type,
                     'path', a.path,
                     'url', a.url,
-                    'content', a.content
+                    'content', case when length(a.content) then json('true') else null end,
+                    'content_length', nullif(length(a.content), 0)
                 ))
                 from tool_results_attachments tra
                 join attachments a on tra.attachment_id = a.id
