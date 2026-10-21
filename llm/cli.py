@@ -2589,7 +2589,9 @@ def templates_list():
     for file in path.glob("*.yaml"):
         name = file.stem
         try:
-            template = load_template(name)
+            # Load this file directly, load_template(name) would prefer
+            # a file or directory called name in the current directory
+            template = _load_template_file(name, file)
         except LoadTemplateError:
             # Skip invalid templates
             continue
@@ -2639,7 +2641,7 @@ def templates_edit(name):
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
     click.edit(filename=str(path))
     # Validate that template
-    load_template(name)
+    _load_template_file(name, path)
 
 
 @templates.command(name="path")
@@ -4374,7 +4376,11 @@ def load_template(name: str) -> Template:
 
     potential_path = pathlib.Path(name)
 
-    if has_plugin_prefix(name) and not potential_path.exists():
+    # A directory with the same name as the template is not a template
+    # file - not using is_file() here so /dev/stdin and <(...) still work
+    is_local_file = potential_path.exists() and not potential_path.is_dir()
+
+    if has_plugin_prefix(name) and not is_local_file:
         prefix, rest = name.split(":", 1)
         loaders = get_template_loaders()
         if prefix not in loaders:
@@ -4386,14 +4392,22 @@ def load_template(name: str) -> Template:
             raise LoadTemplateError(f"Could not load template {name}: {ex}")
 
     # Try local file
-    if potential_path.exists():
+    if is_local_file:
         path = potential_path
     else:
         # Look for template in template_dir()
         path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
-    content = path.read_text()
+    return _load_template_file(name, path)
+
+
+def _load_template_file(name: str, path: pathlib.Path) -> Template:
+    "Load template from a YAML file, or raise LoadTemplateError(msg)"
+    try:
+        content = path.read_text()
+    except OSError as ex:
+        raise LoadTemplateError(f"Could not read template {name}: {ex}")
     template_obj = _parse_yaml_template(name, content)
     # We trust functions here because they came from the filesystem
     template_obj._functions_is_trusted = True

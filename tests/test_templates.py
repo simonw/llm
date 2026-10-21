@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 import textwrap
+import threading
 from importlib.metadata import version
 from unittest import mock
 
@@ -458,6 +459,56 @@ def test_execute_prompt_from_template_path(tmp_path):
         "stream": True,
         "previous": [],
     }
+
+
+def test_template_name_matches_local_directory_or_file(
+    templates_path, tmp_path, monkeypatch
+):
+    # A directory or file in the current directory with the same name as a
+    # saved template should not break that template
+    (templates_path / "docs.yaml").write_text("prompt: summarize the docs", "utf-8")
+    (templates_path / "hi.yaml").write_text("prompt: hello", "utf-8")
+    workdir = tmp_path / "work"
+    (workdir / "docs").mkdir(parents=True)
+    (workdir / "hi").write_text("not: a template", "utf-8")
+    # Unreadable entries in the templates directory are skipped
+    (templates_path / "folder.yaml").mkdir()
+    if hasattr(os, "symlink") and os.name != "nt":
+        pathlib.Path(templates_path / "dangling.yaml").symlink_to(tmp_path / "missing")
+    monkeypatch.chdir(workdir)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == "docs : summarize the docs\nhi   : hello\n"
+    result = runner.invoke(cli, ["templates", "show", "docs"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "prompt: summarize the docs" in result.output
+    result = runner.invoke(
+        cli, ["-t", "docs", "-m", "echo", "--no-stream"], catch_exceptions=False
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["prompt"] == "summarize the docs"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="Needs os.mkfifo")
+def test_template_from_named_pipe(tmp_path):
+    # Like llm -t <(echo 'prompt: from a pipe')
+    fifo = tmp_path / "template"
+    os.mkfifo(fifo)
+
+    def write():
+        with open(fifo, "w") as fp:
+            fp.write("prompt: from a pipe")
+
+    writer = threading.Thread(target=write, daemon=True)
+    writer.start()
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["-t", str(fifo), "-m", "echo", "--no-stream"], catch_exceptions=False
+    )
+    writer.join(timeout=5)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["prompt"] == "from a pipe"
 
 
 def test_template_respects_cli_extract_flag(
