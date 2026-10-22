@@ -723,6 +723,11 @@ def _merge_options(options: dict | None, kwargs: dict) -> dict:
     return {**options, **kwargs}
 
 
+# Chains are bounded by default so a model that keeps requesting a tool cannot loop forever. The CLI passes
+# its own value (it defaults --chain-limit to 5); this is the default the Python API falls back to.
+DEFAULT_CHAIN_LIMIT = 10
+
+
 @dataclass
 class _BaseConversation:
     model: "_BaseModel"
@@ -730,7 +735,7 @@ class _BaseConversation:
     name: str | None = None
     responses: list["_BaseResponse"] = field(default_factory=list)
     tools: list[ToolDef] | None = None
-    chain_limit: int | None = None
+    chain_limit: int | None = DEFAULT_CHAIN_LIMIT
     # History read back from storage, used as the chain for the next turn
     # when this conversation has not yet produced a response in this
     # process. Unlike a chain rebuilt from logged responses this is the
@@ -2853,7 +2858,7 @@ class _BaseChainResponse:
         stream: bool,
         conversation: _BaseConversation,
         key: str | None = None,
-        chain_limit: int | None = 10,
+        chain_limit: int | None = DEFAULT_CHAIN_LIMIT,
         before_call: BeforeCallSync | BeforeCallAsync | None = None,
         after_call: AfterCallSync | AfterCallAsync | None = None,
     ):
@@ -3288,7 +3293,7 @@ class _Model(_BaseModel):
         tools: list[ToolDef] | None = None,
         before_call: BeforeCallSync | None = None,
         after_call: AfterCallSync | None = None,
-        chain_limit: int | None = None,
+        chain_limit: int | None = DEFAULT_CHAIN_LIMIT,
     ) -> Conversation:
         return Conversation(
             model=self,
@@ -3414,7 +3419,7 @@ class _AsyncModel(_BaseModel):
         tools: list[ToolDef] | None = None,
         before_call: BeforeCallAsync | None = None,
         after_call: AfterCallAsync | None = None,
-        chain_limit: int | None = None,
+        chain_limit: int | None = DEFAULT_CHAIN_LIMIT,
     ) -> AsyncConversation:
         return AsyncConversation(
             model=self,

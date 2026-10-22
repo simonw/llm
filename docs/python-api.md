@@ -135,7 +135,7 @@ follow_up = response.reply(
     tool_results=[llm.ToolResult(name="upper", output="PANDA", tool_call_id="...")],
 )
 ```
-For an automatic loop that keeps going until the model stops requesting tools, use `model.chain()` — it passes tool call results back to the model automatically as subsequent prompts:
+For an automatic loop that keeps going until the model stops requesting tools, use `model.chain()` — it passes tool call results back to the model automatically as subsequent prompts. The loop is bounded: `model.chain()` and `conversation().chain()` stop after 10 tool calls and raise `ValueError` rather than looping forever. Pass `chain_limit=` to change the bound, or `chain_limit=0` to remove it and keep going until the model stops requesting tools:
 ```python
 chain_response = model.chain(
     "Convert panda to upper",
@@ -143,6 +143,10 @@ chain_response = model.chain(
 )
 print(chain_response.text())
 # The word "panda" converted to uppercase is "PANDA".
+```
+To keep the previous unbounded behaviour, pass `chain_limit=0`:
+```python
+chain_response = model.chain("Convert panda to upper", tools=[upper], chain_limit=0)
 ```
 You can also loop through the `model.chain()` response to get a stream of tokens, like this:
 ```python
