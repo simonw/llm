@@ -1960,7 +1960,12 @@ def logs_list(
             # Maybe they uninstalled a model, use the -m option as-is
             model_id = model
 
-    fragment_hashes = [fragment.id() for fragment in resolve_fragments(db, fragments)]
+    try:
+        fragment_hashes = [
+            fragment.id() for fragment in resolve_fragments(db, fragments)
+        ]
+    except FragmentNotFound as ex:
+        raise click.ClickException(str(ex))
 
     schema_id = make_schema_id(schema)[0] if schema else None
 
