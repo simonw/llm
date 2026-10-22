@@ -325,7 +325,7 @@ class Collection:
         self.db.register_function(distance_score, replace=True)
 
         where_bits = ["collection_id = ?"]
-        where_args: list[str | float] = [str(self.id)]
+        where_args = [str(self.id)]
 
         if prefix:
             where_bits.append("id LIKE ? || '%'")
@@ -335,11 +335,9 @@ class Collection:
             where_bits.append("id != ?")
             where_args.append(skip_id)
 
-        having = ""
-        if min_score is not None:
-            having = "and distance_score(embedding) >= ?"
-            where_args.append(min_score)
-
+        # Filter on min_score in Python after the top-N query, so each cosine
+        # score is only computed once per row. Results are ordered by score,
+        # so this gives the same entries as filtering before the limit.
         return [
             Entry(
                 id=row["id"],
@@ -353,15 +351,15 @@ class Collection:
             select id, content, content_type, metadata,
                 distance_score(embedding) as score
             from embeddings
-            where {where} {having}
+            where {where}
             order by score desc limit {number}
         """.format(
                     where=" and ".join(where_bits),
-                    having=having,
                     number=number,
                 ),
                 where_args,
             )
+            if min_score is None or row["score"] >= min_score
         ]
 
     def similar_by_id(
