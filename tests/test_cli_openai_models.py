@@ -111,6 +111,14 @@ def test_deprecated_models_are_not_registered(model_id):
         llm.get_async_model(model_id)
 
 
+def test_gpt_5_2_chat_latest_is_not_registered():
+    # https://github.com/simonw/llm/issues/1696 - OpenAI shut this model down
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_model("gpt-5.2-chat-latest")
+    with pytest.raises(llm.UnknownModelError):
+        llm.get_async_model("gpt-5.2-chat-latest")
+
+
 def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx2_mock):
     httpx2_mock.add_response(
         method="POST",
