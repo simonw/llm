@@ -151,6 +151,32 @@ def test_templates_list(templates_path, args):
             },
             None,
         ),
+        # The top-level -e/--effort shortcut must be captured in saved
+        # templates too (it maps to the model's reasoning effort option).
+        (
+            ["-m", "gpt-5", "-e", "high"],
+            {
+                "model": "gpt-5",
+                "options": {"reasoning_effort": "high"},
+            },
+            None,
+        ),
+        # An explicit -o for the reasoning option wins over -e.
+        (
+            ["-m", "gpt-5", "-e", "high", "-o", "reasoning_effort", "minimal"],
+            {
+                "model": "gpt-5",
+                "options": {"reasoning_effort": "minimal"},
+            },
+            None,
+        ),
+        # -e against a model with no reasoning effort option errors, even on
+        # the --save path.
+        (
+            ["-m", "gpt-4o-mini", "-e", "high"],
+            None,
+            "does not support --effort",
+        ),
     ),
 )
 def test_templates_prompt_save(
