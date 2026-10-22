@@ -332,6 +332,59 @@ class TestChainRoundTrip:
         ]
         assert round_trip(store, messages) == messages
 
+    @pytest.mark.parametrize("tool_result", [False, True])
+    def test_shared_attachment_bytes_preserve_each_references_media_type(
+        self, store, tool_result
+    ):
+        png = Attachment(type="image/png", content=b"same bytes")
+        text = Attachment(type="text/plain", content=b"same bytes")
+
+        def message(attachment):
+            if tool_result:
+                return llm.tool_message(
+                    ToolResultPart(name="read", output="file", attachments=[attachment])
+                )
+            return llm.user(attachment)
+
+        first = store.ensure_chain([message(png)])
+        second = store.ensure_chain([message(text)])
+        loaded = store.load_chain(first)[0].parts[0]
+        original = loaded.attachments[0] if tool_result else loaded.attachment
+        assert original.type == "image/png"
+        assert original.content == b"same bytes"
+        loaded = store.load_chain(second)[0].parts[0]
+        latest = loaded.attachments[0] if tool_result else loaded.attachment
+        assert latest.type == "text/plain"
+        assert store.db["attachments"].count == 1
+        assert store.verify() == []
+
+    def test_same_bytes_with_distinct_types_in_one_tool_result(self, store):
+        messages = [
+            llm.tool_message(
+                ToolResultPart(
+                    name="read",
+                    output="files",
+                    attachments=[
+                        Attachment(type="image/png", content=b"same bytes"),
+                        Attachment(type="text/plain", content=b"same bytes"),
+                    ],
+                )
+            )
+        ]
+        assert round_trip(store, messages) == messages
+        assert store.db["attachments"].count == 1
+        assert store.verify() == []
+
+    def test_legacy_attachment_reference_without_media_type(self, store):
+        messages = [llm.user(Attachment(type="image/png", content=b"bytes"))]
+        tip = store.ensure_chain(messages)
+        row = next(store.db["parts"].rows)
+        payload = json.loads(row["payload"])
+        payload["attachment"].pop("type", None)
+        store.db["parts"].update(row["id"], {"payload": json.dumps(payload)})
+        assert store.load_chain(tip) == messages
+        assert store.verify() == []
+
     def test_attachment_content_is_shared_with_legacy_table(self, store):
         store.ensure_chain(
             [llm.user("Describe", Attachment(type="image/png", content=b"bytes"))]
