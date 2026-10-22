@@ -21,6 +21,9 @@ from llm.plugins import pm
         ("S: $input", "system", None, {}, "S: input", "system", None),
         ("No vars", None, None, {}, "No vars", None, None),
         ("$one and $two", None, None, {}, None, None, "Missing variables: one, two"),
+        # A variable reused in the template is reported once, not once per use.
+        ("$name and $name", None, None, {}, None, None, "Missing variables: name"),
+        ("$a $b $a", None, None, {}, None, None, "Missing variables: a, b"),
         ("$one and $two", None, None, {"one": 1, "two": 2}, "1 and 2", None, None),
         ("$one and $two", None, {"one": 1}, {"two": 2}, "1 and 2", None, None),
         ("$one and $$2", None, None, {"one": 1}, "1 and $2", None, None),
