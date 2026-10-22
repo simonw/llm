@@ -680,6 +680,7 @@ def cli():
     help="Continue the conversation with the given ID.",
 )
 @click.option("--key", help="API key to use")
+@click.option("--name", help="Set the conversation name")
 @click.option("--save", help="Save prompt with this template name")
 @click.option("async_", "--async", is_flag=True, help="Run prompt asynchronously")
 @click.option("-u", "--usage", is_flag=True, help="Show token usage")
@@ -725,6 +726,7 @@ def prompt(
     _continue,
     conversation_id,
     key,
+    name,
     save,
     async_,
     usage,
@@ -1016,6 +1018,9 @@ def prompt(
         # creating it here means both writers agree on which conversation
         # (and so which thread) this response belongs to.
         conversation = model.conversation()
+
+    if name is not None:
+        conversation.name = name
 
     if conversation:
         # To ensure it can see the key
