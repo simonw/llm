@@ -49,6 +49,20 @@ def test_template_evaluate(
         assert system == expected_system
 
 
+def test_template_evaluate_does_not_modify_params():
+    params = {"name": "Ada", "input": "stale input"}
+    template = Template(
+        name="greeting",
+        prompt="$name: $input ($language)",
+        defaults={"language": "English"},
+    )
+
+    prompt, system = template.evaluate("Hello", params)
+
+    assert (prompt, system) == ("Ada: Hello (English)", None)
+    assert params == {"name": "Ada", "input": "stale input"}
+
+
 def test_templates_list_no_templates_found():
     runner = CliRunner()
     result = runner.invoke(cli, ["templates", "list"])
