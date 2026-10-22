@@ -2070,12 +2070,12 @@ class Response(_BaseResponse):
             yield chunk
 
     def __iter__(self) -> Iterator[str]:
-        self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
             yield from self._chunks
             return
 
+        self._start = time.monotonic()
+        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         for chunk in self._iter_events():
             text = self._process_chunk(chunk)
             if text is not None:
@@ -2498,10 +2498,11 @@ class AsyncResponse(_BaseResponse):
         return results[0]
 
     def __aiter__(self):
-        self._start = time.monotonic()
-        self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         if self._done:
             self._iter_chunks = list(self._chunks)  # Make a copy for iteration
+        else:
+            self._start = time.monotonic()
+            self._start_utcnow = datetime.datetime.now(datetime.timezone.utc)
         return self
 
     def _ensure_async_generator(self):
