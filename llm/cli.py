@@ -23,6 +23,7 @@ import httpx2
 import pydantic
 import sqlite_utils
 import yaml
+from click.shell_completion import get_completion_class
 from click_default_group import DefaultGroup
 from sqlite_utils.utils import Format, rows_from_file
 
@@ -578,6 +579,14 @@ def cli():
 
         llm prompt --help
     """
+
+
+@cli.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completions(shell):
+    """Generate a shell completion script for bash, zsh or fish."""
+    completion_class = get_completion_class(shell)
+    click.echo(completion_class(cli, {}, "llm", "_LLM_COMPLETE").source(), nl=False)
 
 
 @cli.command(name="prompt")

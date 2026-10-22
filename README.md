@@ -165,6 +165,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
 
 * [Setup](https://llm.datasette.io/en/stable/setup.html)
   * [Installation](https://llm.datasette.io/en/stable/setup.html#installation)
+  * [Shell completion](https://llm.datasette.io/en/stable/setup.html#shell-completion)
   * [Upgrading to the latest version](https://llm.datasette.io/en/stable/setup.html#upgrading-to-the-latest-version)
   * [Using uvx](https://llm.datasette.io/en/stable/setup.html#using-uvx)
   * [A note about Homebrew and PyTorch](https://llm.datasette.io/en/stable/setup.html#a-note-about-homebrew-and-pytorch)
@@ -380,6 +381,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
   * [Symbex](https://llm.datasette.io/en/stable/related-tools.html#symbex)
 * [CLI reference](https://llm.datasette.io/en/stable/help.html)
   * [llm  –help](https://llm.datasette.io/en/stable/help.html#llm-help)
+    * [llm completions –help](https://llm.datasette.io/en/stable/help.html#llm-completions-help)
     * [llm prompt –help](https://llm.datasette.io/en/stable/help.html#llm-prompt-help)
     * [llm chat –help](https://llm.datasette.io/en/stable/help.html#llm-chat-help)
     * [llm keys –help](https://llm.datasette.io/en/stable/help.html#llm-keys-help)
