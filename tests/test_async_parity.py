@@ -128,6 +128,43 @@ async def test_async_from_row_response_messages_synthesized(db_factory, tmp_path
     assert isinstance(msgs[0].parts[0], llm.parts.TextPart)
 
 
+@pytest.mark.asyncio
+async def test_async_from_row_restores_token_usage(db_factory, tmp_path):
+    """Async twin of the sync from_row usage test: token usage recorded
+    in the row must survive rehydration."""
+
+    from llm.migrations import migrate
+
+    db = db_factory(str(tmp_path / "logs.db"))
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "model": "echo",
+            "prompt": "hello",
+            "system": None,
+            "prompt_json": None,
+            "options_json": "{}",
+            "response": "echoed text",
+            "response_json": None,
+            "conversation_id": None,
+            "duration_ms": 1,
+            "datetime_utc": "2025-01-01T00:00:00",
+            "schema_id": None,
+            "input_tokens": 123,
+            "output_tokens": 45,
+            "token_details": '{"reasoning_tokens": 12}',
+        },
+        alter=True,
+    )
+
+    row = next(db["responses"].rows)
+    rehydrated = llm.AsyncResponse.from_row(db, row)
+    assert await rehydrated.usage() == llm.Usage(
+        input=123, output=45, details={"reasoning_tokens": 12}
+    )
+
+
 # ---- AsyncConversation follow-up via load_conversation -------------
 
 
