@@ -917,7 +917,9 @@ def prompt(
                     if v is not None
                 }
             except pydantic.ValidationError as ex:
-                raise click.ClickException(render_errors(ex.errors()))
+                raise click.ClickException(
+                    render_option_errors(ex.errors(), model.model_id)
+                )
         path.write_text(
             yaml.safe_dump(
                 to_save,
@@ -1032,7 +1034,9 @@ def prompt(
                 if value is not None
             }
         except pydantic.ValidationError as ex:
-            raise click.ClickException(render_errors(ex.errors()))
+            raise click.ClickException(
+                render_option_errors(ex.errors(), model.model_id)
+            )
 
     # Add on any default model options
     default_options = get_model_options(model.model_id)
@@ -1325,7 +1329,9 @@ def chat(
                 if value is not None
             }
         except pydantic.ValidationError as ex:
-            raise click.ClickException(render_errors(ex.errors()))
+            raise click.ClickException(
+                render_option_errors(ex.errors(), model.model_id)
+            )
 
     kwargs = {}
     if validated_options:
@@ -4222,6 +4228,13 @@ def render_errors(errors):
         output.append(", ".join(error["loc"]))
         output.append("  " + error["msg"])
     return "\n".join(output)
+
+
+def render_option_errors(errors, model_id):
+    message = render_errors(errors)
+    if any(error["type"] == "extra_forbidden" for error in errors):
+        message += f"\nRun `llm -m {model_id} --options` to see supported options."
+    return message
 
 
 load_plugins()
