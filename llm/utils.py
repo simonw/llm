@@ -1,9 +1,11 @@
+import contextlib
 import hashlib
 import itertools
 import json
 import os
 import pathlib
 import re
+import sys
 import textwrap
 import threading
 import time
@@ -18,6 +20,38 @@ from ulid import ULID
 MIME_TYPE_FIXES = {
     "audio/wave": "audio/wav",
 }
+
+
+@contextlib.contextmanager
+def redirect_stdout_to_stderr():
+    """Temporarily redirect OS-level stdout (file descriptor 1) to stderr.
+
+    Some native libraries write log messages straight to file descriptor 1,
+    bypassing both ``sys.stdout`` and ``contextlib.redirect_stdout``. For
+    example, llama.cpp (used by the ``llm-llama-cpp`` plugin) and gpt4all
+    emit diagnostics this way. Wrapping those native calls in this context
+    manager routes that noise to stderr, leaving stdout free for model output.
+
+    This changes file descriptor 1 process-wide, so the redirect affects every
+    thread while the context manager is active.
+    """
+    stdout = sys.__stdout__ or sys.stdout
+    stderr = sys.__stderr__ or sys.stderr
+    stdout_fd = stdout.fileno()
+    stderr_fd = stderr.fileno()
+    stdout.flush()
+    saved_stdout_fd = os.dup(stdout_fd)
+    try:
+        os.dup2(stderr_fd, stdout_fd)
+        try:
+            yield
+        finally:
+            stdout.flush()
+    finally:
+        try:
+            os.dup2(saved_stdout_fd, stdout_fd)
+        finally:
+            os.close(saved_stdout_fd)
 
 
 class Fragment(str):
