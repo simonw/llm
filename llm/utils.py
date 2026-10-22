@@ -199,14 +199,14 @@ def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
     # Regex pattern to match fenced code blocks
     # - ^ or \n ensures that the fence is at the start of a line
     # - (`{3,}) captures the opening backticks (at least three)
-    # - (\w+)? optionally captures the language tag
+    # - ([^\r\n]*) optionally captures the info string (language tag plus any attributes)
     # - \r?\n matches the newline after the opening fence
     # - (.*?) non-greedy match for the code block content
     # - (?P=fence) ensures that the closing fence has the same number of backticks
     # - [ ]* allows for optional spaces between the closing fence and newline
     # - (?=\r?\n|$) ensures that the closing fence is followed by a newline or end of string
     pattern = re.compile(
-        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\r?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\r?\n|$)""",
+        r"""(?m)^(?P<fence>`{3,})(?P<lang>[^\r\n]*)\r?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\r?\n|$)""",
         re.DOTALL,
     )
     matches = list(pattern.finditer(text))
