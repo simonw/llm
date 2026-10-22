@@ -197,6 +197,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
   * [Configuration](https://llm.datasette.io/en/stable/openai-models.html#configuration)
   * [OpenAI language models](https://llm.datasette.io/en/stable/openai-models.html#openai-language-models)
   * [Model features](https://llm.datasette.io/en/stable/openai-models.html#model-features)
+  * [Stop sequences](https://llm.datasette.io/en/stable/openai-models.html#stop-sequences)
   * [Web Search](https://llm.datasette.io/en/stable/openai-models.html#web-search)
   * [Code Interpreter](https://llm.datasette.io/en/stable/openai-models.html#code-interpreter)
   * [Fast mode and service tiers](https://llm.datasette.io/en/stable/openai-models.html#fast-mode-and-service-tiers)

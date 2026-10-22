@@ -2,6 +2,7 @@ import json
 
 import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 import llm
 from llm.cli import cli
@@ -61,6 +62,68 @@ def test_openai_options_min_max():
         result2 = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
         assert result2.exit_code == 1
         assert f"less than or equal to {max_val}" in result2.output
+
+
+@pytest.mark.parametrize(
+    "stop",
+    (
+        [],
+        ["[END]"],
+        ["first", "second", "third", "fourth"],
+    ),
+)
+@pytest.mark.parametrize("as_json", (False, True))
+def test_openai_stop_accepts_lists_of_up_to_four_strings(stop, as_json):
+    for model in (llm.get_model("gpt-4o-mini"), llm.get_async_model("gpt-4o-mini")):
+        options = model.Options(stop=json.dumps(stop) if as_json else stop)
+        assert options.stop == stop
+
+
+@pytest.mark.parametrize(
+    "stop",
+    (
+        [1],
+        ["first", None],
+        ["one", "two", "three", "four", "five"],
+    ),
+)
+@pytest.mark.parametrize("as_json", (False, True))
+def test_openai_stop_rejects_non_string_members_and_more_than_four(stop, as_json):
+    for model in (llm.get_model("gpt-4o-mini"), llm.get_async_model("gpt-4o-mini")):
+        with pytest.raises(ValidationError):
+            model.Options(stop=json.dumps(stop) if as_json else stop)
+
+
+@pytest.mark.parametrize("stop", ("[END]", "123", "null", "one,two", "停止"))
+def test_openai_stop_strings_are_sent_unchanged(httpx2_mock, stop):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [{"message": {"content": "Hello"}}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "-m",
+            "gpt-4o-mini",
+            "--key",
+            "x",
+            "--no-stream",
+            "-o",
+            "stop",
+            stop,
+            "Say hi",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request_body["stop"] == stop
 
 
 @pytest.mark.parametrize(

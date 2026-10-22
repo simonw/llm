@@ -90,6 +90,27 @@ The following features work with OpenAI models:
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
+## Stop sequences
+
+For Chat Completions and completion models that support stop sequences, use `stop` to end generation when a sequence is encountered. Pass a single string or a JSON array of up to four strings:
+
+```bash
+llm -m gpt-4o 'List colors' -o stop '["END", "STOP"]'
+```
+
+The Python API accepts a list directly:
+
+```python
+import llm
+
+response = llm.get_model("gpt-4o").prompt("List colors", stop=["END", "STOP"])
+print(response.text())
+```
+
+Ordinary strings, including strings containing commas, are used as a single stop sequence. A string that decodes to a JSON array is interpreted as a list of sequences. To stop on a literal JSON array, pass that string inside a one-item list.
+
+The Responses API does not support this option. Stop sequence support also depends on the selected model.
+
 (openai-models-web-search)=
 
 ## Web Search
