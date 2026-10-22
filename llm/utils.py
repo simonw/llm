@@ -437,11 +437,19 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
 
 def multi_schema(schema: dict) -> dict:
     "Wrap JSON schema in an 'items': [] array"
-    return {
+    item_schema = schema.copy()
+    wrapped = {
         "type": "object",
-        "properties": {"items": {"type": "array", "items": schema}},
+        "properties": {"items": {"type": "array", "items": item_schema}},
         "required": ["items"],
     }
+    # References such as #/$defs/Address still resolve from the document root.
+    # A schema with its own $id is a separate resource and keeps its definitions.
+    if "$id" not in schema:
+        for keyword in ("$defs", "definitions"):
+            if keyword in item_schema:
+                wrapped[keyword] = item_schema.pop(keyword)
+    return wrapped
 
 
 def find_unused_key(item: dict, key: str) -> str:
