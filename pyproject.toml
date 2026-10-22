@@ -40,6 +40,7 @@ dependencies = [
     "pip",
     "pyreadline3; sys_platform == 'win32'",
     "puremagic",
+    "opentelemetry-api>=1.37",
 ]
 
 [dependency-groups]
@@ -60,6 +61,7 @@ dev = [
     "types-PyYAML",
     "types-setuptools",
     "llm-echo==0.3a3",
+    "opentelemetry-sdk>=1.37",
     # docs
     "sphinx==7.2.6",
     "furo==2023.9.10",
