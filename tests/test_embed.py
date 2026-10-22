@@ -168,6 +168,34 @@ def test_collection_embed_multi_key(embed_key_demo, request):
     assert embed_key_demo.key is None
 
 
+@pytest.mark.parametrize("model_argument", ("model", "model_id", "alias", "both"))
+def test_new_collection_model_id(
+    db_factory, tmp_path, embed_demo, embed_key_demo, model_argument
+):
+    path = str(tmp_path / "embeddings.db")
+    db = db_factory(path)
+    if model_argument == "model":
+        kwargs = {"model": embed_demo}
+    elif model_argument == "alias":
+        llm.set_alias("embedding-alias", "embed-demo")
+        kwargs = {"model_id": "embedding-alias"}
+    elif model_argument == "both":
+        # model_id takes precedence when both constructor arguments are given.
+        kwargs = {"model": embed_key_demo, "model_id": "embed-demo"}
+    else:
+        kwargs = {"model_id": "embed-demo"}
+    collection = llm.Collection("new", db, **kwargs)
+
+    assert collection.model_id == "embed-demo"
+    assert collection.model().model_id == collection.model_id
+    assert db["collections"].get(collection.id)["model"] == collection.model_id
+
+    reopened = llm.Collection("new", db_factory(path), create=False)
+    assert reopened.model_id == collection.model_id
+    assert reopened.model().model_id == collection.model_id
+    assert embed_demo.embedded_content == []
+
+
 def test_collection(collection):
     assert collection.id == 1
     assert collection.count() == 2
