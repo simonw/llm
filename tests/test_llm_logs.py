@@ -921,6 +921,15 @@ def test_logs_fragments(fragments_fixture, fragment_refs, expected):
     assert reshaped2 == expected
 
 
+def test_logs_unknown_fragment_is_a_clean_error(fragments_fixture):
+    result = CliRunner().invoke(
+        cli,
+        ["logs", "-d", fragments_fixture["path"], "-f", "no-such-fragment"],
+    )
+    assert result.exit_code == 1
+    assert result.output == "Error: Fragment 'no-such-fragment' not found\n"
+
+
 def test_logs_fragments_markdown(fragments_fixture):
     fragments_log_path = fragments_fixture["path"]
     fragment_hashes_by_slug = fragments_fixture["fragment_hashes_by_slug"]
