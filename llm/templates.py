@@ -9,6 +9,14 @@ class AttachmentType(BaseModel):
     value: str
 
 
+class InlineFragment(BaseModel):
+    """Literal fragment content stored in a template."""
+
+    content: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class Template(BaseModel):
     """A reusable prompt template."""
 
@@ -23,8 +31,8 @@ class Template(BaseModel):
     extract: bool | None = None  # For extracting fenced code blocks
     extract_last: bool | None = None
     schema_object: dict | None = None
-    fragments: list[str] | None = None
-    system_fragments: list[str] | None = None
+    fragments: list[str | InlineFragment] | None = None
+    system_fragments: list[str | InlineFragment] | None = None
     tools: list[str] | None = None
     functions: str | None = None
 

@@ -72,6 +72,7 @@ from .logs import (
 )
 from .migrations import migrate
 from .plugins import load_plugins, pm
+from .templates import InlineFragment
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
@@ -241,7 +242,9 @@ def validate_fragment_alias(ctx, param, value):
 
 
 def resolve_fragments(
-    db: sqlite_utils.Database, fragments: Iterable[str], allow_attachments: bool = False
+    db: sqlite_utils.Database,
+    fragments: Iterable[str | InlineFragment],
+    allow_attachments: bool = False,
 ) -> list[Fragment | Attachment]:
     """
     Resolve fragment strings into a mixed of llm.Fragment() and llm.Attachment() objects.
@@ -266,7 +269,9 @@ def resolve_fragments(
     # The fragment strings could be URLs or paths or plugin references
     resolved: list[Fragment | Attachment] = []
     for fragment in fragments:
-        if fragment.startswith(("http://", "https://")):
+        if isinstance(fragment, InlineFragment):
+            resolved.append(Fragment(fragment.content))
+        elif fragment.startswith(("http://", "https://")):
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
             client = httpx2.Client(
@@ -1290,6 +1295,10 @@ def chat(
             raise click.ClickException(str(ex))
         if model_id is None and template_obj.model:
             model_id = template_obj.model
+        if template_obj.fragments:
+            fragments = [*template_obj.fragments, *fragments]
+        if template_obj.system_fragments:
+            system_fragments = [*template_obj.system_fragments, *system_fragments]
         tools, python_tools = _merge_template_tools(template_obj, tools, python_tools)
 
     # Figure out which model we are using
