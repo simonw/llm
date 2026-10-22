@@ -1745,6 +1745,13 @@ To configure a default option for a specific model, use the `llm models options 
 ```bash
 llm models options set gpt-4.1 temperature 0.5
 ```
+
+Negative values are supported when the model's option allows them. For example:
+
+```bash
+llm models options set gpt-4.1 frequency_penalty -0.5
+```
+
 This option will then be applied automatically any time you run a prompt through the `gpt-4o` model.
 
 Default options are stored in the `model_options.json` file in the LLM configuration directory.
