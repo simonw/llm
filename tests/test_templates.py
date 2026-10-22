@@ -606,3 +606,89 @@ def test_tools_in_templates(
     finally:
         after()
         pm.unregister(name="greetings-plugin")
+
+
+@pytest.mark.parametrize("chat", [False, True])
+@pytest.mark.parametrize("loader", [False, True])
+def test_inline_template_fragments(
+    templates_path, tmp_path, mock_model, logs_db, chat, loader
+):
+    reference = tmp_path / "reference.txt"
+    reference.write_text("Referenced fragment", encoding="utf-8")
+    cli_fragment = tmp_path / "cli.txt"
+    cli_fragment.write_text("CLI fragment", encoding="utf-8")
+    inline_text = "https://example.com/literal\nKeep $input and $other literally.\n"
+    template_data = {
+        "model": "mock",
+        "fragments": [{"content": inline_text}, str(reference)],
+        "system_fragments": [{"content": "Literal system $input"}],
+    }
+
+    class InlineTemplatePlugin:
+        @hookimpl
+        def register_template_loaders(self, register):
+            register("inline", lambda path: Template(name=path, **template_data))
+
+    plugin = InlineTemplatePlugin()
+    if loader:
+        pm.register(plugin)
+        template_name = "inline:example"
+    else:
+        (templates_path / "inline.yaml").write_text(
+            yaml.safe_dump(template_data), encoding="utf-8"
+        )
+        template_name = "inline"
+    try:
+        args = ["chat"] if chat else []
+        args += ["-t", template_name, "-f", str(cli_fragment)]
+        mock_model.enqueue(["Response"])
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            args if chat else [*args, "Question"],
+            input="Question\nquit\n" if chat else None,
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0
+        prompt = mock_model.history[0][0]
+        assert prompt.prompt == (
+            inline_text + "\nReferenced fragment\nCLI fragment\nQuestion"
+        )
+        assert prompt.system == "Literal system $input"
+        assert all(hasattr(fragment, "id") for fragment in prompt.fragments)
+        stored = list(logs_db["fragments"].rows)
+        assert {row["content"] for row in stored} == {
+            inline_text,
+            "Referenced fragment",
+            "CLI fragment",
+            "Literal system $input",
+        }
+        assert any(
+            row["hash"] == prompt.fragments[0].id() and row["content"] == inline_text
+            for row in stored
+        )
+        if not loader:
+            shown = runner.invoke(cli, ["templates", "show", "inline"])
+            assert shown.exit_code == 0
+            assert yaml.safe_load(shown.output) == {"name": "inline", **template_data}
+    finally:
+        if loader:
+            pm.unregister(plugin)
+
+
+@pytest.mark.parametrize("field", ["fragments", "system_fragments"])
+@pytest.mark.parametrize("value", [{"content": ""}, {"content": "line one\nline two"}])
+def test_inline_fragment_template_round_trip(field, value):
+    template = Template(name="example", **{field: [value, "existing-reference"]})
+    data = template.model_dump(exclude_none=True)
+    assert data[field] == [value, "existing-reference"]
+    assert Template(**data) == template
+
+
+@pytest.mark.parametrize("field", ["fragments", "system_fragments"])
+@pytest.mark.parametrize("value", [{}, {"content": None}, {"content": "x", "typo": 1}])
+def test_inline_fragment_template_validation(field, value):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Template(name="example", **{field: [value]})
