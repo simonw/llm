@@ -442,7 +442,7 @@ llm 'More names' -c
 ```
 This will re-send the prompts and responses for the previous conversation as part of the call to the language model. Note that this can add up quickly in terms of tokens, especially if you are using expensive models.
 
-`--continue` will automatically use the same model as the conversation that you are continuing, even if you omit the `-m/--model` option.
+`--continue` uses the same model as the conversation by default. Pass `-m/--model` to use a different model for the new response while retaining the conversation history.
 
 To continue a conversation that is not the most recent one, use the `--cid/--conversation <id>` option:
 ```bash
