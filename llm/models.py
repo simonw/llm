@@ -1773,6 +1773,14 @@ def _response_from_dict(
         response.input_tokens = usage.get("input")
         response.output_tokens = usage.get("output")
         response.token_details = usage.get("details")
+    # Restore the recorded start time, so datetime_utc() and any
+    # re-serialization keep the timestamp to_dict() wrote.
+    datetime_utc = data.get("datetime_utc")
+    if datetime_utc:
+        try:
+            response._start_utcnow = datetime.datetime.fromisoformat(datetime_utc)
+        except ValueError:
+            pass
     return response
 
 
