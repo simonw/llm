@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `model.chain()` and `conversation().chain()` are now bounded by default: they stop after 10 tool calls and raise `ValueError` instead of looping forever. Pass `chain_limit=` to change the bound, or `chain_limit=0` to keep the previous unbounded behaviour. [#1773](https://github.com/simonw/llm/issues/1773)
 - The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`.
 
 (v0_36)=

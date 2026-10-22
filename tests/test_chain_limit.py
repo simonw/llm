@@ -46,3 +46,14 @@ def test_conversation_chain_is_bounded_by_default():
 def test_explicit_chain_limit_still_wins():
     chain = LoopingModel().conversation(chain_limit=3).chain('go', tools=[ping])
     assert responses_before_stopping(chain) == 3
+def test_chain_limit_zero_opts_out():
+    # chain_limit=0 is falsy, so the loop is not bounded - documented as the opt-out.
+    chain = LoopingModel().conversation(chain_limit=0).chain('go', tools=[ping])
+    assert chain.chain_limit == 0
+    count = 0
+    for response in chain.responses():
+        response.text()
+        count += 1
+        if count >= 15:
+            break
+    assert count == 15
