@@ -215,6 +215,17 @@ def test_similar_prefixed(collection):
     ]
 
 
+def test_similar_min_score(collection):
+    results = list(collection.similar("hello world", min_score=0.99))
+    assert results == [
+        Entry(id="1", score=pytest.approx(0.9999999999999999)),
+    ]
+
+
+def test_similar_by_id_min_score(collection):
+    assert list(collection.similar_by_id("1", min_score=0.99)) == []
+
+
 def test_similar_by_id(collection):
     results = list(collection.similar_by_id("1"))
     assert results == [

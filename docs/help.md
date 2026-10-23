@@ -1010,6 +1010,8 @@ Options:
   -p, --plain                     Output in plain text format
   -d, --database FILE
   --prefix TEXT                   Just IDs with this prefix
+  --min-score FLOAT               Only return results with a similarity score at
+                                  or above this value
   -h, --help                      Show this message and exit.
 ```
 

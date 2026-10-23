@@ -415,6 +415,12 @@ You can filter results to only show IDs that begin with a specific prefix using 
 llm similar quotations --prefix 'movies/' -c 'star wars'
 ```
 
+Use `--min-score` to drop results whose cosine similarity score is below a threshold. This can return fewer than `-n` results, or none at all:
+
+```bash
+llm similar quotations --min-score 0.8 -c 'star wars'
+```
+
 (embeddings-cli-embed-models)=
 ## llm embed-models
 
