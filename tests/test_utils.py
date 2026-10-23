@@ -638,3 +638,27 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_toolbox_config_capture_inherited():
+    class BaseTools(Toolbox):
+        def __init__(self, root):
+            self.root = root
+
+            def dynamic():
+                return self.root
+
+            self.add_tool(dynamic)
+
+    class LimitedTools(BaseTools):
+        def __init__(self, root, *, limit=10):
+            super().__init__(root)
+            self.limit = limit
+
+    class InheritedTools(LimitedTools):
+        pass
+
+    tools = InheritedTools("example", limit=2)
+    assert next(iter(tools.tools())).implementation() == "example"
+    assert tools._config == {"root": "example", "limit": 2}
+    assert LimitedTools("example")._config == {"root": "example", "limit": 10}

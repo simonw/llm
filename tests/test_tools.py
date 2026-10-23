@@ -152,6 +152,37 @@ def test_server_side_tool_configuration_is_logged(db_factory):
     assert next(iter(db["turn_tools"].rows))["instance_id"] == instance["id"]
 
 
+def test_inherited_toolbox_configurations_are_logged(db_factory, mock_model):
+    class BaseTools(llm.Toolbox):
+        def __init__(self, root):
+            self.root = root
+
+        def lookup(self):
+            return self.root
+
+    class LimitedTools(BaseTools):
+        def __init__(self, root, limit):
+            super().__init__(root)
+            self.limit = limit
+
+    db = db_factory(memory=True)
+    for limit in (1, 2, 1):
+        response = mock_model.prompt("hello", tools=[LimitedTools("example", limit)])
+        response.text()
+        response.log_to_db(db)
+
+    instances = list(db["tool_instances"].rows)
+    assert [json.loads(instance["arguments"]) for instance in instances] == [
+        {"root": "example", "limit": 1},
+        {"root": "example", "limit": 2},
+    ]
+    assert [row["instance_id"] for row in db["turn_tools"].rows] == [
+        instances[0]["id"],
+        instances[1]["id"],
+        instances[0]["id"],
+    ]
+
+
 def test_logs_expanded_server_side_tool(db_factory, user_path):
     db = db_factory(str(user_path / "logs.db"))
     migrate(db)
