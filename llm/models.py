@@ -327,16 +327,19 @@ class Toolbox:
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
 
-            self._config = {
+            config = {
                 name: value
                 for name, value in bound.arguments.items()
                 if name != "self"
                 and sig.parameters[name].kind
                 not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
+            self._config = config
             self._extra_tools = []
 
             original_init(self, *args, **kwargs)
+            # A wrapped superclass constructor may replace the configuration.
+            self._config = config
 
         cls.__init__ = wrapped_init
 
