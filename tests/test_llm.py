@@ -804,6 +804,17 @@ def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filenam
                 "required": ["items"],
             },
         ),
+        (
+            ["--schema", " \nname, age int\n "],
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+                "required": ["name", "age"],
+            },
+        ),
     ),
 )
 def test_schema_using_dsl(db_factory, mock_model, tmpdir, monkeypatch, args, expected):
@@ -906,6 +917,19 @@ def test_schemas_dsl():
             }
         },
         "required": ["items"],
+    }
+    padded_result = runner.invoke(
+        cli, ["schemas", "dsl", " \nname, age int, bio: short bio\n "]
+    )
+    assert padded_result.exit_code == 0
+    assert json.loads(padded_result.output) == {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+            "bio": {"type": "string", "description": "short bio"},
+        },
+        "required": ["name", "age", "bio"],
     }
 
 
