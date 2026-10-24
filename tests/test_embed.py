@@ -140,6 +140,24 @@ def test_embed_store(collection):
     )
 
 
+def test_embed_same_content_new_id_is_stored(collection):
+    # collection fixture already holds (1, "hello world")
+    # The dedup skip must only apply to the same id, not to any
+    # row in the collection with the same content hash - see #1789
+    collection.embed("3", "hello world")
+    assert collection.db["embeddings"].count == 3
+    assert (
+        next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["id"] == "3"
+    )
+
+
+def test_embed_same_id_same_content_is_noop(collection):
+    # Re-embedding the same id with unchanged content still skips
+    # the model call and leaves the row count untouched
+    collection.embed("1", "hello world")
+    assert collection.db["embeddings"].count == 2
+
+
 def test_embed_metadata(collection):
     collection.embed("3", "hello yet again", metadata={"foo": "bar"}, store=True)
     assert collection.db["embeddings"].count == 3
