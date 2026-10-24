@@ -376,6 +376,12 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
     # Initialize the schema dictionary with required elements
     json_schema: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
+    # Normalize only whitespace surrounding the complete schema before deciding
+    # which separator it uses. This allows a trailing newline on an otherwise
+    # comma-separated schema without changing the interpretation of internal
+    # newlines, blank lines, or descriptions.
+    schema_dsl = schema_dsl.strip()
+
     # Check if the schema is newline-separated or comma-separated
     if "\n" in schema_dsl:
         fields = [field.strip() for field in schema_dsl.split("\n") if field.strip()]
