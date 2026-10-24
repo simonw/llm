@@ -4,6 +4,34 @@ from collections.abc import Callable
 MIGRATIONS: list[Callable] = []
 migration = MIGRATIONS.append
 
+def _add_column_if_missing(db, table, col_name, col_type=None, **kwargs):
+    """
+    ``add_column()`` is not idempotent: SQLite raises "duplicate column name"
+    when the column already exists. That can legitimately happen - a database
+    written by another tool, or a migration interrupted half way - so
+    migrations must tolerate it instead of leaving the database unusable.
+    """
+    if col_name not in db[table].columns_dict:
+        db[table].add_column(col_name, col_type, **kwargs)
+
+
+def _create_index_if_missing(db, table, columns, **kwargs):
+    """
+    ``create_index()`` raises "index ... already exists" when re-run; the
+    index name is derived from the columns, so ask SQLite to skip it instead.
+    """
+    db[table].create_index(columns, if_not_exists=True, **kwargs)
+
+
+
+def _add_fts_if_missing(db, table, columns, **kwargs):
+    """
+    ``enable_fts()`` fails on a re-run ("table ..._fts already exists") and
+    ``replace=True`` would drop and rebuild the index. Only build it when the
+    table does not already have FTS configured.
+    """
+    if not db[table].detect_fts():
+        db[table].enable_fts(columns, **kwargs)
 
 def migrate(db):
     ensure_migrations_table(db)
@@ -28,8 +56,7 @@ def ensure_migrations_table(db):
                 "name": str,
                 "applied_at": str,
             },
-            pk="name",
-        )
+            pk="name", if_not_exists=True)
 
 
 @migration
@@ -38,7 +65,7 @@ def m001_initial(db):
     if db["log"].exists():
         # It needs to have the chat_id column
         if "chat_id" not in db["log"].columns_dict:
-            db["log"].add_column("chat_id")
+            _add_column_if_missing(db, "log", "chat_id")
         return
     db["log"].create(
         {
@@ -49,8 +76,7 @@ def m001_initial(db):
             "response": str,
             "model": str,
             "timestamp": str,
-        }
-    )
+        }, if_not_exists=True)
 
 
 @migration
@@ -86,8 +112,8 @@ def m004_drop_provider(db):
 
 @migration
 def m005_debug(db):
-    db["log"].add_column("debug", str)
-    db["log"].add_column("duration_ms", int)
+    _add_column_if_missing(db, "log", "debug", str)
+    _add_column_if_missing(db, "log", "duration_ms", int)
 
 
 @migration
@@ -102,7 +128,7 @@ def m006_new_logs_table(db):
         # It's possible people running development code like myself
         # might have accidentally created these columns already
         if column not in columns:
-            db["log"].add_column(column, type)
+            _add_column_if_missing(db, "log", column, type)
 
     # Use .transform() to rename options and timestamp_utc, and set new order
     db["log"].transform(
@@ -179,8 +205,7 @@ def m010_create_new_log_tables(db):
             "name": str,
             "model": str,
         },
-        pk="id",
-    )
+        pk="id", if_not_exists=True)
     db["responses"].create(
         {
             "id": str,
@@ -196,13 +221,12 @@ def m010_create_new_log_tables(db):
             "datetime_utc": str,
         },
         pk="id",
-        foreign_keys=(("conversation_id", "conversations", "id"),),
-    )
+        foreign_keys=(("conversation_id", "conversations", "id"),), if_not_exists=True)
 
 
 @migration
 def m011_fts_for_responses(db):
-    db["responses"].enable_fts(["prompt", "response"], create_triggers=True)
+    _add_fts_if_missing(db, "responses", ["prompt", "response"], create_triggers=True)
 
 
 @migration
@@ -215,8 +239,7 @@ def m012_attachments_tables(db):
             "url": str,
             "content": bytes,
         },
-        pk="id",
-    )
+        pk="id", if_not_exists=True)
     db["prompt_attachments"].create(
         {
             "response_id": str,
@@ -227,15 +250,14 @@ def m012_attachments_tables(db):
             ("response_id", "responses", "id"),
             ("attachment_id", "attachments", "id"),
         ),
-        pk=("response_id", "attachment_id"),
-    )
+        pk=("response_id", "attachment_id"), if_not_exists=True)
 
 
 @migration
 def m013_usage(db):
-    db["responses"].add_column("input_tokens", int)
-    db["responses"].add_column("output_tokens", int)
-    db["responses"].add_column("token_details", str)
+    _add_column_if_missing(db, "responses", "input_tokens", int)
+    _add_column_if_missing(db, "responses", "output_tokens", int)
+    _add_column_if_missing(db, "responses", "token_details", str)
 
 
 @migration
@@ -245,15 +267,12 @@ def m014_schemas(db):
             "id": str,
             "content": str,
         },
-        pk="id",
-    )
-    db["responses"].add_column("schema_id", str, fk="schemas", fk_col="id")
+        pk="id", if_not_exists=True)
+    _add_column_if_missing(db, "responses", "schema_id", str, fk="schemas", fk_col="id")
     # Clean up SQL create table indentation
     db["responses"].transform()
     # These changes may have dropped the FTS configuration, fix that
-    db["responses"].enable_fts(
-        ["prompt", "response"], create_triggers=True, replace=True
-    )
+    _add_fts_if_missing(db, "responses", ["prompt", "response"], create_triggers=True)
 
 
 @migration
@@ -266,17 +285,15 @@ def m015_fragments_tables(db):
             "datetime_utc": str,
             "source": str,
         },
-        pk="id",
-    )
-    db["fragments"].create_index(["hash"], unique=True)
+        pk="id", if_not_exists=True)
+    _create_index_if_missing(db, "fragments", ["hash"], unique=True)
     db["fragment_aliases"].create(
         {
             "alias": str,
             "fragment_id": int,
         },
         foreign_keys=(("fragment_id", "fragments", "id"),),
-        pk="alias",
-    )
+        pk="alias", if_not_exists=True)
     db["prompt_fragments"].create(
         {
             "response_id": str,
@@ -287,8 +304,7 @@ def m015_fragments_tables(db):
             ("response_id", "responses", "id"),
             ("fragment_id", "fragments", "id"),
         ),
-        pk=("response_id", "fragment_id"),
-    )
+        pk=("response_id", "fragment_id"), if_not_exists=True)
     db["system_fragments"].create(
         {
             "response_id": str,
@@ -299,8 +315,7 @@ def m015_fragments_tables(db):
             ("response_id", "responses", "id"),
             ("fragment_id", "fragments", "id"),
         ),
-        pk=("response_id", "fragment_id"),
-    )
+        pk=("response_id", "fragment_id"), if_not_exists=True)
 
 
 @migration
@@ -321,9 +336,8 @@ def m017_tools_tables(db):
             "description": str,
             "input_schema": str,
         },
-        pk="id",
-    )
-    db["tools"].create_index(["hash"], unique=True)
+        pk="id", if_not_exists=True)
+    _create_index_if_missing(db, "tools", ["hash"], unique=True)
     # Many-to-many relationship between tools and responses
     db["tool_responses"].create(
         {
@@ -334,8 +348,7 @@ def m017_tools_tables(db):
             ("tool_id", "tools", "id"),
             ("response_id", "responses", "id"),
         ),
-        pk=("tool_id", "response_id"),
-    )
+        pk=("tool_id", "response_id"), if_not_exists=True)
     # tool_calls and tool_results are one-to-many against responses
     db["tool_calls"].create(
         {
@@ -350,8 +363,7 @@ def m017_tools_tables(db):
         foreign_keys=(
             ("response_id", "responses", "id"),
             ("tool_id", "tools", "id"),
-        ),
-    )
+        ), if_not_exists=True)
     db["tool_results"].create(
         {
             "id": int,
@@ -365,13 +377,12 @@ def m017_tools_tables(db):
         foreign_keys=(
             ("response_id", "responses", "id"),
             ("tool_id", "tools", "id"),
-        ),
-    )
+        ), if_not_exists=True)
 
 
 @migration
 def m017_tools_plugin(db):
-    db["tools"].add_column("plugin")
+    _add_column_if_missing(db, "tools", "plugin")
 
 
 @migration
@@ -385,17 +396,16 @@ def m018_tool_instances(db):
             "name": str,
             "arguments": str,
         },
-        pk="id",
-    )
+        pk="id", if_not_exists=True)
     # We record which instance was used only on the results
-    db["tool_results"].add_column("instance_id", fk="tool_instances")
+    _add_column_if_missing(db, "tool_results", "instance_id", fk="tool_instances")
 
 
 @migration
 def m019_resolved_model(db):
     # For models like gemini-1.5-flash-latest where we wish to record
     # the resolved model name in addition to the alias
-    db["responses"].add_column("resolved_model", str)
+    _add_column_if_missing(db, "responses", "resolved_model", str)
 
 
 @migration
@@ -410,13 +420,12 @@ def m020_tool_results_attachments(db):
             ("tool_result_id", "tool_results", "id"),
             ("attachment_id", "attachments", "id"),
         ),
-        pk=("tool_result_id", "attachment_id"),
-    )
+        pk=("tool_result_id", "attachment_id"), if_not_exists=True)
 
 
 @migration
 def m021_tool_results_exception(db):
-    db["tool_results"].add_column("exception", str)
+    _add_column_if_missing(db, "tool_results", "exception", str)
 
 
 @migration
@@ -424,7 +433,7 @@ def m022_response_reasoning(db):
     # Concatenated visible reasoning text emitted during the response.
     # NULL/empty when no reasoning was emitted or when the provider
     # only reported an opaque token count (the redacted-marker case).
-    db["responses"].add_column("reasoning", str)
+    _add_column_if_missing(db, "responses", "reasoning", str)
 
 
 @migration
@@ -438,11 +447,10 @@ def m023_message_store(db):
             "provider_metadata": str,
         },
         pk="hash",
-        foreign_keys=(("parent_hash", "messages", "hash"),),
-    )
+        foreign_keys=(("parent_hash", "messages", "hash"),), if_not_exists=True)
     # Needed by the recursive descent through the tree and by the
     # child count that identifies a fork.
-    db["messages"].create_index(["parent_hash"])
+    _create_index_if_missing(db, "messages", ["parent_hash"])
 
     db["parts"].create(
         {
@@ -464,10 +472,9 @@ def m023_message_store(db):
             "payload": str,
         },
         pk="id",
-        foreign_keys=(("message_hash", "messages", "hash"),),
-    )
+        foreign_keys=(("message_hash", "messages", "hash"),), if_not_exists=True)
     # The hot read path, and it enforces one part per position.
-    db["parts"].create_index(["message_hash", "position"], unique=True)
+    _create_index_if_missing(db, "parts", ["message_hash", "position"], unique=True)
 
     # Attachment and fragment ids are in the payload too. These tables
     # exist so referential integrity, garbage collection reachability and
@@ -483,8 +490,7 @@ def m023_message_store(db):
         foreign_keys=(
             ("part_id", "parts", "id"),
             ("attachment_id", "attachments", "id"),
-        ),
-    )
+        ), if_not_exists=True)
 
     db["part_fragments"].create(
         {
@@ -496,9 +502,8 @@ def m023_message_store(db):
         foreign_keys=(
             ("part_id", "parts", "id"),
             ("fragment_id", "fragments", "id"),
-        ),
-    )
-    db["part_fragments"].create_index(["fragment_id"])
+        ), if_not_exists=True)
+    _create_index_if_missing(db, "part_fragments", ["fragment_id"])
 
     # The only mutable rows in the schema. A fork is a second thread
     # pointing at a message that already exists.
@@ -514,8 +519,7 @@ def m023_message_store(db):
         foreign_keys=(
             ("tip_message_hash", "messages", "hash"),
             ("forked_from", "threads", "id"),
-        ),
-    )
+        ), if_not_exists=True)
 
     # One model call. Self-contained - it does not read anything from the
     # older responses table. parent_ and tip_message_hash together
@@ -543,15 +547,13 @@ def m023_message_store(db):
             ("parent_message_hash", "messages", "hash"),
             ("tip_message_hash", "messages", "hash"),
             ("schema_id", "schemas", "id"),
-        ),
-    )
-    db["turns"].create_index(["thread_id"])
+        ), if_not_exists=True)
+    _create_index_if_missing(db, "turns", ["thread_id"])
 
     db["turn_tools"].create(
         {"turn_id": str, "tool_id": int},
         pk=("turn_id", "tool_id"),
-        foreign_keys=(("turn_id", "turns", "id"), ("tool_id", "tools", "id")),
-    )
+        foreign_keys=(("turn_id", "turns", "id"), ("tool_id", "tools", "id")), if_not_exists=True)
 
     # Provenance: which fragments this call was given. Distinct from
     # part_fragments, which says what a message's text is built from.
@@ -566,9 +568,8 @@ def m023_message_store(db):
         foreign_keys=(
             ("turn_id", "turns", "id"),
             ("fragment_id", "fragments", "id"),
-        ),
-    )
-    db["turn_fragments"].create_index(["fragment_id"])
+        ), if_not_exists=True)
+    _create_index_if_missing(db, "turn_fragments", ["fragment_id"])
 
     # Searchable text per turn: the user's typed prompt (fragment
     # content excluded) and the assistant's text output, kept fresh by
@@ -583,10 +584,9 @@ def m023_message_store(db):
             "response": str,
         },
         pk="id",
-        foreign_keys=(("turn_id", "turns", "id"),),
-    )
-    db["turn_search"].create_index(["turn_id"], unique=True)
-    db["turn_search"].enable_fts(["prompt", "response"], create_triggers=True)
+        foreign_keys=(("turn_id", "turns", "id"),), if_not_exists=True)
+    _create_index_if_missing(db, "turn_search", ["turn_id"], unique=True)
+    _add_fts_if_missing(db, "turn_search", ["prompt", "response"], create_triggers=True)
 
     # Which configured toolbox instance served a tool call: the toolbox
     # name, its plugin and its constructor arguments. Local execution
@@ -605,8 +605,7 @@ def m023_message_store(db):
             "arguments": str,
         },
         pk=("turn_id", "tool_call_id"),
-        foreign_keys=(("turn_id", "turns", "id"),),
-    )
+        foreign_keys=(("turn_id", "turns", "id"),), if_not_exists=True)
 
 
 @migration
@@ -620,8 +619,8 @@ def m024_tool_instance_references(db):
     # tool.
     from .utils import ensure_tool_instance
 
-    db["turn_tools"].add_column("instance_id", int, fk="tool_instances", fk_col="id")
-    db["tool_instantiations"].add_column(
+    _add_column_if_missing(db, "turn_tools", "instance_id", int, fk="tool_instances", fk_col="id")
+    _add_column_if_missing(db, "tool_instantiations", 
         "instance_id", int, fk="tool_instances", fk_col="id"
     )
     for row in list(db["tool_instantiations"].rows):
@@ -719,7 +718,7 @@ def m026_message_tree_view(db):
     # rows carry no timestamp of their own. Kept ordered by including
     # path in the output - selecting from the view preserves tree order
     # only while sorted by path.
-    db.create_view("message_tree", MESSAGE_TREE_SQL)
+    db.create_view("message_tree", MESSAGE_TREE_SQL, ignore=True)
 
 
 @migration
@@ -731,4 +730,4 @@ def m027_turns_response_json(db):
     # envelope - ids, usage, fingerprints - not a second copy of the
     # response. NULL for turns logged before this column existed and
     # for models that expose no raw payload.
-    db["turns"].add_column("response_json", str)
+    _add_column_if_missing(db, "turns", "response_json", str)
