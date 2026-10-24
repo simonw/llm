@@ -393,12 +393,26 @@ def register_models(register):
     extra_path = llm.user_dir() / "extra-openai-models.yaml"
     if not extra_path.exists():
         return
-    with open(extra_path) as f:
+    with open(extra_path, encoding="utf-8-sig") as f:
         extra_models = yaml.safe_load(f)
+    if not extra_models:
+        return
+    if not isinstance(extra_models, list):
+        raise click.ClickException(
+            "extra-openai-models.yaml must contain a list of models"
+        )
     for extra_model in extra_models:
-        model_id = extra_model["model_id"]
+        if not isinstance(extra_model, dict):
+            raise click.ClickException(
+                "Each entry in extra-openai-models.yaml must be a mapping"
+            )
+        model_id = extra_model.get("model_id")
+        if not model_id:
+            raise click.ClickException(
+                "Each extra-openai-models.yaml entry must include model_id"
+            )
         aliases = extra_model.get("aliases", [])
-        model_name = extra_model["model_name"]
+        model_name = extra_model.get("model_name", model_id)
         api_base = extra_model.get("api_base")
         api_type = extra_model.get("api_type")
         api_version = extra_model.get("api_version")
