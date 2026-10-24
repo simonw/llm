@@ -158,6 +158,7 @@ def _run_chat(
     transform_prompt=None,
     show_reasoning=True,
     show_usage=False,
+    initial_multi=False,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
     click.echo(f"Chatting with {model_label}")
@@ -171,7 +172,7 @@ def _run_chat(
 
     argument_fragments = list(initial_fragments or [])
     argument_attachments = list(initial_attachments or [])
-    in_multi = False
+    in_multi = initial_multi
     accumulated = []
     accumulated_fragments = []
     accumulated_attachments = []
@@ -1232,6 +1233,7 @@ def prompt(
 @click.option(
     "-u", "--usage", is_flag=True, help="Show token usage after each chat turn"
 )
+@click.option("--multi", is_flag=True, help="Start in multi-line input mode")
 @click.option("--key", help="API key to use")
 @tool_options
 def chat(
@@ -1247,6 +1249,7 @@ def chat(
     no_stream,
     hide_reasoning,
     usage,
+    multi,
     key,
     database,
     tools,
@@ -1401,6 +1404,7 @@ def chat(
         transform_prompt=transform_chat_prompt,
         show_reasoning=not hide_reasoning,
         show_usage=usage,
+        initial_multi=multi,
     )
 
 
