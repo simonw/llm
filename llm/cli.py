@@ -66,6 +66,7 @@ from llm.models import _BaseChainResponse, _BaseConversation
 
 from .logs import (
     LogStore,
+    conversation_rows,
     legacy_log_row_extras,
     log_row_extras,
     merged_log_rows,
@@ -1675,6 +1676,81 @@ def logs_turn_off():
     "Turn off logging for all prompts"
     path = user_dir() / "logs-off"
     path.touch()
+
+
+@logs.command(name="conversations")
+@click.option(
+    "-n",
+    "--count",
+    type=int,
+    default=10,
+    help="Number of conversations to show (default 10, use 0 for all)",
+)
+@click.option(
+    "-d",
+    "--database",
+    type=click.Path(readable=True, exists=True, dir_okay=False),
+    help="Path to log database",
+)
+@click.option("-q", "--query", help="Filter conversations matching search term")
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output conversations as JSON",
+)
+@click.option(
+    "-t",
+    "--truncate",
+    is_flag=True,
+    help="Truncate conversation names in output",
+)
+def logs_conversations(count, database, query, json_output, truncate):
+    """
+    List logged conversations and their IDs
+    """
+    log_path = pathlib.Path(database) if database else logs_db_path()
+    if not log_path.exists():
+        if json_output:
+            click.echo("[]")
+        else:
+            click.echo(f"No log database found at {log_path}")
+        return
+    db = sqlite_utils.Database(log_path)
+    migrate(db)
+
+    convs = conversation_rows(db, count=count, query=query)
+
+    if json_output:
+        click.echo(json.dumps(convs, indent=2))
+        return
+
+    if not convs:
+        click.echo("No conversations found")
+        return
+
+    for c in convs:
+        cid = c["id"]
+        dt = c.get("datetime_utc") or ""
+        if dt and "T" in dt:
+            dt = dt.replace("T", " ")[:19]
+        turns = c.get("turns_count", 0)
+        turns_str = f"{turns} turn" if turns == 1 else f"{turns} turns"
+        model = c.get("model") or ""
+        name = (c.get("name") or "").replace("\n", " ").strip()
+        if truncate and len(name) > 60:
+            name = name[:57] + "..."
+        line_parts = [cid]
+        if dt:
+            line_parts.append(dt)
+        line_parts.append(f"{turns_str:>8}")
+        if model:
+            line_parts.append(model)
+        if name:
+            line_parts.append(name)
+        click.echo("  ".join(line_parts))
+
+
 
 
 def annotate_log_rows(db, rows, expand=False, truncate=False):

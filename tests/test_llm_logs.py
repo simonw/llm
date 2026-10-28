@@ -1484,6 +1484,7 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+<<<<<<< HEAD
     assert "<details>" not in result.output
 
 
@@ -1530,3 +1531,147 @@ def test_logs_truncate_markdown_new_store(logs_db, mock_model):
     result = runner.invoke(cli, ["logs", "-t"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Response\n\nhello" in result.output
+
+
+def test_logs_conversations_empty(db_factory, user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "empty_logs.db")
+    db = db_factory(db_path)
+=======
+
+
+def test_logs_conversations_empty(user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "empty_logs.db")
+    db = sqlite_utils.Database(db_path)
+>>>>>>> 1ef51a7c0d84bdc5849fad346ff04bbb928eed7e
+    migrate(db)
+    result = runner.invoke(cli, ["logs", "conversations", "-d", db_path])
+    assert result.exit_code == 0
+    assert "No conversations found" in result.output
+
+    # --json returns []
+    result_json = runner.invoke(cli, ["logs", "conversations", "-d", db_path, "--json"])
+    assert result_json.exit_code == 0
+    assert json.loads(result_json.output) == []
+
+
+<<<<<<< HEAD
+def test_logs_conversations_threads(db_factory, user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "threads_logs.db")
+    db = db_factory(db_path)
+=======
+def test_logs_conversations_threads(user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "threads_logs.db")
+    db = sqlite_utils.Database(db_path)
+>>>>>>> 1ef51a7c0d84bdc5849fad346ff04bbb928eed7e
+    migrate(db)
+    db["threads"].insert({
+        "id": "thread-12345",
+        "name": "Analyze financial report",
+        "datetime_utc": "2025-10-15T12:00:00Z",
+    })
+    db["turns"].insert({
+        "id": "turn-1",
+        "thread_id": "thread-12345",
+        "model": "gpt-4o",
+        "datetime_utc": "2025-10-15T12:00:05Z",
+    })
+    db["turns"].insert({
+        "id": "turn-2",
+        "thread_id": "thread-12345",
+        "model": "gpt-4o",
+        "datetime_utc": "2025-10-15T12:01:00Z",
+    })
+
+    result = runner.invoke(cli, ["logs", "conversations", "-d", db_path])
+    assert result.exit_code == 0
+    assert "thread-12345" in result.output
+    assert "2 turns" in result.output
+    assert "gpt-4o" in result.output
+    assert "Analyze financial report" in result.output
+
+    # Test --json
+    result_json = runner.invoke(cli, ["logs", "conversations", "-d", db_path, "--json"])
+    assert result_json.exit_code == 0
+    data = json.loads(result_json.output)
+    assert len(data) == 1
+    assert data[0]["id"] == "thread-12345"
+    assert data[0]["turns_count"] == 2
+    assert data[0]["model"] == "gpt-4o"
+    assert data[0]["name"] == "Analyze financial report"
+
+
+<<<<<<< HEAD
+def test_logs_conversations_filter_and_count(db_factory, user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "multi_threads_logs.db")
+    db = db_factory(db_path)
+=======
+def test_logs_conversations_filter_and_count(user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "multi_threads_logs.db")
+    db = sqlite_utils.Database(db_path)
+>>>>>>> 1ef51a7c0d84bdc5849fad346ff04bbb928eed7e
+    migrate(db)
+    for i in range(5):
+        tid = f"conv-{i}"
+        db["threads"].insert({
+            "id": tid,
+            "name": f"Topic {i} discussion",
+            "datetime_utc": f"2025-10-15T12:0{i}:00Z",
+        })
+        db["turns"].insert({
+            "id": f"turn-{i}",
+            "thread_id": tid,
+            "model": "gpt-4o-mini",
+            "datetime_utc": f"2025-10-15T12:0{i}:05Z",
+        })
+
+    # Test limit with -n 2
+    res_n = runner.invoke(cli, ["logs", "conversations", "-d", db_path, "-n", "2", "--json"])
+    assert res_n.exit_code == 0
+    assert len(json.loads(res_n.output)) == 2
+
+    # Test query with -q
+    res_q = runner.invoke(cli, ["logs", "conversations", "-d", db_path, "-q", "Topic 3", "--json"])
+    assert res_q.exit_code == 0
+    data = json.loads(res_q.output)
+    assert len(data) == 1
+    assert data[0]["id"] == "conv-3"
+
+
+<<<<<<< HEAD
+def test_logs_conversations_legacy(db_factory, user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "legacy_convs.db")
+    db = db_factory(db_path)
+=======
+def test_logs_conversations_legacy(user_path):
+    runner = CliRunner()
+    db_path = str(user_path / "legacy_convs.db")
+    db = sqlite_utils.Database(db_path)
+>>>>>>> 1ef51a7c0d84bdc5849fad346ff04bbb928eed7e
+    migrate(db)
+    db["conversations"].insert({
+        "id": "legacy-abc",
+        "name": "Legacy conversation",
+        "model": "claude-3",
+    })
+    db["responses"].insert({
+        "id": "resp-1",
+        "conversation_id": "legacy-abc",
+        "model": "claude-3",
+        "prompt": "Hello",
+        "response": "World",
+        "datetime_utc": "2024-06-01T10:00:00Z",
+    })
+
+    result = runner.invoke(cli, ["logs", "conversations", "-d", db_path])
+    assert result.exit_code == 0
+    assert "legacy-abc" in result.output
+    assert "1 turn" in result.output
+    assert "claude-3" in result.output
+    assert "Legacy conversation" in result.output

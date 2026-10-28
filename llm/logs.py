@@ -47,6 +47,7 @@ __all__ = [
     "LogStore",
     "canonical_json",
     "content_hash",
+    "conversation_rows",
     "message_hash",
 ]
 
@@ -2021,3 +2022,107 @@ def legacy_log_row_extras(db, ids: list[str]) -> dict[str, dict]:
         )
 
     return extras
+
+
+def conversation_rows(
+    db: Any,
+    *,
+    count: int | None = None,
+    query: str | None = None,
+) -> list[dict[str, Any]]:
+    """Retrieve summarized conversations across both new threads and legacy conversations."""
+    results: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    if db["threads"].exists():
+        has_turn_search = db["turn_search"].exists()
+        name_subquery = (
+            "(select ts.prompt from turns t2 join turn_search ts on ts.turn_id = t2.id where t2.thread_id = threads.id order by t2.id asc limit 1)"
+            if has_turn_search
+            else "NULL"
+        )
+        sql = f"""
+        select
+            threads.id,
+            coalesce(threads.name, {name_subquery}) as name,
+            threads.datetime_utc,
+            count(turns.id) as turns_count,
+            max(turns.datetime_utc) as last_turn_utc,
+            (
+                select t.model from turns t
+                where t.thread_id = threads.id
+                order by t.id desc limit 1
+            ) as model
+        from threads
+        left join turns on turns.thread_id = threads.id
+        """
+        params: dict[str, Any] = {}
+        if query:
+            sql += f" where (threads.name like :q or threads.id like :q or ({name_subquery}) like :q)"
+            params["q"] = f"%{query}%"
+        sql += " group by threads.id"
+
+        for row in db.query(sql, params):
+            seen_ids.add(row["id"])
+            results.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "datetime_utc": row["datetime_utc"],
+                    "last_active_utc": row["last_turn_utc"] or row["datetime_utc"],
+                    "turns_count": row["turns_count"],
+                    "model": row["model"],
+                }
+            )
+
+    if db["conversations"].exists():
+        sql = """
+        select
+            conversations.id,
+            coalesce(
+                conversations.name,
+                (
+                    select r.prompt from responses r
+                    where r.conversation_id = conversations.id
+                    order by r.id asc limit 1
+                )
+            ) as name,
+            conversations.model,
+            min(responses.datetime_utc) as datetime_utc,
+            max(responses.datetime_utc) as last_turn_utc,
+            count(responses.id) as turns_count
+        from conversations
+        left join responses on responses.conversation_id = conversations.id
+        """
+        params = {}
+        if query:
+            sql += """ where (
+                conversations.name like :q
+                or conversations.id like :q
+                or (select r.prompt from responses r where r.conversation_id = conversations.id order by r.id asc limit 1) like :q
+            )"""
+            params["q"] = f"%{query}%"
+        sql += " group by conversations.id"
+
+        for row in db.query(sql, params):
+            if row["id"] in seen_ids:
+                continue
+            seen_ids.add(row["id"])
+            results.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "datetime_utc": row["datetime_utc"],
+                    "last_active_utc": row["last_turn_utc"] or row["datetime_utc"],
+                    "turns_count": row["turns_count"],
+                    "model": row["model"],
+                }
+            )
+
+    results.sort(
+        key=lambda r: (r["last_active_utc"] or "", r["datetime_utc"] or "", r["id"]),
+        reverse=True,
+    )
+    if count and count > 0:
+        results = results[:count]
+    return results

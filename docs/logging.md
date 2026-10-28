@@ -169,6 +169,41 @@ To see logs for a specific conversation based on its ID, use `--cid ID` or `--co
 llm logs --cid 01h82n0q9crqtnzmf13gkyxawg
 ```
 
+(logging-conversations)=
+
+### Listing conversations
+
+To list recorded conversations, their IDs, titles, turn counts, and models:
+
+```bash
+llm logs conversations
+```
+
+Output looks like this:
+
+```
+01k6c9t0w4ajm0qz8k5sx1rv2p  2025-10-15 12:00:00   2 turns  gpt-4o  Analyze financial report
+```
+
+You can filter conversations by search term using `-q/--query`:
+
+```bash
+llm logs conversations -q "financial"
+```
+
+Limit the number of results using `-n/--count`:
+
+```bash
+llm logs conversations -n 5
+```
+
+Pass `--json` to output the results as a JSON array:
+
+```bash
+llm logs conversations --json
+```
+
+
 (logging-search)=
 
 ### Searching the logs
