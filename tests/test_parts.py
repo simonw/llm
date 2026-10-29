@@ -1429,6 +1429,44 @@ class TestSqliteRehydrateMessages:
             rehydrated.token_usage() == '123 input, 45 output, {"reasoning_tokens": 12}'
         )
 
+    def test_from_row_restores_partial_token_usage(
+        self, db_factory, mock_model, tmp_path
+    ):
+        """Legacy rows can have input_tokens recorded while
+        output_tokens and token_details are still NULL. That partial
+        usage must survive rehydration too - without inventing values
+        for the missing half."""
+
+        from llm.migrations import migrate
+
+        db = db_factory(str(tmp_path / "logs.db"))
+        migrate(db)
+        db["responses"].insert(
+            {
+                "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+                "model": "mock",
+                "prompt": "q1",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "answer text",
+                "response_json": None,
+                "conversation_id": None,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00",
+                "schema_id": None,
+                "input_tokens": 7,
+                "output_tokens": None,
+                "token_details": None,
+            },
+            alter=True,
+        )
+
+        row = next(db["responses"].rows)
+        rehydrated = llm.Response.from_row(db, row)
+        assert rehydrated.usage() == llm.Usage(input=7, output=None, details=None)
+        assert rehydrated.to_dict()["usage"] == {"input": 7}
+
     def test_llm_dash_c_chain_preserves_prior_assistant_turn(
         self, db_factory, mock_model, tmp_path
     ):

@@ -165,6 +165,45 @@ async def test_async_from_row_restores_token_usage(db_factory, tmp_path):
     )
 
 
+@pytest.mark.asyncio
+async def test_async_from_row_restores_partial_token_usage(db_factory, tmp_path):
+    """Async twin of the sync partial-NULL case: input_tokens set
+    while output_tokens and token_details are NULL must rehydrate as
+    a partial Usage, not collapse to all-None."""
+
+    from llm.migrations import migrate
+
+    db = db_factory(str(tmp_path / "logs.db"))
+    migrate(db)
+    db["responses"].insert(
+        {
+            "id": "01aaaaaaaaaaaaaaaaaaaaaaaa",
+            "model": "echo",
+            "prompt": "hello",
+            "system": None,
+            "prompt_json": None,
+            "options_json": "{}",
+            "response": "echoed text",
+            "response_json": None,
+            "conversation_id": None,
+            "duration_ms": 1,
+            "datetime_utc": "2025-01-01T00:00:00",
+            "schema_id": None,
+            "input_tokens": 7,
+            "output_tokens": None,
+            "token_details": None,
+        },
+        alter=True,
+    )
+
+    row = next(db["responses"].rows)
+    rehydrated = llm.AsyncResponse.from_row(db, row)
+    assert await rehydrated.usage() == llm.Usage(
+        input=7, output=None, details=None
+    )
+    assert rehydrated.to_dict()["usage"] == {"input": 7}
+
+
 # ---- AsyncConversation follow-up via load_conversation -------------
 
 
