@@ -155,32 +155,60 @@ llm openai endpoint https://openrouter.ai/api/v1 \
 
 `-R` hides the reasoning text returned by this model so the command displays just its final answer.
 
+(openai-endpoint-add)=
 ### Configure an OpenAI-compatible model
 
-The `model_id` is the name LLM will use for the model. The `model_name` is the name which needs to be passed to the API - this might differ from the `model_id`, especially if the `model_id` could potentially clash with other installed models.
+Once you have found an endpoint and model that work, save them to the `extra-openai-models.yaml` configuration file so the model can be used with `llm -m MODEL_ID`, and logged, like any other model. The `llm openai endpoint add` command writes that file for you.
 
-The `api_base` key can be used to point the OpenAI client library at a different API endpoint.
+To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/):
 
-To add the `orca-mini-3b` model hosted by a local installation of [LocalAI](https://localai.io/), add this to your `extra-openai-models.yaml` file:
+```bash
+llm openai endpoint add http://localhost:8080 \
+  -m orca-mini-3b.ggmlv3 \
+  --id orca-openai-compat
+```
+
+This appends the following record to the file:
 
 ```yaml
 - model_id: orca-openai-compat
   model_name: orca-mini-3b.ggmlv3
-  api_base: "http://localhost:8080"
+  api_base: http://localhost:8080
 ```
-If the `api_base` is set, the existing configured `openai` API key will not be sent by default.
 
-You can set `api_key_name` to the name of a key stored using the {ref}`api-keys` feature.
+The `model_id` is the name LLM will use for the model. The `model_name` is the name which needs to be passed to the API - this might differ from the `model_id`, especially if the `model_id` could potentially clash with other installed models. `--id` defaults to the model name if you omit it.
 
-Other keys you can use here:
+The `api_base` key points the OpenAI client library at a different API endpoint. If `api_base` is set, the existing configured `openai` API key will not be sent by default.
 
-- `completion: true` for completion models that should use the `/completion` endpoint as opposed to `/completion/chat`
-- `responses: true` for models that should use the OpenAI Responses API (`/responses`) instead of the Chat Completions API (`/chat/completions`)
-- `supports_tools: true` for models that support tool calling
-- `can_stream: false` to disable streaming mode for models that cannot stream
-- `supports_schema: true` for models that support JSON structured schema output
-- `vision: true` for models that can accept images as input
-- `audio: true` for models that accept audio attachments
+Use `--key NAME` to send a key stored using the {ref}`api-keys` feature instead. This is written as `api_key_name` in the file - the key itself is never stored there, so the name must already exist in `llm keys list`:
+
+```bash
+llm keys set openrouter
+llm openai endpoint add https://openrouter.ai/api/v1 \
+  -m anthropic/claude-sonnet-4.5 \
+  --id claude-sonnet \
+  --alias claude \
+  --key openrouter \
+  --supports-tools --vision
+```
+
+The other options correspond to keys in the YAML file:
+
+- `--alias NAME` adds an alias, written to the `aliases` list. Repeat it for multiple aliases.
+- `--completion` writes `completion: true` for completion models that should use the `/completion` endpoint as opposed to `/completion/chat`
+- `--responses` writes `responses: true` for models that should use the OpenAI Responses API (`/responses`) instead of the Chat Completions API (`/chat/completions`)
+- `--supports-tools` writes `supports_tools: true` for models that support tool calling
+- `--no-stream` writes `can_stream: false` to disable streaming mode for models that cannot stream
+- `--supports-schema` writes `supports_schema: true` for models that support JSON structured schema output
+- `--vision` writes `vision: true` for models that can accept images as input
+- `--audio` writes `audio: true` for models that accept audio attachments
+- `--reasoning` writes `reasoning: true` for reasoning models
+- `--service-tier` writes `service_tier: true` for models that support the `service_tier` option
+- `--api-type`, `--api-version` and `--api-engine` write the corresponding keys, used for Azure OpenAI deployments
+
+Adding a model with an ID that is already in the file is an error. Pass `--replace` to overwrite that record instead.
+
+You can also edit the file by hand. `llm openai endpoint path` outputs its location, and `add` appends to the end of the file without rewriting your existing records, so comments and formatting are preserved. `--replace` and `remove` do rewrite the file, which drops any comments.
 
 Having configured the model like this, run `llm models --options -m MODEL_ID` to check that it installed correctly. You can then run prompts against it like so:
 
@@ -192,9 +220,27 @@ And confirm they were logged correctly with:
 llm logs -n 1
 ```
 
+### Listing and removing configured models
+
+`llm openai endpoint list` shows the records in the file, or `--json` for the raw records:
+
+```bash
+llm openai endpoint list
+```
+```
+orca-openai-compat: orca-mini-3b.ggmlv3 at http://localhost:8080
+claude-sonnet: anthropic/claude-sonnet-4.5 at https://openrouter.ai/api/v1 (aliases: claude)
+```
+
+`llm openai endpoint remove MODEL_ID` deletes a record:
+
+```bash
+llm openai endpoint remove orca-openai-compat
+```
+
 ### Extra HTTP headers
 
-Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require the setting of additional HTTP headers. You can set those using the `headers:` key like this:
+Some providers such as [openrouter.ai](https://openrouter.ai/docs) may require the setting of additional HTTP headers. Pass `-H/--header` to `llm openai endpoint add`, or set them using the `headers:` key like this:
 
 ```yaml
 - model_id: claude

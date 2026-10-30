@@ -247,24 +247,33 @@ The `gpt-3.5-turbo-instruct` model is a little different - it is a completion mo
 
 OpenAI occasionally release new models with new names. LLM aims to ship new releases to support these, but you can also configure them directly, by adding them to a `extra-openai-models.yaml` configuration file.
 
-Run this command to find the directory in which this file should be created:
+Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You can add it to that file using the `llm openai endpoint add` command:
 
 ```bash
-dirname "$(llm logs path)"
+llm openai endpoint add https://api.openai.com/v1 \
+  -m gpt-3.5-turbo-0613 \
+  --alias 0613
 ```
-On my Mac laptop I get this:
-```
-~/Library/Application Support/io.datasette.llm
-```
-Create a file in that directory called `extra-openai-models.yaml`.
-
-Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
+This adds the following record to the file:
 
 ```yaml
 - model_id: gpt-3.5-turbo-0613
   model_name: gpt-3.5-turbo-0613
-  aliases: ["0613"]
+  aliases:
+  - '0613'
 ```
+Because the URL is OpenAI's own API the `api_base` key is omitted, so the model uses your regular OpenAI API key. See {ref}`openai-endpoint-add` for the full set of options, including how to point at other OpenAI-compatible endpoints.
+
+You can also create or edit the file by hand. Run this command to find its location:
+
+```bash
+llm openai endpoint path
+```
+On my Mac laptop I get this:
+```
+~/Library/Application Support/io.datasette.llm/extra-openai-models.yaml
+```
+
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
