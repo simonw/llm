@@ -85,8 +85,11 @@ class HelloWorld(llm.EmbeddingModel):
     model_id = "helloworld"
 
     def embed_batch(self, items):
-        return [[1, 2, 3], [4, 5, 6]]
+        for item in items:
+            yield [float(len(item))]
 ```
+
+`embed_batch()` should yield one vector of floats for each input item, in the same order. This toy model uses the length of each string as a one-dimensional vector; a real embedding model would compute meaningful vectors from the text.
 
 (plugin-hooks-register-tools)=
 ## register_tools(register)
