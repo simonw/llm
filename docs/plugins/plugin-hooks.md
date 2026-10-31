@@ -86,10 +86,10 @@ class HelloWorld(llm.EmbeddingModel):
 
     def embed_batch(self, items):
         for item in items:
-            yield [float(len(item))]
+            yield [float(len(item)), 1.0]
 ```
 
-`embed_batch()` should yield one vector of floats for each input item, in the same order. This toy model uses the length of each string as a one-dimensional vector; a real embedding model would compute meaningful vectors from the text.
+`embed_batch()` should yield one vector of floats for each input item, in the same order. This toy model uses the length of each string and a constant as a two-dimensional vector. The constant keeps the vector nonzero, even for an empty string, so it can be used in cosine similarity calculations. A real embedding model would compute meaningful vectors from the text.
 
 (plugin-hooks-register-tools)=
 ## register_tools(register)
