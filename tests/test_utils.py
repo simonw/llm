@@ -141,6 +141,40 @@ def test_simplify_usage_dict(input_data, expected_output):
             True,
             "second();\r\n",
         ],
+        # Tilde fences
+        [
+            "Here is some text.\n\n~~~python\ndef foo():\n    return 'bar'\n~~~\n\nMore text.",
+            False,
+            "def foo():\n    return 'bar'\n",
+        ],
+        [
+            "Here is some text.\n\n~~~\nprint('```')\n~~~\n",
+            False,
+            "print('```')\n",
+        ],
+        # Opening and closing fences must use the same character
+        ["Here is some text.\n\n```python\nfoo()\n~~~\n", False, None],
+        # Indented fences, e.g. inside a Markdown list item
+        [
+            "Steps:\n\n1. Install it:\n   ```bash\n   pip install llm\n   ```\n2. Done.",
+            False,
+            "pip install llm\n",
+        ],
+        [
+            "- Example:\n  ```python\n  def foo():\n      return 'bar'\n\n  foo()\n  ```\n",
+            False,
+            "def foo():\n    return 'bar'\n\nfoo()\n",
+        ],
+        [
+            (
+                "1. First:\n   ```python\n   first()\n   ```\n"
+                "2. Second:\n   ```javascript\n   second();\n   ```\n"
+            ),
+            True,
+            "second();\n",
+        ],
+        # Closing fence must have the same indentation as the opening fence
+        ["- Example:\n  ```python\n  foo()\n```\n", False, None],
     ],
 )
 def test_extract_fenced_code_block(input, last, expected):
