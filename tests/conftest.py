@@ -37,14 +37,26 @@ def user_path(tmpdir):
 
 
 @pytest.fixture
-def logs_db(user_path):
-    return sqlite_utils.Database(str(user_path / "logs.db"))
+def db_factory(request):
+    """Create test-owned databases and close them even when a test fails."""
+
+    def create(*args, **kwargs):
+        db = sqlite_utils.Database(*args, **kwargs)
+        request.addfinalizer(db.close)
+        return db
+
+    return create
 
 
 @pytest.fixture
-def user_path_with_embeddings(user_path):
+def logs_db(db_factory, user_path):
+    return db_factory(str(user_path / "logs.db"))
+
+
+@pytest.fixture
+def user_path_with_embeddings(db_factory, user_path):
     path = str(user_path / "embeddings.db")
-    db = sqlite_utils.Database(path)
+    db = db_factory(path)
     collection = llm.Collection("demo", db, model_id="embed-demo")
     collection.embed("1", "hello world", store=True)
     collection.embed("2", "goodbye world", store=True)
@@ -553,8 +565,9 @@ def mocked_localai(httpx2_mock):
 
 
 @pytest.fixture
-def collection():
+def collection(request):
     collection = llm.Collection("test", model_id="embed-demo")
+    request.addfinalizer(collection.db.close)
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection

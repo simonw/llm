@@ -699,7 +699,7 @@ def instantiate_from_spec(class_map: dict[str, type], spec: str):
         return cls(**kw)
 
     # Starts with quote / number / [ / t f n for single positional JSON value
-    if re.match(r'\s*(["\[\d\-]|true|false|null)', arg_body, re.IGNORECASE):
+    if re.match(r'\s*(["\[\d\-]|(true|false|null)\b)', arg_body, re.IGNORECASE):
         try:
             positional_value = json.loads(arg_body)
         except json.JSONDecodeError as e:

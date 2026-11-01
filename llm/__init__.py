@@ -10,6 +10,7 @@ import click
 
 from .embeddings import Collection
 from .errors import (
+    ConversationNotSupported,
     ModelError,
     NeedsKeyException,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "CancelToolCall",
     "Collection",
     "Conversation",
+    "ConversationNotSupported",
     "Fragment",
     "KeyModel",
     "Message",
@@ -88,7 +90,7 @@ __all__ = [
     "user",
     "user_dir",
 ]
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "gpt-6-luna"
 
 
 def get_plugins(all=False):

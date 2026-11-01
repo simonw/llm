@@ -4,11 +4,33 @@ import sys
 from unittest.mock import ANY
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 
-from llm import Collection
+from llm import Attachment, Collection
 from llm.cli import cli
+
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\xa6\x00\x00\x01\x1a"
+    b"\x02\x03\x00\x00\x00\xe6\x99\xc4^\x00\x00\x00\tPLTE\xff\xff\xff"
+    b"\x00\xff\x00\xfe\x01\x00\x12t\x01J\x00\x00\x00GIDATx\xda\xed\xd81\x11"
+    b"\x000\x08\xc0\xc0.]\xea\xaf&Q\x89\x04V\xe0>\xf3+\xc8\x91Z\xf4\xa2\x08EQ\x14E"
+    b"Q\x14EQ\x14EQ\xd4B\x91$I3\xbb\xbf\x08EQ\x14EQ\x14EQ\x14E\xd1\xa5"
+    b"\xd4\x17\x91\xc6\x95\x05\x15\x0f\x9f\xc5\t\x9f\xa4\x00\x00\x00\x00IEND\xaeB`"
+    b"\x82"
+)
+
+
+def capture_typed_attachments(monkeypatch, embed_demo):
+    captured = []
+    embed_demo.attachment_types = frozenset({"image/png", "audio/wav"})
+
+    def embed_batch(items):
+        for item in items:
+            captured.append(item)
+            yield [1.0] + [0.0] * 15
+
+    monkeypatch.setattr(embed_demo, "embed_batch", embed_batch)
+    return captured
 
 
 @pytest.mark.parametrize(
@@ -82,7 +104,7 @@ def test_embed_errors(args, expected_error):
         ('{"foo": "incomplete}', "metadata must be valid JSON"),
     ),
 )
-def test_embed_store(user_path, metadata, metadata_error):
+def test_embed_store(db_factory, user_path, metadata, metadata_error):
     embeddings_db = user_path / "embeddings.db"
     assert not embeddings_db.exists()
     runner = CliRunner()
@@ -104,7 +126,7 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert result.exit_code == 0
     assert embeddings_db.exists()
     # Check the contents
-    db = sqlite_utils.Database(str(embeddings_db))
+    db = db_factory(str(embeddings_db))
     rows = list(db["collections"].rows)
     assert rows == [{"id": 1, "name": "items", "model": "embed-demo"}]
     expected_metadata = None
@@ -124,6 +146,7 @@ def test_embed_store(user_path, metadata, metadata_error):
             ),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": Collection.content_hash("hello"),
             "metadata": expected_metadata,
             "updated": ANY,
@@ -150,12 +173,12 @@ def test_embed_store(user_path, metadata, metadata_error):
     assert db["embeddings"].count == 0
 
 
-def test_embed_store_binary(user_path):
+def test_embed_store_binary(db_factory, user_path):
     runner = CliRunner()
     args = ["embed", "-m", "embed-demo", "items", "2", "--binary", "--store"]
     result = runner.invoke(cli, args, input=b"\x00\x01\x02")
     assert result.exit_code == 0
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = db_factory(str(user_path / "embeddings.db"))
     rows = list(db["embeddings"].rows)
     assert rows == [
         {
@@ -169,11 +192,75 @@ def test_embed_store_binary(user_path):
             ),
             "content": None,
             "content_blob": b"\x00\x01\x02",
+            "content_type": None,
             "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
             "metadata": None,
             "updated": ANY,
         }
     ]
+
+
+@pytest.mark.parametrize("typed_option", ("detected", "explicit"))
+def test_embed_typed_attachment_cli(monkeypatch, embed_demo, tmp_path, typed_option):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+    args = ["embed", "-m", "embed-demo"]
+    if typed_option == "detected":
+        args.extend(("-a", str(image_path)))
+    else:
+        args.extend(("--at", str(image_path), "image/png"))
+
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [1.0] + [0.0] * 15
+    assert captured == [Attachment(type="image/png", path=str(image_path.resolve()))]
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    (
+        ("-c", "hello"),
+        ("--binary",),
+    ),
+)
+def test_embed_typed_attachment_conflicts(tmp_path, extra_args):
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        ["embed", "-m", "embed-demo", "-a", str(image_path), *extra_args],
+    )
+
+    assert result.exit_code == 2
+    assert (
+        "Attachments cannot be combined with --content, --input or --binary"
+        in result.output
+    )
+
+
+def test_embed_rejects_multiple_typed_attachments(tmp_path):
+    paths = [tmp_path / "one.png", tmp_path / "two.png"]
+    for path in paths:
+        path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed",
+            "-m",
+            "embed-demo",
+            "-a",
+            str(paths[0]),
+            "-a",
+            str(paths[1]),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Only one attachment can be embedded at a time" in result.output
 
 
 def test_embed_key_option(embed_key_demo):
@@ -197,11 +284,11 @@ def test_embed_key_option(embed_key_demo):
     assert embed_key_demo.key is None
 
 
-def test_embed_multi_key_option(embed_key_demo, tmpdir):
+def test_embed_multi_key_option(db_factory, embed_key_demo, tmpdir):
     # --key should be passed through to the embedding model for embed-multi too
     assert embed_key_demo.key is None
     db_path = str(tmpdir / "embeddings.db")
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     db["content"].insert_all(
         [
             {"id": 1, "name": "cli", "description": "Command line interface"},
@@ -229,8 +316,8 @@ def test_embed_multi_key_option(embed_key_demo, tmpdir):
     assert embed_key_demo.key is None
 
 
-def test_collection_delete_errors(user_path):
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+def test_collection_delete_errors(db_factory, user_path):
+    db = db_factory(str(user_path / "embeddings.db"))
     collection = Collection("items", db, model_id="embed-demo")
     collection.embed("1", "hello")
     assert db["collections"].count == 1
@@ -351,6 +438,114 @@ def test_similar_by_content_prefixed(
     assert json.loads(result.output) == expected_result
 
 
+@pytest.mark.parametrize("typed_option", ("detected", "explicit"))
+def test_similar_by_typed_attachment_cli(
+    monkeypatch,
+    embed_demo,
+    tmp_path,
+    user_path_with_embeddings,
+    typed_option,
+):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    image_path = tmp_path / "query.png"
+    image_path.write_bytes(TINY_PNG)
+    args = ["similar", "demo", "-n", "1"]
+    if typed_option == "detected":
+        args.extend(("-a", str(image_path)))
+    else:
+        args.extend(("--at", str(image_path), "image/png"))
+
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["id"] in {"1", "2"}
+    assert [(item.type, item.path) for item in captured] == [
+        ("image/png", str(image_path.resolve()))
+    ]
+
+
+def test_similar_json_includes_attachment_content_type(
+    db_factory, monkeypatch, embed_demo, tmp_path
+):
+    capture_typed_attachments(monkeypatch, embed_demo)
+    db_path = tmp_path / "embeddings.db"
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+    attachment = Attachment(type="image/png", path=str(image_path.resolve()))
+    collection = Collection("media", db_factory(str(db_path)), model_id="embed-demo")
+    collection.embed("photo", attachment)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "similar",
+            "media",
+            "-d",
+            str(db_path),
+            "-n",
+            "1",
+            "-a",
+            str(image_path),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {
+        "id": "photo",
+        "score": pytest.approx(1.0),
+        "content": None,
+        "content_type": "image/png",
+        "metadata": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    (
+        ("-c", "hello"),
+        ("--binary",),
+        ("1",),
+    ),
+)
+def test_similar_typed_attachment_conflicts(
+    tmp_path, user_path_with_embeddings, extra_args
+):
+    image_path = tmp_path / "query.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        ["similar", "demo", "-a", str(image_path), *extra_args],
+    )
+
+    assert result.exit_code == 2
+    assert "Attachments cannot be combined with" in result.output
+
+
+def test_similar_rejects_multiple_typed_attachments(
+    tmp_path, user_path_with_embeddings
+):
+    paths = [tmp_path / "one.png", tmp_path / "two.png"]
+    for path in paths:
+        path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "similar",
+            "demo",
+            "-a",
+            str(paths[0]),
+            "-a",
+            str(paths[1]),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Only one attachment can be used for comparison" in result.output
+
+
 @pytest.mark.parametrize("use_stdin", (False, True))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
@@ -369,7 +564,9 @@ def test_similar_by_content_prefixed(
         ),
     ),
 )
-def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, content):
+def test_embed_multi_file_input(
+    db_factory, tmpdir, use_stdin, prefix, prepend, filename, content
+):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "phrases", "-d", str(db_path), "-m", "embed-demo"]
     input = None
@@ -391,7 +588,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     result = runner.invoke(cli, args, input=input, catch_exceptions=False)
     assert result.exit_code == 0
     # Check that everything was embedded correctly
-    db = sqlite_utils.Database(str(db_path))
+    db = db_factory(str(db_path))
     assert db["embeddings"].count == 2
     ids = [row["id"] for row in db["embeddings"].rows]
     expected_ids = ["1", "2"]
@@ -400,7 +597,7 @@ def test_embed_multi_file_input(tmpdir, use_stdin, prefix, prepend, filename, co
     assert ids == expected_ids
 
 
-def test_embed_multi_files_binary_store(tmpdir):
+def test_embed_multi_files_binary_store(db_factory, tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
     bin_path = tmpdir / "file.bin"
@@ -409,7 +606,7 @@ def test_embed_multi_files_binary_store(tmpdir):
     runner = CliRunner()
     result = runner.invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0
-    db = sqlite_utils.Database(str(db_path))
+    db = db_factory(str(db_path))
     assert db["embeddings"].count == 1
     row = next(iter(db["embeddings"].rows))
     assert row == {
@@ -423,22 +620,92 @@ def test_embed_multi_files_binary_store(tmpdir):
         ),
         "content": None,
         "content_blob": b"\x00\x01\x02",
+        "content_type": None,
         "content_hash": b'\xb9_g\xf6\x1e\xbb\x03a\x96"\xd7\x98\xf4_\xc2\xd3',
         "metadata": None,
         "updated": ANY,
     }
 
 
+def test_embed_multi_typed_attachments(db_factory, monkeypatch, embed_demo, tmp_path):
+    captured = capture_typed_attachments(monkeypatch, embed_demo)
+    db_path = tmp_path / "embeddings.db"
+    image_path = tmp_path / "photo.png"
+    audio_path = tmp_path / "recording.data"
+    image_path.write_bytes(TINY_PNG)
+    audio_path.write_bytes(b"not a complete wav")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "media",
+            "-d",
+            str(db_path),
+            "-m",
+            "embed-demo",
+            "-a",
+            str(image_path),
+            "--at",
+            str(audio_path),
+            "audio/wav",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert [(item.type, item.path) for item in captured] == [
+        ("image/png", str(image_path.resolve())),
+        ("audio/wav", str(audio_path.resolve())),
+    ]
+    db = db_factory(str(db_path))
+    assert [row["id"] for row in db["embeddings"].rows] == [
+        "photo.png",
+        "recording.data",
+    ]
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_error",
+    (
+        (("--binary",), "Attachments cannot be combined with --binary"),
+        (
+            ("--files", ".", "*.png"),
+            "Attachments cannot be combined with an input path, --sql, --files or --format",
+        ),
+    ),
+)
+def test_embed_multi_typed_attachment_conflicts(tmp_path, extra_args, expected_error):
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(TINY_PNG)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "media",
+            "-m",
+            "embed-demo",
+            "-a",
+            str(image_path),
+            *extra_args,
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert expected_error in result.output
+
+
 @pytest.mark.parametrize("use_other_db", (True, False))
 @pytest.mark.parametrize("prefix", (None, "prefix"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
-def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
+def test_embed_multi_sql(db_factory, tmpdir, use_other_db, prefix, prepend):
     db_path = str(tmpdir / "embeddings.db")
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     extra_args = []
     if use_other_db:
         db_path2 = str(tmpdir / "other.db")
-        db = sqlite_utils.Database(db_path2)
+        db = db_factory(db_path2)
         extra_args = ["--attach", "other", db_path2]
 
     if prefix:
@@ -470,7 +737,7 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
         + extra_args,
     )
     assert result.exit_code == 0
-    embeddings_db = sqlite_utils.Database(db_path)
+    embeddings_db = db_factory(db_path)
     assert embeddings_db["embeddings"].count == 2
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     assert rows == [
@@ -485,7 +752,7 @@ def test_embed_multi_sql(tmpdir, use_other_db, prefix, prepend):
     ]
 
 
-def test_embed_multi_batch_size(embed_demo, tmpdir):
+def test_embed_multi_batch_size(db_factory, embed_demo, tmpdir):
     db_path = str(tmpdir / "data.db")
     runner = CliRunner()
     sql = """
@@ -514,7 +781,7 @@ def test_embed_multi_batch_size(embed_demo, tmpdir):
         ],
     )
     assert result.exit_code == 0
-    db = sqlite_utils.Database(db_path)
+    db = db_factory(db_path)
     assert db["embeddings"].count == 100
     assert embed_demo.batch_count == 13
 
@@ -541,7 +808,7 @@ def multi_files(tmpdir):
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 @pytest.mark.parametrize("scenario", ("single", "multi"))
 @pytest.mark.parametrize("prepend", (None, "search_document: "))
-def test_embed_multi_files(multi_files, scenario, prepend):
+def test_embed_multi_files(db_factory, multi_files, scenario, prepend):
     db_path, files = multi_files
     for filename, content in (
         ("file1.txt", b"hello world"),
@@ -589,7 +856,7 @@ def test_embed_multi_files(multi_files, scenario, prepend):
         + extra_args,
     )
     assert result.exit_code == 0
-    embeddings_db = sqlite_utils.Database(db_path)
+    embeddings_db = db_factory(db_path)
     rows = list(embeddings_db.query("select id, content from embeddings order by id"))
     if scenario == "single":
         assert rows == [
@@ -635,7 +902,9 @@ def test_embed_multi_files_errors(multi_files, args, expected_error):
         (["--encoding", "utf-8", "--encoding", "latin-1"], None),
     ),
 )
-def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
+def test_embed_multi_files_encoding(
+    db_factory, multi_files, extra_args, expected_error
+):
     db_path, files = multi_files
     runner = CliRunner()
     result = runner.invoke(
@@ -661,7 +930,7 @@ def test_embed_multi_files_encoding(multi_files, extra_args, expected_error):
     else:
         assert result.exit_code == 0
         assert not result.stderr
-        embeddings_db = sqlite_utils.Database(db_path)
+        embeddings_db = db_factory(db_path)
         rows = list(
             embeddings_db.query("select id, content from embeddings order by id")
         )
@@ -709,7 +978,7 @@ def test_llm_embed_models_query(user_path, args, expected_model_id):
 
 @pytest.mark.parametrize("default_is_set", (False, True))
 @pytest.mark.parametrize("command", ("embed", "embed-multi"))
-def test_default_embed_model_errors(user_path, default_is_set, command):
+def test_default_embed_model_errors(db_factory, user_path, default_is_set, command):
     runner = CliRunner()
     if default_is_set:
         (user_path / "default_embedding_model.txt").write_text(
@@ -737,12 +1006,12 @@ def test_default_embed_model_errors(user_path, default_is_set, command):
         result3 = runner.invoke(cli, args, input=input, catch_exceptions=False)
         assert result3.exit_code == 0
     # At the end of this, there should be 2 embeddings
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+    db = db_factory(str(user_path / "embeddings.db"))
     assert db["embeddings"].count == 1
 
 
-def test_embed_multi_existing_collection_without_default(user_path):
-    db = sqlite_utils.Database(str(user_path / "embeddings.db"))
+def test_embed_multi_existing_collection_without_default(db_factory, user_path):
+    db = db_factory(str(user_path / "embeddings.db"))
     Collection("example", db, model_id="embed-demo")
 
     result = CliRunner().invoke(
@@ -756,10 +1025,10 @@ def test_embed_multi_existing_collection_without_default(user_path):
     assert db["embeddings"].count == 1
 
 
-def test_duplicate_content_embedded_only_once(embed_demo):
+def test_duplicate_content_embedded_only_once(db_factory, embed_demo):
     # content_hash should avoid embedding the same content twice
     # per collection
-    db = sqlite_utils.Database(memory=True)
+    db = db_factory(memory=True)
     assert len(embed_demo.embedded_content) == 0
     collection = Collection("test", db, model_id="embed-demo")
     collection.embed("1", "hello world")

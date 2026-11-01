@@ -31,7 +31,7 @@ from typing import (
 
 import httpx2
 
-from .errors import NeedsKeyException
+from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
 if TYPE_CHECKING:
@@ -519,7 +519,7 @@ class Prompt:
         self.schema = schema
         self.tools = _wrap_tools(tools or [])
         self.tool_results = tool_results or []
-        self.options = options or {}
+        self.options = options or model.Options()
         self.hide_reasoning = hide_reasoning
         # Explicit messages= list, if the caller supplied one. Copied so
         # later mutation by the caller doesn't alter the Prompt.
@@ -1110,6 +1110,7 @@ class _BaseResponse:
 
     id: str
     prompt: "Prompt"
+    _loaded_messages: list["Message"]
     stream: bool
     resolved_model: str | None = None
     conversation: Optional["_BaseConversation"] = None
@@ -1169,6 +1170,13 @@ class _BaseResponse:
 
         if self.prompt.schema and not self.model.supports_schema:
             raise ValueError(f"{self.model} does not support schemas")
+
+        if not self.model.supports_conversation and any(
+            message.role in ("assistant", "tool") for message in self.prompt.messages
+        ):
+            raise ConversationNotSupported(
+                f"{self.model} does not support conversations"
+            )
 
         function_tools, _ = _partition_tools(self.model, self.prompt.tools)
         if function_tools and not self.model.supports_tools:
@@ -1902,15 +1910,11 @@ class Response(_BaseResponse):
             tool_calls_list = self.tool_calls()
 
         # Run prepare() on all Toolbox instances that need it
-        instances_to_prepare: list[Toolbox] = []
         for tool_to_prep in tools_by_name.values():
             inst = _get_instance(tool_to_prep.implementation)
             if isinstance(inst, Toolbox) and not getattr(inst, "_prepared", False):
-                instances_to_prepare.append(inst)
-
-        for inst in instances_to_prepare:
-            inst.prepare()
-            inst._prepared = True
+                inst.prepare()
+                inst._prepared = True
 
         for tool_call in tool_calls_list:
             tool: Tool | None = tools_by_name.get(tool_call.name)
@@ -1935,8 +1939,13 @@ class Response(_BaseResponse):
                     )
                     continue
 
-            if tool is None:
-                msg = f'tool "{tool_call.name}" does not exist'
+            if tool is None or not tool.implementation:
+                # Mirror the async executor: append an error ToolResult so
+                # the provider still receives a result for every tool
+                # call, including a call pending in a rehydrated response
+                # whose tools have no implementation.
+                reason = "does not exist" if tool is None else "has no implementation"
+                msg = f'tool "{tool_call.name}" {reason}'
                 tool_results.append(
                     ToolResult(
                         name=tool_call.name,
@@ -1946,11 +1955,6 @@ class Response(_BaseResponse):
                     )
                 )
                 continue
-
-            if not tool.implementation:
-                raise ValueError(
-                    f"No implementation available for tool: {tool_call.name}"
-                )
 
             attachments = []
             exception = None
@@ -2139,6 +2143,19 @@ class AsyncResponse(_BaseResponse):
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
+    def log_to_db(self, db):
+        """Record this completed response in a log database.
+
+        Call this after awaiting the response, for example with
+        ``await response.text()``. Like the synchronous response API, this
+        performs the database write immediately.
+        """
+        if not self._done:
+            raise ValueError(
+                "Response not yet awaited — call `await response` before log_to_db()"
+            )
+        self._to_sync_response().log_to_db(db)
+
     async def reply(
         self,
         prompt: str | None = None,
@@ -2248,17 +2265,13 @@ class AsyncResponse(_BaseResponse):
         }
 
         # Run async prepare_async() on all Toolbox instances that need it
-        instances_to_prepare: list[Toolbox] = []
         for tool_to_prep in tools_by_name.values():
             inst = _get_instance(tool_to_prep.implementation)
             if isinstance(inst, Toolbox) and not getattr(
                 inst, "_async_prepared", False
             ):
-                instances_to_prepare.append(inst)
-
-        for inst in instances_to_prepare:
-            await inst.prepare_async()
-            inst._async_prepared = True
+                await inst.prepare_async()
+                inst._async_prepared = True
 
         indexed_results: list[tuple[int, ToolResult]] = []
         async_tasks: list[asyncio.Task] = []
@@ -2561,7 +2574,8 @@ class AsyncResponse(_BaseResponse):
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]
         finally:
-            pass
+            if not self._done:
+                await self._generator.aclose()
 
     async def messages(self) -> list[Any]:
         """List of Message objects produced by this response.
@@ -2630,6 +2644,9 @@ class AsyncResponse(_BaseResponse):
 
     async def to_sync_response(self) -> Response:
         await self._force()
+        return self._to_sync_response()
+
+    def _to_sync_response(self) -> Response:
         # This conversion might be tricky if the model is AsyncModel,
         # as Response expects a sync Model. For simplicity, we'll assume
         # the primary use case is data transfer after completion.
@@ -2669,6 +2686,10 @@ class AsyncResponse(_BaseResponse):
         # part's provider_metadata are lost. The CLI converts before
         # logging, so that loss would apply to every async response.
         response._stream_events = list(self._stream_events)
+        # Deserialized responses keep their structured output here instead
+        # of reconstructing it from stream events.
+        if hasattr(self, "_loaded_messages"):
+            response._loaded_messages = list(self._loaded_messages)
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response
@@ -2845,16 +2866,20 @@ class _BaseChainResponse:
         self.chain_limit = chain_limit
         self.before_call = before_call
         self.after_call = after_call
+        self._response_callbacks: list[Callable] = []
+
+    def on_response(self, callback):
+        """Register a callback for each subsequent completed response.
+
+        Called before the chain limit is checked or tools are executed.
+        Async chains also accept async callbacks and await them. Register
+        before consuming the chain; earlier responses are not replayed.
+        """
+        self._response_callbacks.append(callback)
 
     def log_to_db(self, db):
         for response in self._responses:
-            if isinstance(response, AsyncResponse):
-                sync_response = asyncio.run(response.to_sync_response())
-            elif isinstance(response, Response):
-                sync_response = response
-            else:
-                assert False, "Should have been a Response or AsyncResponse"
-            sync_response.log_to_db(db)
+            response.log_to_db(db)
 
     def _pending_tool_calls(self) -> list[ToolCall]:
         """Unresolved tool calls at the end of this chain's history.
@@ -2933,9 +2958,15 @@ class ChainResponse(_BaseChainResponse):
         current_response: Response | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
@@ -3071,10 +3102,16 @@ class AsyncChainResponse(_BaseChainResponse):
         current_response: AsyncResponse | None = initial_response
         while current_response:
             count += 1
+            for callback in self._response_callbacks:
+                await current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
 
-            if self.chain_limit and count >= self.chain_limit:
+            if (
+                self.chain_limit
+                and count >= self.chain_limit
+                and await current_response.tool_calls()
+            ):
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
             # This could raise llm.CancelToolCall:
@@ -3211,6 +3248,7 @@ class _BaseModel(ABC, _get_key_mixin):
 
     supports_schema = False
     supports_tools = False
+    supports_conversation = True
 
     @property
     def supported_server_side_tools(self) -> tuple[type[ServerSideTool], ...]:
@@ -3504,9 +3542,24 @@ class EmbeddingModel(ABC, _get_key_mixin):
     key_env_var: str | None = None
     supports_text: bool = True
     supports_binary: bool = False
+    attachment_types: set[str] | frozenset[str] = frozenset()
     batch_size: int | None = None
 
-    def _check(self, item: str | bytes):
+    def _check(self, item: str | bytes | Attachment):
+        if isinstance(item, Attachment):
+            # supports_binary predates typed attachments. Continue to accept an
+            # Attachment for those models, converting it to bytes immediately
+            # before calling embed_batch().
+            if not self.attachment_types:
+                if not self.supports_binary:
+                    raise ValueError("This model does not support attachments")
+                return
+            attachment_type = item.resolve_type()
+            if attachment_type not in self.attachment_types:
+                raise ValueError(
+                    f"This model does not support attachments of type "
+                    f"'{attachment_type}', only {', '.join(sorted(self.attachment_types))}"
+                )
         if not self.supports_binary and isinstance(item, bytes):
             raise ValueError(
                 "This model does not support binary data, only text strings"
@@ -3516,10 +3569,22 @@ class EmbeddingModel(ABC, _get_key_mixin):
                 "This model does not support text strings, only binary data"
             )
 
-    def embed(self, item: str | bytes, *, key: str | None = None) -> list[float]:
-        "Embed a single text string or binary blob, return a list of floats"
+    def _prepare_input(
+        self, item: str | bytes | Attachment
+    ) -> str | bytes | Attachment:
         self._check(item)
-        iterator = self._embed_batch([item], key=key)
+        if isinstance(item, Attachment) and not self.attachment_types:
+            content = item.content_bytes()
+            if content is None:
+                raise ValueError("Attachment has no content")
+            return content
+        return item
+
+    def embed(
+        self, item: str | bytes | Attachment, *, key: str | None = None
+    ) -> list[float]:
+        "Embed a single text string, binary blob or attachment, returning floats"
+        iterator = self._embed_batch([self._prepare_input(item)], key=key)
         try:
             return next(iterator)
         finally:
@@ -3527,22 +3592,14 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
     def embed_multi(
         self,
-        items: Iterable[str | bytes],
+        items: Iterable[str | bytes | Attachment],
         batch_size: int | None = None,
         *,
         key: str | None = None,
     ) -> Iterator[list[float]]:
         "Embed multiple items in batches according to the model batch_size"
-        iter_items = iter(items)
+        iter_items = (self._prepare_input(item) for item in items)
         effective_batch_size = self.batch_size if batch_size is None else batch_size
-        if (not self.supports_binary) or (not self.supports_text):
-
-            def checking_iter(inner_items):
-                for item_to_check in inner_items:
-                    self._check(item_to_check)
-                    yield item_to_check
-
-            iter_items = checking_iter(items)
         if effective_batch_size is None:
             yield from self._embed_batch(iter_items, key=key)
             return
@@ -3553,7 +3610,10 @@ class EmbeddingModel(ABC, _get_key_mixin):
             yield from self._embed_batch(batch_items, key=key)
 
     def _embed_batch(
-        self, items: Iterable[str | bytes], *, key: str | None = None
+        self,
+        items: Iterable[str | bytes | Attachment],
+        *,
+        key: str | None = None,
     ) -> Generator[list[float], None, None]:
         resolved_key = self.get_key(key)
         try:
@@ -3573,10 +3633,13 @@ class EmbeddingModel(ABC, _get_key_mixin):
 
     @abstractmethod
     def embed_batch(
-        self, items: Iterable[str | bytes], *, key: str | None = None
+        self,
+        items: Iterable[str | bytes | Attachment],
+        *,
+        key: str | None = None,
     ) -> Iterator[list[float]]:
         """
-        Embed a batch of strings or blobs, return a list of lists of floats
+        Embed a batch of strings, blobs or attachments, returning float vectors
         """
 
     def __str__(self) -> str:
@@ -3649,16 +3712,15 @@ def _ensure_dict_schema(schema):
 
 
 def _remove_titles_recursively(obj):
-    """Recursively remove all 'title' fields from a nested dictionary."""
+    """Recursively remove JSON Schema 'title' annotations from a nested dictionary."""
     if isinstance(obj, dict):
-        # Remove title if present
-        obj.pop("title", None)
-
-        # Recursively process all values
+        # JSON Schema "title" is a string. A property or $defs entry named
+        # "title" has an object value and must be kept.
+        if isinstance(obj.get("title"), str):
+            obj.pop("title")
         for value in obj.values():
             _remove_titles_recursively(value)
     elif isinstance(obj, list):
-        # Process each item in lists
         for item in obj:
             _remove_titles_recursively(item)
 

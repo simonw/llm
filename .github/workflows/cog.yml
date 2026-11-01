@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   run-cog:
+    # Fork PRs get a read-only token, so they can't be checked out by
+    # branch name or pushed to. test.yml runs cog --check for those.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:

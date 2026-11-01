@@ -10,7 +10,7 @@ from sqlite_utils import Database
 from sqlite_utils.db import Table
 
 from .embeddings_migrations import embeddings_migrations
-from .models import EmbeddingModel
+from .models import Attachment, EmbeddingModel
 
 
 @dataclass
@@ -19,6 +19,7 @@ class Entry:
     score: float | None
     content: str | None = None
     metadata: dict[str, Any] | None = None
+    content_type: str | None = None
 
 
 class Collection:
@@ -115,10 +116,33 @@ class Collection:
             )
         )["c"]
 
+    @staticmethod
+    def _materialize(
+        value: str | bytes | Attachment,
+    ) -> str | bytes | Attachment:
+        """Resolve an attachment once while retaining its path and URL context."""
+        if not isinstance(value, Attachment):
+            return value
+        if value.type is not None and value.content is not None:
+            return value
+        content_type = value.resolve_type()
+        if content_type is None:
+            raise ValueError("Attachment has no content type")
+        content = value.content_bytes()
+        if content is None:
+            raise ValueError("Attachment has no content")
+        return Attachment(
+            type=content_type,
+            path=value.path,
+            url=value.url,
+            content=content,
+            _id=value._id,
+        )
+
     def embed(
         self,
         id: str,
-        value: str | bytes,
+        value: str | bytes | Attachment,
         metadata: dict[str, Any] | None = None,
         store: bool = False,
         *,
@@ -129,13 +153,14 @@ class Collection:
 
         Args:
             id (str): ID for the value
-            value (str or bytes): value to be embedded
+            value (str, bytes or Attachment): value to be embedded
             metadata (dict, optional): Metadata to be stored
             store (bool, optional): Whether to store the value in the content or content_blob column
             key (str, optional): API key or stored key alias to use
         """
         from llm import encode
 
+        value = self._materialize(value)
         content_hash = self.content_hash(value)
         if self.db["embeddings"].count_where(
             "content_hash = ? and collection_id = ?", [content_hash, self.id]
@@ -148,7 +173,14 @@ class Collection:
                 "id": id,
                 "embedding": encode(embedding),
                 "content": value if (store and isinstance(value, str)) else None,
-                "content_blob": value if (store and isinstance(value, bytes)) else None,
+                "content_blob": (
+                    value.content_bytes()
+                    if (store and isinstance(value, Attachment))
+                    else value if (store and isinstance(value, bytes)) else None
+                ),
+                "content_type": (
+                    value.resolve_type() if isinstance(value, Attachment) else None
+                ),
                 "content_hash": content_hash,
                 "metadata": json.dumps(metadata) if metadata else None,
                 "updated": int(time.time()),
@@ -158,7 +190,7 @@ class Collection:
 
     def embed_multi(
         self,
-        entries: Iterable[tuple[str, str | bytes]],
+        entries: Iterable[tuple[str, str | bytes | Attachment]],
         store: bool = False,
         batch_size: int = 100,
         *,
@@ -182,7 +214,7 @@ class Collection:
 
     def embed_multi_with_metadata(
         self,
-        entries: Iterable[tuple[str, str | bytes, dict[str, Any] | None]],
+        entries: Iterable[tuple[str, str | bytes | Attachment, dict[str, Any] | None]],
         store: bool = False,
         batch_size: int = 100,
         *,
@@ -203,7 +235,10 @@ class Collection:
         iterator = iter(entries)
         collection_id = self.id
         while True:
-            batch = list(islice(iterator, batch_size))
+            batch = [
+                (id, self._materialize(value), metadata)
+                for id, value, metadata in islice(iterator, batch_size)
+            ]
             if not batch:
                 break
             # Calculate hashes first
@@ -235,7 +270,18 @@ class Collection:
                                 value if (store and isinstance(value, str)) else None
                             ),
                             "content_blob": (
-                                value if (store and isinstance(value, bytes)) else None
+                                value.content_bytes()
+                                if (store and isinstance(value, Attachment))
+                                else (
+                                    value
+                                    if (store and isinstance(value, bytes))
+                                    else None
+                                )
+                            ),
+                            "content_type": (
+                                value.resolve_type()
+                                if isinstance(value, Attachment)
+                                else None
                             ),
                             "content_hash": self.content_hash(value),
                             "metadata": json.dumps(metadata) if metadata else None,
@@ -292,10 +338,12 @@ class Collection:
                 score=row["score"],
                 content=row["content"],
                 metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+                content_type=row["content_type"],
             )
             for row in self.db.query(
                 """
-            select id, content, metadata, distance_score(embedding) as score
+            select id, content, content_type, metadata,
+                distance_score(embedding) as score
             from embeddings
             where {where}
             order by score desc limit {number}
@@ -337,20 +385,23 @@ class Collection:
         )
 
     def similar(
-        self, value: str | bytes, number: int = 10, prefix: str | None = None
+        self,
+        value: str | bytes | Attachment,
+        number: int = 10,
+        prefix: str | None = None,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given value.
 
         Args:
-            value (str or bytes): value to search by
+            value (str, bytes or Attachment): value to search by
             number (int, optional): Number of similar items to return
             prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
         """
-        comparison_vector = self.model().embed(value)
+        comparison_vector = self.model().embed(self._materialize(value))
         return self.similar_by_vector(comparison_vector, number, prefix=prefix)
 
     @classmethod
@@ -373,8 +424,20 @@ class Collection:
             self.db.execute("delete from collections where id = ?", [self.id])
 
     @staticmethod
-    def content_hash(input: str | bytes) -> bytes:
+    def content_hash(input: str | bytes | Attachment) -> bytes:
         "Hash content for deduplication. Override to change hashing behavior."
-        if isinstance(input, str):
-            input = input.encode("utf8")
-        return hashlib.md5(input).digest()
+        if isinstance(input, Attachment):
+            content_type = input.resolve_type()
+            if content_type is None:
+                raise ValueError("Attachment has no content type")
+            content = input.content_bytes()
+            if content is None:
+                raise ValueError("Attachment has no content")
+            content_to_hash = (
+                b"llm-attachment\0" + content_type.encode("utf8") + b"\0" + content
+            )
+        elif isinstance(input, str):
+            content_to_hash = input.encode("utf8")
+        else:
+            content_to_hash = input
+        return hashlib.md5(content_to_hash).digest()

@@ -62,7 +62,7 @@ from llm import (
     set_default_model,
     user_dir,
 )
-from llm.models import ChainResponse, _BaseChainResponse, _BaseConversation
+from llm.models import _BaseChainResponse, _BaseConversation
 
 from .logs import (
     LogStore,
@@ -133,6 +133,21 @@ async def display_async_stream_events(events, *, show_reasoning=True):
             click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
 
 
+def _display_token_usage(response):
+    responses = (
+        response._responses if isinstance(response, _BaseChainResponse) else [response]
+    )
+    for response_object in responses:
+        click.echo(
+            click.style(
+                f"Token usage: {response_object.token_usage()}",
+                fg="yellow",
+                bold=True,
+            ),
+            err=True,
+        )
+
+
 def _run_chat(
     model_label,
     prompt_callback,
@@ -141,8 +156,8 @@ def _run_chat(
     initial_fragments=None,
     initial_attachments=None,
     transform_prompt=None,
-    after_response=None,
     show_reasoning=True,
+    show_usage=False,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
     click.echo(f"Chatting with {model_label}")
@@ -214,9 +229,9 @@ def _run_chat(
             response.stream_events(),
             show_reasoning=show_reasoning,
         )
-        if after_response is not None:
-            after_response(response)
         print()
+        if show_usage:
+            _display_token_usage(response)
 
 
 def validate_fragment_alias(ctx, param, value):
@@ -796,7 +811,7 @@ def prompt(
 
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
+    db = _cli_database(log_path)
     migrate(db)
 
     if schema_multi:
@@ -1075,35 +1090,46 @@ def prompt(
     if hide_reasoning:
         kwargs["hide_reasoning"] = True
 
+    # Commit each completed response before the chain does any more work.
+    log_db = None
+    if (logs_on() or log) and not no_log:
+        log_db = db
+    elif json_output:
+        # --json needs logged rows, so use a temporary in-memory database.
+        log_db = _cli_database(memory=True)
+        migrate(log_db)
+
+    def log_response(response):
+        response.log_to_db(log_db)
+
     try:
+        response = prompt_method(
+            prompt,
+            fragments=resolved_fragments,
+            attachments=resolved_attachments,
+            system=system,
+            schema=schema,
+            system_fragments=resolved_system_fragments,
+            **kwargs,
+        )
+        if log_db is not None:
+            if isinstance(response, _BaseChainResponse):
+                response.on_response(log_response)
+            elif not isinstance(response, AsyncResponse):
+                response.on_done(log_response)
+
         if async_:
 
             async def inner():
+                if log_db is not None and isinstance(response, AsyncResponse):
+                    await response.on_done(log_response)
                 if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     await display_async_stream_events(
                         response.astream_events(),
                         show_reasoning=not hide_reasoning,
                     )
                     print()
                 else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
                     text = await response.text()
                     if extract or extract_last:
                         text = (
@@ -1111,19 +1137,9 @@ def prompt(
                         )
                     if not json_output:
                         print(text)
-                return response
 
-            response = asyncio.run(inner())
+            asyncio.run(inner())
         else:
-            response = prompt_method(
-                prompt,
-                fragments=resolved_fragments,
-                attachments=resolved_attachments,
-                system=system,
-                schema=schema,
-                system_fragments=resolved_system_fragments,
-                **kwargs,
-            )
             if should_stream:
                 display_stream_events(
                     response.stream_events(),
@@ -1148,36 +1164,7 @@ def prompt(
         raise click.ClickException(str(ex))
 
     if usage:
-        if isinstance(response, ChainResponse):
-            responses = response._responses
-        else:
-            responses = [response]
-        for response_object in responses:
-            # Show token usage to stderr in yellow
-            click.echo(
-                click.style(
-                    f"Token usage: {response_object.token_usage()}",
-                    fg="yellow",
-                    bold=True,
-                ),
-                err=True,
-            )
-
-    # Log responses to the database
-    log_db = None
-    if (logs_on() or log) and not no_log:
-        log_db = db
-    elif json_output:
-        # --json needs logged rows, so use a temporary in-memory database
-        log_db = sqlite_utils.Database(memory=True)
-        migrate(log_db)
-
-    if log_db is not None:
-        # Could be Response, AsyncResponse, ChainResponse, AsyncChainResponse
-        if isinstance(response, AsyncResponse):
-            response = asyncio.run(response.to_sync_response())
-        # At this point ALL forms should have a log_to_db() method that works:
-        response.log_to_db(log_db)
+        _display_token_usage(response)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1242,6 +1229,9 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
+@click.option(
+    "-u", "--usage", is_flag=True, help="Show token usage after each chat turn"
+)
 @click.option("--key", help="API key to use")
 @tool_options
 def chat(
@@ -1256,6 +1246,7 @@ def chat(
     options,
     no_stream,
     hide_reasoning,
+    usage,
     key,
     database,
     tools,
@@ -1276,7 +1267,7 @@ def chat(
         readline.parse_and_bind("bind -x '\\e[C: forward-char'")
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
-    db = sqlite_utils.Database(log_path)
+    db = _cli_database(log_path)
     migrate(db)
 
     conversation = None
@@ -1313,6 +1304,9 @@ def chat(
         model = get_model(model_id)
     except KeyError:
         raise click.ClickException(f"'{model_id}' is not a known model")
+
+    if not model.supports_conversation:
+        raise click.ClickException(f"{model} does not support conversations")
 
     if conversation is None:
         # Start a fresh conversation for this chat
@@ -1391,6 +1385,7 @@ def chat(
             system=system,
             **kwargs,
         )
+        response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -1404,8 +1399,8 @@ def chat(
         initial_fragments=argument_fragments,
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
-        after_response=lambda response: response.log_to_db(db),
         show_reasoning=not hide_reasoning,
+        show_usage=usage,
     )
 
 
@@ -1415,125 +1410,127 @@ def load_conversation(
     database=None,
 ) -> _BaseConversation | None:
     log_path = pathlib.Path(database) if database else logs_db_path()
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    if conversation_id is None:
-        # Most recent conversation from either generation of tables -
-        # thread ids are conversation ids, so the union dedupes rows
-        # from the dual-write era.
-        matches = list(db.query("""
-                select id from (
-                    select id from threads
-                    union
-                    select id from conversations
-                ) order by id desc limit 1
-                """))
-        if matches:
-            conversation_id = matches[0]["id"]
-        else:
-            return None
-    try:
-        row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
-    except sqlite_utils.db.NotFoundError:
-        # No legacy record - reconstruct the equivalent from the thread
-        # and its most recent turn's model.
-        try:
-            thread_row = cast(sqlite_utils.db.Table, db["threads"]).get(conversation_id)
-        except sqlite_utils.db.NotFoundError:
-            raise click.ClickException(
-                f"No conversation found with id={conversation_id}"
-            )
-        model_match = next(
-            db.query(
-                "select model from turns where thread_id = ? order by id desc limit 1",
-                [conversation_id],
-            ),
-            None,
-        )
-        if model_match is None:
-            raise click.ClickException(
-                f"No conversation found with id={conversation_id}"
-            )
-        row = {
-            "id": conversation_id,
-            "name": thread_row["name"],
-            "model": model_match["model"],
-        }
-    # Inflate that conversation
-    conversation_class = AsyncConversation if async_ else Conversation
-    response_class = AsyncResponse if async_ else Response
-    conversation = conversation_class.from_row(row)
-    for response in db["responses"].rows_where(
-        "conversation_id = ?", [conversation_id], order_by="id"
-    ):
-        response_obj = response_class.from_row(db, response)
-        if conversation.responses:
-            previous_response = conversation.responses[-1]
-            # SQLite rows store each response's legacy current-turn inputs
-            # (prompt text, attachments, tool_results), not the full
-            # prompt.messages chain. Rebuild that chain here so follow-up
-            # prompts via `llm -c` satisfy the Prompt.messages invariant.
-            response_obj.prompt._explicit_messages = (
-                list(previous_response.prompt.messages)
-                + list(previous_response._messages_now())
-                + list(response_obj.prompt.messages)
-            )
-        conversation.responses.append(response_obj)
-
-    # If this conversation has a thread in the content-addressed tables,
-    # take the history from there. That chain is the exact message list
-    # that was sent and returned, so reasoning signatures and provider
-    # metadata survive - unlike the rebuild above, which can only work
-    # from the flattened legacy columns.
-    try:
-        conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
-    except KeyError:
-        pass
-
-    # Plugin and server-side tools recorded against the first turn, for
-    # the same reuse-on-continue behaviour the rebuilt responses provide.
-    # Configured instances are collapsed into a single spec string like
-    # Datasette({"url": "..."}) - the same format -T accepts - so the
-    # instance can be reconstructed with its configuration.
-    loaded_tools = []
-    seen_instance_ids = set()
-    supported_server_side_tool_names = {
-        tool_class.__name__
-        for tool_class in conversation.model.supported_server_side_tools
-    }
-    for tool_row in db.query(
-        """
-        select tools.name, tools.plugin, turn_tools.instance_id,
-            tool_instances.name as instance_name,
-            tool_instances.arguments as instance_arguments
-        from tools
-        join turn_tools on turn_tools.tool_id = tools.id
-        left join tool_instances on tool_instances.id = turn_tools.instance_id
-        where turn_tools.turn_id = (
-            select id from turns where thread_id = ? order by id limit 1
-        )
-        """,
-        [conversation_id],
-    ):
-        if (
-            tool_row["plugin"] is None
-            and tool_row["instance_name"] not in supported_server_side_tool_names
-        ):
-            continue
-        if tool_row["instance_id"] is None:
-            loaded_tools.append(tool_row["name"])
-        elif tool_row["instance_id"] not in seen_instance_ids:
-            seen_instance_ids.add(tool_row["instance_id"])
-            arguments = tool_row["instance_arguments"]
-            if arguments and arguments != "{}":
-                loaded_tools.append(
-                    "{}({})".format(tool_row["instance_name"], arguments)
-                )
+    with sqlite_utils.Database(log_path) as db:
+        migrate(db)
+        if conversation_id is None:
+            # Most recent conversation from either generation of tables -
+            # thread ids are conversation ids, so the union dedupes rows
+            # from the dual-write era.
+            matches = list(db.query("""
+                    select id from (
+                        select id from threads
+                        union
+                        select id from conversations
+                    ) order by id desc limit 1
+                    """))
+            if matches:
+                conversation_id = matches[0]["id"]
             else:
-                loaded_tools.append(tool_row["instance_name"])
-    conversation.loaded_tools = loaded_tools
+                return None
+        try:
+            row = cast(sqlite_utils.db.Table, db["conversations"]).get(conversation_id)
+        except sqlite_utils.db.NotFoundError:
+            # No legacy record - reconstruct the equivalent from the thread
+            # and its most recent turn's model.
+            try:
+                thread_row = cast(sqlite_utils.db.Table, db["threads"]).get(
+                    conversation_id
+                )
+            except sqlite_utils.db.NotFoundError:
+                raise click.ClickException(
+                    f"No conversation found with id={conversation_id}"
+                )
+            model_match = next(
+                db.query(
+                    "select model from turns where thread_id = ? order by id desc limit 1",
+                    [conversation_id],
+                ),
+                None,
+            )
+            if model_match is None:
+                raise click.ClickException(
+                    f"No conversation found with id={conversation_id}"
+                )
+            row = {
+                "id": conversation_id,
+                "name": thread_row["name"],
+                "model": model_match["model"],
+            }
+        # Inflate that conversation
+        conversation_class = AsyncConversation if async_ else Conversation
+        response_class = AsyncResponse if async_ else Response
+        conversation = conversation_class.from_row(row)
+        for response in db["responses"].rows_where(
+            "conversation_id = ?", [conversation_id], order_by="id"
+        ):
+            response_obj = response_class.from_row(db, response)
+            if conversation.responses:
+                previous_response = conversation.responses[-1]
+                # SQLite rows store each response's legacy current-turn inputs
+                # (prompt text, attachments, tool_results), not the full
+                # prompt.messages chain. Rebuild that chain here so follow-up
+                # prompts via `llm -c` satisfy the Prompt.messages invariant.
+                response_obj.prompt._explicit_messages = (
+                    list(previous_response.prompt.messages)
+                    + list(previous_response._messages_now())
+                    + list(response_obj.prompt.messages)
+                )
+            conversation.responses.append(response_obj)
 
-    return conversation
+        # If this conversation has a thread in the content-addressed tables,
+        # take the history from there. That chain is the exact message list
+        # that was sent and returned, so reasoning signatures and provider
+        # metadata survive - unlike the rebuild above, which can only work
+        # from the flattened legacy columns.
+        try:
+            conversation.loaded_messages = LogStore(db).thread_messages(conversation_id)
+        except KeyError:
+            pass
+
+        # Plugin and server-side tools recorded against the first turn, for
+        # the same reuse-on-continue behaviour the rebuilt responses provide.
+        # Configured instances are collapsed into a single spec string like
+        # Datasette({"url": "..."}) - the same format -T accepts - so the
+        # instance can be reconstructed with its configuration.
+        loaded_tools = []
+        seen_instance_ids = set()
+        supported_server_side_tool_names = {
+            tool_class.__name__
+            for tool_class in conversation.model.supported_server_side_tools
+        }
+        for tool_row in db.query(
+            """
+            select tools.name, tools.plugin, turn_tools.instance_id,
+                tool_instances.name as instance_name,
+                tool_instances.arguments as instance_arguments
+            from tools
+            join turn_tools on turn_tools.tool_id = tools.id
+            left join tool_instances on tool_instances.id = turn_tools.instance_id
+            where turn_tools.turn_id = (
+                select id from turns where thread_id = ? order by id limit 1
+            )
+            """,
+            [conversation_id],
+        ):
+            if (
+                tool_row["plugin"] is None
+                and tool_row["instance_name"] not in supported_server_side_tool_names
+            ):
+                continue
+            if tool_row["instance_id"] is None:
+                loaded_tools.append(tool_row["name"])
+            elif tool_row["instance_id"] not in seen_instance_ids:
+                seen_instance_ids.add(tool_row["instance_id"])
+                arguments = tool_row["instance_arguments"]
+                if arguments and arguments != "{}":
+                    loaded_tools.append(
+                        "{}({})".format(tool_row["instance_name"], arguments)
+                    )
+                else:
+                    loaded_tools.append(tool_row["instance_name"])
+        conversation.loaded_tools = loaded_tools
+
+        return conversation
 
 
 @cli.group(
@@ -1638,7 +1635,7 @@ def logs_status():
         click.echo("Logging is ON for all prompts".format())
     else:
         click.echo("Logging is OFF".format())
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
     click.echo(f"Found log database at {path}")
     click.echo("Number of threads logged:\t{}".format(db["threads"].count))
@@ -1657,7 +1654,7 @@ def backup(path):
     "Backup your logs database to this file"
     logs_path = logs_db_path()
     path = pathlib.Path(path)
-    db = sqlite_utils.Database(logs_path)
+    db = _cli_database(logs_path)
     try:
         db.execute("vacuum into ?", [str(path)])
     except Exception as ex:  # noqa: BLE001
@@ -1910,7 +1907,7 @@ def logs_list(
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     if schema_multi:
@@ -2165,7 +2162,8 @@ def logs_list(
                 if row["tool_calls"]:
                     obj["tool_calls"] = [
                         "{}({})".format(
-                            tool_call["name"], json.dumps(tool_call["arguments"])
+                            tool_call["name"],
+                            truncate_string(json.dumps(tool_call["arguments"])),
                         )
                         for tool_call in row["tool_calls"]
                     ]
@@ -2234,7 +2232,8 @@ def logs_list(
                 should_show_conversation = False
             click.echo("## Prompt\n\n{}".format(row["prompt"] or "-- none --"))
             _display_fragments(row["prompt_fragments"], "Prompt fragments")
-            if row["options_json"]:
+            # .get(): annotate_log_rows removes the *_json keys under -t
+            if row.get("options_json"):
                 options = row["options_json"]
                 if isinstance(options, str):
                     options = json.loads(options)
@@ -2248,7 +2247,7 @@ def logs_list(
                     click.echo("\n## System\n\n{}".format(row["system"]))
                 current_system = row["system"]
             _display_fragments(row["system_fragments"], "System fragments")
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 click.echo(
                     "\n## Schema\n\n```json\n{}\n```".format(
                         json.dumps(row["schema_json"], indent=2)
@@ -2337,14 +2336,18 @@ def logs_list(
 
             # If a schema was provided and the row is valid JSON, pretty print and syntax highlight it
             response = row["response"]
-            if row["schema_json"]:
+            if row.get("schema_json"):
                 try:
                     parsed = json.loads(response)
                     response = f"```json\n{json.dumps(parsed, indent=2)}\n```"
                 except ValueError:
                     pass
             if row.get("reasoning"):
-                click.echo("\n## Reasoning\n\n{}".format(row["reasoning"].rstrip()))
+                click.echo(
+                    "\n## Reasoning\n\n<details><summary>Reasoning trace</summary>\n\n{}\n\n</details>".format(
+                        row["reasoning"].rstrip()
+                    )
+                )
             click.echo("\n## Response\n")
             if row["tool_calls"]:
                 click.echo("### Tool calls\n")
@@ -2524,6 +2527,7 @@ def models_list(options, async_, schemas, tools, json_, query, model_ids):
                 "can_stream": model.can_stream,
                 "supports_schema": model.supports_schema,
                 "supports_tools": model.supports_tools,
+                "supports_conversation": model.supports_conversation,
                 "supports_async": model_with_aliases.async_model is not None,
                 "attachment_types": sorted(model.attachment_types),
                 "server_side_tools": [
@@ -2699,7 +2703,7 @@ def schemas_list(path, database, queries, full, json_, nl):
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     params = []
@@ -2775,7 +2779,7 @@ def schemas_show(schema_id, path, database):
     path = pathlib.Path(path or logs_db_path())
     if not path.exists():
         raise click.ClickException(f"No log database found at {path}")
-    db = sqlite_utils.Database(path)
+    db = _cli_database(path)
     migrate(db)
 
     try:
@@ -3040,13 +3044,13 @@ def aliases_set(alias, model_id, query):
     Example usage:
 
     \b
-        llm aliases set luna gpt-5.6-luna
+        llm aliases set luna gpt-6-luna
 
     Alternatively you can omit the model ID and specify one or more -q options.
     The first model matching all of those query strings will be used.
 
     \b
-        llm aliases set luna -q gpt -q luna
+        llm aliases set luna -q gpt-6 -q luna
     """
     if not model_id:
         if not query:
@@ -3121,7 +3125,7 @@ def fragments():
 @click.option("json_", "--json", is_flag=True, help="Output as JSON")
 def fragments_list(queries, aliases, json_):
     "List current fragments"
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     params = {}
     where_bits = []
@@ -3188,7 +3192,7 @@ def fragments_set(alias, fragment):
     \b
         llm fragments set mydocs ./docs.md
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     try:
         resolved = resolve_fragments(db, [fragment])[0]
@@ -3215,7 +3219,7 @@ def fragments_show(alias_or_hash):
     \b
         llm fragments show mydocs
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     try:
         resolved = resolve_fragments(db, [alias_or_hash])[0]
@@ -3235,7 +3239,7 @@ def fragments_remove(alias):
     \b
         llm fragments remove docs
     """
-    db = sqlite_utils.Database(logs_db_path())
+    db = _cli_database(logs_db_path())
     migrate(db)
     db.execute("delete from fragment_aliases where alias = :alias", {"alias": alias})
 
@@ -3361,6 +3365,23 @@ def uninstall(packages, yes):
 )
 @click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "--metadata",
     help="JSON object metadata to store",
     callback=json_validator("metadata"),
@@ -3382,6 +3403,8 @@ def embed(
     database,
     content,
     binary,
+    attachments,
+    attachment_types,
     metadata,
     format_,
 ):
@@ -3392,12 +3415,20 @@ def embed(
     if store and not collection:
         raise click.ClickException("Must provide collection when using --store")
 
+    resolved_attachments = [*attachments, *attachment_types]
+    if len(resolved_attachments) > 1:
+        raise click.UsageError("Only one attachment can be embedded at a time")
+    if resolved_attachments and (content is not None or input is not None or binary):
+        raise click.UsageError(
+            "Attachments cannot be combined with --content, --input or --binary"
+        )
+
     # Lazy load this because we do not need it for -c or -i versions
     def get_db():
         if database:
-            return sqlite_utils.Database(database)
+            return _cli_database(database)
         else:
-            return sqlite_utils.Database(user_dir() / "embeddings.db")
+            return _cli_database(user_dir() / "embeddings.db")
 
     collection_obj = None
     model_obj = None
@@ -3432,8 +3463,10 @@ def embed(
     if collection and (format_ is None):
         show_output = False
 
-    # Resolve input text
-    if not content:
+    # Resolve input text, binary data or a typed attachment
+    if resolved_attachments:
+        content = resolved_attachments[0]
+    elif not content:
         if not input or input == "-":
             # Read from stdin
             input_source = sys.stdin.buffer if binary else sys.stdin
@@ -3483,6 +3516,23 @@ def embed(
     help="Embed files in this directory - specify directory and glob pattern",
 )
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "encodings",
     "--encoding",
     help="Encodings to try when reading --files",
@@ -3520,6 +3570,8 @@ def embed_multi(
     input_path,
     format,
     files,
+    attachments,
+    attachment_types,
     encodings,
     binary,
     sql,
@@ -3535,7 +3587,7 @@ def embed_multi(
     """
     Store embeddings for multiple strings at once in the specified collection.
 
-    Input data can come from one of three sources:
+    Input data can come from one of four sources:
 
     \b
     1. A CSV, TSV, JSON or JSONL file:
@@ -3569,21 +3621,42 @@ def embed_multi(
          llm embed-multi docs --files docs '**/*.md'
          llm embed-multi images --files photos '*.jpg' --binary
          llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
+
+    \b
+    4. Typed attachments:
+       - Each path or URL becomes one embedding
+       - Use --at PATH MIME-TYPE to supply an explicit MIME type
+
+    \b
+       Examples:
+         llm embed-multi media -a photo.jpg -a recording.wav
+         llm embed-multi media --at recording.data audio/wav
     """
+    resolved_attachments = [*attachments, *attachment_types]
+    if resolved_attachments and binary:
+        raise click.UsageError("Attachments cannot be combined with --binary")
+    if resolved_attachments and (input_path or sql or files or format):
+        raise click.UsageError(
+            "Attachments cannot be combined with an input path, --sql, --files or --format"
+        )
+    if resolved_attachments and encodings:
+        raise click.UsageError("Attachments cannot be combined with --encoding")
     if binary and not files:
         raise click.UsageError("--binary must be used with --files")
     if binary and encodings:
         raise click.UsageError("--binary cannot be used with --encoding")
-    if not input_path and not sql and not files:
-        raise click.UsageError("Either --sql or input path or --files is required")
+    if not input_path and not sql and not files and not resolved_attachments:
+        raise click.UsageError(
+            "Either --sql, input path, --files or an attachment is required"
+        )
 
     if files and (input_path or sql or format):
         raise click.UsageError("Cannot use --files with --sql, input path or --format")
 
     if database:
-        db = sqlite_utils.Database(database)
+        db = _cli_database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = _cli_database(user_dir() / "embeddings.db")
 
     for alias, attach_path in attach:
         db.attach(alias, attach_path)
@@ -3599,7 +3672,21 @@ def embed_multi(
         )
 
     expected_length = None
-    if files:
+    if resolved_attachments:
+        expected_length = len(resolved_attachments)
+
+        def attachment_id(attachment: Attachment) -> str:
+            if attachment.path:
+                return pathlib.Path(attachment.path).name
+            if attachment.url:
+                return attachment.url
+            return attachment.id()
+
+        rows = (
+            {"id": attachment_id(attachment), "content": attachment}
+            for attachment in resolved_attachments
+        )
+    elif files:
         encodings = encodings or ("utf-8", "latin-1")
 
         def count_files():
@@ -3672,12 +3759,14 @@ def embed_multi(
         rows, label="Embedding", show_percent=True, length=expected_length
     ) as rows:
 
-        def tuples() -> Iterable[tuple[str, bytes | str]]:
+        def tuples() -> Iterable[tuple[str, Attachment | bytes | str]]:
             for row in rows:
                 values = list(row.values())
                 id: str = prefix + str(values[0])
-                content: bytes | str | None = None
-                if binary:
+                content: Attachment | bytes | str | None = None
+                if isinstance(values[1], Attachment):
+                    content = values[1]
+                elif binary:
                     content = cast(bytes, values[1])
                 else:
                     content = " ".join(v or "" for v in values[1:])
@@ -3703,6 +3792,23 @@ def embed_multi(
 @click.option("-c", "--content", help="Content to embed for comparison")
 @click.option("--binary", is_flag=True, help="Treat input as binary data")
 @click.option(
+    "attachments",
+    "-a",
+    "--attachment",
+    type=AttachmentType(),
+    multiple=True,
+    help="Attachment path or URL or -",
+)
+@click.option(
+    "attachment_types",
+    "--at",
+    "--attachment-type",
+    type=(str, str),
+    multiple=True,
+    callback=attachment_types_callback,
+    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
+)
+@click.option(
     "-n", "--number", type=int, default=10, help="Number of results to return"
 )
 @click.option("-p", "--plain", is_flag=True, help="Output in plain text format")
@@ -3713,7 +3819,19 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option("--prefix", help="Just IDs with this prefix", default="")
-def similar(collection, id, input, content, binary, number, plain, database, prefix):
+def similar(
+    collection,
+    id,
+    input,
+    content,
+    binary,
+    attachments,
+    attachment_types,
+    number,
+    plain,
+    database,
+    prefix,
+):
     """
     Return top N similar IDs from a collection using cosine similarity.
 
@@ -3727,13 +3845,23 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
     \b
         llm similar my-collection 1234
     """
-    if not id and not content and not input:
+    resolved_attachments = [*attachments, *attachment_types]
+    if len(resolved_attachments) > 1:
+        raise click.UsageError("Only one attachment can be used for comparison")
+    if resolved_attachments and (
+        id or content is not None or input is not None or binary
+    ):
+        raise click.UsageError(
+            "Attachments cannot be combined with an ID, --content, --input or --binary"
+        )
+
+    if not id and not content and not input and not resolved_attachments:
         raise click.ClickException("Must provide content or an ID for the comparison")
 
     if database:
-        db = sqlite_utils.Database(database)
+        db = _cli_database(database)
     else:
-        db = sqlite_utils.Database(user_dir() / "embeddings.db")
+        db = _cli_database(user_dir() / "embeddings.db")
 
     if not db["embeddings"].exists():
         raise click.ClickException("No embeddings table found in database")
@@ -3749,8 +3877,10 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
-        # Resolve input text
-        if not content:
+        # Resolve input text, binary data or a typed attachment
+        if resolved_attachments:
+            content = resolved_attachments[0]
+        elif not content:
             if not input or input == "-":
                 # Read from stdin
                 input_source = sys.stdin.buffer if binary else sys.stdin
@@ -3772,7 +3902,10 @@ def similar(collection, id, input, content, binary, number, plain, database, pre
                 click.echo(textwrap.indent(json.dumps(result.metadata), "  "))
             click.echo("")
         else:
-            click.echo(json.dumps(asdict(result)))
+            result_dict = asdict(result)
+            if result_dict.get("content_type") is None:
+                result_dict.pop("content_type", None)
+            click.echo(json.dumps(result_dict))
 
 
 @cli.group(
@@ -3856,7 +3989,7 @@ def collections_path():
 def embed_db_collections(database, json_):
     "View a list of collections"
     database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    db = _cli_database(str(database))
     if not db["collections"].exists():
         raise click.ClickException(f"No collections table found in {database}")
     rows = db.query("""
@@ -3901,7 +4034,7 @@ def collections_delete(collection, database):
         llm collections delete my-collection
     """
     database = database or (user_dir() / "embeddings.db")
-    db = sqlite_utils.Database(str(database))
+    db = _cli_database(str(database))
     try:
         collection_obj = Collection(collection, db, create=False)
     except Collection.DoesNotExist:
@@ -4052,6 +4185,14 @@ def template_dir():
     return path
 
 
+def _cli_database(*args, **kwargs):
+    """Open a database owned by the current Click command."""
+    ctx = click.get_current_context()
+    db = sqlite_utils.Database(*args, **kwargs)
+    ctx.call_on_close(db.close)
+    return db
+
+
 def logs_db_path():
     return user_dir() / "logs.db"
 
@@ -4060,19 +4201,19 @@ def get_history(chat_id):
     if chat_id is None:
         return None, []
     log_path = logs_db_path()
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-    if chat_id == -1:
-        # Return the most recent chat
-        last_row = list(db["logs"].rows_where(order_by="-id", limit=1))
-        if last_row:
-            chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
-        else:  # Database is empty
-            return None, []
-    rows = db["logs"].rows_where(
-        "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
-    )
-    return chat_id, rows
+    with sqlite_utils.Database(log_path) as db:
+        migrate(db)
+        if chat_id == -1:
+            # Return the most recent chat
+            last_row = list(db["logs"].rows_where(order_by="-id", limit=1))
+            if last_row:
+                chat_id = last_row[0].get("chat_id") or last_row[0].get("id")
+            else:  # Database is empty
+                return None, []
+        rows = db["logs"].rows_where(
+            "id = ? or chat_id = ?", [chat_id, chat_id], order_by="id"
+        )
+        return chat_id, list(rows)
 
 
 def render_errors(errors):

@@ -1,7 +1,6 @@
 import json
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 
 import llm
@@ -271,7 +270,9 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx2_mock):
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
-def test_code_interpreter_cli_tool_is_reused_on_continue(httpx2_mock, user_path):
+def test_code_interpreter_cli_tool_is_reused_on_continue(
+    db_factory, httpx2_mock, user_path
+):
     def response_payload(response_id, text):
         return {
             "id": response_id,
@@ -385,7 +386,7 @@ def test_code_interpreter_cli_tool_is_reused_on_continue(httpx2_mock, user_path)
         {"role": "user", "content": "Continue"},
     ]
 
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    db = db_factory(str(user_path / "logs.db"))
     instance = next(iter(db["tool_instances"].rows))
     assert instance["name"] == "CodeInterpreter"
     assert json.loads(instance["arguments"])["memory_limit"] == "4g"
@@ -681,7 +682,9 @@ def test_openai_image_detail_original_is_rejected_for_other_models():
 
 @pytest.mark.parametrize("async_", (False, True))
 @pytest.mark.parametrize("usage", (None, "-u", "--usage"))
-def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx2_mock, async_, usage):
+def test_gpt4o_mini_sync_and_async(
+    db_factory, monkeypatch, tmpdir, httpx2_mock, async_, usage
+):
     user_path = tmpdir / "user_dir"
     log_db = user_path / "logs.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -728,7 +731,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx2_mock, async_, usa
         assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
     # Confirm it was correctly logged
     assert log_db.exists()
-    db = sqlite_utils.Database(str(log_db))
+    db = db_factory(str(log_db))
     assert db["turns"].count == 1
     turn = next(db["turns"].rows)
     store = LogStore(db)

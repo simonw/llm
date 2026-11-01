@@ -1,4 +1,5 @@
 import json
+from contextlib import aclosing
 
 import pytest
 
@@ -918,6 +919,30 @@ class TestAsyncStreamEvents:
         assert seen_types == ["reasoning", "text"]
 
     @pytest.mark.asyncio
+    async def test_closing_stream_events_closes_provider_generator(self):
+        class ResourceModel(llm.AsyncModel):
+            model_id = "resource-model"
+
+            def __init__(self):
+                self.resource_closed = False
+
+            async def execute(self, prompt, stream, response, conversation):
+                try:
+                    yield "first"
+                    yield "second"
+                finally:
+                    self.resource_closed = True
+
+        model = ResourceModel()
+        response = model.prompt("x")
+
+        async with aclosing(response.astream_events()) as events:
+            event = await anext(events)
+            assert event.chunk == "first"
+
+        assert model.resource_closed
+
+    @pytest.mark.asyncio
     async def test_async_iter_yields_only_text(self, async_mock_model):
         events = [
             llm.parts.StreamEvent(type="reasoning", chunk="r", part_index=0),
@@ -1324,13 +1349,12 @@ class TestSqliteRehydrateMessages:
     """
 
     def test_from_row_response_messages_synthesized_from_chunks(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
-        import sqlite_utils
 
         from llm.migrations import migrate
 
-        db = sqlite_utils.Database(str(tmp_path / "logs.db"))
+        db = db_factory(str(tmp_path / "logs.db"))
         migrate(db)
         # log_to_db no longer writes the legacy tables - seed the row
         # the way an older version of llm recorded it, since from_row
@@ -1367,11 +1391,10 @@ class TestSqliteRehydrateMessages:
         ]
 
     def test_llm_dash_c_chain_preserves_prior_assistant_turn(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
         """End-to-end: a follow-up turn via load_conversation must send
         [user(q1), assistant(a1), user(q2)] — not drop the assistant."""
-        import sqlite_utils
 
         from llm.cli import load_conversation
         from llm.migrations import migrate
@@ -1382,7 +1405,7 @@ class TestSqliteRehydrateMessages:
         r1.text()
 
         db_path = tmp_path / "logs.db"
-        db = sqlite_utils.Database(str(db_path))
+        db = db_factory(str(db_path))
         migrate(db)
         r1.log_to_db(db)
 
@@ -1397,12 +1420,11 @@ class TestSqliteRehydrateMessages:
         ]
 
     def test_llm_dash_c_after_logged_tool_chain_preserves_full_chain(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
         """A loaded tool-result response must carry the preceding
         assistant tool_use. Otherwise Anthropic sees an orphan
         tool_result at the start of the continued request."""
-        import sqlite_utils
 
         from llm.cli import load_conversation
         from llm.migrations import migrate
@@ -1431,7 +1453,7 @@ class TestSqliteRehydrateMessages:
         chain_response.text()
 
         db_path = tmp_path / "logs.db"
-        db = sqlite_utils.Database(str(db_path))
+        db = db_factory(str(db_path))
         migrate(db)
         chain_response.log_to_db(db)
 

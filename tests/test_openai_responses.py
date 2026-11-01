@@ -625,7 +625,13 @@ def test_chat_completions_opt_out_dispatches_to_chat(httpx2_mock):
     assert "reasoning_summary" not in request_body
 
 
-def test_default_routes_to_responses_endpoint(httpx2_mock):
+@pytest.mark.parametrize("model_id", ("gpt-5.5", "gpt-6-sol", "gpt-6-luna"))
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("reasoning_effort", (None, "none", "max"))
+@pytest.mark.asyncio
+async def test_default_routes_to_responses_endpoint(
+    httpx2_mock, model_id, async_, reasoning_effort
+):
     httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
@@ -633,7 +639,7 @@ def test_default_routes_to_responses_endpoint(httpx2_mock):
             "id": "resp_test_1",
             "object": "response",
             "created_at": 1,
-            "model": "gpt-5.5",
+            "model": model_id,
             "output": [
                 {
                     "type": "message",
@@ -658,15 +664,22 @@ def test_default_routes_to_responses_endpoint(httpx2_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    model = llm.get_model("gpt-5.5")
-    response = model.prompt("hello", stream=False, key="test")
-    assert response.text() == "hi from responses"
+    model = llm.get_async_model(model_id) if async_ else llm.get_model(model_id)
+    response = model.prompt(
+        "hello", stream=False, key="test", reasoning_effort=reasoning_effort
+    )
+    text = await response.text() if async_ else response.text()
+    assert text == "hi from responses"
     # Ensure we sent to the right endpoint
     requests = [r for r in httpx2_mock.get_requests()]
     assert any("/v1/responses" in str(r.url) for r in requests)
     request_body = json.loads(requests[-1].content)
     assert request_body["include"] == ["reasoning.encrypted_content"]
-    assert request_body["reasoning"] == {"summary": "auto"}
+    assert request_body["model"] == model_id
+    expected_reasoning = {"summary": "auto"}
+    if reasoning_effort is not None:
+        expected_reasoning["effort"] = reasoning_effort
+    assert request_body["reasoning"] == expected_reasoning
 
 
 def test_hide_reasoning_omits_reasoning_summary_from_responses_request(httpx2_mock):
@@ -1005,6 +1018,8 @@ def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
         ("gpt-5.6-sol", True),
         ("gpt-5.6-terra", True),
         ("gpt-5.6-luna", True),
+        ("gpt-6-sol", True),
+        ("gpt-6-luna", True),
         ("gpt-5.5", True),
         ("gpt-4o", True),
         # The legacy /v1/completions endpoint does not accept service_tier
