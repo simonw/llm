@@ -56,3 +56,16 @@ symbex '*' '*:*' --nl | \
   --format nl --database embeddings.db --store
 ```
 For more examples see [Symbex: search Python code for functions and classes, then pipe them into a LLM](https://simonwillison.net/2023/Jun/18/symbex/).
+
+(related-tools-ob-llm)=
+## ob-llm
+
+[ob-llm](https://github.com/sunflowerseastar/ob-llm) is an Emacs wrapper for `llm`, and is used from [Org mode](https://orgmode.org/) [Babel](https://orgmode.org/worg/org-contrib/babel/intro.html) code blocks. Responses are auto-converted to [Org syntax](https://orgmode.org/worg/org-syntax.html), unless `:schema` or `:schema-multi` is present, in which case the results will be prettified and put into a JSON code block. This auto-conversion can be turned off at the global customization level with `(setq ob-llm-post-process-auto-convert-p nil)`. Relevant regular Babel [header arguments](https://orgmode.org/manual/Using-Header-Arguments.html) apply, ex. `:results silent`, and there are a few ob-llm-specific header arguments, like `:no-conversion` to prevent auto-conversion at the single code block level. Otherwise, all other header arguments are passed to `llm` as flags:
+
+```org
+#+begin_src llm :m gpt-4.1 :system "thorough" :no-log
+what exaptations are found in brown pelicans?
+#+end_src
+```
+
+Execute the llm Babel code block by calling `org-ctrl-c-ctrl-c` with the binding `C-c C-c`.
