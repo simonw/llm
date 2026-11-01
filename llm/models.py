@@ -21,11 +21,13 @@ from pathlib import Path
 from types import MethodType
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     ClassVar,
     Optional,
     Union,
     cast,
+    get_origin,
     get_type_hints,
 )
 
@@ -41,6 +43,7 @@ import json
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict, create_model
+from pydantic.fields import FieldInfo, PydanticUndefined
 
 from .utils import (
     Fragment,
@@ -259,7 +262,7 @@ class ServerSideTool:
 
 def _get_arguments_input_schema(function, name):
     signature = inspect.signature(function)
-    type_hints = get_type_hints(function)
+    type_hints = get_type_hints(function, include_extras=True)
     fields = {}
     for param_name, param in signature.parameters.items():
         if param_name in ("self", "llm_tool_call"):
@@ -269,11 +272,23 @@ def _get_arguments_input_schema(function, name):
         # Determine the type annotation (default to string if missing)
         annotated_type = type_hints.get(param_name, str)
 
-        # Handle default value if present; if there's no default, use '...'
-        if param.default is inspect.Parameter.empty:
-            fields[param_name] = (annotated_type, ...)
+        default = (
+            PydanticUndefined
+            if param.default is inspect.Parameter.empty
+            else param.default
+        )
+        if get_origin(annotated_type) is Annotated:
+            field_info = FieldInfo.from_annotation(annotated_type)
+            # Python controls invocation: metadata must not rename a keyword
+            # or make a required Python argument optional.
+            field_info.alias = None
+            field_info.validation_alias = None
+            field_info.serialization_alias = None
+            field_info.default_factory = None
+            field_info.default = default
+            fields[param_name] = (field_info.annotation, field_info)
         else:
-            fields[param_name] = (annotated_type, param.default)
+            fields[param_name] = (annotated_type, default)
 
     return create_model(f"{name}InputSchema", **fields)
 
