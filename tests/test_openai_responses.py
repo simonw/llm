@@ -625,7 +625,9 @@ def test_chat_completions_opt_out_dispatches_to_chat(httpx2_mock):
     assert "reasoning_summary" not in request_body
 
 
-@pytest.mark.parametrize("model_id", ("gpt-5.5", "gpt-6-sol", "gpt-6-luna"))
+@pytest.mark.parametrize(
+    "model_id", ("gpt-5.5", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-terra")
+)
 @pytest.mark.parametrize("async_", (False, True))
 @pytest.mark.parametrize("reasoning_effort", (None, "none", "max"))
 @pytest.mark.asyncio
@@ -1020,6 +1022,7 @@ def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
         ("gpt-5.6-luna", True),
         ("gpt-6-sol", True),
         ("gpt-6-luna", True),
+        ("gpt-6.1-terra", True),
         ("gpt-5.5", True),
         ("gpt-4o", True),
         # The legacy /v1/completions endpoint does not accept service_tier
