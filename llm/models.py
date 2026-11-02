@@ -1812,7 +1812,11 @@ class Response(_BaseResponse):
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
         if tool_results is None and self._tool_calls:
-            tool_results = self.execute_tool_calls(tools=kwargs.get("tools"))
+            tool_results = self.execute_tool_calls(
+                before_call=cast(BeforeCallSync | None, self.before_call),
+                after_call=cast(AfterCallSync | None, self.after_call),
+                tools=kwargs.get("tools"),
+            )
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             tool_attachments: list[Attachment] = []
@@ -1823,7 +1827,12 @@ class Response(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, options=options, **kwargs)
+        follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
+        # Keep the originating response's tool lifecycle hooks available
+        # if this follow-up also requests local tool calls.
+        follow_up.before_call = self.before_call
+        follow_up.after_call = self.after_call
+        return follow_up
 
     def to_dict(self) -> ResponseDict:
         """Serialize this response for JSON persistence.
@@ -2181,7 +2190,11 @@ class AsyncResponse(_BaseResponse):
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
         if tool_results is None and self._tool_calls:
-            tool_results = await self.execute_tool_calls(tools=kwargs.get("tools"))
+            tool_results = await self.execute_tool_calls(
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tools=kwargs.get("tools"),
+            )
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             tool_attachments: list[Attachment] = []
@@ -2192,7 +2205,12 @@ class AsyncResponse(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, options=options, **kwargs)
+        follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
+        # Keep the originating response's tool lifecycle hooks available
+        # if this follow-up also requests local tool calls.
+        follow_up.before_call = self.before_call
+        follow_up.after_call = self.after_call
+        return follow_up
 
     def to_dict(self) -> ResponseDict:
         """Async counterpart of Response.to_dict(). Requires awaiting."""
