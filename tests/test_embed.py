@@ -146,9 +146,7 @@ def test_embed_same_content_new_id_is_stored(collection):
     # row in the collection with the same content hash - see #1789
     collection.embed("3", "hello world")
     assert collection.db["embeddings"].count == 3
-    assert (
-        next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["id"] == "3"
-    )
+    assert next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["id"] == "3"
 
 
 def test_embed_same_id_same_content_is_noop(collection):
