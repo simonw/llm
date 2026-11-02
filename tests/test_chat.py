@@ -224,6 +224,22 @@ def test_chat_basic(mock_model, logs_db):
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+def test_chat_respects_logs_off(mock_model, logs_db):
+    runner = CliRunner()
+    runner.invoke(llm.cli.cli, ["logs", "off"], catch_exceptions=False)
+    mock_model.enqueue(["one world"])
+    result = runner.invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "one world" in result.output
+    assert logged_rows(logs_db) == []
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_system(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["I am mean"])

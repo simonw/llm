@@ -32,6 +32,7 @@ Bug fixes:
 - `llm schemas list` no longer crashes on schemas with boolean property definitions such as `{"properties": {"x": true}}`. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1748](https://github.com/simonw/llm/pull/1748)
 - `AsyncConversation.prompt()` now uses the tools set on the conversation, matching `Conversation.prompt()`. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1790](https://github.com/simonw/llm/issues/1790), [#1791](https://github.com/simonw/llm/pull/1791)
 - Calling `response.log_to_db()` on a synchronous response that has not yet been read now runs the response first. Previously the logged turn was missing its output and token usage. Thanks, [Allen Flux](https://github.com/allenflux). [#1817](https://github.com/simonw/llm/pull/1817)
+- `llm chat` now respects `llm logs off`. Previously it logged every response even when logging had been turned off. [#1203](https://github.com/simonw/llm/issues/1203)
 
 (v0_36)=
 ## 0.36 (2026-09-22)

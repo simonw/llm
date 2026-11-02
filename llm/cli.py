@@ -1385,7 +1385,8 @@ def chat(
             system=system,
             **kwargs,
         )
-        response.on_response(lambda response: response.log_to_db(db))
+        if logs_on():
+            response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
