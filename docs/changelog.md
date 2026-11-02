@@ -2,8 +2,26 @@
 
 ## Unreleased
 
-- New OpenAI model: `gpt-6.1-terra` for [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra).
-- The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`.
+New features:
+
+- New OpenAI models: `gpt-6.1-sol` for [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), `gpt-6.1-terra` for [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra) and `chat-latest` for [Chat Latest](https://developers.openai.com/api/docs/models/chat-latest).
+- The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`. [#1746](https://github.com/simonw/llm/pull/1746)
+- New `llm openai endpoint add`, `list`, `remove` and `path` commands for managing OpenAI-compatible models saved in `extra-openai-models.yaml`. `llm openai endpoint URL ...` still runs a prompt directly against an endpoint, and is now also available as `llm openai endpoint prompt URL ...`. See {ref}`Configure an OpenAI-compatible model <openai-endpoint-add>`. [#1838](https://github.com/simonw/llm/pull/1838)
+- Embedding models can now accept typed attachments, which carry a MIME type and the path or URL they came from. Plugins declare the MIME types they support using `attachment_types` and receive matching inputs as `llm.Attachment` objects. `llm embed`, `llm embed-multi` and `llm similar` gain `-a/--attachment` and `--at/--attachment-type` options. Collections store the MIME type in a new `content_type` column, exposed as `Entry.content_type`. See {ref}`llm embed <embeddings-cli-embed>` and {ref}`Writing plugins to add new embedding models <embeddings-writing-plugins>`. [#1741](https://github.com/simonw/llm/pull/1741)
+- `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [xilinghuiye](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
+- New `chain.on_response(callback)` method in the Python API, which runs a callback for each completed response in a tool chain before the chain limit is checked or that response's tool calls are executed. See {ref}`Running code when a response has completed <python-api-response-on-done>`. [#1768](https://github.com/simonw/llm/pull/1768)
+
+Bug fixes:
+
+- `llm prompt` and `llm chat` now log each response in a tool chain as soon as it completes, so an error or hitting the chain limit no longer discards the earlier responses in that chain from the logs. [#1768](https://github.com/simonw/llm/pull/1768)
+- Fixed `SQLITE_BUSY` errors when multiple processes logged responses to the same database at the same time. [#1742](https://github.com/simonw/llm/pull/1742)
+- Tool chains that finish within their chain limit no longer raise a `Chain limit of N exceeded` error. The limit now only applies when the final allowed response requests another round of tool calls. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1757](https://github.com/simonw/llm/issues/1757), [#1766](https://github.com/simonw/llm/pull/1766)
+- Fixed `AsyncChainResponse.log_to_db()` raising `RuntimeError` inside a running event loop, for example straight after `await chain.text()`. Thanks, [Christopher Krah](https://github.com/chrikrah). [#1727](https://github.com/simonw/llm/issues/1727), [#1734](https://github.com/simonw/llm/pull/1734)
+- Fixed `llm prompt --usage` crashing with an `AttributeError` when used with `--async` and tools. Thanks, [Ethan Stoner](https://github.com/ethanstoner). [#1709](https://github.com/simonw/llm/pull/1709)
+- `Response.execute_tool_calls()` now returns an error result for a tool with no implementation instead of raising `ValueError`, matching the behavior of `AsyncResponse.execute_tool_calls()`. Thanks, [Chen Yufeiyang](https://github.com/feiiiiii5). [#1724](https://github.com/simonw/llm/pull/1724)
+- Toolboxes exposing more than one method now run `prepare()` and `prepare_async()` once per instance, instead of once per method. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1761](https://github.com/simonw/llm/pull/1761)
+- Tool specs passed to `-T/--tool` with keyword arguments whose names start with `true`, `false` or `null`, such as `MyTool(nullable=true)`, are no longer mistaken for a single positional JSON value. Thanks, [Olamide Faniyan](https://github.com/Pajimo). [#1704](https://github.com/simonw/llm/pull/1704)
+- `llm logs -s/--short` now truncates tool call arguments. [#1772](https://github.com/simonw/llm/issues/1772)
 
 (v0_36)=
 ## 0.36 (2026-09-22)
