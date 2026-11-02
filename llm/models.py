@@ -2911,6 +2911,7 @@ class _BaseChainResponse:
             messages=next_chain,
             system=prompt._system,
             system_fragments=prompt.system_fragments,
+            schema=prompt.schema,
             options=prompt.options,
             attachments=attachments,
             hide_reasoning=prompt.hide_reasoning,
@@ -2998,6 +2999,10 @@ class ChainResponse(_BaseChainResponse):
                         # of the chain loop.
                         system=self.prompt._system,
                         system_fragments=self.prompt.system_fragments,
+                        # The schema describes the final answer, which
+                        # arrives after the tool rounds - it has to
+                        # survive them too.
+                        schema=self.prompt.schema,
                         options=self.prompt.options,
                         attachments=attachments,
                         hide_reasoning=current_response.prompt.hide_reasoning,
@@ -3137,6 +3142,7 @@ class AsyncChainResponse(_BaseChainResponse):
                     # reasoning as the sync path.
                     system=self.prompt._system,
                     system_fragments=self.prompt.system_fragments,
+                    schema=self.prompt.schema,
                     options=self.prompt.options,
                     attachments=attachments,
                     hide_reasoning=current_response.prompt.hide_reasoning,

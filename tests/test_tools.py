@@ -1419,3 +1419,63 @@ def test_tool_without_implementation_error_matches_sync_and_async():
     assert tool_results(sync_chain) == [
         ("no_impl", 'Error: tool "no_impl" has no implementation'),
     ]
+
+
+def _tool_calling_execute(rounds):
+    "Replace a mock model's execute with one that asks for a tool once."
+
+    def execute(prompt, stream, response, conversation):
+        rounds.append(prompt)
+        if not prompt.tool_results:
+            response.add_tool_call(llm.ToolCall(name="double", arguments={"value": 2}))
+        yield "ok"
+
+    return execute
+
+
+def test_chain_carries_schema_through_tool_rounds(mock_model, monkeypatch):
+    # A schema describes the answer the user asked for, which only
+    # arrives after the tool-call round - so every provider call in the
+    # chain has to see it, not just the first one.
+    prompts = []
+    monkeypatch.setattr(mock_model, "execute", _tool_calling_execute(prompts))
+
+    def double(value: int) -> int:
+        "Double a number"
+        return value * 2
+
+    schema = {"type": "object", "properties": {"value": {"type": "integer"}}}
+    chain = mock_model.conversation().chain("double 2", tools=[double], schema=schema)
+    chain.text()
+
+    assert len(prompts) == 2
+    assert [prompt.schema for prompt in prompts] == [schema, schema]
+
+
+@pytest.mark.asyncio
+async def test_async_chain_carries_schema_through_tool_rounds(
+    async_mock_model, monkeypatch
+):
+    async_mock_model.supports_tools = True
+    prompts = []
+
+    async def execute(prompt, stream, response, conversation):
+        prompts.append(prompt)
+        if not prompt.tool_results:
+            response.add_tool_call(llm.ToolCall(name="double", arguments={"value": 2}))
+        yield "ok"
+
+    monkeypatch.setattr(async_mock_model, "execute", execute)
+
+    def double(value: int) -> int:
+        "Double a number"
+        return value * 2
+
+    schema = {"type": "object", "properties": {"value": {"type": "integer"}}}
+    chain = async_mock_model.conversation().chain(
+        "double 2", tools=[double], schema=schema
+    )
+    await chain.text()
+
+    assert len(prompts) == 2
+    assert [prompt.schema for prompt in prompts] == [schema, schema]
