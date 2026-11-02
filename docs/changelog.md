@@ -1,6 +1,7 @@
 # Changelog
 
-## Unreleased
+(v0_37)=
+## 0.37 (2026-11-02)
 
 New features:
 
@@ -8,13 +9,16 @@ New features:
 - The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`. [#1746](https://github.com/simonw/llm/pull/1746)
 - New `llm openai endpoint add`, `list`, `remove` and `path` commands for managing OpenAI-compatible models saved in `extra-openai-models.yaml`. See {ref}`Configure an OpenAI-compatible model <openai-endpoint-add>`. [#1838](https://github.com/simonw/llm/pull/1838)
 - Embedding models can now accept typed attachments, which carry a MIME type and the path or URL they came from. Plugins declare the MIME types they support using `attachment_types` and receive matching inputs as `llm.Attachment` objects. `llm embed`, `llm embed-multi` and `llm similar` gain `-a/--attachment` and `--at/--attachment-type` options. Collections store the MIME type in a new `content_type` column, exposed as `Entry.content_type`. See {ref}`llm embed <embeddings-cli-embed>` and {ref}`Writing plugins to add new embedding models <embeddings-writing-plugins>`. [#1741](https://github.com/simonw/llm/pull/1741)
-- `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [xilinghuiye](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
+- `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [Bian Yuhan](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
 - New `chain.on_response(callback)` method in the Python API, which runs a callback for each completed response in a tool chain before the chain limit is checked or that response's tool calls are executed. See {ref}`Running code when a response has completed <python-api-response-on-done>`. [#1768](https://github.com/simonw/llm/pull/1768)
 - Added support for Python 3.15 and dropped support for Python 3.10.
 - Removed OpenAI models that have been shut down: `gpt-3.5-turbo`, `gpt-3.5-turbo-16k`, `gpt-3.5-turbo-instruct`, `gpt-4`, `gpt-4-turbo`, `gpt-4-turbo-2024-04-09`, `gpt-4.1-nano`, `gpt-5.2-chat-latest`, `o1`, `o1-2024-12-17`, `o3-mini` and `o4-mini`, along with their aliases such as `3.5`, `chatgpt`, `4` and `4t`. [#1696](https://github.com/simonw/llm/issues/1696)
 
 Bug fixes:
 
+- `llm chat` now respects `llm logs off`. Previously it logged every response even when logging had been turned off. [#1203](https://github.com/simonw/llm/issues/1203)
+- `Response.reply()` now passes `before_call` and `after_call` to the tool calls it executes automatically, and keeps them for later replies. Previously a tool rejected by `before_call` would still run. Thanks, [0d00ciallo0721](https://github.com/0d00ciallo0721). [#1835](https://github.com/simonw/llm/issues/1835), [#1836](https://github.com/simonw/llm/pull/1836)
+- `llm embed-multi --files` no longer corrupts non-ASCII UTF-8 files by decoding them as `latin-1`, which stored and embedded "Café" as "CafÃ©". Run the same command again to repair an existing collection: only the affected files will be embedded again. Thanks, [Alex](https://github.com/ac1982). [#283](https://github.com/simonw/llm/issues/283), [#1750](https://github.com/simonw/llm/pull/1750)
 - `llm prompt` and `llm chat` now log each response in a tool chain as soon as it completes, so an error or hitting the chain limit no longer discards the earlier responses in that chain from the logs. [#1768](https://github.com/simonw/llm/pull/1768)
 - Fixed `SQLITE_BUSY` errors when multiple processes logged responses to the same database at the same time. [#1742](https://github.com/simonw/llm/pull/1742)
 - Tool chains that finish within their chain limit no longer raise a `Chain limit of N exceeded` error. The limit now only applies when the final allowed response requests another round of tool calls. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1757](https://github.com/simonw/llm/issues/1757), [#1766](https://github.com/simonw/llm/pull/1766)
@@ -24,16 +28,13 @@ Bug fixes:
 - Toolboxes exposing more than one method now run `prepare()` and `prepare_async()` once per instance, instead of once per method. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1761](https://github.com/simonw/llm/pull/1761)
 - Tool specs passed to `-T/--tool` with keyword arguments whose names start with `true`, `false` or `null`, such as `MyTool(nullable=true)`, are no longer mistaken for a single positional JSON value. Thanks, [Olamide Faniyan](https://github.com/Pajimo). [#1704](https://github.com/simonw/llm/pull/1704)
 - `llm logs -s/--short` now truncates tool call arguments. [#1772](https://github.com/simonw/llm/issues/1772)
-- `Response.reply()` now passes `before_call` and `after_call` to the tool calls it executes automatically, and keeps them for later replies. Previously a tool rejected by `before_call` would still run. Thanks, [0d00ciallo0721](https://github.com/0d00ciallo0721). [#1835](https://github.com/simonw/llm/issues/1835), [#1836](https://github.com/simonw/llm/pull/1836)
 - A schema passed to a tool chain now applies to every request in that chain, including the final response. It was previously dropped after the first round of tool calls. Thanks, [Chen Yufeiyang](https://github.com/feiiiiii5). [#1222](https://github.com/simonw/llm/issues/1222), [#1825](https://github.com/simonw/llm/pull/1825)
-- `llm embed-multi --files` no longer corrupts non-ASCII UTF-8 files by decoding them as `latin-1`, which stored and embedded "Café" as "CafÃ©". Run the same command again to repair an existing collection: only the affected files will be embedded again. Thanks, [Alex](https://github.com/ac1982). [#283](https://github.com/simonw/llm/issues/283), [#1750](https://github.com/simonw/llm/pull/1750)
 - `Collection.embed()` no longer silently skips a new ID when another item in the collection has the same content, matching the behavior of `Collection.embed_multi()`. Thanks, [nosmile99](https://github.com/nosmile99). [#1789](https://github.com/simonw/llm/issues/1789), [#1812](https://github.com/simonw/llm/pull/1812)
 - `Collection.embed_multi()` now raises `ValueError` if an embedding model returns the wrong number of embeddings for a batch, instead of silently losing rows or storing vectors against the wrong IDs. Thanks, [Sharat Chandra Sai Boddu](https://github.com/sharatchandrasai999-sketch). [#1722](https://github.com/simonw/llm/issues/1722), [#1726](https://github.com/simonw/llm/pull/1726)
-- `llm schemas list` now includes schemas used by responses logged to the new `turns` table. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1808](https://github.com/simonw/llm/pull/1808)
+- `llm schemas list` now includes schemas used by recently logged responses. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1808](https://github.com/simonw/llm/pull/1808)
 - `llm schemas list` no longer crashes on schemas with boolean property definitions such as `{"properties": {"x": true}}`. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1748](https://github.com/simonw/llm/pull/1748)
 - `AsyncConversation.prompt()` now uses the tools set on the conversation, matching `Conversation.prompt()`. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1790](https://github.com/simonw/llm/issues/1790), [#1791](https://github.com/simonw/llm/pull/1791)
 - Calling `response.log_to_db()` on a synchronous response that has not yet been read now runs the response first. Previously the logged turn was missing its output and token usage. Thanks, [Allen Flux](https://github.com/allenflux). [#1817](https://github.com/simonw/llm/pull/1817)
-- `llm chat` now respects `llm logs off`. Previously it logged every response even when logging had been turned off. [#1203](https://github.com/simonw/llm/issues/1203)
 
 (v0_36)=
 ## 0.36 (2026-09-22)
