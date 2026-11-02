@@ -2714,15 +2714,21 @@ def schemas_list(path, database, queries, full, json_, nl):
         params.extend(f"%{q}%" for q in queries)
 
     sql = f"""
+    with schema_uses as (
+      select schema_id, datetime_utc from turns
+      union all
+      select schema_id, datetime_utc from responses
+      where responses.id not in (select id from turns)
+    )
     select
       schemas.id,
       schemas.content,
-      max(responses.datetime_utc) as recently_used,
+      max(schema_uses.datetime_utc) as recently_used,
       count(*) as times_used
     from schemas
-    join responses
-      on responses.schema_id = schemas.id
-    {where_sql} group by responses.schema_id
+    join schema_uses
+      on schema_uses.schema_id = schemas.id
+    {where_sql} group by schema_uses.schema_id
     order by recently_used
     """
     rows = db.query(sql, params)
