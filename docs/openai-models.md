@@ -247,20 +247,26 @@ The `gpt-3.5-turbo-instruct` model is a little different - it is a completion mo
 
 OpenAI occasionally release new models with new names. LLM aims to ship new releases to support these, but you can also configure them directly, by adding them to a `extra-openai-models.yaml` configuration file.
 
-Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You can add it to that file using the `llm openai endpoint add` command:
+Suppose you are using an older version of LLM that does not yet include `gpt-6.1-sol`. You can add it to that file using the `llm openai endpoint add` command:
 
 ```bash
 llm openai endpoint add https://api.openai.com/v1 \
-  -m gpt-3.5-turbo-0613 \
-  --alias 0613
+  -m gpt-6.1-sol \
+  --alias 6.1-sol \
+  --responses \
+  --reasoning \
+  --supports-tools
 ```
 This adds the following record to the file:
 
 ```yaml
-- model_id: gpt-3.5-turbo-0613
-  model_name: gpt-3.5-turbo-0613
+- model_id: gpt-6.1-sol
+  model_name: gpt-6.1-sol
   aliases:
-  - '0613'
+  - 6.1-sol
+  responses: true
+  supports_tools: true
+  reasoning: true
 ```
 Because the URL is OpenAI's own API the `api_base` key is omitted, so the model uses your regular OpenAI API key. See {ref}`openai-endpoint-add` for the full set of options, including how to point at other OpenAI-compatible endpoints.
 
@@ -278,7 +284,7 @@ The `model_id` is the identifier that will be recorded in the LLM logs. You can 
 
 If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
 
-If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration. This is useful for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through `/v1/responses`.
+If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration, as shown above.
 
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
@@ -289,7 +295,7 @@ If the model supports the `service_tier` parameter - see {ref}`openai-models-ser
 With this configuration in place, the following command should run a prompt against the new model:
 
 ```bash
-llm -m 0613 'What is the capital of France?'
+llm -m 6.1-sol 'What is the capital of France?'
 ```
 Run `llm models` to confirm that the new model is now available:
 ```bash
@@ -297,9 +303,7 @@ llm models
 ```
 Example output:
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
+...
+OpenAI Responses: gpt-6.1-sol (aliases: 6.1-sol)
 ```
 Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.
