@@ -212,7 +212,7 @@ This can be particularly useful when {ref}`working with schema data <schemas-log
 
 You can filter to logs just for a specific model (or model alias) using `-m/--model`:
 ```bash
-llm logs -m chatgpt
+llm logs -m 4o-mini
 ```
 
 (logging-filter-fragments)=

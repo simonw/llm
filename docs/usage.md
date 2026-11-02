@@ -465,12 +465,12 @@ This pattern of using `$(command)` inside a double quoted string is a useful way
 
 Some models are completion models - rather than being tuned to respond to chat style prompts, they are designed to complete a sentence or paragraph.
 
-An example of this is the `gpt-3.5-turbo-instruct` OpenAI model.
+OpenAI no longer offers these, but other OpenAI-compatible servers may. See {ref}`OpenAI-compatible models <openai-extra-models>` for how to configure one using `completion: true`.
 
-You can prompt that model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
+You can prompt such a model the same way as the chat models, but be aware that the prompt format that works best is likely to differ.
 
 ```bash
-llm -m gpt-3.5-turbo-instruct 'Reasons to tame a wild beaver:'
+llm -m my-completion-model 'Reasons to tame a wild beaver:'
 ```
 
 (usage-chat)=
@@ -484,7 +484,7 @@ This is particularly useful for models that run on your own machine, since it sa
 Run `llm chat`, optionally with a `-m model_id`, to start a chat conversation:
 
 ```bash
-llm chat -m chatgpt
+llm chat -m 4o-mini
 ```
 Each chat starts a new conversation. A record of each conversation can be accessed through {ref}`the logs <logging-conversation>`.
 
@@ -739,125 +739,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-turbo-2024-04-09
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    image_detail: str
-    service_tier: str
-  Features:
-  - streaming
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: o1
+OpenAI Responses: o3
   Options:
     temperature: float
       What sampling temperature to use, between 0 and 2. Higher values like
@@ -907,106 +789,6 @@ OpenAI Responses: o1
       The processing tier to use for this request - for example 'fast' for
       Fast mode (faster responses at a higher price) or 'flex' for slower,
       cheaper processing on models that support those tiers.
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: o1-2024-12-17
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: o3-mini
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    service_tier: str
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: o3
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: o4-mini
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:
@@ -1207,33 +989,6 @@ OpenAI Responses: gpt-5.1
     key: openai
     env_var: OPENAI_API_KEY
 OpenAI Responses: gpt-5.2
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5.2-chat-latest
   Options:
     temperature: float
     max_tokens: int
@@ -1716,42 +1471,6 @@ OpenAI Responses: chat-latest
   - schemas
   - tools
   - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
-  Options:
-    temperature: float
-      What sampling temperature to use, between 0 and 2. Higher values like
-      0.8 will make the output more random, while lower values like 0.2 will
-      make it more focused and deterministic.
-    max_tokens: int
-      Maximum number of tokens to generate.
-    top_p: float
-      An alternative to sampling with temperature, called nucleus sampling,
-      where the model considers the results of the tokens with top_p
-      probability mass. So 0.1 means only the tokens comprising the top 10%
-      probability mass are considered. Recommended to use top_p or
-      temperature but not both.
-    frequency_penalty: float
-      Number between -2.0 and 2.0. Positive values penalize new tokens based
-      on their existing frequency in the text so far, decreasing the model's
-      likelihood to repeat the same line verbatim.
-    presence_penalty: float
-      Number between -2.0 and 2.0. Positive values penalize new tokens based
-      on whether they appear in the text so far, increasing the model's
-      likelihood to talk about new topics.
-    stop: str
-      A string where the API will stop generating further tokens.
-    logit_bias: dict, str
-      Modify the likelihood of specified tokens appearing in the completion.
-      Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
-    seed: int
-      Integer seed to attempt to sample deterministically
-    logprobs: int
-      Include the log probabilities of most likely N per token
-  Features:
-  - streaming
   Keys:
     key: openai
     env_var: OPENAI_API_KEY

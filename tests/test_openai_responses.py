@@ -1025,8 +1025,6 @@ def test_responses_kwargs_omits_empty_reasoning_when_hide_reasoning():
         ("gpt-6.1-terra", True),
         ("gpt-5.5", True),
         ("gpt-4o", True),
-        # The legacy /v1/completions endpoint does not accept service_tier
-        ("gpt-3.5-turbo-instruct", False),
     ],
 )
 def test_service_tier_option_on_models(model_id, expected):

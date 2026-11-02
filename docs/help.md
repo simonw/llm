@@ -1212,8 +1212,7 @@ Options:
                                'llm keys set'
   -H, --header <TEXT TEXT>...  Additional HTTP header
   --responses                  Use the Responses API instead of Chat Completions
-  --completion                 Use the Completions API, for models such as
-                               gpt-3.5-turbo-instruct
+  --completion                 Use the Completions API
   --supports-tools             Model supports tool calling
   --supports-schema            Model supports JSON schema output
   --vision                     Model accepts image attachments

@@ -35,17 +35,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
 OpenAI Chat: gpt-4.1 (aliases: 4.1)
 OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
-OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-turbo-2024-04-09
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-OpenAI Responses: o1
-OpenAI Responses: o1-2024-12-17
-OpenAI Responses: o3-mini
 OpenAI Responses: o3
-OpenAI Responses: o4-mini
 OpenAI Responses: gpt-5
 OpenAI Responses: gpt-5-mini
 OpenAI Responses: gpt-5-nano
@@ -54,7 +44,6 @@ OpenAI Responses: gpt-5-mini-2025-08-07
 OpenAI Responses: gpt-5-nano-2025-08-07
 OpenAI Responses: gpt-5.1
 OpenAI Responses: gpt-5.2
-OpenAI Responses: gpt-5.2-chat-latest
 OpenAI Responses: gpt-5.4
 OpenAI Responses: gpt-5.4-2026-03-05
 OpenAI Responses: gpt-5.4-mini
@@ -72,7 +61,6 @@ OpenAI Responses: gpt-6-luna
 OpenAI Responses: gpt-6.1-sol
 OpenAI Responses: gpt-6.1-terra
 OpenAI Responses: chat-latest
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
 
@@ -192,7 +180,7 @@ OpenAI containers are ephemeral and expire after 20 minutes without activity. Se
 
 OpenAI models can process requests at different speeds and prices using the `service_tier` API parameter. [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode) runs up to 2.5x faster than standard processing at a higher per-token price, with the biggest speed increase on `gpt-5.6-sol`. [Flex processing](https://developers.openai.com/api/docs/guides/flex-processing) is slower but cheaper. Each tier works with a different subset of models - the Fast and Flex tables on [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) are the definitive list of which models support which tier.
 
-All of the OpenAI models supported by LLM expose a `service_tier` option, with the exception of the legacy `gpt-3.5-turbo-instruct` completion model. Use `-o service_tier fast` to enable Fast mode for a prompt:
+All of the OpenAI models supported by LLM expose a `service_tier` option. Use `-o service_tier fast` to enable Fast mode for a prompt:
 
 ```bash
 llm -m gpt-5.6-sol -o service_tier fast 'Fast facts about pelicans'
@@ -240,7 +228,7 @@ The vector size of the supported OpenAI embedding models are as follows:
 
 ## OpenAI completion models
 
-The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
+OpenAI has shut down the completion models that LLM used to include, such as `gpt-3.5-turbo-instruct`. Other servers may still offer [the completions API](https://platform.openai.com/docs/api-reference/completions/create): to use one, {ref}`configure the model <openai-extra-models>` with `completion: true`.
 
 (openai-extra-models)=
 
@@ -283,13 +271,13 @@ On my Mac laptop I get this:
 
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
-If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+If the model is a completion model add `completion: true` to the configuration.
 
 If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration, as shown above.
 
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
-For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
+For reasoning models like `o3` add `reasoning: true`.
 
 If the model supports the `service_tier` parameter - see {ref}`openai-models-service-tier` - add `service_tier: true` to enable the corresponding option.
 

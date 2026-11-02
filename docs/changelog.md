@@ -11,6 +11,7 @@ New features:
 - `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [xilinghuiye](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
 - New `chain.on_response(callback)` method in the Python API, which runs a callback for each completed response in a tool chain before the chain limit is checked or that response's tool calls are executed. See {ref}`Running code when a response has completed <python-api-response-on-done>`. [#1768](https://github.com/simonw/llm/pull/1768)
 - Added support for Python 3.15 and dropped support for Python 3.10.
+- Removed OpenAI models that have been shut down: `gpt-3.5-turbo`, `gpt-3.5-turbo-16k`, `gpt-3.5-turbo-instruct`, `gpt-4`, `gpt-4-turbo`, `gpt-4-turbo-2024-04-09`, `gpt-4.1-nano`, `gpt-5.2-chat-latest`, `o1`, `o1-2024-12-17`, `o3-mini` and `o4-mini`, along with their aliases such as `3.5`, `chatgpt`, `4` and `4t`. [#1696](https://github.com/simonw/llm/issues/1696)
 
 Bug fixes:
 

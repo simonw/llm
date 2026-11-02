@@ -137,7 +137,7 @@ def register_models(register):
         aliases=("4o-mini",),
     )
     # GPT-4.1
-    for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+    for model_id in ("gpt-4.1", "gpt-4.1-mini"):
         register(
             Chat(
                 model_id,
@@ -155,71 +155,6 @@ def register_models(register):
             ),
             aliases=(model_id.replace("gpt-", ""),),
         )
-    # 3.5 and 4
-    register(
-        Chat("gpt-3.5-turbo", service_tier=True),
-        AsyncChat("gpt-3.5-turbo", service_tier=True),
-        aliases=("3.5", "chatgpt"),
-    )
-    register(
-        Chat("gpt-3.5-turbo-16k", service_tier=True),
-        AsyncChat("gpt-3.5-turbo-16k", service_tier=True),
-        aliases=("chatgpt-16k", "3.5-16k"),
-    )
-    register(
-        Chat("gpt-4", service_tier=True),
-        AsyncChat("gpt-4", service_tier=True),
-        aliases=("4", "gpt4"),
-    )
-    # GPT-4 Turbo models
-    register(
-        Chat("gpt-4-turbo-2024-04-09", service_tier=True),
-        AsyncChat("gpt-4-turbo-2024-04-09", service_tier=True),
-    )
-    register(
-        Chat("gpt-4-turbo", service_tier=True),
-        AsyncChat("gpt-4-turbo", service_tier=True),
-        aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
-    )
-    # o1
-    for model_id in ("o1", "o1-2024-12-17"):
-        register(
-            Responses(
-                model_id,
-                vision=True,
-                can_stream=False,
-                reasoning=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-            AsyncResponses(
-                model_id,
-                vision=True,
-                can_stream=False,
-                reasoning=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-        )
-
-    register(
-        Responses(
-            "o3-mini",
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncResponses(
-            "o3-mini",
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
     register(
         Responses(
             "o3",
@@ -231,24 +166,6 @@ def register_models(register):
         ),
         AsyncResponses(
             "o3",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
-    register(
-        Responses(
-            "o4-mini",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncResponses(
-            "o4-mini",
             vision=True,
             reasoning=True,
             service_tier=True,
@@ -307,7 +224,7 @@ def register_models(register):
         ),
     )
     # GPT-5.2
-    for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
+    for model_id in ("gpt-5.2",):
         register(
             Responses(
                 model_id,
@@ -445,12 +362,6 @@ def register_models(register):
                 supports_tools=True,
             ),
         )
-
-    # The -instruct completion model
-    register(
-        Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
-        aliases=("3.5-instruct", "chatgpt-instruct"),
-    )
 
     # Load extra models
     for extra_model in load_extra_models():
@@ -982,7 +893,7 @@ def register_commands(cli):
     @click.option(
         "--completion",
         is_flag=True,
-        help="Use the Completions API, for models such as gpt-3.5-turbo-instruct",
+        help="Use the Completions API",
     )
     @click.option("--supports-tools", is_flag=True, help="Model supports tool calling")
     @click.option(

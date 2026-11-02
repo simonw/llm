@@ -73,7 +73,7 @@ curl -s https://example.com/ | llm -t summarize
 This can be combined with the `-m` option to specify a different model:
 ```bash
 curl -s https://llm.datasette.io/en/latest/ | \
-  llm -t summarize -m gpt-3.5-turbo-16k
+  llm -t summarize -m gpt-4o-mini
 ```
 Templates can also be specified as a direct path to a YAML file on disk:
 ```bash
