@@ -10,6 +10,7 @@ New features:
 - Embedding models can now accept typed attachments, which carry a MIME type and the path or URL they came from. Plugins declare the MIME types they support using `attachment_types` and receive matching inputs as `llm.Attachment` objects. `llm embed`, `llm embed-multi` and `llm similar` gain `-a/--attachment` and `--at/--attachment-type` options. Collections store the MIME type in a new `content_type` column, exposed as `Entry.content_type`. See {ref}`llm embed <embeddings-cli-embed>` and {ref}`Writing plugins to add new embedding models <embeddings-writing-plugins>`. [#1741](https://github.com/simonw/llm/pull/1741)
 - `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [xilinghuiye](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
 - New `chain.on_response(callback)` method in the Python API, which runs a callback for each completed response in a tool chain before the chain limit is checked or that response's tool calls are executed. See {ref}`Running code when a response has completed <python-api-response-on-done>`. [#1768](https://github.com/simonw/llm/pull/1768)
+- Added support for Python 3.15 and dropped support for Python 3.10.
 
 Bug fixes:
 
@@ -28,6 +29,9 @@ Bug fixes:
 - `Collection.embed()` no longer silently skips a new ID when another item in the collection has the same content, matching the behavior of `Collection.embed_multi()`. Thanks, [nosmile99](https://github.com/nosmile99). [#1789](https://github.com/simonw/llm/issues/1789), [#1812](https://github.com/simonw/llm/pull/1812)
 - `Collection.embed_multi()` now raises `ValueError` if an embedding model returns the wrong number of embeddings for a batch, instead of silently losing rows or storing vectors against the wrong IDs. Thanks, [Sharat Chandra Sai Boddu](https://github.com/sharatchandrasai999-sketch). [#1722](https://github.com/simonw/llm/issues/1722), [#1726](https://github.com/simonw/llm/pull/1726)
 - `llm schemas list` now includes schemas used by responses logged to the new `turns` table. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1808](https://github.com/simonw/llm/pull/1808)
+- `llm schemas list` no longer crashes on schemas with boolean property definitions such as `{"properties": {"x": true}}`. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1748](https://github.com/simonw/llm/pull/1748)
+- `AsyncConversation.prompt()` now uses the tools set on the conversation, matching `Conversation.prompt()`. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1790](https://github.com/simonw/llm/issues/1790), [#1791](https://github.com/simonw/llm/pull/1791)
+- Calling `response.log_to_db()` on a synchronous response that has not yet been read now runs the response first. Previously the logged turn was missing its output and token usage. Thanks, [Allen Flux](https://github.com/allenflux). [#1817](https://github.com/simonw/llm/pull/1817)
 
 (v0_36)=
 ## 0.36 (2026-09-22)
