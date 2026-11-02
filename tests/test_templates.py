@@ -475,6 +475,53 @@ def test_template_respects_cli_extract_flag(
     assert result.output.strip() == "function foo() {\n  return 'bar';\n}"
 
 
+@pytest.mark.parametrize(
+    "template,extra_args,expected",
+    (
+        ("prompt: Write code", ["-x"], "first code"),
+        ("prompt: Write code", ["--xl"], "last code"),
+        ("extract: true\nprompt: Write code", [], "first code"),
+        ("extract_last: true\nprompt: Write code", [], "last code"),
+        ("extract: true\nprompt: Write code", ["--xl"], "last code"),
+        ("extract_last: true\nprompt: Write code", ["-x"], "first code"),
+    ),
+)
+def test_template_extract_precedence(
+    template, extra_args, expected, templates_path, mock_model
+):
+    (templates_path / "template.yaml").write_text(template, "utf-8")
+    mock_model.enqueue(
+        ["Start\n```text\nfirst code\n```\nMiddle\n```python\nlast code\n```\nEnd"]
+    )
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "-t", "template", *extra_args],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.strip() == expected
+
+
+def test_saved_template_respects_cli_extract_last(templates_path, mock_model):
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "--save", "pelican", "Create an SVG"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+
+    mock_model.enqueue(
+        ["Start\n```text\nfirst code\n```\nMiddle\n```xml\nlast code\n```\nEnd"]
+    )
+    result = CliRunner().invoke(
+        cli,
+        ["--template", "pelican", "--xl"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.output.strip() == "last code"
+
+
 FUNCTIONS_EXAMPLE = """
 def greet(name: str) -> str:
     return f"Hello, {name}!"

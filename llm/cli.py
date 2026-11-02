@@ -956,10 +956,18 @@ def prompt(
         if any("input" in template_obj.vars() for template_obj in template_objs):
             prompt = read_prompt()
 
+        # Explicit CLI extraction flags take precedence over template defaults.
+        # Capture them before applying templates so template values cannot
+        # suppress settings from later templates in the chain.
+        cli_extract = extract
+        cli_extract_last = extract_last
         for template_obj in template_objs:
-            if not (extract or extract_last):
-                extract = template_obj.extract
-                extract_last = template_obj.extract_last
+            if not (cli_extract or cli_extract_last) and (
+                template_obj.extract is not None
+                or template_obj.extract_last is not None
+            ):
+                extract = bool(template_obj.extract)
+                extract_last = bool(template_obj.extract_last)
             if template_obj.schema_object:
                 schema = template_obj.schema_object
             if template_obj.options:
