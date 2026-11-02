@@ -506,6 +506,7 @@ class Prompt:
         tool_results=None,
         messages=None,
         hide_reasoning=False,
+        _fragments_in_prompt=False,
     ):
         self._prompt = prompt
         self.model = model
@@ -524,6 +525,39 @@ class Prompt:
         # Explicit messages= list, if the caller supplied one. Copied so
         # later mutation by the caller doesn't alter the Prompt.
         self._explicit_messages = list(messages) if messages is not None else None
+        # Search provenance belongs to this call, not to deduplicated message
+        # parts. Explicit messages ignore the legacy fragment kwargs unless
+        # a Model/Conversation factory has appended this turn's input itself.
+        self._search_prompt: str | None = None
+        self._search_prompt_input: str | None = None
+        if (
+            (messages is None or _fragments_in_prompt)
+            and self.fragments
+            and self.prompt
+        ):
+            self._search_prompt = prompt or ""
+            self._search_prompt_input = self.prompt
+        self._search_prompt_unknown = False
+
+    def _last_user_text(self) -> str | None:
+        from .parts import TextPart
+
+        messages = self.messages
+        if not messages or messages[-1].role != "user":
+            return None
+        return "".join(
+            part.text for part in messages[-1].parts if isinstance(part, TextPart)
+        )
+
+    def _search_prompt_for_messages(self) -> str | None:
+        # Message objects are mutable. A changed authoritative input no longer
+        # has the generated prefix whose provenance we captured.
+        if (
+            self._search_prompt is not None
+            and self._last_user_text() != self._search_prompt_input
+        ):
+            return None
+        return self._search_prompt
 
     @property
     def prompt(self):
@@ -865,6 +899,7 @@ class Conversation(_BaseConversation):
                 messages=chain,
                 options=self.model.Options(**merged),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             self.model,
             stream,
@@ -922,6 +957,7 @@ class Conversation(_BaseConversation):
                 model=self.model,
                 options=self.model.Options(**(options or {})),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             model=self.model,
             stream=stream,
@@ -997,6 +1033,7 @@ class AsyncConversation(_BaseConversation):
                 model=self.model,
                 options=self.model.Options(**(options or {})),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             model=self.model,
             stream=stream,
@@ -1050,6 +1087,7 @@ class AsyncConversation(_BaseConversation):
                 messages=chain,
                 options=self.model.Options(**merged),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             self.model,
             stream,
@@ -1684,6 +1722,10 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
         payload["prompt"]["options"] = options
     if response.prompt._system:
         payload["prompt"]["system"] = response.prompt._system
+    if not response.prompt._search_prompt_unknown:
+        payload["prompt"][
+            "search_prompt"
+        ] = response.prompt._search_prompt_for_messages()
     # Optional audit fields — helpful for debugging, not needed for reply().
     if response.id:
         payload["id"] = response.id
@@ -1732,6 +1774,9 @@ def _response_from_dict(
         system=system,
         options=model.Options(**options_kwargs),
     )
+    prompt._search_prompt = prompt_data.get("search_prompt")
+    prompt._search_prompt_input = prompt._last_user_text()
+    prompt._search_prompt_unknown = "search_prompt" not in prompt_data
     response = cls(prompt, model=model, stream=False)
     # Preserve id for audit continuity.
     if "id" in data:
@@ -3363,6 +3408,7 @@ class _Model(_BaseModel):
                 model=self,
                 options=self.Options(**merged),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             self,
             stream,
@@ -3488,6 +3534,7 @@ class _AsyncModel(_BaseModel):
                 model=self,
                 options=self.Options(**merged),
                 hide_reasoning=hide_reasoning,
+                _fragments_in_prompt=True,
             ),
             self,
             stream,

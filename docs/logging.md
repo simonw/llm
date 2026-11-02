@@ -193,6 +193,8 @@ llm logs -q 'cheesecake' -l -n 3
 
 Search covers both new conversations and history recorded by older versions of LLM.
 
+Older search rows are preserved as recorded. If an older version omitted typed text that also appeared in a fragment, that text cannot always be recovered safely: shared messages do not distinguish generated fragment prefixes from authoritative explicit input. New logs and serialized responses retain the per-turn searchable prompt separately.
+
 (logging-filter-id)=
 
 ### Filtering past a specific ID
@@ -555,7 +557,7 @@ The full schema for these tables appears in {ref}`the SQL schema section <loggin
 - `turns` - one row per model call. `parent_message_hash` and `tip_message_hash` bracket the call's input and output as described above, and the remaining columns record provenance: model, options, schema, token counts, timings and the {ref}`condensed raw provider payload <logging-message-store-response-json>` in `response_json`. Turn ids are ULIDs, in the same id space as legacy response ids, which is how the two generations of tables sort together in `llm logs`.
 - `turn_tools` - which {ref}`tool <tools>` definitions were available to a turn, referencing the `tools` table. For toolbox-derived tools, `instance_id` references the `tool_instances` row recording which configured instance provided them - so the tools list in `llm logs` shows that `SQLite_query` came from `SQLite("mydb.db")` before any call has run.
 - `turn_fragments` - which fragments a turn was given, with their `kind` (`prompt` or `system`) and order. Provenance lives here rather than on the shared message rows, and this table is what powers `llm logs -f`.
-- `turn_search` - the searchable text of each turn: the literal prompt the user typed (fragment content excluded, via the `text_ref` literals described above) and the assistant's text output. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. Derived from the stored parts when a turn is logged; a turn with no prompt or response text, such as a pure tool call, gets no row.
+- `turn_search` - the searchable text of each turn: the prompt the user typed and the assistant's text output. Stored parts are resolved independently of fragment compression; when fragments were prepended, the producer supplies the exact typed prompt separately. This table retains that per-turn search provenance, which cannot always be reconstructed from shared messages. An FTS5 index over this table, `turn_search_fts`, is what powers {ref}`llm logs -q <logging-search>`. A turn with no searchable prompt or response text, such as a pure tool call, gets no row.
 - `tool_instantiations` - which configured {ref}`toolbox <python-api-toolbox>` instance served a tool call, as a reference into the shared `tool_instances` table (each distinct configuration is stored once), keyed by `(turn_id, tool_call_id)` - call ids supplied by providers are not guaranteed unique across turns. Message rows are shared between conversations and so cannot carry this kind of local execution provenance; this table joins to the chain from outside it.
 
 (logging-message-store-queries)=

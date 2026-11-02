@@ -155,6 +155,9 @@ class PromptDict(TypedDict):
     messages: list[MessageDict]
     options: NotRequired[dict[str, Any]]
     system: NotRequired[str]
+    # String: typed input without generated fragments; null: full explicit
+    # input is searchable; absent: older payload with unknown provenance.
+    search_prompt: NotRequired[str | None]
 
 
 class UsageDict(TypedDict, total=False):

@@ -2365,3 +2365,320 @@ class TestLogListingCost:
         message_lookups = [s for s in statements if "from messages" in s]
         # One user and one assistant message per turn, each fetched once
         assert len(message_lookups) <= 2 * turns
+
+
+class TestTurnSearchFragmentProvenance:
+    @pytest.mark.parametrize("kind", ("prompt", "system"))
+    def test_typed_text_matching_a_fragment_is_searchable(
+        self, store, mock_model, kind
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "what are wombats?",
+            **{"fragments" if kind == "prompt" else "system_fragments": ["wombats"]},
+        )
+        response.text()
+        turn_id = store.log(response)
+        assert store.verify() == []
+        assert [row["id"] for row in merged_log_rows(store, query="wombats")] == [
+            turn_id
+        ]
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == "what are wombats?"
+
+    @pytest.mark.parametrize("fragment_first", (False, True))
+    def test_shared_messages_use_each_turns_fragment_provenance(
+        self, store, mock_model, fragment_first
+    ):
+        ids = {}
+        for fragmented in (fragment_first, not fragment_first):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(
+                "question" if fragmented else "wombats\nquestion",
+                fragments=["wombats"] if fragmented else [],
+            )
+            response.text()
+            ids[fragmented] = store.log(response)
+        assert store.db["messages"].count == 2
+        assert store.verify() == []
+        assert {row["id"] for row in merged_log_rows(store, query="question")} == set(
+            ids.values()
+        )
+        assert [row["id"] for row in merged_log_rows(store, query="wombats")] == [
+            ids[False]
+        ]
+
+    def test_fragment_only_and_ordinary_text_controls(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("question", fragments=["wombats"])
+        response.text()
+        turn_id = store.log(response)
+        assert merged_log_rows(store, query="wombats") == []
+        assert [row["id"] for row in merged_log_rows(store, query="question")] == [
+            turn_id
+        ]
+        assert [row["id"] for row in merged_log_rows(store, query="ok")] == [turn_id]
+        assert store.verify() == []
+
+    @pytest.mark.parametrize(
+        "fragments", (["wombats", "wombats"], ["", "wombats", ""], ["", ""])
+    )
+    @pytest.mark.parametrize("prompt", ("wombats are interesting", None))
+    def test_only_the_joined_fragment_prefix_is_excluded(
+        self, store, mock_model, fragments, prompt
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(prompt, fragments=fragments)
+        response.text()
+        turn_id = store.log(response)
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == (prompt or "")
+        assert bool(merged_log_rows(store, query="wombats")) == bool(prompt)
+        assert store.verify() == []
+
+    def test_response_previously_stored_with_fragments_is_searchable(
+        self, store, mock_model
+    ):
+        # Shared history can store the output by reference before its own
+        # turn is logged. Compression must not decide search eligibility.
+        store.ensure_chain(
+            [llm.user("question"), llm.assistant("wombats")], fragments=["wombats"]
+        )
+        mock_model.enqueue(["wombats"])
+        response = mock_model.prompt("question")
+        response.text()
+        turn_id = store.log(response)
+        assert store.db["messages"].count == 2
+        assert store.verify() == []
+        assert [row["id"] for row in merged_log_rows(store, query="wombats")] == [
+            turn_id
+        ]
+
+    @pytest.mark.parametrize("fragment", ("wombats", "absent"))
+    def test_explicit_multipart_text_is_resolved_in_order(
+        self, store, mock_model, fragment
+    ):
+        mock_model.enqueue(["ok"])
+        response = llm.Response(
+            llm.Prompt(
+                None,
+                mock_model,
+                messages=[
+                    Message(
+                        role="user",
+                        parts=[
+                            TextPart(text="wombats\n"),
+                            TextPart(text="what are wombats?"),
+                        ],
+                    )
+                ],
+                fragments=[fragment],
+            ),
+            mock_model,
+            stream=False,
+        )
+        response.text()
+        turn_id = store.log(response)
+        # Direct Prompt(messages=...) is authoritative: fragment kwargs do
+        # not describe generated input, even if the text happens to match.
+        expected = "wombats\nwhat are wombats?"
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == expected
+        assert store.verify() == []
+
+    @pytest.mark.parametrize("fragment_first", (False, True))
+    def test_opening_existing_logs_preserves_unknown_historical_index(
+        self, store, mock_model, fragment_first
+    ):
+        for fragmented in (fragment_first, not fragment_first):
+            mock_model.enqueue(["ok"])
+            response = mock_model.prompt(
+                "question" if fragmented else "wombats\nquestion",
+                fragments=["wombats"] if fragmented else [],
+            )
+            response.text()
+            store.log(response)
+        # Simulate the old first-writer-dependent index. The stored input
+        # cannot distinguish generated prefixes from authoritative messages.
+        store.db.execute(
+            "update turn_search set prompt = ?",
+            ["\nquestion" if fragment_first else "wombats\nquestion"],
+        )
+        before = {table: list(store.db[table].rows) for table in store.db.table_names()}
+        LogStore(store.db)
+        after = {table: list(store.db[table].rows) for table in before}
+        assert before == after
+        assert store.verify() == []
+
+    def test_authoritative_messages_ignore_fragment_prompt_kwargs(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["ok"])
+        response = llm.Response(
+            llm.Prompt(
+                None,
+                mock_model,
+                messages=[llm.user("wombats\nquestion")],
+                fragments=["wombats"],
+            ),
+            mock_model,
+            stream=False,
+        )
+        response.text()
+        turn_id = store.log(response)
+        assert response.prompt.messages == [llm.user("wombats\nquestion")]
+        assert store.verify() == []
+        assert [row["id"] for row in merged_log_rows(store, query="wombats")] == [
+            turn_id
+        ]
+
+    @pytest.mark.parametrize("conversation", (False, True))
+    @pytest.mark.parametrize("chain", (False, True))
+    @pytest.mark.parametrize(
+        "prompt,fragments", [("what are wombats?", ["wombats"]), (None, [""])]
+    )
+    def test_sync_factories_preserve_search_provenance(
+        self, store, mock_model, conversation, chain, prompt, fragments
+    ):
+        model = mock_model.conversation() if conversation else mock_model
+        mock_model.enqueue(["ok"])
+        call = model.chain if chain else model.prompt
+        response = call(prompt, fragments=fragments, messages=[llm.user("wombats")])
+        if chain:
+            (response,) = response.responses()
+        response.text()
+        turn_id = store.log(response)
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == (prompt or "wombats")
+        assert store.verify() == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("conversation", (False, True))
+    @pytest.mark.parametrize("chain", (False, True))
+    @pytest.mark.parametrize(
+        "prompt,fragments", [("what are wombats?", ["wombats"]), (None, [""])]
+    )
+    async def test_async_factories_preserve_search_provenance(
+        self, store, async_mock_model, conversation, chain, prompt, fragments
+    ):
+        model = async_mock_model.conversation() if conversation else async_mock_model
+        async_mock_model.enqueue(["ok"])
+        call = model.chain if chain else model.prompt
+        response = call(prompt, fragments=fragments, messages=[llm.user("wombats")])
+        if chain:
+            (response,) = [item async for item in response.responses()]
+        await response.text()
+        response = await response.to_sync_response()
+        turn_id = store.log(response)
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == (prompt or "wombats")
+        assert store.verify() == []
+
+    @pytest.mark.parametrize("prompt", ("what are 🦘 wombats?", None))
+    @pytest.mark.parametrize("async_", (False, True))
+    def test_wire_roundtrip_preserves_search_provenance(
+        self, store, mock_model, prompt, async_
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(prompt, fragments=["🦘 wombats"])
+        response.text()
+        data = response.to_dict()
+        assert data["prompt"]["search_prompt"] == (prompt or "")
+        cls = llm.AsyncResponse if async_ else llm.Response
+        restored = cls.from_dict(data, model=mock_model)
+        restored.log_to_db(store.db)
+        assert bool(merged_log_rows(store, query="wombats")) == bool(prompt)
+        assert store.verify() == []
+
+    @pytest.mark.parametrize("changed_input", (False, True))
+    def test_old_wire_relog_preserves_index_only_for_same_input(
+        self, store, mock_model, changed_input
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("question", fragments=["wombats"])
+        response.text()
+        turn_id = store.log(response)
+        data = response.to_dict()
+        data["id"] = turn_id
+        data["prompt"].pop("search_prompt", None)
+        if changed_input:
+            data["prompt"]["messages"] = [llm.user("new wombats question").to_dict()]
+        restored = llm.Response.from_dict(data, model=mock_model)
+        assert "search_prompt" not in restored.to_dict()["prompt"]
+        store.log(restored)
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == (
+            "new wombats question" if changed_input else "question"
+        )
+        assert bool(merged_log_rows(store, query="wombats")) == changed_input
+        assert store.verify() == []
+
+    def test_tool_only_turn_does_not_index_prompt_history(self, store, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            messages=[llm.user("wombats")],
+            tool_results=[llm.ToolResult(name="lookup", output="found wombats")],
+            system_fragments=["wombats"],
+        )
+        response.text()
+        store.log(response)
+        assert merged_log_rows(store, query="wombats") == []
+        assert store.verify() == []
+
+    def test_old_wire_relog_preserves_absent_search_row(self, store, mock_model):
+        mock_model.enqueue([])
+        response = mock_model.prompt(fragments=["wombats"])
+        response.text()
+        turn_id = store.log(response)
+        assert store.db["turn_search"].count == 0
+        data = response.to_dict()
+        data["id"] = turn_id
+        data["prompt"].pop("search_prompt", None)
+        restored = llm.Response.from_dict(data, model=mock_model)
+        store.log(restored)
+        assert store.db["turn_search"].count == 0
+        assert merged_log_rows(store, query="wombats") == []
+        assert store.verify() == []
+
+    def test_new_explicit_wire_does_not_reuse_old_fragment_exclusion(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["ok"])
+        generated = mock_model.prompt("question", fragments=["wombats"])
+        generated.text()
+        turn_id = store.log(generated)
+        mock_model.enqueue(["ok"])
+        explicit = llm.Response(
+            llm.Prompt(None, mock_model, messages=[llm.user("wombats\nquestion")]),
+            mock_model,
+            stream=False,
+        )
+        explicit.text()
+        explicit.id = turn_id
+        data = explicit.to_dict()
+        assert data["prompt"]["search_prompt"] is None
+        restored = llm.Response.from_dict(data, model=mock_model)
+        restored = llm.Response.from_dict(restored.to_dict(), model=mock_model)
+        store.log(restored)
+        assert [row["id"] for row in merged_log_rows(store, query="wombats")] == [
+            turn_id
+        ]
+        assert store.verify() == []
+
+    @pytest.mark.parametrize("restored", (False, True))
+    def test_mutated_authoritative_input_does_not_use_stale_search_prompt(
+        self, store, mock_model, restored
+    ):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt("question", fragments=["wombats"], messages=[])
+        if restored:
+            response.text()
+            response = llm.Response.from_dict(response.to_dict(), model=mock_model)
+        response.prompt.messages[-1].parts[0].text = "new wombats question"
+        response.text()
+        turn_id = store.log(response)
+        row = next(store.db["turn_search"].rows_where("turn_id = ?", [turn_id]))
+        assert row["prompt"] == "new wombats question"
+        assert [row["id"] for row in merged_log_rows(store, query="new")] == [turn_id]
+        assert response.to_dict()["prompt"]["search_prompt"] is None
+        assert store.verify() == []
