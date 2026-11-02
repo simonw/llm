@@ -4102,7 +4102,7 @@ def options_show(model):
         click.echo(f"{key}: {value}")
 
 
-@options.command(name="set")
+@options.command(name="set", context_settings={"ignore_unknown_options": True})
 @click.argument("model")
 @click.argument("key")
 @click.argument("value")
