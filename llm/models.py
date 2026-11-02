@@ -1044,7 +1044,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools,
+                tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
