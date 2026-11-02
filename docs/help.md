@@ -1119,7 +1119,7 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  endpoint  Run prompts against OpenAI-compatible endpoints
+  endpoint  Work with OpenAI-compatible endpoints
   models    List models available to you from the OpenAI API
 ```
 
@@ -1128,7 +1128,7 @@ Commands:
 ```
 Usage: llm openai endpoint [OPTIONS] COMMAND [ARGS]...
 
-  Run prompts against OpenAI-compatible endpoints
+  Work with OpenAI-compatible endpoints
 
   "llm openai endpoint URL ..." runs the "prompt" subcommand. Use "add", "list"
   and "remove" to manage endpoints saved in extra-openai-models.yaml.

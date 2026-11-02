@@ -598,7 +598,7 @@ def register_commands(cli):
     )
     def endpoint_():
         """
-        Run prompts against OpenAI-compatible endpoints
+        Work with OpenAI-compatible endpoints
 
         "llm openai endpoint URL ..." runs the "prompt" subcommand. Use
         "add", "list" and "remove" to manage endpoints saved in
