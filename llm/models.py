@@ -1782,6 +1782,11 @@ class Response(_BaseResponse):
     model: "Model"
     conversation: Optional["Conversation"] = None
 
+    def log_to_db(self, db):
+        "Execute this response if needed and record it in a log database."
+        self._force()
+        super().log_to_db(db)
+
     def reply(
         self,
         prompt: str | None = None,
