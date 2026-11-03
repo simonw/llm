@@ -150,6 +150,71 @@ def test_endpoint_add_appends_preserving_existing_content(user_path):
     ]
 
 
+@pytest.mark.parametrize(
+    "existing", ["# My models\n", "# My models", "---\n# My models\n"]
+)
+def test_endpoint_add_to_comment_only_file(user_path, existing):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text(existing, "utf-8")
+
+    result = _invoke("add", "http://localhost:8080", "-m", "first")
+    assert result.exit_code == 0, result.output
+    assert path.read_text("utf-8").startswith(existing)
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        {
+            "model_id": "first",
+            "model_name": "first",
+            "api_base": "http://localhost:8080",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        "# My models\n[] # End of models\n",
+        "# My models\n[{model_id: first, model_name: first-model}] # End of models\n",
+        (
+            "# My models\n[{model_id: first, model_name: first-model}, # Keep this\n]"
+            " # End of models\n"
+        ),
+        (
+            "# My models\n[&first {model_id: first, model_name: first-model}, *first,]"
+            " # End of models\n"
+        ),
+    ],
+)
+def test_endpoint_add_to_flow_sequence_preserves_content(user_path, existing):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text(existing, "utf-8")
+    records = _read_yaml(user_path)
+
+    result = _invoke("add", "http://localhost:8080", "-m", "second")
+    assert result.exit_code == 0, result.output
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        *records,
+        {
+            "model_id": "second",
+            "model_name": "second",
+            "api_base": "http://localhost:8080",
+        },
+    ]
+    text = path.read_text("utf-8")
+    assert text.startswith("# My models\n[")
+    assert text.endswith("] # End of models\n")
+    if records:
+        assert "{model_id: first, model_name: first-model}" in text
+    if "# Keep this" in existing:
+        assert "# Keep this\n" in text
+    if "*first" in existing:
+        assert "&first" in text and "*first" in text
+    assert llm.get_model("second").api_base == "http://localhost:8080"
+
+
 def test_endpoint_add_duplicate_requires_replace(user_path):
     assert _invoke("add", "http://localhost:8080", "-m", "orca").exit_code == 0
     assert _invoke("add", "http://localhost:8080", "-m", "other").exit_code == 0
@@ -254,6 +319,23 @@ def test_endpoint_remove(user_path):
     ]
     with pytest.raises(llm.UnknownModelError):
         llm.get_model("orca")
+
+
+def test_endpoint_add_after_removing_last_model(user_path):
+    assert _invoke("add", "http://localhost:8080", "-m", "first").exit_code == 0
+    assert _invoke("remove", "first").exit_code == 0
+    assert _invoke("add", "http://localhost:8080", "-m", "second").exit_code == 0
+
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        {
+            "model_id": "second",
+            "model_name": "second",
+            "api_base": "http://localhost:8080",
+        }
+    ]
+    assert llm.get_model("second").api_base == "http://localhost:8080"
 
 
 def test_endpoint_path(user_path):
