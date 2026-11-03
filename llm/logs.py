@@ -1111,20 +1111,36 @@ TURN_SEARCH_LITERAL = """coalesce(
     where json_extract(je.value, '$.literal') is not null)
 )"""
 
-# Derives the searchable prompt and response text for turns. Serves both
-# the migration backfill (turn_filter="") and the per-turn refresh in
-# LogStore.log (turn_filter="and turns.id = :turn_id" - the slot appears
-# in three places so the filtered form touches only that turn's chain).
+# Derives one turn's searchable prompt and response text, for the
+# refresh in LogStore.log. The prompt is every user message in the
+# turn's input - the trailing run of user and tool messages, as in
+# _LogRowBuilder.build - and the response is every assistant message
+# between the parent and the tip. Text parts are joined in chain order
+# with a newline between each, so the words either side of a part
+# boundary stay separate tokens. Each group_concat reads from an
+# ordered subquery because that is what fixes its order: an order by
+# alongside the aggregate would not.
 TURN_SEARCH_INSERT_SQL = """
-with recursive output_messages(turn_id, hash) as (
-    select turns.id, turns.tip_message_hash
+with recursive input_messages(hash, parent_hash, role, depth) as (
+    select messages.hash, messages.parent_hash, messages.role, 0
+      from turns
+      join messages on messages.hash = turns.parent_message_hash
+     where turns.id = :turn_id and messages.role in ('user', 'tool')
+    union all
+    select messages.hash, messages.parent_hash, messages.role, im.depth + 1
+      from input_messages im
+      join messages on messages.hash = im.parent_hash
+     where messages.role in ('user', 'tool')
+),
+output_messages(turn_id, hash, depth) as (
+    select turns.id, turns.tip_message_hash, 0
       from turns
      where turns.tip_message_hash is not null
        and (turns.parent_message_hash is null
             or turns.tip_message_hash != turns.parent_message_hash)
        and turns.id = :turn_id
     union all
-    select om.turn_id, messages.parent_hash
+    select om.turn_id, messages.parent_hash, om.depth + 1
       from output_messages om
       join messages on messages.hash = om.hash
       join turns on turns.id = om.turn_id
@@ -1133,33 +1149,29 @@ with recursive output_messages(turn_id, hash) as (
             or messages.parent_hash != turns.parent_message_hash)
 ),
 prompt_text as (
-    select turns.id as turn_id,
-           (select group_concat({LITERAL}, '')
-              from parts
-             where parts.message_hash = turns.parent_message_hash
-               and parts.type = 'text'
-             order by parts.position) as text
-      from turns
-      join messages on messages.hash = turns.parent_message_hash
-     where messages.role = 'user' and turns.id = :turn_id
+    select group_concat(text, char(10)) as text from (
+        select nullif({LITERAL}, '') as text
+          from input_messages im
+          join parts on parts.message_hash = im.hash
+         where im.role = 'user' and parts.type = 'text'
+         order by im.depth desc, parts.position
+    )
 ),
 response_text as (
-    select om.turn_id, group_concat(part_text.text, '') as text
-      from output_messages om
-      join messages on messages.hash = om.hash and messages.role = 'assistant'
-      join (
-          select parts.message_hash, parts.position, {LITERAL} as text
-            from parts where parts.type = 'text'
-      ) part_text on part_text.message_hash = om.hash
-     group by om.turn_id
+    select group_concat(text, char(10)) as text from (
+        select nullif({LITERAL}, '') as text
+          from output_messages om
+          join messages on messages.hash = om.hash and messages.role = 'assistant'
+          join parts on parts.message_hash = om.hash
+         where parts.type = 'text'
+         order by om.depth desc, parts.position
+    )
 )
 insert into turn_search (turn_id, prompt, response)
 select turns.id,
        coalesce(prompt_text.text, ''),
        coalesce(response_text.text, '')
-  from turns
-  left join prompt_text on prompt_text.turn_id = turns.id
-  left join response_text on response_text.turn_id = turns.id
+  from turns, prompt_text, response_text
  where (coalesce(prompt_text.text, '') != ''
         or coalesce(response_text.text, '') != '') and turns.id = :turn_id
 """.replace("{LITERAL}", TURN_SEARCH_LITERAL)
@@ -1216,11 +1228,12 @@ class _LogRowBuilder:
             boundary -= 1
         input_messages = inputs[boundary:]
 
-        prompt_parts = [
-            part
+        # Parts within a message join directly, as providers send them;
+        # separate user messages are kept apart.
+        prompt_texts = [
+            _text_of(message.parts, TextPart)
             for message in input_messages
             if message.role == "user"
-            for part in message.parts
         ]
         input_parts = [part for message in input_messages for part in message.parts]
         system_parts = inputs[0].parts if inputs and inputs[0].role == "system" else []
@@ -1251,7 +1264,7 @@ class _LogRowBuilder:
                 # The turn stores null when no options were set; the
                 # responses table always recorded "{}".
                 "options_json": row["options_json"] or "{}",
-                "prompt": _text_of(prompt_parts, TextPart),
+                "prompt": "\n\n".join(text for text in prompt_texts if text),
                 # None rather than "" when there was no system
                 # message, matching what was recorded before.
                 "system": _text_of(system_parts, TextPart) or None,

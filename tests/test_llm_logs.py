@@ -11,9 +11,10 @@ import yaml
 from click.testing import CliRunner
 from ulid import ULID
 
-from llm import Fragment, ToolCall
+from llm import Fragment, ToolCall, user
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.parts import StreamEvent
 from llm.utils import monotonic_ulid
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
@@ -492,6 +493,50 @@ def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
         cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False
     )
     assert json.loads(not_found.output) == []
+
+
+def test_logs_search_indexes_every_user_message(mock_model, logs_db):
+    # A turn's input can hold several user messages. All of them are
+    # shown as its prompt, so all of them are searchable, in order.
+    migrate(logs_db)
+    mock_model.enqueue(["Hello"])
+    response = mock_model.prompt("second narwhal", messages=[user("original walrus")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("walrus", "narwhal", '"walrus second"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        rows = json.loads(result.output)
+        assert [row["prompt"] for row in rows] == [
+            "original walrus\n\nsecond narwhal"
+        ], query
+
+
+def test_logs_search_separates_text_parts(mock_model, logs_db):
+    # Each text part is indexed as separate words, even where the
+    # displayed text joins parts directly the way providers send them.
+    migrate(logs_db)
+    mock_model.enqueue(
+        [
+            StreamEvent(type="text", chunk="first alpha"),
+            StreamEvent(type="reasoning", chunk="hmm"),
+            StreamEvent(type="text", chunk="second beta"),
+            StreamEvent(type="text", chunk="third gamma", message_index=1),
+        ]
+    )
+    response = mock_model.prompt(messages=[user("tell me about", "pelicans")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("pelicans", '"about pelicans"', '"alpha second"', '"beta third"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        assert len(json.loads(result.output)) == 1, query
 
 
 def test_logs_search_merges_legacy_rows(mock_model, logs_db):
