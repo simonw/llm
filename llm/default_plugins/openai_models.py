@@ -87,6 +87,19 @@ def _append_extra_model(path, record):
     if not existing.strip():
         _write_extra_models(path, [record])
         return
+    events = list(yaml.parse(existing, Loader=yaml.SafeLoader))
+    sequence = events[2]  # After StreamStartEvent and DocumentStartEvent
+    if isinstance(sequence, yaml.SequenceStartEvent) and sequence.flow_style:
+        # Insert after the last item (or opening bracket), before any trailing comma.
+        last_item = events[-4]  # Before sequence, document and stream end events
+        position = last_item.end_mark.index
+        text = yaml.safe_dump(
+            record, sort_keys=False, allow_unicode=True, default_flow_style=True
+        ).rstrip()
+        if last_item is not sequence:
+            text = ", " + text
+        path.write_text(existing[:position] + text + existing[position:], "utf-8")
+        return
     if not existing.endswith("\n"):
         existing += "\n"
     path.write_text(existing + text, "utf-8")
