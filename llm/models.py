@@ -711,6 +711,20 @@ def _combine_system(system, system_fragments):
     return "\n\n".join(bits)
 
 
+def _with_system(messages, system, system_fragments) -> list[Any]:
+    """Copy of an explicit ``messages=`` list with ``system=`` as its first
+    message, so adapters that build requests from ``prompt.messages``
+    alone still see it. A list that already starts with a system message
+    is left as it is."""
+    from .parts import Message, TextPart
+
+    chain = list(messages)
+    system_text = _combine_system(system, system_fragments)
+    if system_text and not (chain and chain[0].role == "system"):
+        chain.insert(0, Message(role="system", parts=[TextPart(text=system_text)]))
+    return chain
+
+
 def _merge_options(options: dict | None, kwargs: dict) -> dict:
     if not options:
         return kwargs
@@ -778,13 +792,14 @@ class _BaseConversation:
 
         If ``explicit_messages`` is provided, the caller has opted out
         of history reconstruction: the list is the authoritative history,
-        and the new turn's input is appended to it.
+        and the new turn's input is appended to it. A ``system`` prompt is
+        added as its first message unless it already starts with one.
         """
         from .parts import Message, TextPart
 
         if explicit_messages is not None:
             return _append_turn_input(
-                list(explicit_messages),
+                _with_system(explicit_messages, system, system_fragments),
                 prompt,
                 fragments,
                 attachments,
@@ -3352,7 +3367,11 @@ class _Model(_BaseModel):
             # arguments are this turn's new input, folded in so that
             # response.prompt.messages stays exactly what the model sees.
             messages = _append_turn_input(
-                list(messages), prompt, fragments, attachments, tool_results
+                _with_system(messages, system, system_fragments),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
             )
         return Response(
             Prompt(
@@ -3477,7 +3496,11 @@ class _AsyncModel(_BaseModel):
             # Same fold as Model.prompt: messages= is the history, the
             # other prompt arguments are this turn's new input.
             messages = _append_turn_input(
-                list(messages), prompt, fragments, attachments, tool_results
+                _with_system(messages, system, system_fragments),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
             )
         return AsyncResponse(
             Prompt(

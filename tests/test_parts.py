@@ -2444,6 +2444,129 @@ class TestChainMessagesKwarg:
         assert r1.prompt.messages == [llm.user("explicit")]
 
 
+# system= alongside messages= is not dropped
+
+
+class TestSystemWithExplicitMessages:
+    """system= passed alongside messages= must reach prompt.messages,
+    since adapters such as OpenAI build requests from that list alone."""
+
+    def test_model_prompt(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_model_chain(self, mock_model):
+        mock_model.enqueue(["ok"])
+        chain = mock_model.chain("q", system="be brief", messages=[])
+        chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("q"),
+        ]
+
+    def test_conversation_chain(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        chain = conv.chain(
+            "q",
+            system="be brief",
+            messages=[llm.user("earlier"), llm.assistant("ok")],
+        )
+        chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.assistant("ok"),
+            llm.user("q"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_chain(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        chain = async_mock_model.chain(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        await chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_prompt(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        response = async_mock_model.prompt(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        await response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_system_fragments(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q",
+            system="be brief",
+            system_fragments=["fragment A"],
+            messages=[llm.user("earlier")],
+        )
+        response.text()
+        assert response.prompt.messages[0] == llm.system("fragment A\n\nbe brief")
+
+    def test_leading_system_message_not_duplicated(self, mock_model):
+        """A caller that already put a system message first (the
+        workaround for older versions) keeps exactly that list."""
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q",
+            system="be brief",
+            messages=[llm.system("be brief"), llm.user("earlier")],
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_tool_result_turn_has_one_system_message(self, mock_model):
+        tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
+
+        class ChainMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                if not self._queue:
+                    yield "done"
+                    return
+                yield from self._queue.pop(0)
+                if not response._tool_calls:
+                    response.add_tool_call(tool_call)
+
+        def tick() -> str:
+            "Tick"
+            return "tock"
+
+        m = ChainMock()
+        m.enqueue(["tool-turn"])
+        m.enqueue(["final"])
+        chain = m.chain("q", system="be brief", messages=[], tools=[tick])
+        list(chain.responses())
+        messages = chain._responses[1].prompt.messages
+        assert messages[0] == llm.system("be brief")
+        assert [msg.role for msg in messages].count("system") == 1
+
+
 # Response.to_dict / Response.from_dict
 
 
