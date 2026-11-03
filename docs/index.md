@@ -31,7 +31,7 @@ Or with Homebrew (see {ref}`warning note <homebrew-warning>`):
 ```bash
 brew install llm
 ```
-Or with [pipx](https://pypa.github.io/pipx/):
+Or with [pipx](https://pipx.pypa.io/):
 ```bash
 pipx install llm
 ```
@@ -56,7 +56,7 @@ If you have an [OpenAI API key](https://platform.openai.com/api-keys) key you ca
 # Paste your OpenAI API key into this
 llm keys set openai
 
-# Run a prompt (with the default gpt-5.6-luna model)
+# Run a prompt (with the default gpt-6-luna model)
 llm "Ten fun names for a pet pelican"
 
 # Extract text from an image

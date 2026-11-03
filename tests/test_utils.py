@@ -1,13 +1,18 @@
 import json
+import threading
+from types import SimpleNamespace
 
+import click
 import pytest
 
+import llm.utils
 from llm import Toolbox, get_key
 from llm.utils import (
     extract_fenced_code_block,
     instantiate_from_spec,
     maybe_fenced_code,
     monotonic_ulid,
+    resolve_schema_input,
     schema_dsl,
     simplify_usage_dict,
     truncate_string,
@@ -114,6 +119,27 @@ def test_simplify_usage_dict(input_data, expected_output):
             "Here is some text.\n\n```python\ndef foo():\n    return `bar`\n```\n\nMore text.",
             False,
             "def foo():\n    return `bar`\n",
+        ],
+        [
+            "Here is some text.\r\n\r\n```python\r\ndef foo():\r\n    return 'bar'\r\n```\r\n\r\nMore text.",
+            False,
+            "def foo():\r\n    return 'bar'\r\n",
+        ],
+        [
+            (
+                "First code block:\r\n\r\n```python\r\nfirst()\r\n```\r\n\r\n"
+                "Second code block:\n\n```javascript\nsecond();\r\n```\n"
+            ),
+            False,
+            "first()\r\n",
+        ],
+        [
+            (
+                "First code block:\r\n\r\n```python\r\nfirst()\r\n```\r\n\r\n"
+                "Second code block:\n\n```javascript\nsecond();\r\n```\n"
+            ),
+            True,
+            "second();\r\n",
         ],
     ],
 )
@@ -267,6 +293,34 @@ def test_schema_dsl_missing_field_name(schema, invalid_field):
     assert str(ex.value) == (
         f"Invalid schema DSL: field {invalid_field!r} is missing a name before ':'"
     )
+
+
+@pytest.mark.parametrize(
+    ("schema", "field_name", "unknown_type"),
+    (
+        ("name string", "name", "string"),
+        ("name, age integer", "age", "integer"),
+        ("active boolean: whether active", "active", "boolean"),
+    ),
+)
+def test_schema_dsl_unknown_type(schema, field_name, unknown_type):
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(schema)
+    assert str(ex.value) == (
+        f"Invalid schema DSL: unknown type {unknown_type!r} for field {field_name!r}"
+    )
+
+
+def test_schema_dsl_duplicate_field_name():
+    with pytest.raises(ValueError) as ex:
+        schema_dsl("name, age int, name")
+    assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
+
+
+def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
+    with pytest.raises(click.BadParameter) as ex:
+        resolve_schema_input(None, "name, age badtype", load_template=None)
+    assert "badtype" in str(ex.value)
 
 
 @pytest.mark.parametrize(
@@ -428,6 +482,11 @@ class ValueFlag:
         self.flag = flag
 
 
+class Nullable:
+    def __init__(self, nullable=False):
+        self.nullable = nullable
+
+
 @pytest.mark.parametrize(
     "spec, expected_cls, expected_attrs",
     [
@@ -443,10 +502,13 @@ class ValueFlag:
         ),
         ("ValueFlag(flag=true)", ValueFlag, {"flag": True}),
         ("ValueFlag(value=123, flag=false)", ValueFlag, {"value": 123, "flag": False}),
+        ("Nullable(nullable=true)", Nullable, {"nullable": True}),
     ],
 )
 def test_instantiate_valid(spec, expected_cls, expected_attrs):
-    obj = instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+    obj = instantiate_from_spec(
+        {"Files": Files, "ValueFlag": ValueFlag, "Nullable": Nullable}, spec
+    )
     assert isinstance(obj, expected_cls)
     for key, val in expected_attrs.items():
         assert getattr(obj, key) == val
@@ -486,6 +548,46 @@ def test_get_key(user_path, monkeypatch):
 def test_monotonic_ulids():
     ulids = [monotonic_ulid() for i in range(1000)]
     assert ulids == sorted(ulids)
+
+
+def _pin_clock(monkeypatch, time_ns):
+    monkeypatch.setattr(llm.utils, "_last", None)
+    monkeypatch.setattr(llm.utils, "time", SimpleNamespace(time_ns=time_ns))
+
+
+def test_monotonic_ulids_when_clock_steps_backwards(monkeypatch):
+    readings = iter([2_000_000_000, 1_999_000_000])
+    _pin_clock(monkeypatch, lambda: next(readings))
+    first = monotonic_ulid()
+    second = monotonic_ulid()
+    assert second > first
+    # The earlier timestamp is discarded rather than encoded into the ULID
+    assert second.timestamp == first.timestamp
+
+
+def test_monotonic_ulids_across_threads(monkeypatch):
+    # time_ns() is read outside the lock, so the thread holding the earlier
+    # reading can reach the lock after the thread holding the later one
+    readings = {"early": 3_000_000_000, "late": 3_001_000_000}
+    _pin_clock(monkeypatch, lambda: readings[threading.current_thread().name])
+
+    late_is_done = threading.Event()
+    generated = {}
+
+    def generate():
+        name = threading.current_thread().name
+        if name == "early":
+            assert late_is_done.wait(timeout=10)
+        generated[name] = monotonic_ulid()
+        late_is_done.set()
+
+    threads = [threading.Thread(target=generate, name=name) for name in readings]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert generated["early"] > generated["late"]
 
 
 def test_toolbox_config_capture():
@@ -536,3 +638,23 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+@pytest.mark.parametrize("nested", [False, True])
+def test_schema_summary_boolean_properties(allowed, nested):
+    schema = {"type": "object", "properties": {"value": allowed}}
+    expected = "{value}"
+    if nested:
+        schema = {"type": "object", "properties": {"nested": schema}}
+        expected = "{nested: {value}}"
+    assert llm.utils.schema_summary(schema) == expected
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schema_summary_boolean_array_items(allowed):
+    schema = {
+        "type": "object",
+        "properties": {"values": {"type": "array", "items": allowed}},
+    }
+    assert llm.utils.schema_summary(schema) == "{values: []}"

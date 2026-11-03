@@ -42,6 +42,23 @@ class SentenceTransformerModel(llm.EmbeddingModel):
         results = self._model.encode(texts)
         return (list(map(float, result)) for result in results)
 ```
+
+Embedding models that call a hosted API should set `needs_key` and optionally `key_env_var`, then accept a keyword-only `key=` argument in `embed_batch()`. LLM resolves explicit keys, stored key aliases and environment variables before calling this method:
+
+```python
+class HostedEmbeddingModel(llm.EmbeddingModel):
+    model_id = "hosted-embedding-model"
+    needs_key = "hosted"
+    key_env_var = "HOSTED_API_KEY"
+
+    def embed_batch(self, texts, *, key=None):
+        # key is the resolved API key
+        results = hosted_client.embed(texts, api_key=key)
+        return (list(map(float, result)) for result in results)
+```
+
+The `key=` value can come from `llm embed --key`, `llm embed-multi --key` or the Python `embed(..., key=)` and `embed_multi(..., key=)` methods. For compatibility, LLM also supports older plugins whose `embed_batch()` method does not accept `key=` by temporarily exposing the resolved value as `self.key`.
+
 Once installed, the model provided by this plugin can be used with the {ref}`llm embed <embeddings-cli-embed>` command like this:
 
 ```bash
@@ -71,3 +88,29 @@ class ClipEmbeddingModel(llm.EmbeddingModel):
 If your model accepts binary, your `.embed_batch()` model may be called with a list of Python bytestrings. These may be mixed with regular strings if the model accepts both types of input.
 
 [llm-clip](https://github.com/simonw/llm-clip) is an example of a model that can embed both binary and text content.
+
+## Embedding typed attachments
+
+Binary strings do not include a MIME type or information about where they came from. Models that need that information can declare the attachment MIME types they support using `attachment_types`:
+
+```python
+class MultimodalEmbeddingModel(llm.EmbeddingModel):
+    model_id = "multimodal"
+    attachment_types = frozenset({"image/png", "image/jpeg", "audio/wav"})
+
+    def embed_batch(self, items, *, key=None):
+        for item in items:
+            if isinstance(item, llm.Attachment):
+                mimetype = item.resolve_type()
+                content = item.content_bytes()
+                # Decode content according to mimetype, then embed it
+            else:
+                # Embed text strings as usual
+                ...
+```
+
+An embedding model with a non-empty `attachment_types` collection receives matching inputs as `llm.Attachment` objects. Attachments provide `type`, `path`, `url`, and `content` attributes, along with `resolve_type()` and `content_bytes()` methods.
+
+The CLI accepts typed attachments using `-a/--attachment`, which detects the MIME type, or `--at/--attachment-type PATH MIME`, which sets it explicitly.
+
+For backwards compatibility, a model with `supports_binary = True` and no declared `attachment_types` receives the attachment's content as bytes. This allows existing binary embedding plugins to work with the typed attachment CLI without modification.

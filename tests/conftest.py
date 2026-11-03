@@ -6,7 +6,7 @@ import llm_echo
 import pytest
 import sqlite_utils
 from pydantic import Field
-from pytest_httpx import IteratorStream
+from pytest_httpx2 import IteratorStream
 
 import llm
 from llm.plugins import pm
@@ -37,14 +37,26 @@ def user_path(tmpdir):
 
 
 @pytest.fixture
-def logs_db(user_path):
-    return sqlite_utils.Database(str(user_path / "logs.db"))
+def db_factory(request):
+    """Create test-owned databases and close them even when a test fails."""
+
+    def create(*args, **kwargs):
+        db = sqlite_utils.Database(*args, **kwargs)
+        request.addfinalizer(db.close)
+        return db
+
+    return create
 
 
 @pytest.fixture
-def user_path_with_embeddings(user_path):
+def logs_db(db_factory, user_path):
+    return db_factory(str(user_path / "logs.db"))
+
+
+@pytest.fixture
+def user_path_with_embeddings(db_factory, user_path):
     path = str(user_path / "embeddings.db")
-    db = sqlite_utils.Database(path)
+    db = db_factory(path)
     collection = llm.Collection("demo", db, model_id="embed-demo")
     collection.embed("1", "hello world", store=True)
     collection.embed("2", "goodbye world", store=True)
@@ -172,6 +184,19 @@ class EmbedDemo(llm.EmbeddingModel):
             yield embedding
 
 
+class EmbedKeyDemo(EmbedDemo):
+    model_id = "embed-key-demo"
+    needs_key = "embed-key-demo"
+
+    def __init__(self):
+        super().__init__()
+        self.keys = []
+
+    def embed_batch(self, texts, *, key=None):
+        self.keys.append(key)
+        yield from super().embed_batch(texts)
+
+
 class EmbedBinaryOnly(EmbedDemo):
     model_id = "embed-binary-only"
     supports_text = False
@@ -187,6 +212,11 @@ class EmbedTextOnly(EmbedDemo):
 @pytest.fixture
 def embed_demo():
     return EmbedDemo()
+
+
+@pytest.fixture
+def embed_key_demo():
+    return EmbedKeyDemo()
 
 
 @pytest.fixture
@@ -210,13 +240,14 @@ def mock_async_key_model():
 
 
 @pytest.fixture(autouse=True)
-def register_embed_demo_model(embed_demo, mock_model, async_mock_model):
+def register_embed_demo_model(embed_demo, embed_key_demo, mock_model, async_mock_model):
     class MockModelsPlugin:
         __name__ = "MockModelsPlugin"
 
         @llm.hookimpl
         def register_embedding_models(self, register):
             register(embed_demo)
+            register(embed_key_demo)
             register(EmbedBinaryOnly())
             register(EmbedTextOnly())
 
@@ -248,8 +279,8 @@ def register_echo_model():
 
 
 @pytest.fixture
-def mocked_openai_chat(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -259,18 +290,18 @@ def mocked_openai_chat(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 @pytest.fixture
-def mock_openai_responses(httpx_mock):
+def mock_openai_responses(httpx2_mock):
     def add_response(
         text="Bob, Alice, Eve",
         model="gpt-5.6-luna",
         response_id="resp_test",
         message_id="msg_test",
     ):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/responses",
             json={
@@ -307,14 +338,14 @@ def mock_openai_responses(httpx_mock):
 
 
 @pytest.fixture
-def mocked_openai_responses(httpx_mock, mock_openai_responses):
+def mocked_openai_responses(httpx2_mock, mock_openai_responses):
     mock_openai_responses()
-    return httpx_mock
+    return httpx2_mock
 
 
 @pytest.fixture
-def mocked_openai_chat_returning_fenced_code(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat_returning_fenced_code(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -330,7 +361,7 @@ def mocked_openai_chat_returning_fenced_code(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 def stream_events():
@@ -357,8 +388,8 @@ def stream_events():
 
 
 @pytest.fixture
-def mocked_openai_chat_stream(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_chat_stream(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         stream=IteratorStream(stream_events()),
@@ -367,15 +398,23 @@ def mocked_openai_chat_stream(httpx_mock):
 
 
 @pytest.fixture
-def mocked_openai_completion(httpx_mock):
-    httpx_mock.add_response(
+def completion_model(user_path):
+    (user_path / "extra-openai-models.yaml").write_text(
+        "- model_id: completion-demo\n  model_name: completion-demo\n  completion: true\n",
+        "utf-8",
+    )
+
+
+@pytest.fixture
+def mocked_openai_completion(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         json={
             "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
             "object": "text_completion",
             "created": 1589478378,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nThis is indeed a test",
@@ -389,7 +428,7 @@ def mocked_openai_completion(httpx_mock):
         headers={"Content-Type": "application/json"},
         is_reusable=True,
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 def stream_completion_events():
@@ -456,7 +495,7 @@ def stream_completion_events():
                     "object": "text_completion",
                     "created": 1695097702,
                     "choices": choices,
-                    "model": "gpt-3.5-turbo-instruct",
+                    "model": "completion-demo",
                 }
             )
         ).encode("utf-8")
@@ -464,26 +503,26 @@ def stream_completion_events():
 
 
 @pytest.fixture
-def mocked_openai_completion_logprobs_stream(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_completion_logprobs_stream(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         stream=IteratorStream(stream_completion_events()),
         headers={"Content-Type": "text/event-stream"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 @pytest.fixture
-def mocked_openai_completion_logprobs(httpx_mock):
-    httpx_mock.add_response(
+def mocked_openai_completion_logprobs(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/completions",
         json={
             "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
             "object": "text_completion",
             "created": 1695097747,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nHi.",
@@ -505,12 +544,12 @@ def mocked_openai_completion_logprobs(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 @pytest.fixture
-def mocked_localai(httpx_mock):
-    httpx_mock.add_response(
+def mocked_localai(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="http://localai.localhost/chat/completions",
         json={
@@ -520,7 +559,7 @@ def mocked_localai(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="http://localai.localhost/completions",
         json={
@@ -530,12 +569,13 @@ def mocked_localai(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 @pytest.fixture
-def collection():
+def collection(request):
     collection = llm.Collection("test", model_id="embed-demo")
+    request.addfinalizer(collection.db.close)
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection

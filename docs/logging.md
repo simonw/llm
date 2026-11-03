@@ -212,7 +212,7 @@ This can be particularly useful when {ref}`working with schema data <schemas-log
 
 You can filter to logs just for a specific model (or model alias) using `-m/--model`:
 ```bash
-llm logs -m chatgpt
+llm logs -m 4o-mini
 ```
 
 (logging-filter-fragments)=
@@ -670,6 +670,15 @@ db = sqlite_utils.Database("logs.db")
 model = llm.get_model("gpt-5.5")
 response = model.prompt("A short pelican fact")
 print(response.text())
+response.log_to_db(db)
+```
+
+For an `AsyncResponse`, wait for the response before logging it:
+
+```python
+async_model = llm.get_async_model("gpt-5.5")
+response = async_model.prompt("A short pelican fact")
+print(await response.text())
 response.log_to_db(db)
 ```
 

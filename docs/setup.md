@@ -6,7 +6,7 @@ Install this tool using `pip`:
 ```bash
 pip install llm
 ```
-Or using [pipx](https://pypa.github.io/pipx/):
+Or using [pipx](https://pipx.pypa.io/):
 ```bash
 pipx install llm
 ```
@@ -167,7 +167,7 @@ You can configure LLM in a number of different ways.
 (setup-default-model)=
 ### Setting a custom default model
 
-The model used when calling `llm` without the `-m/--model` option defaults to `gpt-5.6-luna` - a fast and less expensive OpenAI model.
+The model used when calling `llm` without the `-m/--model` option defaults to `gpt-6-luna` - OpenAI's cheapest frontier model.
 
 You can use the `llm models default` command to set a different default model. For GPT-4o (slower and more expensive, but more capable) run this:
 

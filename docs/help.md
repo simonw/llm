@@ -112,6 +112,27 @@ Usage: llm prompt [OPTIONS] [PROMPT]
       # With an explicit mimetype:
       cat image | llm 'describe image' --at - image/jpeg
 
+  Structured output schemas:
+
+  Use --schema to request one JSON object, or --schema-multi to request multiple
+  objects returned in an "items" array. Both options accept a concise schema
+  DSL. Define each field as NAME [TYPE]: DESCRIPTION, with the type and
+  description both optional. Separate fields with commas:
+
+      llm --schema 'name, age int, active bool' 'Invent a dog'
+
+  Supported types are str, int, float and bool. The default is str and every
+  listed field is required. Descriptions provide extra instructions to the
+  model. Use one field per line if descriptions contain commas:
+
+      llm --schema-multi '
+      name: the dog's name
+      age int: the dog's age in years
+      bio: a short bio, no more than three sentences
+      ' 'Invent three dogs'
+
+  JSON Schema is also accepted.
+
   The -x/--extract option returns just the content of the first ``` fenced code
   block, if one is present. If none are present it returns the full response.
 
@@ -135,12 +156,13 @@ Options:
                                   default 5, set 0 for unlimited
   -o, --option <TEXT TEXT>...     key/value options for the model
   --options                       Show options for the selected model
-  --schema TEXT                   JSON schema, filepath or ID
-  --schema-multi TEXT             JSON schema to use for multiple results
+  --schema TEXT                   Schema DSL, JSON schema, filepath or ID
+  --schema-multi TEXT             Schema for multiple results
   -f, --fragment TEXT             Fragment (alias, URL, hash or file path) to
                                   add to the prompt
   --sf, --system-fragment TEXT    Fragment to add to system prompt
-  -t, --template TEXT             Template to use
+  -t, --template TEXT             Template to use; can be repeated to combine
+                                  templates
   -p, --param <TEXT TEXT>...      Parameters for template
   --no-stream                     Do not stream output
   -n, --no-log                    Don't log to database
@@ -180,6 +202,7 @@ Options:
   -d, --database FILE           Path to log database
   --no-stream                   Do not stream output
   -R, --hide-reasoning          Hide reasoning output
+  -u, --usage                   Show token usage after each chat turn
   --key TEXT                    API key to use
   -T, --tool TEXT               Name of a tool to make available to the model
   --functions TEXT              Python code block or file path defining
@@ -352,7 +375,7 @@ Options:
   -f, --fragment TEXT         Filter for prompts using these fragments
   -T, --tool TEXT             Filter for prompts with results from these tools
   --tools                     Filter for prompts with results from any tools
-  --schema TEXT               JSON schema, filepath or ID
+  --schema TEXT               Schema DSL, JSON schema, filepath or ID
   --schema-multi TEXT         JSON schema used for multiple results
   -l, --latest                Return latest results matching search query
   --data                      Output newline-delimited JSON data for schema
@@ -696,12 +719,12 @@ Usage: llm aliases set [OPTIONS] ALIAS [MODEL_ID]
 
   Example usage:
 
-      llm aliases set luna gpt-5.6-luna
+      llm aliases set luna gpt-6-luna
 
   Alternatively you can omit the model ID and specify one or more -q options.
   The first model matching all of those query strings will be used.
 
-      llm aliases set luna -q gpt -q luna
+      llm aliases set luna -q gpt-6 -q luna
 
 Options:
   -q, --query TEXT  Set alias for model matching these strings
@@ -877,10 +900,15 @@ Usage: llm embed [OPTIONS] [COLLECTION] [ID]
 Options:
   -i, --input PATH                File to embed
   -m, --model TEXT                Embedding model to use
+  --key TEXT                      API key to use
   --store                         Store the text itself in the database
   -d, --database FILE
   -c, --content TEXT              Content to embed
   --binary                        Treat input as binary data
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
   --metadata TEXT                 JSON object metadata to store
   -f, --format [json|blob|base64|hex]
                                   Output format
@@ -894,7 +922,7 @@ Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
 
   Store embeddings for multiple strings at once in the specified collection.
 
-  Input data can come from one of three sources:
+  Input data can come from one of four sources:
 
   1. A CSV, TSV, JSON or JSONL file:
      - CSV/TSV: First column is ID, remaining columns concatenated as content
@@ -923,23 +951,36 @@ Usage: llm embed-multi [OPTIONS] COLLECTION [INPUT_PATH]
        llm embed-multi images --files photos '*.jpg' --binary
        llm embed-multi texts --files texts '*.txt' --encoding utf-8 --encoding latin-1
 
+  4. Typed attachments:
+     - Each path or URL becomes one embedding
+     - Use --at PATH MIME-TYPE to supply an explicit MIME type
+
+     Examples:
+       llm embed-multi media -a photo.jpg -a recording.wav
+       llm embed-multi media --at recording.data audio/wav
+
 Options:
-  --format [json|csv|tsv|nl]   Format of input file - defaults to auto-detect
-  --files <DIRECTORY TEXT>...  Embed files in this directory - specify directory
-                               and glob pattern
-  --encoding TEXT              Encodings to try when reading --files
-  --binary                     Treat --files as binary data
-  --sql TEXT                   Read input using this SQL query
-  --attach <TEXT FILE>...      Additional databases to attach - specify alias
-                               and file path
-  --batch-size INTEGER         Batch size to use when running embeddings
-  --prefix TEXT                Prefix to add to the IDs
-  -m, --model TEXT             Embedding model to use
-  --prepend TEXT               Prepend this string to all content before
-                               embedding
-  --store                      Store the text itself in the database
+  --format [json|csv|tsv|nl]      Format of input file - defaults to auto-detect
+  --files <DIRECTORY TEXT>...     Embed files in this directory - specify
+                                  directory and glob pattern
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  --encoding TEXT                 Encodings to try when reading --files
+  --binary                        Treat --files as binary data
+  --sql TEXT                      Read input using this SQL query
+  --attach <TEXT FILE>...         Additional databases to attach - specify alias
+                                  and file path
+  --batch-size INTEGER            Batch size to use when running embeddings
+  --prefix TEXT                   Prefix to add to the IDs
+  -m, --model TEXT                Embedding model to use
+  --key TEXT                      API key to use
+  --prepend TEXT                  Prepend this string to all content before
+                                  embedding
+  --store                         Store the text itself in the database
   -d, --database FILE
-  -h, --help                   Show this message and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 (help-similar)=
@@ -958,14 +999,18 @@ Usage: llm similar [OPTIONS] COLLECTION [ID]
       llm similar my-collection 1234
 
 Options:
-  -i, --input PATH      File to embed for comparison
-  -c, --content TEXT    Content to embed for comparison
-  --binary              Treat input as binary data
-  -n, --number INTEGER  Number of results to return
-  -p, --plain           Output in plain text format
+  -i, --input PATH                File to embed for comparison
+  -c, --content TEXT              Content to embed for comparison
+  --binary                        Treat input as binary data
+  -a, --attachment ATTACHMENT     Attachment path or URL or -
+  --at, --attachment-type <TEXT TEXT>...
+                                  Attachment with explicit mimetype,
+                                  --at image.jpg image/jpeg
+  -n, --number INTEGER            Number of results to return
+  -p, --plain                     Output in plain text format
   -d, --database FILE
-  --prefix TEXT         Just IDs with this prefix
-  -h, --help            Show this message and exit.
+  --prefix TEXT                   Just IDs with this prefix
+  -h, --help                      Show this message and exit.
 ```
 
 (help-embed-models)=
@@ -1074,14 +1119,35 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  endpoint  Run against an OpenAI-compatible endpoint without logging.
+  endpoint  Work with OpenAI-compatible endpoints
   models    List models available to you from the OpenAI API
 ```
 
 (help-openai-endpoint)=
 #### llm openai endpoint --help
 ```
-Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
+Usage: llm openai endpoint [OPTIONS] COMMAND [ARGS]...
+
+  Work with OpenAI-compatible endpoints
+
+  "llm openai endpoint URL ..." runs the "prompt" subcommand. Use "add", "list"
+  and "remove" to manage endpoints saved in extra-openai-models.yaml.
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  prompt*  Run against an OpenAI-compatible endpoint without logging.
+  add      Save an OpenAI-compatible endpoint to extra-openai-models.yaml
+  list     List endpoints saved in extra-openai-models.yaml
+  path     Output the path to the extra-openai-models.yaml file
+  remove   Remove a saved endpoint from extra-openai-models.yaml
+```
+
+(help-openai-endpoint-prompt)=
+##### llm openai endpoint prompt --help
+```
+Usage: llm openai endpoint prompt [OPTIONS] URL [PROMPT]
 
   Run against an OpenAI-compatible endpoint without logging.
 
@@ -1097,7 +1163,7 @@ Options:
   -t, --template TEXT             Template to use
   -p, --param <TEXT TEXT>...      Parameters for template
   -o, --option <TEXT TEXT>...     key/value options for the model
-  --schema TEXT                   JSON schema, filepath or ID
+  --schema TEXT                   Schema DSL, JSON schema, filepath or ID
   --schema-multi TEXT             JSON schema to use for multiple results
   -a, --attachment ATTACHMENT     Attachment path or URL or -
   --at, --attachment-type <TEXT TEXT>...
@@ -1119,6 +1185,80 @@ Options:
   --no-stream                     Do not stream output
   -R, --hide-reasoning            Hide reasoning output
   -h, --help                      Show this message and exit.
+```
+
+(help-openai-endpoint-add)=
+##### llm openai endpoint add --help
+```
+Usage: llm openai endpoint add [OPTIONS] URL
+
+  Save an OpenAI-compatible endpoint to extra-openai-models.yaml
+
+  The model can then be used with "llm -m MODEL_ID". Example usage:
+
+      llm openai endpoint add https://openrouter.ai/api/v1 \
+        -m anthropic/claude-sonnet-4.5 --id claude-sonnet \
+        --key openrouter --alias claude --supports-tools
+
+  If URL is the default OpenAI API URL the api_base key is omitted and the model
+  uses your regular OpenAI API key.
+
+Options:
+  -m, --model TEXT             Model name to send to the API  [required]
+  --id TEXT                    Model ID to use with LLM, defaults to the model
+                               name
+  --alias TEXT                 Alias for the model, can be used multiple times
+  --key TEXT                   Name of a stored key to send to the endpoint, see
+                               'llm keys set'
+  -H, --header <TEXT TEXT>...  Additional HTTP header
+  --responses                  Use the Responses API instead of Chat Completions
+  --completion                 Use the Completions API
+  --supports-tools             Model supports tool calling
+  --supports-schema            Model supports JSON schema output
+  --vision                     Model accepts image attachments
+  --audio                      Model accepts audio attachments
+  --reasoning                  Model is a reasoning model
+  --service-tier               Model supports the service_tier option
+  --no-stream                  Model cannot stream responses
+  --api-type TEXT              api_type, for Azure OpenAI
+  --api-version TEXT           api_version, for Azure OpenAI
+  --api-engine TEXT            api_engine, for Azure OpenAI
+  --replace                    Replace an existing record with the same model ID
+  -h, --help                   Show this message and exit.
+```
+
+(help-openai-endpoint-list)=
+##### llm openai endpoint list --help
+```
+Usage: llm openai endpoint list [OPTIONS]
+
+  List endpoints saved in extra-openai-models.yaml
+
+Options:
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-endpoint-remove)=
+##### llm openai endpoint remove --help
+```
+Usage: llm openai endpoint remove [OPTIONS] MODEL_ID
+
+  Remove a saved endpoint from extra-openai-models.yaml
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-endpoint-path)=
+##### llm openai endpoint path --help
+```
+Usage: llm openai endpoint path [OPTIONS]
+
+  Output the path to the extra-openai-models.yaml file
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-openai-models)=

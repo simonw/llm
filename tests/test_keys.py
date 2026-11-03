@@ -66,7 +66,7 @@ def test_keys_list(monkeypatch, tmpdir, args):
     assert result2.output.strip() == "openai"
 
 
-@pytest.mark.httpx_mock(
+@pytest.mark.httpx2_mock(
     assert_all_requests_were_expected=False, can_send_already_matched_responses=True
 )
 def test_uses_correct_key(mocked_openai_chat, monkeypatch, tmpdir):

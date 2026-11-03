@@ -11,6 +11,12 @@ To embed a string, returning a Python list of floating point numbers, use the `.
 ```python
 vector = embedding_model.embed("my happy hound")
 ```
+You can pass an API key directly using `key=`. This can be either the key itself or the alias of a key stored using `llm keys set`:
+
+```python
+vector = embedding_model.embed("my happy hound", key="sk-...")
+```
+
 If the embedding model can handle binary input, you can call `.embed()` with a byte string instead. You can check the `supports_binary` property to see if this is supported:
 ```python
 from pathlib import Path
@@ -20,11 +26,25 @@ if embedding_model.supports_binary:
 ```
 The `embedding_model.supports_text` property indicates if the model supports text input.
 
+Models can also advertise typed attachment support through their `attachment_types` collection. Passing an `Attachment` preserves the MIME type and its path or URL in addition to providing access to the bytes:
+
+```python
+import llm
+
+attachment = llm.Attachment(path="my-image.jpg", type="image/jpeg")
+if attachment.resolve_type() in embedding_model.attachment_types:
+    vector = embedding_model.embed(attachment)
+```
+
+When a model supports binary data but does not declare any `attachment_types`, LLM passes the attachment's content to that model as bytes for backwards compatibility.
+
 Many embeddings models are more efficient when you embed multiple strings or binary strings at once. To embed multiple strings at once, use the `.embed_multi()` method:
 ```python
 vectors = list(embedding_model.embed_multi(["my happy hound", "my dissatisfied cat"]))
 ```
 This returns a generator that yields one embedding vector per string.
+
+`embed_multi()` accepts the same `key=` argument as `embed()`.
 
 Embeddings are calculated in batches. By default all items will be processed in a single batch, unless the underlying embedding model has defined its own preferred batch size. You can pass a custom batch size using `batch_size=N`, for example:
 
@@ -65,6 +85,8 @@ To embed a single string and store it in the collection, use the `embed()` metho
 collection.embed("hound", "my happy hound")
 ```
 This stores the embedding for the string "my happy hound" in the `entries` collection under the key `hound`.
+
+You can pass an API key directly using `key="..."`. The `collection.embed_multi()` and `collection.embed_multi_with_metadata()` methods accept this argument too.
 
 Add `store=True` to store the text content itself in the database table along with the embedding vector.
 
@@ -124,10 +146,10 @@ A collection instance has the following properties and methods:
 - `model_id` - the string ID of the embedding model used for this collection
 - `model()` - returns the `EmbeddingModel` instance, based on that `model_id`
 - `count()` - returns the integer number of items in the collection
-- `embed(id: str, value: str | bytes, metadata: dict[str, Any] | None = None, store: bool = False)` - embeds the given value and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON) and store the text or binary content itself in the database table.
-- `embed_multi(entries: Iterable[tuple[str, str | bytes]], store: bool = False, batch_size: int = 100)` - see above
-- `embed_multi_with_metadata(entries: Iterable[tuple[str, str | bytes, dict[str, Any] | None]], store: bool = False, batch_size: int = 100)` - see above
-- `similar(value: str | bytes, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the given value
+- `embed(id: str, value: str | bytes | Attachment, metadata: dict[str, Any] | None = None, store: bool = False, *, key: str | None = None)` - embeds the given value and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON), store the text or binary content itself in the database table and pass an API key or stored key alias.
+- `embed_multi(entries: Iterable[tuple[str, str | bytes | Attachment]], store: bool = False, batch_size: int = 100, *, key: str | None = None)` - see above
+- `embed_multi_with_metadata(entries: Iterable[tuple[str, str | bytes | Attachment, dict[str, Any] | None]], store: bool = False, batch_size: int = 100, *, key: str | None = None)` - see above
+- `similar(value: str | bytes | Attachment, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the given value
 - `similar_by_id(id: str, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the item with the given ID
 - `similar_by_vector(vector: list[float], number: int = 10, skip_id: str | None = None, prefix: str | None = None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
 - `delete()` - deletes the collection and its embeddings from the database
@@ -204,6 +226,7 @@ CREATE TABLE "embeddings" (
    "embedding" BLOB,
    "content" TEXT,
    "content_blob" BLOB,
+   "content_type" TEXT,
    "content_hash" BLOB,
    "metadata" TEXT,
    "updated" INTEGER,

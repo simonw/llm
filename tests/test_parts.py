@@ -1,8 +1,79 @@
 import json
+from contextlib import aclosing
 
 import pytest
 
 import llm
+
+
+def _tool_call_events(response, calls):
+    """Create matching response tool calls and stream events for test models."""
+    events = []
+    for index, (name, arguments, tool_call_id) in enumerate(calls):
+        response.add_tool_call(
+            llm.ToolCall(
+                name=name,
+                arguments=arguments,
+                tool_call_id=tool_call_id,
+            )
+        )
+        events.extend(
+            [
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk=name,
+                    part_index=index,
+                    tool_call_id=tool_call_id,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk=json.dumps(arguments),
+                    part_index=index,
+                    tool_call_id=tool_call_id,
+                ),
+            ]
+        )
+    return events
+
+
+def _tool_round_mock(base_model, rounds):
+    """Create a mock model that emits tool calls for each planned round."""
+    if isinstance(base_model, llm.AsyncModel):
+
+        class ToolCallMock(type(base_model)):
+            supports_tools = True
+
+            async def execute(self, prompt, stream, response, conversation):
+                if self.tool_round >= len(rounds):
+                    async for chunk in super().execute(
+                        prompt, stream, response, conversation
+                    ):
+                        yield chunk
+                    return
+                self.history.append((prompt, stream, response, conversation))
+                events = _tool_call_events(response, rounds[self.tool_round])
+                self.tool_round += 1
+                for event in events:
+                    yield event
+
+    else:
+
+        class ToolCallMock(type(base_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                if self.tool_round >= len(rounds):
+                    yield from super().execute(prompt, stream, response, conversation)
+                    return
+                self.history.append((prompt, stream, response, conversation))
+                events = _tool_call_events(response, rounds[self.tool_round])
+                self.tool_round += 1
+                yield from events
+
+    model = ToolCallMock()
+    model.tool_round = 0
+    model.enqueue(["complete"])
+    return model
 
 
 class TestTextPart:
@@ -918,6 +989,30 @@ class TestAsyncStreamEvents:
         assert seen_types == ["reasoning", "text"]
 
     @pytest.mark.asyncio
+    async def test_closing_stream_events_closes_provider_generator(self):
+        class ResourceModel(llm.AsyncModel):
+            model_id = "resource-model"
+
+            def __init__(self):
+                self.resource_closed = False
+
+            async def execute(self, prompt, stream, response, conversation):
+                try:
+                    yield "first"
+                    yield "second"
+                finally:
+                    self.resource_closed = True
+
+        model = ResourceModel()
+        response = model.prompt("x")
+
+        async with aclosing(response.astream_events()) as events:
+            event = await anext(events)
+            assert event.chunk == "first"
+
+        assert model.resource_closed
+
+    @pytest.mark.asyncio
     async def test_async_iter_yields_only_text(self, async_mock_model):
         events = [
             llm.parts.StreamEvent(type="reasoning", chunk="r", part_index=0),
@@ -1324,13 +1419,12 @@ class TestSqliteRehydrateMessages:
     """
 
     def test_from_row_response_messages_synthesized_from_chunks(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
-        import sqlite_utils
 
         from llm.migrations import migrate
 
-        db = sqlite_utils.Database(str(tmp_path / "logs.db"))
+        db = db_factory(str(tmp_path / "logs.db"))
         migrate(db)
         # log_to_db no longer writes the legacy tables - seed the row
         # the way an older version of llm recorded it, since from_row
@@ -1367,11 +1461,10 @@ class TestSqliteRehydrateMessages:
         ]
 
     def test_llm_dash_c_chain_preserves_prior_assistant_turn(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
         """End-to-end: a follow-up turn via load_conversation must send
         [user(q1), assistant(a1), user(q2)] — not drop the assistant."""
-        import sqlite_utils
 
         from llm.cli import load_conversation
         from llm.migrations import migrate
@@ -1382,7 +1475,7 @@ class TestSqliteRehydrateMessages:
         r1.text()
 
         db_path = tmp_path / "logs.db"
-        db = sqlite_utils.Database(str(db_path))
+        db = db_factory(str(db_path))
         migrate(db)
         r1.log_to_db(db)
 
@@ -1397,12 +1490,11 @@ class TestSqliteRehydrateMessages:
         ]
 
     def test_llm_dash_c_after_logged_tool_chain_preserves_full_chain(
-        self, mock_model, tmp_path
+        self, db_factory, mock_model, tmp_path
     ):
         """A loaded tool-result response must carry the preceding
         assistant tool_use. Otherwise Anthropic sees an orphan
         tool_result at the start of the continued request."""
-        import sqlite_utils
 
         from llm.cli import load_conversation
         from llm.migrations import migrate
@@ -1431,7 +1523,7 @@ class TestSqliteRehydrateMessages:
         chain_response.text()
 
         db_path = tmp_path / "logs.db"
-        db = sqlite_utils.Database(str(db_path))
+        db = db_factory(str(db_path))
         migrate(db)
         chain_response.log_to_db(db)
 
@@ -1877,6 +1969,65 @@ class TestResponseReply:
             ToolResultPart(name="echo", output="echo:42", tool_call_id="c1")
         ]
 
+    def test_reply_auto_execution_uses_conversation_callbacks(self, mock_model):
+        executed = []
+        before_calls = []
+        after_calls = []
+
+        def blocked(x: int) -> str:
+            executed.append(("blocked", x))
+            return f"blocked:{x}"
+
+        def allowed(x: int) -> str:
+            executed.append(("allowed", x))
+            return f"allowed:{x}"
+
+        def before(tool, tool_call):
+            before_calls.append(tool_call.name)
+            if tool_call.name == "blocked":
+                raise llm.CancelToolCall("blocked by before_call")
+
+        def after(tool, tool_call, tool_result):
+            after_calls.append(tool.name)
+
+        model = _tool_round_mock(
+            mock_model,
+            [
+                [
+                    ("blocked", {"x": 1}, "c1"),
+                    ("allowed", {"x": 2}, "c2"),
+                ],
+                [("allowed", {"x": 3}, "c3")],
+            ],
+        )
+        conversation = model.conversation(
+            tools=[blocked, allowed], before_call=before, after_call=after
+        )
+        response = conversation.prompt("call tools")
+        response.text()
+
+        follow_up = response.reply()
+        follow_up.text()
+        second_follow_up = follow_up.reply()
+        second_follow_up.text()
+
+        assert executed == [("allowed", 2), ("allowed", 3)]
+        assert before_calls == ["blocked", "allowed", "allowed"]
+        assert after_calls == ["allowed", "allowed"]
+        assert follow_up.before_call is before
+        assert follow_up.after_call is after
+        assert second_follow_up.before_call is before
+        assert second_follow_up.after_call is after
+        cancelled_result = next(
+            part
+            for message in follow_up.prompt.messages
+            if message.role == "tool"
+            for part in message.parts
+            if part.name == "blocked"
+        )
+        assert cancelled_result.output == "Cancelled: blocked by before_call"
+        assert cancelled_result.exception == "CancelToolCall: blocked by before_call"
+
     def test_reply_auto_execute_with_prompt(self, mock_model):
         # reply("more text") with tool calls present also auto-executes
         # so the user prompt can land after the tool results.
@@ -2002,6 +2153,70 @@ class TestResponseReply:
         assert tool_msg.parts == [
             ToolResultPart(name="echo", output="echo:7", tool_call_id="c1")
         ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_auto_execution_uses_conversation_callbacks(
+        self, async_mock_model
+    ):
+        executed = []
+        before_calls = []
+        after_calls = []
+
+        async def blocked(x: int) -> str:
+            executed.append(("blocked", x))
+            return f"blocked:{x}"
+
+        async def allowed(x: int) -> str:
+            executed.append(("allowed", x))
+            return f"allowed:{x}"
+
+        async def before(tool, tool_call):
+            before_calls.append(tool_call.name)
+            if tool_call.name == "blocked":
+                raise llm.CancelToolCall("blocked by before_call")
+
+        async def after(tool, tool_call, tool_result):
+            after_calls.append(tool.name)
+
+        model = _tool_round_mock(
+            async_mock_model,
+            [
+                [
+                    ("blocked", {"x": 1}, "c1"),
+                    ("allowed", {"x": 2}, "c2"),
+                ],
+                [("allowed", {"x": 3}, "c3")],
+            ],
+        )
+        conversation = model.conversation(
+            tools=[blocked, allowed], before_call=before, after_call=after
+        )
+        # Pass tools explicitly to isolate callback propagation from
+        # conversation-level tool inheritance.
+        response = conversation.prompt("call tools", tools=[blocked, allowed])
+        await response.text()
+
+        follow_up = await response.reply()
+        await follow_up.text()
+        second_follow_up = await follow_up.reply()
+        await second_follow_up.text()
+
+        assert sorted(executed) == [("allowed", 2), ("allowed", 3)]
+        assert sorted(before_calls) == ["allowed", "allowed", "blocked"]
+        assert sorted(after_calls) == ["allowed", "allowed"]
+        assert follow_up.before_call is before
+        assert follow_up.after_call is after
+        assert second_follow_up.before_call is before
+        assert second_follow_up.after_call is after
+        cancelled_result = next(
+            part
+            for message in follow_up.prompt.messages
+            if message.role == "tool"
+            for part in message.parts
+            if part.name == "blocked"
+        )
+        assert cancelled_result.output == "Cancelled: blocked by before_call"
+        assert cancelled_result.exception == "CancelToolCall: blocked by before_call"
 
     @pytest.mark.asyncio
     async def test_async_reply_with_tool_results(self, async_mock_model):

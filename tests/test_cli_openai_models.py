@@ -1,7 +1,6 @@
 import json
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 
 import llm
@@ -10,8 +9,8 @@ from llm.logs import LogStore
 
 
 @pytest.fixture
-def mocked_models(httpx_mock):
-    httpx_mock.add_response(
+def mocked_models(httpx2_mock):
+    httpx2_mock.add_response(
         method="GET",
         url="https://api.openai.com/v1/models",
         json={
@@ -32,7 +31,7 @@ def mocked_models(httpx_mock):
         },
         headers={"Content-Type": "application/json"},
     )
-    return httpx_mock
+    return httpx2_mock
 
 
 def test_openai_models(mocked_models):
@@ -56,10 +55,10 @@ def test_openai_options_min_max():
     runner = CliRunner()
 
     for option, [min_val, max_val] in options.items():
-        result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "-10"])
+        result = runner.invoke(cli, ["-m", "4o-mini", "-o", option, "-10"])
         assert result.exit_code == 1
         assert f"greater than or equal to {min_val}" in result.output
-        result2 = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
+        result2 = runner.invoke(cli, ["-m", "4o-mini", "-o", option, "10"])
         assert result2.exit_code == 1
         assert f"less than or equal to {max_val}" in result2.output
 
@@ -194,7 +193,7 @@ def test_gpt5_models_support_verbosity_option(model_id):
     assert "verbosity" in llm.get_async_model(model_id).Options.model_fields
 
 
-@pytest.mark.parametrize("model_id", ("gpt-4o", "o3", "o4-mini"))
+@pytest.mark.parametrize("model_id", ("gpt-4o", "o3"))
 def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
     assert "verbosity" not in llm.get_model(model_id).Options.model_fields
     assert "verbosity" not in llm.get_async_model(model_id).Options.model_fields
@@ -217,6 +216,18 @@ def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
         "o1-preview",
         "o1-mini",
         "gpt-5.1-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "gpt-3.5-turbo-instruct",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-4-turbo-2024-04-09",
+        "gpt-4.1-nano",
+        "o1",
+        "o1-2024-12-17",
+        "o3-mini",
+        "o4-mini",
     ),
 )
 def test_deprecated_models_are_not_registered(model_id):
@@ -226,8 +237,8 @@ def test_deprecated_models_are_not_registered(model_id):
         llm.get_async_model(model_id)
 
 
-def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx_mock):
-    httpx_mock.add_response(
+def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -257,13 +268,13 @@ def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["verbosity"] == "high"
     assert "text" not in request_body
 
 
-def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx_mock):
-    httpx_mock.add_response(
+def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -312,7 +323,7 @@ def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx_mock
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["text"]["verbosity"] == "high"
     assert request_body["include"] == ["reasoning.encrypted_content"]
     assert "verbosity" not in request_body
@@ -328,8 +339,8 @@ def test_gpt5_verbosity_option_validates_allowed_values():
     assert "Input should be 'low', 'medium' or 'high'" in result.output
 
 
-def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
-    httpx_mock.add_response(
+def test_code_interpreter_cli_tool_is_resolved_from_model(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -375,7 +386,7 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
 
     assert result.exit_code == 0
     assert result.stdout == "Calculated\n"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [
         {
             "type": "code_interpreter",
@@ -385,7 +396,9 @@ def test_code_interpreter_cli_tool_is_resolved_from_model(httpx_mock):
     assert "code_interpreter_call.outputs" in request_body["include"]
 
 
-def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
+def test_code_interpreter_cli_tool_is_reused_on_continue(
+    db_factory, httpx2_mock, user_path
+):
     def response_payload(response_id, text):
         return {
             "id": response_id,
@@ -452,7 +465,7 @@ def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
         first_payload,
         response_payload("resp_code_interpreter_second", "Continued"),
     ):
-        httpx_mock.add_response(
+        httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/responses",
             json=payload,
@@ -484,7 +497,7 @@ def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
     assert second.exit_code == 0
     assert second.output == "Continued\n"
     request_bodies = [
-        json.loads(request.content) for request in httpx_mock.get_requests()
+        json.loads(request.content) for request in httpx2_mock.get_requests()
     ]
     expected_tool = {
         "type": "code_interpreter",
@@ -499,15 +512,15 @@ def test_code_interpreter_cli_tool_is_reused_on_continue(httpx_mock, user_path):
         {"role": "user", "content": "Continue"},
     ]
 
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    db = db_factory(str(user_path / "logs.db"))
     instance = next(iter(db["tool_instances"].rows))
     assert instance["name"] == "CodeInterpreter"
     assert json.loads(instance["arguments"])["memory_limit"] == "4g"
     assert {row["instance_id"] for row in db["turn_tools"].rows} == {instance["id"]}
 
 
-def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
-    httpx_mock.add_response(
+def test_web_search_cli_tool_is_resolved_from_model(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -553,7 +566,7 @@ def test_web_search_cli_tool_is_resolved_from_model(httpx_mock):
 
     assert result.exit_code == 0
     assert result.stdout == "Search complete\n"
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["tools"] == [
         {
             "type": "web_search",
@@ -598,11 +611,11 @@ def test_tools_list_for_model_includes_server_side_tools():
 
 def test_tools_list_for_model_with_no_server_side_tools():
     runner = CliRunner()
-    result = runner.invoke(cli, ["tools", "-m", "chatgpt"])
+    result = runner.invoke(cli, ["tools", "-m", "4o-mini"])
 
     assert result.exit_code == 0
 
-    json_result = runner.invoke(cli, ["tools", "-m", "chatgpt", "--json"])
+    json_result = runner.invoke(cli, ["tools", "-m", "4o-mini", "--json"])
     assert json_result.exit_code == 0
     assert json.loads(json_result.output)["server_side_tools"] == []
 
@@ -636,8 +649,8 @@ def test_openai_image_detail_option_description(model_id, expected_description):
     assert field.description == expected_description
 
 
-def test_openai_image_detail_option_is_sent_on_image_attachments(httpx_mock):
-    httpx_mock.add_response(
+def test_openai_image_detail_option_is_sent_on_image_attachments(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -667,7 +680,7 @@ def test_openai_image_detail_option_is_sent_on_image_attachments(httpx_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     image_part = request_body["messages"][0]["content"][1]
     assert image_part == {
         "type": "image_url",
@@ -679,8 +692,8 @@ def test_openai_image_detail_option_is_sent_on_image_attachments(httpx_mock):
     assert "image_detail" not in request_body
 
 
-def test_openai_image_detail_original_is_sent_for_gpt54(httpx_mock):
-    httpx_mock.add_response(
+def test_openai_image_detail_original_is_sent_for_gpt54(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -713,15 +726,15 @@ def test_openai_image_detail_original_is_sent_for_gpt54(httpx_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     image_part = request_body["messages"][0]["content"][1]
     assert image_part["image_url"]["detail"] == "original"
 
 
 def test_openai_image_detail_original_is_sent_for_gpt54_responses_by_default(
-    httpx_mock,
+    httpx2_mock,
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         json={
@@ -773,7 +786,7 @@ def test_openai_image_detail_original_is_sent_for_gpt54_responses_by_default(
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     image_part = request_body["input"][0]["content"][1]
     assert image_part == {
         "type": "input_image",
@@ -795,12 +808,14 @@ def test_openai_image_detail_original_is_rejected_for_other_models():
 
 @pytest.mark.parametrize("async_", (False, True))
 @pytest.mark.parametrize("usage", (None, "-u", "--usage"))
-def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usage):
+def test_gpt4o_mini_sync_and_async(
+    db_factory, monkeypatch, tmpdir, httpx2_mock, async_, usage
+):
     user_path = tmpdir / "user_dir"
     log_db = user_path / "logs.db"
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
     assert not log_db.exists()
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         # chat completion request
         url="https://api.openai.com/v1/chat/completions",
@@ -842,7 +857,7 @@ def test_gpt4o_mini_sync_and_async(monkeypatch, tmpdir, httpx_mock, async_, usag
         assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
     # Confirm it was correctly logged
     assert log_db.exists()
-    db = sqlite_utils.Database(str(log_db))
+    db = db_factory(str(log_db))
     assert db["turns"].count == 1
     turn = next(db["turns"].rows)
     store = LogStore(db)

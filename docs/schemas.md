@@ -32,7 +32,7 @@ I got back Ziggy:
 ```
 The response matched my schema, with `name` and `one_sentence_bio` string columns and an integer for `age`.
 
-We're using the default LLM model here - `gpt-5.6-luna`. Add `-m model` to use another model - for example use `-m gpt-5.6-sol` to have GPT-5.6 Sol invent some dogs.
+We're using the default LLM model here - `gpt-6-luna`. Add `-m model` to use another model - for example use `-m gpt-6-sol` to have GPT-6 Sol invent some dogs.
 
 For a list of available models that support schemas, run this command:
 ```bash
@@ -588,11 +588,11 @@ llm logs --schema-multi 'name, ten_word_bio' --data-key items --data-ids
 ```
 Output:
 ```json
-{"name": "Nebula", "ten_word_bio": "A cosmic puppy with starry fur, loves adventures in space.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
-{"name": "Echo", "ten_word_bio": "A clever hound with extraordinary hearing, master of hide-and-seek.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
-{"name": "Biscuit", "ten_word_bio": "An adorable chef dog, bakes treats that everyone loves.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4dawj8sq0c6t3emf4k5ryx"}
-{"name": "Cosmo", "ten_word_bio": "Galactic explorer, loves adventures and chasing shooting stars.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4daycb3svj0x7kvp7zrp4q"}
-{"name": "Pixel", "ten_word_bio": "Tech-savvy pup, builds gadgets and loves virtual playtime.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4daycb3svj0x7kvp7zrp4q"}
+{"name": "Nebula", "ten_word_bio": "A cosmic puppy with starry fur, loves adventures in space.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4daxk2sq0c6t3emf4k5aaa"}
+{"name": "Echo", "ten_word_bio": "A clever hound with extraordinary hearing, master of hide-and-seek.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4daxk2sq0c6t3emf4k5aaa"}
+{"name": "Biscuit", "ten_word_bio": "An adorable chef dog, bakes treats that everyone loves.", "response_id": "01jn4dawj8sq0c6t3emf4k5ryx", "conversation_id": "01jn4daxk2sq0c6t3emf4k5aaa"}
+{"name": "Cosmo", "ten_word_bio": "Galactic explorer, loves adventures and chasing shooting stars.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4dazk2sq0c6t3emf4k5bbb"}
+{"name": "Pixel", "ten_word_bio": "Tech-savvy pup, builds gadgets and loves virtual playtime.", "response_id": "01jn4daycb3svj0x7kvp7zrp4q", "conversation_id": "01jn4dazk2sq0c6t3emf4k5bbb"}
 ```
 If a row already has a property called `"conversation_id"` or `"response_id"` additional underscores will be appended to the ID key until it no longer overlaps with the existing keys.
 

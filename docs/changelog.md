@@ -1,9 +1,110 @@
 # Changelog
 
-(unreleased)=
-## Unreleased
+(v0_37)=
+## 0.37 (2026-11-02)
 
+New features:
+
+- New OpenAI models: `gpt-6.1-sol` for [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), `gpt-6.1-terra` for [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra) and `chat-latest` for [Chat Latest](https://developers.openai.com/api/docs/models/chat-latest).
+- The default model for users who have not set their own default is now [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), OpenAI's cheapest frontier model. It was previously [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). You can switch back using `llm models default gpt-5.6-luna`. [#1746](https://github.com/simonw/llm/pull/1746)
+- New `llm openai endpoint add`, `list`, `remove` and `path` commands for managing OpenAI-compatible models saved in `extra-openai-models.yaml`. See {ref}`Configure an OpenAI-compatible model <openai-endpoint-add>`. [#1838](https://github.com/simonw/llm/pull/1838)
+- Embedding models can now accept typed attachments, which carry a MIME type and the path or URL they came from. Plugins declare the MIME types they support using `attachment_types` and receive matching inputs as `llm.Attachment` objects. `llm embed`, `llm embed-multi` and `llm similar` gain `-a/--attachment` and `--at/--attachment-type` options. Collections store the MIME type in a new `content_type` column, exposed as `Entry.content_type`. See {ref}`llm embed <embeddings-cli-embed>` and {ref}`Writing plugins to add new embedding models <embeddings-writing-plugins>`. [#1741](https://github.com/simonw/llm/pull/1741)
+- `llm chat` now accepts `-u/--usage` to display token usage on standard error after each chat turn. Thanks, [Bian Yuhan](https://github.com/bianyh). [#980](https://github.com/simonw/llm/issues/980), [#1754](https://github.com/simonw/llm/pull/1754)
+- New `chain.on_response(callback)` method in the Python API, which runs a callback for each completed response in a tool chain before the chain limit is checked or that response's tool calls are executed. See {ref}`Running code when a response has completed <python-api-response-on-done>`. [#1768](https://github.com/simonw/llm/pull/1768)
+- Added support for Python 3.15 and dropped support for Python 3.10.
+- Removed OpenAI models that have been shut down: `gpt-3.5-turbo`, `gpt-3.5-turbo-16k`, `gpt-3.5-turbo-instruct`, `gpt-4`, `gpt-4-turbo`, `gpt-4-turbo-2024-04-09`, `gpt-4.1-nano`, `gpt-5.2-chat-latest`, `o1`, `o1-2024-12-17`, `o3-mini` and `o4-mini`, along with their aliases such as `3.5`, `chatgpt`, `4` and `4t`. [#1696](https://github.com/simonw/llm/issues/1696)
+
+Bug fixes:
+
+- `llm chat` now respects `llm logs off`. Previously it logged every response even when logging had been turned off. [#1203](https://github.com/simonw/llm/issues/1203)
+- `Response.reply()` now passes `before_call` and `after_call` to the tool calls it executes automatically, and keeps them for later replies. Previously a tool rejected by `before_call` would still run. Thanks, [0d00ciallo0721](https://github.com/0d00ciallo0721). [#1835](https://github.com/simonw/llm/issues/1835), [#1836](https://github.com/simonw/llm/pull/1836)
+- `llm embed-multi --files` no longer corrupts non-ASCII UTF-8 files by decoding them as `latin-1`, which stored and embedded "Café" as "CafÃ©". Run the same command again to repair an existing collection: only the affected files will be embedded again. Thanks, [Alex](https://github.com/ac1982). [#283](https://github.com/simonw/llm/issues/283), [#1750](https://github.com/simonw/llm/pull/1750)
+- `llm prompt` and `llm chat` now log each response in a tool chain as soon as it completes, so an error or hitting the chain limit no longer discards the earlier responses in that chain from the logs. [#1768](https://github.com/simonw/llm/pull/1768)
+- Fixed `SQLITE_BUSY` errors when multiple processes logged responses to the same database at the same time. [#1742](https://github.com/simonw/llm/pull/1742)
+- Tool chains that finish within their chain limit no longer raise a `Chain limit of N exceeded` error. The limit now only applies when the final allowed response requests another round of tool calls. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1757](https://github.com/simonw/llm/issues/1757), [#1766](https://github.com/simonw/llm/pull/1766)
+- Fixed `AsyncChainResponse.log_to_db()` raising `RuntimeError` inside a running event loop, for example straight after `await chain.text()`. Thanks, [Christopher Krah](https://github.com/chrikrah). [#1727](https://github.com/simonw/llm/issues/1727), [#1734](https://github.com/simonw/llm/pull/1734)
+- Fixed `llm prompt --usage` crashing with an `AttributeError` when used with `--async` and tools. Thanks, [Ethan Stoner](https://github.com/ethanstoner). [#1709](https://github.com/simonw/llm/pull/1709)
+- `Response.execute_tool_calls()` now returns an error result for a tool with no implementation instead of raising `ValueError`, matching the behavior of `AsyncResponse.execute_tool_calls()`. Thanks, [Chen Yufeiyang](https://github.com/feiiiiii5). [#1724](https://github.com/simonw/llm/pull/1724)
+- Toolboxes exposing more than one method now run `prepare()` and `prepare_async()` once per instance, instead of once per method. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1761](https://github.com/simonw/llm/pull/1761)
+- Tool specs passed to `-T/--tool` with keyword arguments whose names start with `true`, `false` or `null`, such as `MyTool(nullable=true)`, are no longer mistaken for a single positional JSON value. Thanks, [Olamide Faniyan](https://github.com/Pajimo). [#1704](https://github.com/simonw/llm/pull/1704)
+- `llm logs -s/--short` now truncates tool call arguments. [#1772](https://github.com/simonw/llm/issues/1772)
+- A schema passed to a tool chain now applies to every request in that chain, including the final response. It was previously dropped after the first round of tool calls. Thanks, [Chen Yufeiyang](https://github.com/feiiiiii5). [#1222](https://github.com/simonw/llm/issues/1222), [#1825](https://github.com/simonw/llm/pull/1825)
+- `Collection.embed()` no longer silently skips a new ID when another item in the collection has the same content, matching the behavior of `Collection.embed_multi()`. Thanks, [nosmile99](https://github.com/nosmile99). [#1789](https://github.com/simonw/llm/issues/1789), [#1812](https://github.com/simonw/llm/pull/1812)
+- `Collection.embed_multi()` now raises `ValueError` if an embedding model returns the wrong number of embeddings for a batch, instead of silently losing rows or storing vectors against the wrong IDs. Thanks, [Sharat Chandra Sai Boddu](https://github.com/sharatchandrasai999-sketch). [#1722](https://github.com/simonw/llm/issues/1722), [#1726](https://github.com/simonw/llm/pull/1726)
+- `llm schemas list` now includes schemas used by recently logged responses. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1808](https://github.com/simonw/llm/pull/1808)
+- `llm schemas list` no longer crashes on schemas with boolean property definitions such as `{"properties": {"x": true}}`. Thanks, [Jiachen Xie](https://github.com/er-s-an). [#1748](https://github.com/simonw/llm/pull/1748)
+- `AsyncConversation.prompt()` now uses the tools set on the conversation, matching `Conversation.prompt()`. Thanks, [Bishop Kammeraad](https://github.com/porkedchop). [#1790](https://github.com/simonw/llm/issues/1790), [#1791](https://github.com/simonw/llm/pull/1791)
+- Calling `response.log_to_db()` on a synchronous response that has not yet been read now runs the response first. Previously the logged turn was missing its output and token usage. Thanks, [Allen Flux](https://github.com/allenflux). [#1817](https://github.com/simonw/llm/pull/1817)
+
+(v0_36)=
+## 0.36 (2026-09-22)
+
+New features:
+
+- New OpenAI models: `gpt-6-sol` for [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and `gpt-6-luna` for [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna). [#1702](https://github.com/simonw/llm/issues/1702)
+- Model plugins can now declare `supports_conversation = False` for models that only accept single-turn prompts. LLM raises `llm.ConversationNotSupported` when these models receive assistant or tool history, and `llm chat` rejects them before starting a session. See {ref}`Models that do not support conversations <advanced-model-plugins-conversations>`. The first plugin to use this is [llm-typesafe](https://github.com/simonw/llm-typesafe). [#1692](https://github.com/simonw/llm/issues/1692)
+- Reasoning traces in the Markdown output of `llm logs` are now wrapped in `<details><summary>` tags. [#1701](https://github.com/simonw/llm/issues/1701)
+
+Bug fixes:
+
+- Fixed `llm logs -t` crashing with `KeyError: 'options_json'` when displaying truncated logs with options or schemas. Thanks, [rdslw](https://github.com/rdslw). [#1656](https://github.com/simonw/llm/pull/1656)
+- Fixed `AsyncResponse.log_to_db()` raising `sqlite3.ProgrammingError` after a response had been awaited. Structured messages and provider metadata are also preserved when logging restored async responses. Thanks, [Roli Bosch](https://github.com/roli-lpci). [#1668](https://github.com/simonw/llm/pull/1668)
+- Tool parameters and nested model fields named `title` are now preserved in generated input schemas. Thanks, [Christopher Pruijsen](https://github.com/cpruijsen). [#1679](https://github.com/simonw/llm/issues/1679), [#1680](https://github.com/simonw/llm/pull/1680)
+- Constructing `llm.Prompt` directly without options now initializes the model's default `Options` object, fixing errors in providers that access option attributes. Thanks, [Jane Li](https://github.com/oodadoudou). [#1028](https://github.com/simonw/llm/issues/1028), [#1663](https://github.com/simonw/llm/pull/1663)
+- Closing an asynchronous `response.astream_events()` stream before completion now closes the underlying provider generator, allowing it to release streaming connections and other resources. Thanks, [Shunsuke](https://github.com/imshunsuke). [#1659](https://github.com/simonw/llm/pull/1659)
+- SQLite connections opened by CLI commands are now closed when the command finishes, including on errors, avoiding unclosed-connection warnings.
+
+Documentation:
+
+- Corrected the structured output example in the advanced model plugins documentation to use `supports_schema = True`. Thanks, [Ethan Stoner](https://github.com/ethanstoner). [#1686](https://github.com/simonw/llm/pull/1686)
+
+(v0_35)=
+## 0.35 (2026-09-07)
+
+- New OpenAI model: `gpt-6-astra` for [GPT-6 Astra](https://openai.com/index/gpt-6-astra/).
+
+(v0_34)=
+## 0.34 (2026-09-02)
+
+New features:
+
+- `llm logs --usage` Markdown output now includes the response duration in milliseconds and as a human-readable duration. `llm logs --short` includes a new `duration_ms` field. [#1653](https://github.com/simonw/llm/issues/1653)
+
+Bug fixes:
+
+- Significantly improved the performance of `llm logs` for long conversations by caching repeated message and model lookups. [#1654](https://github.com/simonw/llm/issues/1654)
+- Dynamically generated OpenAI options classes are now cached, avoiding repeated Pydantic class construction by plugins such as `llm-openrouter`. Thanks, [waveplate](https://github.com/waveplate). [#1651](https://github.com/simonw/llm/pull/1651)
+- Invalid schema DSL passed to `llm prompt --schema` now produces a clean command-line error instead of a Python traceback. Thanks, [ikatyal2110](https://github.com/ikatyal2110). [#1647](https://github.com/simonw/llm/pull/1647)
+- `llm --extract` now recognizes fenced code blocks in responses that use CRLF line endings. Thanks, [mameikagou](https://github.com/mameikagou). [#1644](https://github.com/simonw/llm/pull/1644)
+- `monotonic_ulid()` now remains monotonic if the system clock moves backwards or concurrent calls observe timestamps out of order. Thanks, [Dylan Pulver](https://github.com/dylanpulver). [#1641](https://github.com/simonw/llm/pull/1641)
+- Declared the `typing-extensions` package as a direct dependency, and added tests to protect against accidental missing dependencies. Thanks, [Vansh Taneja](https://github.com/vanshtaneja23). [#1622](https://github.com/simonw/llm/pull/1622)
+
+(v0_33)=
+## 0.33 (2026-08-22)
+
+New features:
+
+- Upgraded to the OpenAI Python library 3.x and switched the HTTP client dependency from `httpx` to `httpx2`. [#1608](https://github.com/simonw/llm/issues/1608), [#1631](https://github.com/simonw/llm/pull/1631)
+- `llm embed` and `llm embed-multi` now accept `--key`. The Python `EmbeddingModel.embed()`, `EmbeddingModel.embed_multi()`, `Collection.embed()` and `Collection.embed_multi()` methods accept `key=` too, passing the resolved per-call key to embedding plugins without changing shared model state. Existing plugins that read `self.key` continue to work through a compatibility fallback. Thanks, [ChrisJr404](https://github.com/ChrisJr404). [#757](https://github.com/simonw/llm/issues/757), [#1620](https://github.com/simonw/llm/pull/1620)
+- `llm logs` now includes the output of server-side tool calls, shown in a **Tool results** section within the response. These results are also included in `llm logs --json` and `llm logs --short` output, with a new `server_executed` key distinguishing them from locally executed tool results. [#1629](https://github.com/simonw/llm/issues/1629)
+- `llm prompt -t/--template` can now be repeated to combine templates in order. This allows model configuration and options from one template to be used with a prompt from another.
+- Expanded the `llm prompt --help` documentation for `--schema` and `--schema-multi` with details and examples of the supported schema DSL.
+- `schema_dsl()` now raises descriptive `ValueError` exceptions for unknown field types and duplicate field names, instead of silently treating unknown types as strings or overwriting earlier fields. [#1607](https://github.com/simonw/llm/issues/1607), [#1616](https://github.com/simonw/llm/issues/1616)
+- Reasoning stream events that contain provider metadata but no text are now preserved as `ReasoningPart` objects. This allows opaque state such as Anthropic signatures and redacted thinking data to round-trip correctly. [simonw/llm-anthropic#81](https://github.com/simonw/llm-anthropic/issues/81)
 - Reasoning-capable Responses API models now support a `reasoning_summary` option with `auto`, `concise`, and `detailed` values. This can be used with {ref}`llm openai endpoint --responses <openai-endpoint>`. [#1600](https://github.com/simonw/llm/issues/1600)
+- Conversation prompts now validate that attachments are supported by the selected model before execution, for both synchronous and asynchronous conversations. Thanks, [Daniel Peng](https://github.com/original4422). [#1626](https://github.com/simonw/llm/issues/1626), [#1628](https://github.com/simonw/llm/pull/1628)
+
+Bug fixes:
+
+- `llm logs --data-ids` now sets `conversation_id` to the ID of the conversation instead of incorrectly duplicating the response ID. Thanks, [K Merchant](https://github.com/Kayforkind). [#1598](https://github.com/simonw/llm/issues/1598), [#1613](https://github.com/simonw/llm/pull/1613)
+- Fixed `llm aliases list` raising a `ValueError` when no aliases are defined. Thanks, [Taraka Abhiram](https://github.com/abhi-0203). [#1602](https://github.com/simonw/llm/issues/1602)
+- `llm embed-multi` now reuses an existing collection's stored embedding model when no default embedding model is configured, and no longer masks unrelated `ValueError` exceptions with a missing-model error. [#1523](https://github.com/simonw/llm/issues/1523)
+- `llm tools -m MODEL` no longer prints a redundant message when the model has no server-side tools.
+
+(v0_32_1)=
+## 0.32.1 (2026-08-21)
+
+This version pins LLM to use OpenAI Python versions less than [v3.0.0](https://github.com/openai/openai-python/releases#release-v3.0.0), ensuring fresh LLM installations work without needing to also install an extra `httpx` dependency. [#1630](https://github.com/simonw/llm/pull/1630)
 
 (v0_32)=
 ## 0.32 (2026-08-04)
