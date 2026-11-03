@@ -88,7 +88,8 @@ def _append_extra_model(path, record):
         _write_extra_models(path, [record])
         return
     events = list(yaml.parse(existing, Loader=yaml.SafeLoader))
-    sequence = events[2]  # After StreamStartEvent and DocumentStartEvent
+    # Comment-only files have no document/root events.
+    sequence = events[2] if len(events) > 2 else None
     if isinstance(sequence, yaml.SequenceStartEvent) and sequence.flow_style:
         # Insert after the last item (or opening bracket), before any trailing comma.
         last_item = events[-4]  # Before sequence, document and stream end events

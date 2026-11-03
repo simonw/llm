@@ -151,6 +151,27 @@ def test_endpoint_add_appends_preserving_existing_content(user_path):
 
 
 @pytest.mark.parametrize(
+    "existing", ["# My models\n", "# My models", "---\n# My models\n"]
+)
+def test_endpoint_add_to_comment_only_file(user_path, existing):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text(existing, "utf-8")
+
+    result = _invoke("add", "http://localhost:8080", "-m", "first")
+    assert result.exit_code == 0, result.output
+    assert path.read_text("utf-8").startswith(existing)
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        {
+            "model_id": "first",
+            "model_name": "first",
+            "api_base": "http://localhost:8080",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
     "existing",
     [
         "# My models\n[] # End of models\n",
