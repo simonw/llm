@@ -1200,10 +1200,9 @@ class ChatOptions(SharedOptions):
             except json.JSONDecodeError:
                 raise ValueError("Invalid JSON in chat_template_kwargs string")
 
-        if not isinstance(chat_template_kwargs, dict):
-            raise ValueError("chat_template_kwargs must be a JSON object")
-
-        return chat_template_kwargs
+        if isinstance(chat_template_kwargs, dict):
+            return chat_template_kwargs
+        raise ValueError("chat_template_kwargs must be a JSON object")
 
 
 class ReasoningEffortEnum(str, Enum):

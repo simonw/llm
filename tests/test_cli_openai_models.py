@@ -63,8 +63,8 @@ def test_openai_options_min_max():
         assert f"less than or equal to {max_val}" in result2.output
 
 
-def test_chat_template_kwargs_option_is_sent_as_json_object(httpx_mock):
-    httpx_mock.add_response(
+def test_chat_template_kwargs_option_is_sent_as_json_object(httpx2_mock):
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -94,7 +94,7 @@ def test_chat_template_kwargs_option_is_sent_as_json_object(httpx_mock):
     )
 
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["chat_template_kwargs"] == {"enable_thinking": False}
     assert request_body["temperature"] == 0.5
 
@@ -141,9 +141,9 @@ def test_responses_model_requires_chat_completions_for_chat_template_kwargs():
 
 
 def test_responses_model_delegates_chat_template_kwargs_to_chat_completions(
-    httpx_mock,
+    httpx2_mock,
 ):
-    httpx_mock.add_response(
+    httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
@@ -173,7 +173,7 @@ def test_responses_model_delegates_chat_template_kwargs_to_chat_completions(
     )
 
     assert result.exit_code == 0
-    request_body = json.loads(httpx_mock.get_requests()[-1].content)
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
     assert request_body["chat_template_kwargs"] == {"enable_thinking": False}
 
 

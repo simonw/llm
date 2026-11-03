@@ -294,8 +294,10 @@ def test_templates_error_on_missing_schema(templates_path):
             {"temperature": 0.5},
         ),
         (
-            "prompt: 'Think briefly: $input'\noptions:\n"
-            "  chat_template_kwargs:\n    enable_thinking: false",
+            (
+                "prompt: 'Think briefly: $input'\noptions:\n"
+                "  chat_template_kwargs:\n    enable_thinking: false"
+            ),
             "Input text",
             ["-m", "gpt-4o-mini"],
             "gpt-4o-mini",
