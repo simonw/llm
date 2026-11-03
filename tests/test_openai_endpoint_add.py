@@ -176,10 +176,14 @@ def test_endpoint_add_to_comment_only_file(user_path, existing):
     [
         "# My models\n[] # End of models\n",
         "# My models\n[{model_id: first, model_name: first-model}] # End of models\n",
-        "# My models\n[{model_id: first, model_name: first-model}, # Keep this\n]"
-        " # End of models\n",
-        "# My models\n[&first {model_id: first, model_name: first-model}, *first,]"
-        " # End of models\n",
+        (
+            "# My models\n[{model_id: first, model_name: first-model}, # Keep this\n]"
+            " # End of models\n"
+        ),
+        (
+            "# My models\n[&first {model_id: first, model_name: first-model}, *first,]"
+            " # End of models\n"
+        ),
     ],
 )
 def test_endpoint_add_to_flow_sequence_preserves_content(user_path, existing):
