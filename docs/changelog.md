@@ -1,5 +1,16 @@
 # Changelog
 
+(v0_37_1)=
+## 0.37.1 (2026-11-03)
+
+- `llm openai endpoint add` now works when `extra-openai-models.yaml` holds a list written in square brackets, such as the `[]` left behind by removing the last saved endpoint. Previously it wrote invalid YAML that stopped LLM from loading any models until the file was fixed by hand. Thanks, [Steven Huang](https://github.com/remote-controlled-man). [#1845](https://github.com/simonw/llm/pull/1845)
+- Passing both `system=` and `messages=` to `prompt()` or `chain()` in the Python API no longer drops the system prompt for models that build their requests from `prompt.messages`, including the default OpenAI Chat models. [#1849](https://github.com/simonw/llm/issues/1849)
+- Non-streaming prompts, such as those run with `--no-stream`, no longer crash with an `AttributeError` when an OpenAI-compatible server leaves `usage` out of its response. Thanks, [Tao An](https://github.com/tao-hpu). [#1697](https://github.com/simonw/llm/issues/1697), [#1698](https://github.com/simonw/llm/pull/1698)
+- `llm embed --format blob` now outputs exactly the bytes of the embedding. It previously added a newline at the end, which made the output one byte too long to decode. Thanks, [Arjan Mossel](https://github.com/ar-jan). [#1848](https://github.com/simonw/llm/pull/1848)
+- `llm logs` no longer crashes with `JSON cannot hold BLOB values` when a tool result logged by an LLM version before 0.32 has an attachment stored in the database. Thanks, [XQ](https://github.com/XXXXXQ-0206). [#1775](https://github.com/simonw/llm/pull/1775)
+- `llm logs -q` no longer misses words at the boundary between two {ref}`text parts <python-api-messages>`, for example in a response that interleaves text with reasoning or tool calls.
+- When a prompt passes several user messages using `messages=`, `llm logs -q` now searches all of them rather than only the last one.
+
 (v0_37)=
 ## 0.37 (2026-11-02)
 
