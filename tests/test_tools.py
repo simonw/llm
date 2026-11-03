@@ -1,7 +1,9 @@
 import asyncio
+import contextvars
 import json
 import os
 import re
+import threading
 import time
 from importlib.metadata import version
 
@@ -361,6 +363,43 @@ def test_tool_use_async_tool_function():
             ],
         },
     ]
+
+
+def test_async_tool_function_runs_on_calling_thread():
+    caller = str(threading.get_ident())
+
+    async def hello():
+        return str(threading.get_ident())
+
+    chain_response = llm.get_model("echo").chain(
+        json.dumps({"tool_calls": [{"name": "hello"}]}),
+        tools=[hello],
+    )
+    output = chain_response.text()
+    bits = output.split("\n} {\n")
+    assert len(bits) == 2
+    objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
+    assert objects[1]["tool_results"][0]["output"] == caller
+
+
+@pytest.mark.asyncio
+async def test_tool_use_async_tool_function_inside_running_event_loop():
+    request_id = contextvars.ContextVar("request_id")
+
+    async def hello():
+        return request_id.get()
+
+    token = request_id.set("request-123")
+    try:
+        chain_response = llm.get_model("echo").chain(
+            json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[hello]
+        )
+        chain_response.text()
+    finally:
+        request_id.reset(token)
+    tool_result = chain_response._responses[1].prompt.tool_results[0]
+    assert tool_result.output == "request-123"
+    assert tool_result.exception is None
 
 
 @pytest.mark.asyncio
