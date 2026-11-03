@@ -6,7 +6,7 @@ from unittest.mock import ANY
 import pytest
 from click.testing import CliRunner
 
-from llm import Attachment, Collection
+from llm import Attachment, Collection, encode
 from llm.cli import cli
 
 TINY_PNG = (
@@ -54,13 +54,8 @@ def capture_typed_attachments(monkeypatch, embed_demo):
         ),
         (
             "blob",
-            (
-                b"\x00\x00\xef\xbf\xbd@\x00\x00\xef\xbf\xbd@\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\n"
-            ).decode("utf-8"),
+            # Exact little-endian float32 bytes
+            b"\x00\x00\xa0\x40\x00\x00\xa0\x40" + b"\x00" * 56,
         ),
     ),
 )
@@ -80,7 +75,12 @@ def test_embed_output_format(tmpdir, format_, expected, scenario):
         args.extend(["-i", "-"])
     result = runner.invoke(cli, args, input=input)
     assert result.exit_code == 0
-    assert result.output == expected
+    if format_ == "blob":
+        assert result.stdout_bytes == expected
+        assert result.stdout_bytes == encode([5, 5] + [0] * 14)
+        assert len(result.stdout_bytes) == 16 * 4
+    else:
+        assert result.output == expected
 
 
 @pytest.mark.parametrize(

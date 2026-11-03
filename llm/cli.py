@@ -3497,7 +3497,8 @@ def embed(
         if format_ == "json" or format_ is None:
             click.echo(json.dumps(embedding))
         elif format_ == "blob":
-            click.echo(encode(embedding))
+            # Write blob as raw bytes, no trailing newline.
+            click.echo(encode(embedding), nl=False)
         elif format_ == "base64":
             click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
         elif format_ == "hex":
