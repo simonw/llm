@@ -338,6 +338,21 @@ def test_endpoint_add_after_removing_last_model(user_path):
     assert llm.get_model("second").api_base == "http://localhost:8080"
 
 
+def test_endpoint_add_after_removing_last_model_uses_block_style(user_path):
+    # Removing the last model leaves "[]", which the next add replaces
+    # rather than extending, so the file stays in block style
+    path = user_path / "extra-openai-models.yaml"
+    assert _invoke("add", "http://localhost:8080", "-m", "first").exit_code == 0
+    assert _invoke("remove", "first").exit_code == 0
+    assert path.read_text("utf-8") == "[]\n"
+    assert _invoke("add", "http://localhost:8080", "-m", "second").exit_code == 0
+    assert path.read_text("utf-8") == (
+        "- model_id: second\n"
+        "  model_name: second\n"
+        "  api_base: http://localhost:8080\n"
+    )
+
+
 def test_endpoint_path(user_path):
     result = _invoke("path")
     assert result.output == f"{user_path / 'extra-openai-models.yaml'}\n"

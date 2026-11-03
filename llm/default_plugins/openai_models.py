@@ -84,7 +84,9 @@ def _append_extra_model(path, record):
     """
     text = _dump_extra_models([record])
     existing = path.read_text("utf-8") if path.exists() else ""
-    if not existing.strip():
+    # Removing the last model leaves "[]", which is replaced rather than
+    # extended so the file stays in block style
+    if existing.strip() in ("", "[]"):
         _write_extra_models(path, [record])
         return
     events = list(yaml.parse(existing, Loader=yaml.SafeLoader))
