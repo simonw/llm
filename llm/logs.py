@@ -1963,18 +1963,21 @@ select responses.id,
                 'arguments', ti.arguments
             ) else null end,
             'attachments', coalesce(
-                (select json_group_array(json_object(
-                    'id', a.id,
-                    'type', a.type,
-                    'path', a.path,
-                    'url', a.url,
-                    'content', case when length(a.content) then json('true') else null end,
-                    'content_length', nullif(length(a.content), 0)
-                ))
-                from tool_results_attachments tra
-                join attachments a on tra.attachment_id = a.id
-                where tra.tool_result_id = tr.id
-                ),
+                -- json_group_array keeps the order of an ordered subquery
+                (select json_group_array(json(attachment)) from (
+                    select json_object(
+                        'id', a.id,
+                        'type', a.type,
+                        'path', a.path,
+                        'url', a.url,
+                        'content', case when length(a.content) then json('true') else null end,
+                        'content_length', nullif(length(a.content), 0)
+                    ) as attachment
+                    from tool_results_attachments tra
+                    join attachments a on tra.attachment_id = a.id
+                    where tra.tool_result_id = tr.id
+                    order by tra."order"
+                )),
                 '[]'
             )
         ))

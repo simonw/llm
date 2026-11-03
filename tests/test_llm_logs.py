@@ -1468,11 +1468,13 @@ def test_logs_legacy_tool_result_attachment_bytes(logs_db):
         pk="id",
         alter=True,
     )
+    # The "order" column decides the order attachments are listed in,
+    # not insertion order or attachment id
     logs_db["tool_results_attachments"].insert_all(
         [
-            {"tool_result_id": 1, "attachment_id": "att1", "order": 0},
-            {"tool_result_id": 1, "attachment_id": "att2", "order": 1},
-            {"tool_result_id": 1, "attachment_id": "att3", "order": 2},
+            {"tool_result_id": 1, "attachment_id": "att1", "order": 2},
+            {"tool_result_id": 1, "attachment_id": "att2", "order": 0},
+            {"tool_result_id": 1, "attachment_id": "att3", "order": 1},
         ]
     )
 
@@ -1486,7 +1488,7 @@ def test_logs_legacy_tool_result_attachment_bytes(logs_db):
     assert json_result.exit_code == 0
     row = json.loads(json_result.output)[0]
     (tool_result,) = row["tool_results"]
-    stored, empty_content, no_content = tool_result["attachments"]
+    no_content, empty_content, stored = tool_result["attachments"]
     # The bytes are not in the JSON, just a marker and the byte count -
     # the same shape log_row_extras produces for stored attachments
     assert stored["content"] is True
