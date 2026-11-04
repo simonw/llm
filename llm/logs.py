@@ -19,6 +19,7 @@ again, so the hash always covers the content as the model saw it -
 import datetime
 import hashlib
 import json
+from dataclasses import replace
 from typing import Any
 
 from condense_json import UncondenseError, condense_json, uncondense_json
@@ -240,7 +241,11 @@ class LogStore:
             attachment_ids = [
                 ensure_attachment(self.db, attachment) for attachment in attachments
             ]
-            _encode_attachment_refs(payload, attachment_ids, part_type)
+            attachment_refs = [
+                {"id": id_, "type": attachment.resolve_type()}
+                for id_, attachment in zip(attachment_ids, attachments)
+            ]
+            _encode_attachment_refs(payload, attachment_refs, part_type)
         else:
             attachment_ids = []
 
@@ -348,11 +353,11 @@ class LogStore:
             _decode_text_refs(payload, fragments)
             # Strip the attachment references before rebuilding, then
             # hang the resolved objects back on.
-            ids = _attachment_ids(payload)
+            refs = _attachment_refs(payload)
             payload.pop("attachment", None)
             payload.pop("attachments", None)
             part = Part.from_dict(payload)
-            _resolve_attachments(part, ids, attachments)
+            _resolve_attachments(part, refs, attachments)
             out.setdefault(row["message_hash"], []).append(part)
         return out
 
@@ -822,36 +827,48 @@ def _fragment_ids(payload: dict) -> list[int]:
 
 
 def _encode_attachment_refs(
-    payload: dict, attachment_ids: list[str], part_type: str
+    payload: dict, attachment_refs: list[dict], part_type: str
 ) -> None:
-    "Replace inline attachment dicts with their content-addressed ids."
+    """Replace inline attachments with content ids and per-reference media types."""
     if part_type == "attachment":
-        payload["attachment"] = {"id": attachment_ids[0]}
+        payload["attachment"] = attachment_refs[0]
     elif part_type == "tool_result":
-        payload["attachments"] = [{"id": id} for id in attachment_ids]
+        payload["attachments"] = attachment_refs
 
 
-def _resolve_attachments(part, ids: list[str], attachments: dict[str, Any]) -> None:
-    """Hang the resolved Attachment objects back on a part.
+def _resolve_attachments(part, refs: list[dict], attachments: dict[str, Any]) -> None:
+    """Resolve attachment bytes while retaining each reference's media type.
 
-    Done after ``Part.from_dict`` rather than by putting them back into
-    the payload, so the bytes are never round-tripped through base64 and
-    the objects keep the content-addressed id they were stored under.
+    Bytes remain shared in the attachments table. Copy the value object before
+    setting its type, so two references to the same bytes can have different
+    media types. Older references containing only an id use the stored type.
     """
-    if not ids:
+    resolved = [
+        (
+            replace(attachments[ref["id"]], type=ref["type"])
+            if "type" in ref
+            else attachments[ref["id"]]
+        )
+        for ref in refs
+    ]
+    if not resolved:
         return
     if isinstance(part, AttachmentPart):
-        part.attachment = attachments[ids[0]]
+        part.attachment = resolved[0]
     elif isinstance(part, ToolResultPart):
-        part.attachments = [attachments[id] for id in ids]
+        part.attachments = resolved
+
+
+def _attachment_refs(payload: dict) -> list[dict]:
+    if payload["type"] == "attachment" and "attachment" in payload:
+        return [payload["attachment"]]
+    if payload["type"] == "tool_result":
+        return payload.get("attachments") or []
+    return []
 
 
 def _attachment_ids(payload: dict) -> list[str]:
-    if payload["type"] == "attachment" and "attachment" in payload:
-        return [payload["attachment"]["id"]]
-    if payload["type"] == "tool_result":
-        return [ref["id"] for ref in payload.get("attachments") or []]
-    return []
+    return [ref["id"] for ref in _attachment_refs(payload)]
 
 
 def _dump(value: dict | None) -> str | None:
