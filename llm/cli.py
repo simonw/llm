@@ -1258,13 +1258,11 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
-    # Left and right arrow keys to move cursor:
+    # GNU readline bindings work on Unix; pyreadline3 handles Windows arrows
+    # itself and rejects these GNU bindings (see #585).
     if sys.platform != "win32":
         readline.parse_and_bind("\\e[D: backward-char")
         readline.parse_and_bind("\\e[C: forward-char")
-    else:
-        readline.parse_and_bind("bind -x '\\e[D: backward-char'")
-        readline.parse_and_bind("bind -x '\\e[C: forward-char'")
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = _cli_database(log_path)
