@@ -1,0 +1,42 @@
+spec_version: "0.1.0"
+name: llm
+version: 0.32.0
+description: >
+  A CLI tool and Python library for interacting with Large Language Models —
+  OpenAI, Anthropic Claude, Google Gemini, Meta Llama, and dozens of others,
+  both via remote APIs and locally-installed models. Supports multi-turn chat,
+  tool use, structured output (schemas), embeddings, template management,
+  prompt logging to SQLite, and a plugin system for extending model support.
+license: Apache-2.0
+model:
+  preferred: openai:gpt-4o-mini
+  supported:
+    - openai:gpt-4o
+    - openai:gpt-4o-mini
+    - anthropic:claude-sonnet-4-6
+    - google:gemini-2.0-flash
+    - ollama:llama3.2
+runtime:
+  entrypoint: "llm"
+  max_turns: 100
+skills:
+  - name: prompt
+    description: Execute a one-shot prompt against any configured LLM
+  - name: chat
+    description: Interactive multi-turn chat session with any LLM
+  - name: embed
+    description: Generate and store vector embeddings for text inputs
+  - name: tools
+    description: Invoke registered Python tools during model inference
+  - name: schemas
+    description: Extract structured (JSON) output from model responses
+  - name: templates
+    description: Save and reuse named system prompts and prompt templates
+  - name: plugins
+    description: Install and manage LLM plugins to extend model support
+  - name: logs
+    description: Query and inspect the SQLite log of all past prompts and responses
+compliance:
+  risk_tier: standard
+  supervision:
+    human_in_the_loop: destructive
