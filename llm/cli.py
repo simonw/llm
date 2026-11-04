@@ -960,7 +960,7 @@ def prompt(
             if not (extract or extract_last):
                 extract = template_obj.extract
                 extract_last = template_obj.extract_last
-            if template_obj.schema_object:
+            if template_obj.schema_object and not schema:
                 schema = template_obj.schema_object
             if template_obj.options:
                 options = _merge_template_options(template_obj, options)
