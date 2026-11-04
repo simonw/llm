@@ -33,6 +33,13 @@ For `uv`:
 ```bash
 uv tool upgrade llm
 ```
+If you have installed plugins using `llm install ...`, `uv tool upgrade llm`
+may remove those plugins while replacing the tool environment.
+Upgrade LLM from inside its own environment instead:
+```bash
+llm install -U llm
+```
+Or reinstall your plugins after running `uv tool upgrade llm`.
 For Homebrew:
 ```bash
 brew upgrade llm
