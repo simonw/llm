@@ -948,6 +948,29 @@ class TestPerTurnToolResolution:
         assert len(descriptions_to_ids) == 2
         assert len(set(descriptions_to_ids.values())) == 2
 
+    def test_tool_calls_name_the_definition_their_turn_was_given(
+        self, store, mock_model
+    ):
+        # Two turns call a tool named "lookup", each with a different
+        # definition. Each turn's tool call must point at its own turn's
+        # definition, not whichever "lookup" the tools table lists last.
+        for description in ("first definition", "second definition"):
+            tool = llm.Tool(name="lookup", description=description, input_schema={})
+            response = mock_model.prompt("hi", tools=[tool])
+            response.add_tool_call(llm.ToolCall(name="lookup", arguments={}))
+            response.text()
+            response.log_to_db(store.db)
+
+        rows = merged_log_rows(store)
+        rows.reverse()
+        call_ids = []
+        for row in rows:
+            extras = log_row_extras(store, row)
+            assert [call["name"] for call in extras["tool_calls"]] == ["lookup"]
+            assert extras["tool_calls"][0]["tool_id"] == extras["tools"][0]["id"]
+            call_ids.append(extras["tool_calls"][0]["tool_id"])
+        assert len(set(call_ids)) == 2
+
 
 class TestRepeatedFragments:
     def test_passing_the_same_fragment_twice_keeps_both_rows(self, store, mock_model):
