@@ -3,6 +3,7 @@ import json
 import os
 import sys
 from collections.abc import AsyncGenerator, Iterable, Iterator
+from contextlib import aclosing
 from enum import Enum
 from functools import cache
 from typing import Any, ClassVar, Literal, cast
@@ -31,6 +32,7 @@ from llm import (
 from llm.models import _partition_tools
 from llm.parts import StreamEvent
 from llm.utils import (
+    async_logging_client,
     dicts_to_table_string,
     logging_client,
     remove_dict_none_values,
@@ -1576,7 +1578,9 @@ class _Shared:
         if self.headers:
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
+            kwargs["http_client"] = (
+                async_logging_client() if async_ else logging_client()
+            )
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:
@@ -1758,98 +1762,104 @@ class AsyncChat(_Shared, AsyncKeyModel):
             image_detail=getattr(prompt.options, "image_detail", None),
         )
         kwargs = self.build_kwargs(prompt, stream)
-        client = self.get_client(key, async_=True)
-        usage = None
-        if stream:
-            completion = await client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=True,
-                **kwargs,
-            )
-            chunks = []
-            tool_calls = {}
-            async for chunk in completion:
-                if chunk.usage:
-                    usage = chunk.usage.model_dump()
-                chunks.append(chunk)
-                if chunk.choices and chunk.choices[0].delta:
-                    for tool_call in chunk.choices[0].delta.tool_calls or []:
-                        if tool_call.function.arguments is None:
-                            tool_call.function.arguments = ""
-                        idx = tool_call.index
-                        if idx not in tool_calls:
-                            tool_calls[idx] = tool_call
-                            yield StreamEvent(
-                                type="tool_call_name",
-                                chunk=tool_call.function.name or "",
-                                tool_call_id=tool_call.id,
+        async with self.get_client(key, async_=True) as client:
+            usage = None
+            if stream:
+                async with await client.chat.completions.create(
+                    model=self.model_name or self.model_id,
+                    messages=messages,
+                    stream=True,
+                    **kwargs,
+                ) as completion:
+                    chunks = []
+                    tool_calls = {}
+                    async for chunk in completion:
+                        if chunk.usage:
+                            usage = chunk.usage.model_dump()
+                        chunks.append(chunk)
+                        if chunk.choices and chunk.choices[0].delta:
+                            for tool_call in chunk.choices[0].delta.tool_calls or []:
+                                if tool_call.function.arguments is None:
+                                    tool_call.function.arguments = ""
+                                idx = tool_call.index
+                                if idx not in tool_calls:
+                                    tool_calls[idx] = tool_call
+                                    yield StreamEvent(
+                                        type="tool_call_name",
+                                        chunk=tool_call.function.name or "",
+                                        tool_call_id=tool_call.id,
+                                    )
+                                else:
+                                    tool_calls[
+                                        idx
+                                    ].function.arguments += tool_call.function.arguments
+                                if tool_call.function.arguments:
+                                    yield StreamEvent(
+                                        type="tool_call_args",
+                                        chunk=tool_call.function.arguments,
+                                        tool_call_id=tool_calls[idx].id,
+                                    )
+                        try:
+                            content = chunk.choices[0].delta.content
+                        except IndexError:
+                            content = None
+                        if content:
+                            yield StreamEvent(type="text", chunk=content)
+                    if tool_calls:
+                        for value in tool_calls.values():
+                            response.add_tool_call(
+                                llm.ToolCall(
+                                    tool_call_id=value.id,
+                                    name=value.function.name,
+                                    arguments=json.loads(
+                                        value.function.arguments or "{}"
+                                    ),
+                                )
                             )
-                        else:
-                            tool_calls[
-                                idx
-                            ].function.arguments += tool_call.function.arguments
-                        if tool_call.function.arguments:
-                            yield StreamEvent(
-                                type="tool_call_args",
-                                chunk=tool_call.function.arguments,
-                                tool_call_id=tool_calls[idx].id,
-                            )
-                try:
-                    content = chunk.choices[0].delta.content
-                except IndexError:
-                    content = None
-                if content:
-                    yield StreamEvent(type="text", chunk=content)
-            if tool_calls:
-                for value in tool_calls.values():
+                    response.response_json = remove_dict_none_values(
+                        combine_chunks(chunks)
+                    )
+            else:
+                completion = await client.chat.completions.create(
+                    model=self.model_name or self.model_id,
+                    messages=messages,
+                    stream=False,
+                    **kwargs,
+                )
+                response.response_json = remove_dict_none_values(
+                    completion.model_dump()
+                )
+                if completion.usage:
+                    usage = completion.usage.model_dump()
+                for tool_call in completion.choices[0].message.tool_calls or []:
                     response.add_tool_call(
                         llm.ToolCall(
-                            tool_call_id=value.id,
-                            name=value.function.name,
-                            arguments=json.loads(value.function.arguments or "{}"),
+                            tool_call_id=tool_call.id,
+                            name=tool_call.function.name,
+                            arguments=json.loads(tool_call.function.arguments or "{}"),
                         )
                     )
-            response.response_json = remove_dict_none_values(combine_chunks(chunks))
-        else:
-            completion = await client.chat.completions.create(
-                model=self.model_name or self.model_id,
-                messages=messages,
-                stream=False,
-                **kwargs,
-            )
-            response.response_json = remove_dict_none_values(completion.model_dump())
-            if completion.usage:
-                usage = completion.usage.model_dump()
-            for tool_call in completion.choices[0].message.tool_calls or []:
-                response.add_tool_call(
-                    llm.ToolCall(
+                    yield StreamEvent(
+                        type="tool_call_name",
+                        chunk=tool_call.function.name or "",
                         tool_call_id=tool_call.id,
-                        name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments or "{}"),
                     )
-                )
-                yield StreamEvent(
-                    type="tool_call_name",
-                    chunk=tool_call.function.name or "",
-                    tool_call_id=tool_call.id,
-                )
-                yield StreamEvent(
-                    type="tool_call_args",
-                    chunk=tool_call.function.arguments or "",
-                    tool_call_id=tool_call.id,
-                )
-            if completion.choices[0].message.content is not None:
-                yield StreamEvent(
-                    type="text",
-                    chunk=completion.choices[0].message.content,
-                )
-        self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
-        ):
-            yield StreamEvent(type="reasoning", chunk="", redacted=True)
-        response._prompt_json = redact_data({"messages": messages})
+                    yield StreamEvent(
+                        type="tool_call_args",
+                        chunk=tool_call.function.arguments or "",
+                        tool_call_id=tool_call.id,
+                    )
+                if completion.choices[0].message.content is not None:
+                    yield StreamEvent(
+                        type="text",
+                        chunk=completion.choices[0].message.content,
+                    )
+            self.set_usage(response, usage)
+            if usage and (usage.get("completion_tokens_details") or {}).get(
+                "reasoning_tokens"
+            ):
+                yield StreamEvent(type="reasoning", chunk="", redacted=True)
+            response._prompt_json = redact_data({"messages": messages})
 
 
 def _responses_attachment(attachment, image_detail=None):
@@ -2981,10 +2991,11 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         if getattr(prompt.options, "chat_completions", None):
             chat = AsyncChat(**self._delegate_chat_kwargs())
             _partition_tools(chat, prompt.tools)
-            async for event in chat.execute(
-                prompt, stream, response, conversation, key
-            ):
-                yield event
+            async with aclosing(
+                chat.execute(prompt, stream, response, conversation, key)
+            ) as chat_events:
+                async for event in chat_events:
+                    yield event
             return
 
         if prompt.system and not self.allows_system_prompt:
@@ -2998,162 +3009,173 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
         )
         kwargs = self._finalize_responses_kwargs(prompt, stream, instructions)
 
-        client = self.get_client(key, async_=True)
-        usage = None
-        had_reasoning = False
-        if stream:
-            stream_obj = await client.responses.create(
-                model=self.model_name or self.model_id,
-                input=input_items,
-                stream=True,
-                **kwargs,
-            )
-            tool_call_meta: dict[str, dict[str, str]] = {}
-            final_response_dict: dict[str, Any] | None = None
-            reasoning_items_with_streamed_text = set()
-            reasoning_done_events: dict[str, StreamEvent] = {}
-            server_tool_done_events: dict[str, list[StreamEvent]] = {}
-            message_index = 0
-            seen_message = False
-            async for event in stream_obj:
-                etype = getattr(event, "type", None)
-                if etype == "response.output_item.added":
-                    item = event.item
-                    if item.type == "message":
-                        if seen_message:
-                            message_index += 1
-                        seen_message = True
-                    elif item.type == "function_call":
-                        tool_call_meta[item.id] = {
-                            "id": item.id,
-                            "call_id": item.call_id,
-                            "name": item.name,
-                        }
-                        yield StreamEvent(
-                            type="tool_call_name",
-                            chunk=item.name or "",
-                            tool_call_id=item.call_id,
-                            message_index=message_index,
-                        )
-                elif etype == "response.output_text.delta":
-                    yield StreamEvent(
-                        type="text",
-                        chunk=event.delta or "",
-                        message_index=message_index,
-                    )
-                elif etype == "response.function_call_arguments.delta":
-                    item_id = getattr(event, "item_id", None)
-                    meta = tool_call_meta.get(item_id) if item_id else None
-                    call_id = meta["call_id"] if meta else None
-                    yield StreamEvent(
-                        type="tool_call_args",
-                        chunk=event.delta or "",
-                        tool_call_id=call_id,
-                        message_index=message_index,
-                    )
-                elif etype in (
-                    "response.reasoning_summary_text.delta",
-                    "response.reasoning_text.delta",
-                ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id:
-                        reasoning_items_with_streamed_text.add(item_id)
-                    yield StreamEvent(
-                        type="reasoning",
-                        chunk=event.delta or "",
-                        message_index=message_index,
-                    )
-                elif etype in (
-                    "response.reasoning_summary_text.done",
-                    "response.reasoning_text.done",
-                ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id not in reasoning_items_with_streamed_text:
-                        text = getattr(event, "text", None) or ""
-                        if text:
+        async with self.get_client(key, async_=True) as client:
+            usage = None
+            had_reasoning = False
+            if stream:
+                async with await client.responses.create(
+                    model=self.model_name or self.model_id,
+                    input=input_items,
+                    stream=True,
+                    **kwargs,
+                ) as stream_obj:
+                    tool_call_meta: dict[str, dict[str, str]] = {}
+                    final_response_dict: dict[str, Any] | None = None
+                    reasoning_items_with_streamed_text = set()
+                    reasoning_done_events: dict[str, StreamEvent] = {}
+                    server_tool_done_events: dict[str, list[StreamEvent]] = {}
+                    message_index = 0
+                    seen_message = False
+                    async for event in stream_obj:
+                        etype = getattr(event, "type", None)
+                        if etype == "response.output_item.added":
+                            item = event.item
+                            if item.type == "message":
+                                if seen_message:
+                                    message_index += 1
+                                seen_message = True
+                            elif item.type == "function_call":
+                                tool_call_meta[item.id] = {
+                                    "id": item.id,
+                                    "call_id": item.call_id,
+                                    "name": item.name,
+                                }
+                                yield StreamEvent(
+                                    type="tool_call_name",
+                                    chunk=item.name or "",
+                                    tool_call_id=item.call_id,
+                                    message_index=message_index,
+                                )
+                        elif etype == "response.output_text.delta":
+                            yield StreamEvent(
+                                type="text",
+                                chunk=event.delta or "",
+                                message_index=message_index,
+                            )
+                        elif etype == "response.function_call_arguments.delta":
+                            item_id = getattr(event, "item_id", None)
+                            meta = tool_call_meta.get(item_id) if item_id else None
+                            call_id = meta["call_id"] if meta else None
+                            yield StreamEvent(
+                                type="tool_call_args",
+                                chunk=event.delta or "",
+                                tool_call_id=call_id,
+                                message_index=message_index,
+                            )
+                        elif etype in (
+                            "response.reasoning_summary_text.delta",
+                            "response.reasoning_text.delta",
+                        ):
+                            item_id = getattr(event, "item_id", None)
                             if item_id:
                                 reasoning_items_with_streamed_text.add(item_id)
                             yield StreamEvent(
                                 type="reasoning",
-                                chunk=text,
+                                chunk=event.delta or "",
                                 message_index=message_index,
                             )
-                elif etype == "response.output_item.done":
-                    item = event.item
-                    if item.type == "reasoning":
-                        had_reasoning = True
-                        item_id = getattr(item, "id", None)
-                        reasoning_event = self._reasoning_event(
-                            item,
-                            include_text=(
-                                item_id not in reasoning_items_with_streamed_text
-                            ),
-                        )
-                        reasoning_event.message_index = message_index
-                        if item_id:
-                            # Retained so the refresh after
-                            # response.completed can target the part
-                            # this event resolved to.
-                            reasoning_done_events[item_id] = reasoning_event
-                        yield reasoning_event
-                    elif item.type == "function_call":
-                        try:
-                            args = json.loads(item.arguments) if item.arguments else {}
-                        except json.JSONDecodeError:
-                            args = {"_raw": item.arguments}
-                        response.add_tool_call(
-                            llm.ToolCall(
-                                tool_call_id=item.call_id,
-                                name=item.name,
-                                arguments=args,
+                        elif etype in (
+                            "response.reasoning_summary_text.done",
+                            "response.reasoning_text.done",
+                        ):
+                            item_id = getattr(event, "item_id", None)
+                            if item_id not in reasoning_items_with_streamed_text:
+                                text = getattr(event, "text", None) or ""
+                                if text:
+                                    if item_id:
+                                        reasoning_items_with_streamed_text.add(item_id)
+                                    yield StreamEvent(
+                                        type="reasoning",
+                                        chunk=text,
+                                        message_index=message_index,
+                                    )
+                        elif etype == "response.output_item.done":
+                            item = event.item
+                            if item.type == "reasoning":
+                                had_reasoning = True
+                                item_id = getattr(item, "id", None)
+                                reasoning_event = self._reasoning_event(
+                                    item,
+                                    include_text=(
+                                        item_id
+                                        not in reasoning_items_with_streamed_text
+                                    ),
+                                )
+                                reasoning_event.message_index = message_index
+                                if item_id:
+                                    # Retained so the refresh after
+                                    # response.completed can target the part
+                                    # this event resolved to.
+                                    reasoning_done_events[item_id] = reasoning_event
+                                yield reasoning_event
+                            elif item.type == "function_call":
+                                try:
+                                    args = (
+                                        json.loads(item.arguments)
+                                        if item.arguments
+                                        else {}
+                                    )
+                                except json.JSONDecodeError:
+                                    args = {"_raw": item.arguments}
+                                response.add_tool_call(
+                                    llm.ToolCall(
+                                        tool_call_id=item.call_id,
+                                        name=item.name,
+                                        arguments=args,
+                                    )
+                                )
+                            else:
+                                server_events = self._server_tool_events(
+                                    item, message_index
+                                )
+                                item_id = getattr(item, "id", None)
+                                if item_id and server_events:
+                                    server_tool_done_events[item_id] = server_events
+                                for server_event in server_events:
+                                    yield server_event
+                        elif etype == "response.completed":
+                            self._refresh_server_tool_events(
+                                event.response.output, server_tool_done_events
                             )
+                            final_response_dict = event.response.model_dump(
+                                warnings=False
+                            )
+                            if final_response_dict.get("usage"):
+                                usage = final_response_dict["usage"]
+                    if final_response_dict is not None:
+                        response.response_json = remove_dict_none_values(
+                            final_response_dict
                         )
-                    else:
-                        server_events = self._server_tool_events(item, message_index)
-                        item_id = getattr(item, "id", None)
-                        if item_id and server_events:
-                            server_tool_done_events[item_id] = server_events
-                        for server_event in server_events:
-                            yield server_event
-                elif etype == "response.completed":
-                    self._refresh_server_tool_events(
-                        event.response.output, server_tool_done_events
-                    )
-                    final_response_dict = event.response.model_dump(warnings=False)
-                    if final_response_dict.get("usage"):
-                        usage = final_response_dict["usage"]
-            if final_response_dict is not None:
-                response.response_json = remove_dict_none_values(final_response_dict)
-                for refresh in self._reasoning_refresh_events(
-                    response.response_json, reasoning_done_events
-                ):
-                    yield refresh
-        else:
-            completion = await client.responses.create(
-                model=self.model_name or self.model_id,
-                input=input_items,
-                stream=False,
-                **kwargs,
-            )
-            dumped = completion.model_dump(warnings=False)
-            response.response_json = remove_dict_none_values(dumped)
-            usage = dumped.get("usage")
-            events, had_reasoning = self._non_streaming_output_events(
-                completion.output, response
-            )
-            for event in events:
-                yield event
+                        for refresh in self._reasoning_refresh_events(
+                            response.response_json, reasoning_done_events
+                        ):
+                            yield refresh
+            else:
+                completion = await client.responses.create(
+                    model=self.model_name or self.model_id,
+                    input=input_items,
+                    stream=False,
+                    **kwargs,
+                )
+                dumped = completion.model_dump(warnings=False)
+                response.response_json = remove_dict_none_values(dumped)
+                usage = dumped.get("usage")
+                events, had_reasoning = self._non_streaming_output_events(
+                    completion.output, response
+                )
+                for event in events:
+                    yield event
 
-        self._set_usage_responses(response, usage)
-        if (
-            not had_reasoning
-            and usage
-            and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens"))
-        ):
-            yield StreamEvent(type="reasoning", chunk="", redacted=True)
-        response._prompt_json = redact_data(
-            {"input": input_items, "instructions": instructions}
-        )
+            self._set_usage_responses(response, usage)
+            if (
+                not had_reasoning
+                and usage
+                and ((usage.get("output_tokens_details") or {}).get("reasoning_tokens"))
+            ):
+                yield StreamEvent(type="reasoning", chunk="", redacted=True)
+            response._prompt_json = redact_data(
+                {"input": input_items, "instructions": instructions}
+            )
 
 
 class Completion(Chat):

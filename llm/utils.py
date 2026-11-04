@@ -1,3 +1,4 @@
+import codecs
 import hashlib
 import itertools
 import json
@@ -7,12 +8,14 @@ import re
 import textwrap
 import threading
 import time
+from contextlib import aclosing
 from typing import Any, Final
 
 import click
 import httpx2
 import puremagic
 import sqlite_utils
+from openai import DefaultAsyncHttpxClient
 from ulid import ULID
 
 MIME_TYPE_FIXES = {
@@ -149,6 +152,51 @@ def logging_client() -> httpx2.Client:
     return httpx2.Client(
         transport=_LogTransport(httpx2.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
+    )
+
+
+class _AsyncLogResponse(httpx2.Response):
+    async def aiter_bytes(self, *args, **kwargs):
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        async with aclosing(super().aiter_bytes(*args, **kwargs)) as chunks:
+            async for chunk in chunks:
+                click.echo(decoder.decode(chunk), nl=False, err=True)
+                yield chunk
+        click.echo(decoder.decode(b"", final=True), err=True)
+
+
+class _AsyncLogTransport(httpx2.AsyncBaseTransport):
+    def __init__(self, transport: httpx2.AsyncBaseTransport):
+        self.transport = transport
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        response = await self.transport.handle_async_request(request)
+        return _AsyncLogResponse(
+            status_code=response.status_code,
+            headers=response.headers,
+            stream=response.stream,
+            extensions=response.extensions,
+        )
+
+    async def aclose(self):
+        await self.transport.aclose()
+
+
+async def _async_no_accept_encoding(request: httpx2.Request):
+    _no_accept_encoding(request)
+
+
+async def _async_log_response(response: httpx2.Response):
+    _log_response(response)
+
+
+def async_logging_client() -> httpx2.AsyncClient:
+    return DefaultAsyncHttpxClient(
+        transport=_AsyncLogTransport(httpx2.AsyncHTTPTransport()),
+        event_hooks={
+            "request": [_async_no_accept_encoding],
+            "response": [_async_log_response],
+        },
     )
 
 
