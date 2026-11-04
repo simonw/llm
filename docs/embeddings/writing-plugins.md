@@ -70,7 +70,7 @@ cat file.txt | llm embed -m all-MiniLM-L6-v2
 ```
 [llm-sentence-transformers](https://github.com/simonw/llm-sentence-transformers) is a complete example of a plugin that provides an embedding model.
 
-[Execute Jina embeddings with a CLI using llm-embed-jina](https://simonwillison.net/2023/Oct/26/llm-embed-jina/#how-i-built-the-plugin) talks through a similar process to add support for the [Jina embeddings models](https://jina.ai/news/jina-ai-launches-worlds-first-open-source-8k-text-embedding-rivaling-openai/).
+[Execute Jina embeddings with a CLI using llm-embed-jina](https://simonwillison.net/2023/Oct/26/llm-embed-jina/#how-i-built-the-plugin) talks through a similar process to add support for the [Jina embeddings models](https://huggingface.co/jinaai/jina-embeddings-v2-base-en).
 
 ## Embedding binary content
 
