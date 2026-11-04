@@ -269,6 +269,27 @@ def test_endpoint_add_rejects_non_list_file(user_path):
     assert path.read_text("utf-8") == "model_id: not-a-list\n"
 
 
+def test_endpoint_list_json_preserves_yaml_timestamps(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text(
+        "- model_id: azure-model\n"
+        "  model_name: azure-deployment\n"
+        "  api_version: 2024-02-01\n"
+        "  updated_at: 2024-02-01T12:30:00+02:00\n",
+        encoding="utf-8",
+    )
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        {
+            "model_id": "azure-model",
+            "model_name": "azure-deployment",
+            "api_version": "2024-02-01",
+            "updated_at": "2024-02-01T12:30:00+02:00",
+        }
+    ]
+
+
 def test_endpoint_list(user_path):
     assert _invoke("list").output == ""
     assert _invoke("list", "--json").output == "[]\n"
