@@ -11,9 +11,10 @@ import yaml
 from click.testing import CliRunner
 from ulid import ULID
 
-from llm import Fragment, ToolCall
+from llm import Fragment, ToolCall, user
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.parts import StreamEvent
 from llm.utils import monotonic_ulid
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
@@ -492,6 +493,50 @@ def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
         cli, ["logs", "-q", "wombats", "--json"], catch_exceptions=False
     )
     assert json.loads(not_found.output) == []
+
+
+def test_logs_search_indexes_every_user_message(mock_model, logs_db):
+    # A turn's input can hold several user messages. All of them are
+    # shown as its prompt, so all of them are searchable, in order.
+    migrate(logs_db)
+    mock_model.enqueue(["Hello"])
+    response = mock_model.prompt("second narwhal", messages=[user("original walrus")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("walrus", "narwhal", '"walrus second"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        rows = json.loads(result.output)
+        assert [row["prompt"] for row in rows] == [
+            "original walrus\n\nsecond narwhal"
+        ], query
+
+
+def test_logs_search_separates_text_parts(mock_model, logs_db):
+    # Each text part is indexed as separate words, even where the
+    # displayed text joins parts directly the way providers send them.
+    migrate(logs_db)
+    mock_model.enqueue(
+        [
+            StreamEvent(type="text", chunk="first alpha"),
+            StreamEvent(type="reasoning", chunk="hmm"),
+            StreamEvent(type="text", chunk="second beta"),
+            StreamEvent(type="text", chunk="third gamma", message_index=1),
+        ]
+    )
+    response = mock_model.prompt(messages=[user("tell me about", "pelicans")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("pelicans", '"about pelicans"', '"alpha second"', '"beta third"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        assert len(json.loads(result.output)) == 1, query
 
 
 def test_logs_search_merges_legacy_rows(mock_model, logs_db):
@@ -1351,6 +1396,110 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     assert "shell: 17711" in short_result.output
 
 
+def test_logs_legacy_tool_result_attachment_bytes(logs_db):
+    """A legacy tool result can record its attachment bytes as a BLOB.
+    Aggregating that row into JSON must not fail, and the byte count
+    should render the same way the store's attachments do."""
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01legacyblobaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": "describe this image",
+            "response": "it is a pelican",
+            "model": "gpt-4o",
+            "datetime_utc": "2025-01-01T00:00:00",
+        },
+        alter=True,
+    )
+    logs_db["tools"].insert(
+        {
+            "id": 1,
+            "name": "view_image",
+            "description": "View an image",
+            "input_schema": "{}",
+            "plugin": "llm",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["tool_results"].insert(
+        {
+            "id": 1,
+            "response_id": "01legacyblobaaaaaaaaaaaaaa",
+            "tool_id": 1,
+            "name": "view_image",
+            "output": "ok",
+            "tool_call_id": "call_1",
+            "instance_id": None,
+            "exception": None,
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert(
+        {
+            "id": "att1",
+            "type": "image/png",
+            "path": None,
+            "url": None,
+            "content": b"hello",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert_all(
+        [
+            {
+                "id": "att2",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": None,
+            },
+            {
+                "id": "att3",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": b"",
+            },
+        ],
+        pk="id",
+        alter=True,
+    )
+    # The "order" column decides the order attachments are listed in,
+    # not insertion order or attachment id
+    logs_db["tool_results_attachments"].insert_all(
+        [
+            {"tool_result_id": 1, "attachment_id": "att1", "order": 2},
+            {"tool_result_id": 1, "attachment_id": "att2", "order": 0},
+            {"tool_result_id": 1, "attachment_id": "att3", "order": 1},
+        ]
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "- **view_image**: `call_1`" in result.output
+    assert "- image/png: <5 bytes>" in result.output
+
+    json_result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert json_result.exit_code == 0
+    row = json.loads(json_result.output)[0]
+    (tool_result,) = row["tool_results"]
+    no_content, empty_content, stored = tool_result["attachments"]
+    # The bytes are not in the JSON, just a marker and the byte count -
+    # the same shape log_row_extras produces for stored attachments
+    assert stored["content"] is True
+    assert stored["content_length"] == 5
+    # a zero length blob and a null content both report no content
+    assert empty_content["content"] is None
+    assert empty_content["content_length"] is None
+    assert no_content["content"] is None
+    assert no_content["content_length"] is None
+
+
 def test_logs_backup(logs_db, tmp_path, monkeypatch):
     assert not logs_db.tables
     runner = CliRunner()
@@ -1530,3 +1679,20 @@ def test_logs_truncate_markdown_new_store(logs_db, mock_model):
     result = runner.invoke(cli, ["logs", "-t"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Response\n\nhello" in result.output
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
+    db = db_factory(schema_log_path)
+    db["schemas"].update(
+        SINGLE_ID,
+        {"content": json.dumps({"type": "object", "properties": {"value": allowed}})},
+    )
+    result = CliRunner().invoke(cli, ["schemas", "list", "-d", schema_log_path])
+    assert result.exit_code == 0, result.exception
+    assert "{value}" in result.output
+    # Summary rendering does not modify the schema's validation semantics.
+    assert (
+        json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
+        is allowed
+    )

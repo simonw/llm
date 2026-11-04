@@ -6,6 +6,76 @@ import pytest
 import llm
 
 
+def _tool_call_events(response, calls):
+    """Create matching response tool calls and stream events for test models."""
+    events = []
+    for index, (name, arguments, tool_call_id) in enumerate(calls):
+        response.add_tool_call(
+            llm.ToolCall(
+                name=name,
+                arguments=arguments,
+                tool_call_id=tool_call_id,
+            )
+        )
+        events.extend(
+            [
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk=name,
+                    part_index=index,
+                    tool_call_id=tool_call_id,
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk=json.dumps(arguments),
+                    part_index=index,
+                    tool_call_id=tool_call_id,
+                ),
+            ]
+        )
+    return events
+
+
+def _tool_round_mock(base_model, rounds):
+    """Create a mock model that emits tool calls for each planned round."""
+    if isinstance(base_model, llm.AsyncModel):
+
+        class ToolCallMock(type(base_model)):
+            supports_tools = True
+
+            async def execute(self, prompt, stream, response, conversation):
+                if self.tool_round >= len(rounds):
+                    async for chunk in super().execute(
+                        prompt, stream, response, conversation
+                    ):
+                        yield chunk
+                    return
+                self.history.append((prompt, stream, response, conversation))
+                events = _tool_call_events(response, rounds[self.tool_round])
+                self.tool_round += 1
+                for event in events:
+                    yield event
+
+    else:
+
+        class ToolCallMock(type(base_model)):
+            supports_tools = True
+
+            def execute(self, prompt, stream, response, conversation):
+                if self.tool_round >= len(rounds):
+                    yield from super().execute(prompt, stream, response, conversation)
+                    return
+                self.history.append((prompt, stream, response, conversation))
+                events = _tool_call_events(response, rounds[self.tool_round])
+                self.tool_round += 1
+                yield from events
+
+    model = ToolCallMock()
+    model.tool_round = 0
+    model.enqueue(["complete"])
+    return model
+
+
 class TestTextPart:
     def test_roundtrip(self):
         part = llm.parts.TextPart(text="Hello world")
@@ -1899,6 +1969,65 @@ class TestResponseReply:
             ToolResultPart(name="echo", output="echo:42", tool_call_id="c1")
         ]
 
+    def test_reply_auto_execution_uses_conversation_callbacks(self, mock_model):
+        executed = []
+        before_calls = []
+        after_calls = []
+
+        def blocked(x: int) -> str:
+            executed.append(("blocked", x))
+            return f"blocked:{x}"
+
+        def allowed(x: int) -> str:
+            executed.append(("allowed", x))
+            return f"allowed:{x}"
+
+        def before(tool, tool_call):
+            before_calls.append(tool_call.name)
+            if tool_call.name == "blocked":
+                raise llm.CancelToolCall("blocked by before_call")
+
+        def after(tool, tool_call, tool_result):
+            after_calls.append(tool.name)
+
+        model = _tool_round_mock(
+            mock_model,
+            [
+                [
+                    ("blocked", {"x": 1}, "c1"),
+                    ("allowed", {"x": 2}, "c2"),
+                ],
+                [("allowed", {"x": 3}, "c3")],
+            ],
+        )
+        conversation = model.conversation(
+            tools=[blocked, allowed], before_call=before, after_call=after
+        )
+        response = conversation.prompt("call tools")
+        response.text()
+
+        follow_up = response.reply()
+        follow_up.text()
+        second_follow_up = follow_up.reply()
+        second_follow_up.text()
+
+        assert executed == [("allowed", 2), ("allowed", 3)]
+        assert before_calls == ["blocked", "allowed", "allowed"]
+        assert after_calls == ["allowed", "allowed"]
+        assert follow_up.before_call is before
+        assert follow_up.after_call is after
+        assert second_follow_up.before_call is before
+        assert second_follow_up.after_call is after
+        cancelled_result = next(
+            part
+            for message in follow_up.prompt.messages
+            if message.role == "tool"
+            for part in message.parts
+            if part.name == "blocked"
+        )
+        assert cancelled_result.output == "Cancelled: blocked by before_call"
+        assert cancelled_result.exception == "CancelToolCall: blocked by before_call"
+
     def test_reply_auto_execute_with_prompt(self, mock_model):
         # reply("more text") with tool calls present also auto-executes
         # so the user prompt can land after the tool results.
@@ -2024,6 +2153,70 @@ class TestResponseReply:
         assert tool_msg.parts == [
             ToolResultPart(name="echo", output="echo:7", tool_call_id="c1")
         ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_auto_execution_uses_conversation_callbacks(
+        self, async_mock_model
+    ):
+        executed = []
+        before_calls = []
+        after_calls = []
+
+        async def blocked(x: int) -> str:
+            executed.append(("blocked", x))
+            return f"blocked:{x}"
+
+        async def allowed(x: int) -> str:
+            executed.append(("allowed", x))
+            return f"allowed:{x}"
+
+        async def before(tool, tool_call):
+            before_calls.append(tool_call.name)
+            if tool_call.name == "blocked":
+                raise llm.CancelToolCall("blocked by before_call")
+
+        async def after(tool, tool_call, tool_result):
+            after_calls.append(tool.name)
+
+        model = _tool_round_mock(
+            async_mock_model,
+            [
+                [
+                    ("blocked", {"x": 1}, "c1"),
+                    ("allowed", {"x": 2}, "c2"),
+                ],
+                [("allowed", {"x": 3}, "c3")],
+            ],
+        )
+        conversation = model.conversation(
+            tools=[blocked, allowed], before_call=before, after_call=after
+        )
+        # Pass tools explicitly to isolate callback propagation from
+        # conversation-level tool inheritance.
+        response = conversation.prompt("call tools", tools=[blocked, allowed])
+        await response.text()
+
+        follow_up = await response.reply()
+        await follow_up.text()
+        second_follow_up = await follow_up.reply()
+        await second_follow_up.text()
+
+        assert sorted(executed) == [("allowed", 2), ("allowed", 3)]
+        assert sorted(before_calls) == ["allowed", "allowed", "blocked"]
+        assert sorted(after_calls) == ["allowed", "allowed"]
+        assert follow_up.before_call is before
+        assert follow_up.after_call is after
+        assert second_follow_up.before_call is before
+        assert second_follow_up.after_call is after
+        cancelled_result = next(
+            part
+            for message in follow_up.prompt.messages
+            if message.role == "tool"
+            for part in message.parts
+            if part.name == "blocked"
+        )
+        assert cancelled_result.output == "Cancelled: blocked by before_call"
+        assert cancelled_result.exception == "CancelToolCall: blocked by before_call"
 
     @pytest.mark.asyncio
     async def test_async_reply_with_tool_results(self, async_mock_model):
@@ -2249,6 +2442,129 @@ class TestChainMessagesKwarg:
         await chain.text()
         r1 = chain._responses[0]
         assert r1.prompt.messages == [llm.user("explicit")]
+
+
+# system= alongside messages= is not dropped
+
+
+class TestSystemWithExplicitMessages:
+    """system= passed alongside messages= must reach prompt.messages,
+    since adapters such as OpenAI build requests from that list alone."""
+
+    def test_model_prompt(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_model_chain(self, mock_model):
+        mock_model.enqueue(["ok"])
+        chain = mock_model.chain("q", system="be brief", messages=[])
+        chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("q"),
+        ]
+
+    def test_conversation_chain(self, mock_model):
+        mock_model.enqueue(["ok"])
+        conv = mock_model.conversation()
+        chain = conv.chain(
+            "q",
+            system="be brief",
+            messages=[llm.user("earlier"), llm.assistant("ok")],
+        )
+        chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.assistant("ok"),
+            llm.user("q"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_chain(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        chain = async_mock_model.chain(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        await chain.text()
+        assert chain._responses[0].prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_model_prompt(self, async_mock_model):
+        async_mock_model.enqueue(["ok"])
+        response = async_mock_model.prompt(
+            "q", system="be brief", messages=[llm.user("earlier")]
+        )
+        await response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_system_fragments(self, mock_model):
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q",
+            system="be brief",
+            system_fragments=["fragment A"],
+            messages=[llm.user("earlier")],
+        )
+        response.text()
+        assert response.prompt.messages[0] == llm.system("fragment A\n\nbe brief")
+
+    def test_leading_system_message_not_duplicated(self, mock_model):
+        """A caller that already put a system message first (the
+        workaround for older versions) keeps exactly that list."""
+        mock_model.enqueue(["ok"])
+        response = mock_model.prompt(
+            "q",
+            system="be brief",
+            messages=[llm.system("be brief"), llm.user("earlier")],
+        )
+        response.text()
+        assert response.prompt.messages == [
+            llm.system("be brief"),
+            llm.user("earlier"),
+            llm.user("q"),
+        ]
+
+    def test_tool_result_turn_has_one_system_message(self, mock_model):
+        tool_call = llm.ToolCall(tool_call_id="c1", name="tick", arguments={})
+
+        class ChainMock(type(mock_model)):
+            def execute(self, prompt, stream, response, conversation):
+                if not self._queue:
+                    yield "done"
+                    return
+                yield from self._queue.pop(0)
+                if not response._tool_calls:
+                    response.add_tool_call(tool_call)
+
+        def tick() -> str:
+            "Tick"
+            return "tock"
+
+        m = ChainMock()
+        m.enqueue(["tool-turn"])
+        m.enqueue(["final"])
+        chain = m.chain("q", system="be brief", messages=[], tools=[tick])
+        list(chain.responses())
+        messages = chain._responses[1].prompt.messages
+        assert messages[0] == llm.system("be brief")
+        assert [msg.role for msg in messages].count("system") == 1
 
 
 # Response.to_dict / Response.from_dict

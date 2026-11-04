@@ -163,7 +163,8 @@ class Collection:
         value = self._materialize(value)
         content_hash = self.content_hash(value)
         if self.db["embeddings"].count_where(
-            "content_hash = ? and collection_id = ?", [content_hash, self.id]
+            "content_hash = ? and collection_id = ? and id = ?",
+            [content_hash, self.id, id],
         ):
             return
         embedding = self.model().embed(value, key=key)
@@ -259,6 +260,11 @@ class Collection:
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )
+            if len(embeddings) != len(filtered_batch):
+                raise ValueError(
+                    f"Expected {len(filtered_batch)} embeddings, "
+                    f"got {len(embeddings)}"
+                )
             with self.db.atomic():
                 cast(Table, self.db["embeddings"]).insert_all(
                     (

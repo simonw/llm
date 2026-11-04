@@ -208,6 +208,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
   * [OpenAI-compatible models](https://llm.datasette.io/en/stable/other-models.html#openai-compatible-models)
     * [Run against an endpoint without configuring it](https://llm.datasette.io/en/stable/other-models.html#run-against-an-endpoint-without-configuring-it)
     * [Configure an OpenAI-compatible model](https://llm.datasette.io/en/stable/other-models.html#configure-an-openai-compatible-model)
+    * [Listing and removing configured models](https://llm.datasette.io/en/stable/other-models.html#listing-and-removing-configured-models)
     * [Extra HTTP headers](https://llm.datasette.io/en/stable/other-models.html#extra-http-headers)
 * [Tools](https://llm.datasette.io/en/stable/tools.html)
   * [How tools work](https://llm.datasette.io/en/stable/tools.html#how-tools-work)
