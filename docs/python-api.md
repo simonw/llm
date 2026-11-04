@@ -22,6 +22,8 @@ print(response.text())
 ```
 Note that the prompt will not be evaluated until you call that `response.text()` method - a form of lazy loading.
 
+Prompts and responses made through the Python API are not automatically saved to the SQLite log database. To save a response, call `response.log_to_db(db)` as shown in {ref}`logging-message-store-python`.
+
 If you inspect the response before it has been evaluated it will look like this:
 
     <Response prompt='Your prompt' text='... not yet done ...'>
