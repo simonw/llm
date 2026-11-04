@@ -31,6 +31,7 @@ from typing import (
 
 import httpx2
 
+from . import telemetry
 from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
@@ -1990,12 +1991,13 @@ class Response(_BaseResponse):
 
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
-                if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(
-                        tool.implementation(**implementation_arguments)
-                    )
-                else:
-                    result = tool.implementation(**implementation_arguments)
+                with telemetry.tool_span(tool_call):
+                    if inspect.iscoroutinefunction(tool.implementation):
+                        result = asyncio.run(
+                            tool.implementation(**implementation_arguments)
+                        )
+                    else:
+                        result = tool.implementation(**implementation_arguments)
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
@@ -2094,7 +2096,7 @@ class Response(_BaseResponse):
         else:
             raise TypeError("self.model must be a Model or KeyModel")
 
-        for chunk in generator:
+        for chunk in telemetry.traced(self, generator):
             assert chunk is not None
             yield chunk
 
@@ -2387,9 +2389,10 @@ class AsyncResponse(_BaseResponse):
                     attachments = []
 
                     try:
-                        result = await tool.implementation(
-                            **_implementation_arguments(tool, tc)
-                        )
+                        with telemetry.tool_span(tc):
+                            result = await tool.implementation(
+                                **_implementation_arguments(tool, tc)
+                            )
                         if isinstance(result, ToolOutput):
                             attachments.extend(result.attachments)
                             result = result.output
@@ -2455,9 +2458,10 @@ class AsyncResponse(_BaseResponse):
                 attachments = []
 
                 try:
-                    res = tool.implementation(**_implementation_arguments(tool, tc))
-                    if inspect.isawaitable(res):
-                        res = await res
+                    with telemetry.tool_span(tc):
+                        res = tool.implementation(**_implementation_arguments(tool, tc))
+                        if inspect.isawaitable(res):
+                            res = await res
                     if isinstance(res, ToolOutput):
                         attachments.extend(res.attachments)
                         res = res.output
@@ -2561,6 +2565,7 @@ class AsyncResponse(_BaseResponse):
                 )
             else:
                 raise ValueError("self.model must be an AsyncModel or AsyncKeyModel")
+            self._generator = telemetry.atraced(self, self._generator)
 
     async def _async_finalize(self):
         if self.conversation:
