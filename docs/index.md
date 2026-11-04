@@ -140,6 +140,7 @@ embeddings/index
 plugins/index
 python-api
 logging
+telemetry
 related-tools
 help
 contributing
