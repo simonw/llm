@@ -301,7 +301,7 @@ def generate_image(prompt: str) -> llm.ToolOutput:
         output="Image generated successfully",
         attachments=[llm.Attachment(
             content=image_content,
-            mimetype="image/png"
+            type="image/png"
         )],
     )
 ```
