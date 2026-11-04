@@ -1055,6 +1055,47 @@ def test_tools_list_prepare_toolbox():
         plugins.pm.unregister(name="DynamicToolboxPlugin")
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_toolbox_multiline_configuration(tmp_path, newline):
+    directory = tmp_path / "files"
+    directory.mkdir()
+    (directory / "example.txt").write_text("example", encoding="utf-8")
+    spec = "Filesystem({})".format(json.dumps({"path": str(directory)}, indent=2))
+    try:
+        plugins.pm.register(ToolboxPlugin(), name="ToolboxPlugin")
+        result = CliRunner().invoke(
+            cli.cli,
+            [
+                "prompt",
+                "-T",
+                spec.replace("\n", newline),
+                json.dumps({"tool_calls": [{"name": "Filesystem_list_files"}]}),
+                "-m",
+                "echo",
+                "--no-log",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # The echo model emits one JSON document per turn.
+        decoder = json.JSONDecoder()
+        responses = []
+        output = result.output.strip()
+        while output:
+            response, end = decoder.raw_decode(output)
+            responses.append(response)
+            output = output[end:].lstrip()
+        assert len(responses) == 2
+        assert responses[1]["tool_results"] == [
+            {
+                "name": "Filesystem_list_files",
+                "output": json.dumps([str(directory / "example.txt")]),
+                "tool_call_id": ANY,
+            }
+        ]
+    finally:
+        plugins.pm.unregister(name="ToolboxPlugin")
+
+
 def test_register_toolbox_fails_on_bad_class():
     class BadTools:
         def bad(self):
