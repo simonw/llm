@@ -2640,7 +2640,10 @@ def templates_edit(name):
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
     click.edit(filename=str(path))
     # Validate that template
-    load_template(name)
+    try:
+        load_template(name)
+    except LoadTemplateError as ex:
+        raise click.ClickException(str(ex))
 
 
 @templates.command(name="path")
