@@ -645,7 +645,7 @@ Usage: llm schemas dsl [OPTIONS] INPUT
 
   Convert LLM's schema DSL to a JSON schema
 
-      llm schema dsl 'name, age int, bio: their bio'
+      llm schemas dsl 'name, age int, bio: their bio'
 
 Options:
   --multi     Wrap in an array
