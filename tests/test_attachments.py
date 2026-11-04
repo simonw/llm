@@ -63,6 +63,34 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert part_attachment["attachment_id"] == attachment["id"]
 
 
+@pytest.mark.parametrize("source", ("stdin", "file"))
+def test_prompt_attachment_empty(mock_model, tmp_path, source):
+    # An empty attachment is a usage error, not a traceback:
+    # https://github.com/simonw/llm/issues/1853
+    runner = CliRunner()
+    if source == "stdin":
+        attachment, input, name = "-", b"", "stdin"
+    else:
+        path = tmp_path / "empty.bin"
+        path.write_bytes(b"")
+        attachment, input, name = str(path), None, str(path)
+    result = runner.invoke(
+        cli.cli,
+        ["prompt", "-m", "mock", "describe file", "-a", attachment],
+        input=input,
+    )
+    assert result.exit_code == 2, result.output
+    assert f"Could not determine mimetype of {name}" in result.output
+    assert mock_model.history == []
+
+
+def test_mimetype_of_empty_content(tmp_path):
+    empty = tmp_path / "empty.bin"
+    empty.write_bytes(b"")
+    assert llm.utils.mimetype_from_string(b"") is None
+    assert llm.utils.mimetype_from_path(str(empty)) is None
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":
