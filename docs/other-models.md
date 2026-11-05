@@ -208,7 +208,7 @@ The other options correspond to keys in the YAML file:
 
 Adding a model with an ID that is already in the file is an error. Pass `--replace` to overwrite that record instead.
 
-You can also edit the file by hand. `llm openai endpoint path` outputs its location, and `add` appends to the end of the file without rewriting your existing records, so comments and formatting are preserved. `--replace` and `remove` do rewrite the file, which drops any comments.
+You can also edit the file by hand. `llm openai endpoint path` outputs its location, and `add` appends to the end of the file without rewriting your existing records, so comments and formatting are preserved. `--replace` and `remove` do rewrite the file, which drops any comments, and so does `add` when the file holds a flow-style list such as the `[]` that `remove` leaves behind.
 
 Having configured the model like this, run `llm models --options -m MODEL_ID` to check that it installed correctly. You can then run prompts against it like so:
 

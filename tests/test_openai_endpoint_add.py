@@ -256,6 +256,32 @@ def test_endpoint_remove(user_path):
         llm.get_model("orca")
 
 
+def test_endpoint_add_after_removing_last_model(user_path):
+    _invoke("add", "http://localhost:8080", "-m", "orca")
+    _invoke("remove", "orca")
+    result = _invoke("add", "http://localhost:8080", "-m", "other")
+    assert result.exit_code == 0, result.output
+    assert _read_yaml(user_path) == [
+        {
+            "model_id": "other",
+            "model_name": "other",
+            "api_base": "http://localhost:8080",
+        }
+    ]
+    assert llm.get_model("other").model_name == "other"
+
+
+def test_endpoint_add_to_flow_style_list(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text("[{model_id: first, model_name: first}]\n", "utf-8")
+    result = _invoke("add", "http://localhost:8080", "-m", "second")
+    assert result.exit_code == 0, result.output
+    assert [record["model_id"] for record in _read_yaml(user_path)] == [
+        "first",
+        "second",
+    ]
+
+
 def test_endpoint_path(user_path):
     result = _invoke("path")
     assert result.output == f"{user_path / 'extra-openai-models.yaml'}\n"

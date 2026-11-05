@@ -87,6 +87,12 @@ def _append_extra_model(path, record):
     if not existing.strip():
         _write_extra_models(path, [record])
         return
+    node = yaml.compose(existing)
+    if node is not None and node.flow_style:
+        # A flow-style list such as the "[]" left by removing the last
+        # model cannot take an appended block item, so rewrite the file
+        _write_extra_models(path, load_extra_models(path) + [record])
+        return
     if not existing.endswith("\n"):
         existing += "\n"
     path.write_text(existing + text, "utf-8")
