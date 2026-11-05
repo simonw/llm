@@ -85,7 +85,8 @@ def test_embed_output_format(tmpdir, format_, expected, scenario):
 
 @pytest.mark.parametrize("format_", ("json", "base64", "hex", "blob"))
 def test_embed_output_format_with_collection(user_path, format_):
-    # Storing in a collection with --format prints the same embedding as without one
+    # With a collection, --format prints the stored 32-bit float embedding, which for
+    # embed-demo's whole numbers is the same as the output without a collection
     runner = CliRunner()
     options = ["--format", format_, "-m", "embed-demo", "-c", "hello world"]
     expected = runner.invoke(cli, ["embed"] + options)
