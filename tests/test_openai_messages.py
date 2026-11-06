@@ -524,6 +524,156 @@ class TestAsyncStreamingExecuteYieldsStreamEvents:
         assert "".join(e.chunk for e in events) == "Hello"
 
 
+def _unindexed_parallel_tool_calls_stream():
+    """Gemini's OpenAI-compatible API omits tool_calls[].index and sends
+    each parallel call whole in its own chunk, finishing with "stop"."""
+    yield _sse({"role": "assistant"})
+    for call_id, city in (("call_1", "Paris"), ("call_2", "Tokyo")):
+        yield _sse(
+            {},
+            tool_calls=[
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": json.dumps({"city": city}),
+                    },
+                }
+            ],
+        )
+    yield _sse({}, finish_reason="stop")
+    yield b"data: [DONE]\n\n"
+
+
+def _unindexed_repeated_id_tool_call_stream():
+    """No index, and the same id repeated on every argument fragment."""
+    yield _sse({"role": "assistant"})
+    for name, arguments in (("get_weather", '{"city":'), (None, '"Paris"}')):
+        function = {"arguments": arguments}
+        if name:
+            function["name"] = name
+        yield _sse({}, tool_calls=[{"id": "call_1", "function": function}])
+    yield _sse({}, finish_reason="tool_calls")
+    yield b"data: [DONE]\n\n"
+
+
+def _mixed_indexed_and_unindexed_tool_calls_stream(
+    calls=((1, "call_1", "Paris"), (None, "call_2", "Tokyo"))
+):
+    """Indexed and unindexed calls with different ids in one stream."""
+    yield _sse({"role": "assistant"})
+    for index, call_id, city in calls:
+        call = {
+            "id": call_id,
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "arguments": json.dumps({"city": city}),
+            },
+        }
+        if index is not None:
+            call["index"] = index
+        yield _sse({}, tool_calls=[call])
+    yield _sse({}, finish_reason="stop")
+    yield b"data: [DONE]\n\n"
+
+
+def _get_weather(city: str) -> str:
+    "Look up the weather."
+    return "sunny"
+
+
+class TestStreamingUnindexedToolCalls:
+    def test_parallel_calls_kept_separate(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_unindexed_parallel_tool_calls_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[_get_weather], key=API_KEY)
+        response.text()
+        assert [
+            (tc.tool_call_id, tc.name, tc.arguments) for tc in response.tool_calls()
+        ] == [
+            ("call_1", "get_weather", {"city": "Paris"}),
+            ("call_2", "get_weather", {"city": "Tokyo"}),
+        ]
+
+    def test_repeated_id_continues_same_call(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_unindexed_repeated_id_tool_call_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[_get_weather], key=API_KEY)
+        response.text()
+        assert [
+            (tc.tool_call_id, tc.name, tc.arguments) for tc in response.tool_calls()
+        ] == [("call_1", "get_weather", {"city": "Paris"})]
+
+    def test_unindexed_call_does_not_reuse_taken_index(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_mixed_indexed_and_unindexed_tool_calls_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[_get_weather], key=API_KEY)
+        response.text()
+        assert [
+            (tc.tool_call_id, tc.name, tc.arguments) for tc in response.tool_calls()
+        ] == [
+            ("call_1", "get_weather", {"city": "Paris"}),
+            ("call_2", "get_weather", {"city": "Tokyo"}),
+        ]
+
+    def test_indexed_call_does_not_reuse_unindexed_key(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                _mixed_indexed_and_unindexed_tool_calls_stream(
+                    ((None, "call_1", "Paris"), (0, "call_2", "Tokyo"))
+                )
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[_get_weather], key=API_KEY)
+        response.text()
+        assert [
+            (tc.tool_call_id, tc.name, tc.arguments) for tc in response.tool_calls()
+        ] == [
+            ("call_1", "get_weather", {"city": "Paris"}),
+            ("call_2", "get_weather", {"city": "Tokyo"}),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_async_parallel_calls_kept_separate(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_unindexed_parallel_tool_calls_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_async_model("gpt-4o-mini")
+        response = model.prompt("weather?", tools=[_get_weather], key=API_KEY)
+        await response.text()
+        assert [
+            (tc.tool_call_id, tc.name, tc.arguments)
+            for tc in await response.tool_calls()
+        ] == [
+            ("call_1", "get_weather", {"city": "Paris"}),
+            ("call_2", "get_weather", {"city": "Tokyo"}),
+        ]
+
+
 def _text_stream_with_reasoning_usage(reasoning_tokens):
     """Stream with usage in the final chunk reporting reasoning_tokens."""
     yield _sse({"role": "assistant", "content": ""})
