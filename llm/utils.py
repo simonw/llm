@@ -1,3 +1,4 @@
+import codecs
 import hashlib
 import itertools
 import json
@@ -95,9 +96,11 @@ def remove_dict_none_values(d):
 
 class _LogResponse(httpx2.Response):
     def iter_bytes(self, *args, **kwargs):
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         for chunk in super().iter_bytes(*args, **kwargs):
-            click.echo(chunk.decode(), err=True)
+            click.echo(decoder.decode(chunk), nl=False, err=True)
             yield chunk
+        click.echo(decoder.decode(b"", final=True), err=True)
 
 
 class _LogTransport(httpx2.BaseTransport):
