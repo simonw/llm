@@ -179,6 +179,7 @@ For everything else, see [the llm tag](https://simonwillison.net/tags/llm/) on m
     * [Turning SQLite logging on and off](https://llm.datasette.io/en/stable/setup.html#turning-sqlite-logging-on-and-off)
 * [Usage](https://llm.datasette.io/en/stable/usage.html)
   * [Executing a prompt](https://llm.datasette.io/en/stable/usage.html#executing-a-prompt)
+    * [Repeating piped input](https://llm.datasette.io/en/stable/usage.html#repeating-piped-input)
     * [Model options](https://llm.datasette.io/en/stable/usage.html#model-options)
     * [Attachments](https://llm.datasette.io/en/stable/usage.html#attachments)
     * [System prompts](https://llm.datasette.io/en/stable/usage.html#system-prompts)
