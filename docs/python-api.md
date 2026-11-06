@@ -77,7 +77,18 @@ response = model.prompt(
     ]
 )
 ```
-Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly.
+Use `llm.Attachment(content=b"binary image content here")` to pass binary content directly. You may optionqlly specify a content type - if tou do not it will be detected automatically:
+
+```python
+image = llm.Attachment(
+    content=b"...",
+    type="image/png"
+)
+response = model.prompt(
+    "extract text",
+    attachments=[image]
+)
+```
 
 ```{eval-rst}
 .. autoclass:: llm.Attachment
