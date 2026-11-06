@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import sys
 from unittest.mock import ANY
@@ -20,6 +22,135 @@ TINY_PNG = (
 )
 
 TINY_WAV = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00"
+
+
+@pytest.fixture(params=["content", "path", "url"])
+def legacy_attachment_history(request, db_factory, tmp_path):
+    from llm.migrations import migrate
+
+    db_path = tmp_path / "legacy-attachments.db"
+    db = db_factory(str(db_path))
+    migrate(db)
+    conversation_id = "01aaaaaaaaaaaaaaaaaaaaaaaa"
+    image_response_id = "01cccccccccccccccccccccccc"
+    db["conversations"].insert(
+        {"id": conversation_id, "name": "Legacy images", "model": "mock"}
+    )
+    for response_id, prompt, response in (
+        ("01bbbbbbbbbbbbbbbbbbbbbbbb", "Hello", "Hi"),
+        (image_response_id, "Describe these images", "Two images"),
+    ):
+        db["responses"].insert(
+            {
+                "id": response_id,
+                "model": "mock",
+                "prompt": prompt,
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": response,
+                "response_json": None,
+                "conversation_id": conversation_id,
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00+00:00",
+                "schema_id": None,
+            }
+        )
+
+    if request.param == "path":
+        path = tmp_path / "tiny.png"
+        path.write_bytes(TINY_PNG)
+        primary = llm.Attachment(type="image/png", path=str(path))
+    elif request.param == "url":
+        primary = llm.Attachment(type="image/png", url="https://example.com/tiny.png")
+    else:
+        primary = llm.Attachment(type="image/png", content=TINY_PNG)
+    attachments = [
+        primary,
+        llm.Attachment(type="image/jpeg", url="https://example.com/second.jpg"),
+    ]
+    # Insert in reverse order so the test exercises prompt_attachments.order.
+    for order in reversed(range(len(attachments))):
+        attachment = attachments[order]
+        db["attachments"].insert(
+            {
+                "id": attachment.id(),
+                "type": attachment.type,
+                "path": attachment.path,
+                "url": attachment.url,
+                "content": attachment.content,
+            }
+        )
+        db["prompt_attachments"].insert(
+            {
+                "response_id": image_response_id,
+                "attachment_id": attachment.id(),
+                "order": order,
+            }
+        )
+    return db, db_path, conversation_id, image_response_id, attachments
+
+
+@pytest.mark.parametrize("async_", [False, True], ids=["sync", "async"])
+def test_legacy_response_restores_prompt_attachments(
+    legacy_attachment_history, mock_model, async_mock_model, async_
+):
+    db, _, _, response_id, attachments = legacy_attachment_history
+    before = {table: list(db[table].rows) for table in db.table_names()}
+    response_class = llm.AsyncResponse if async_ else llm.Response
+    response = response_class.from_row(db, db["responses"].get(response_id))
+
+    # Keep the legacy response attribute, and restore the canonical prompt too.
+    assert response.attachments == attachments
+    assert response.prompt.attachments == attachments
+    expected = llm.user("Describe these images", *attachments)
+    assert response.prompt.messages == [expected]
+    # Both content bytes and path/URL references survive JSON serialization.
+    serialized = json.loads(json.dumps(response.to_dict()))
+    assert serialized["prompt"]["messages"] == [expected.to_dict()]
+    round_trip = llm.Message.from_dict(serialized["prompt"]["messages"][0])
+    assert round_trip.to_dict() == expected.to_dict()
+    primary = round_trip.parts[1].attachment
+    if not primary.url:
+        assert primary.content_bytes() == TINY_PNG
+    assert {table: list(db[table].rows) for table in db.table_names()} == before
+
+
+@pytest.mark.parametrize("async_", [False, True], ids=["sync", "async"])
+def test_legacy_continuation_serializes_ordered_attachments(
+    legacy_attachment_history, mock_model, async_mock_model, async_
+):
+    from llm.default_plugins.openai_models import Chat
+
+    db, db_path, conversation_id, _, attachments = legacy_attachment_history
+    before = {table: list(db[table].rows) for table in db.table_names()}
+    conversation = cli.load_conversation(
+        conversation_id, async_=async_, database=str(db_path)
+    )
+    response = conversation.prompt("What colors are they?")
+    # Render the actual continued chain through the provider adapter, without
+    # executing the model or fetching the URL attachments.
+    messages = Chat("offline-vision", vision=True).build_messages(
+        response.prompt, conversation
+    )
+    primary_url = attachments[0].url or (
+        "data:image/png;base64," + base64.b64encode(TINY_PNG).decode("ascii")
+    )
+    assert messages == [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe these images"},
+                {"type": "image_url", "image_url": {"url": primary_url}},
+                {"type": "image_url", "image_url": {"url": attachments[1].url}},
+            ],
+        },
+        {"role": "assistant", "content": "Two images"},
+        {"role": "user", "content": "What colors are they?"},
+    ]
+    assert {table: list(db[table].rows) for table in db.table_names()} == before
 
 
 @pytest.mark.parametrize(
