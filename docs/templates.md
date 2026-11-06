@@ -194,6 +194,23 @@ system_fragments:
 - https://example.com/systm-prompt.txt
 ```
 
+To store fragment text directly in a template, use an object with a `content` key.
+You can mix these inline fragments with fragment references:
+
+```yaml
+fragments:
+- content: |
+    This text is stored inside the template.
+    It does not need a separate file or URL.
+- /path/to/file.txt
+system_fragments:
+- content: Always explain your reasoning briefly.
+```
+
+Inline content is passed through literally, including `$` characters. Like other
+fragments, it is stored by its content hash when the response is logged.
+Inline fragments work with both `llm -t template-name` and `llm chat -t template-name`.
+
 (prompt-templates-options)=
 
 ### Options
