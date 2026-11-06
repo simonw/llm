@@ -2321,88 +2321,161 @@ class AsyncResponse(_BaseResponse):
         paused: list[tuple[int, PauseChain]] = []
         failures: list[tuple[int, BaseException]] = []
 
-        for idx, tc in enumerate(tool_calls_list):
-            tool: Tool | None = tools_by_name.get(tc.name)
-            exception: Exception | None = None
+        try:
+            for idx, tc in enumerate(tool_calls_list):
+                tool: Tool | None = tools_by_name.get(tc.name)
+                exception: Exception | None = None
 
-            if tool is None or not tool.implementation:
-                # Mirror the sync executor: append an error ToolResult so
-                # the provider still receives a result for every tool
-                # call. before_call fires even though the tool is
-                # unavailable.
-                if before_call:
-                    try:
-                        cb = before_call(tool, tc)
-                        if inspect.isawaitable(cb):
-                            await cb
-                    except CancelToolCall as ex:
-                        indexed_results.append(
-                            (
-                                idx,
-                                ToolResult(
-                                    name=tc.name,
-                                    output="Cancelled: " + str(ex),
-                                    tool_call_id=tc.tool_call_id,
-                                    exception=ex,
-                                ),
-                            )
-                        )
-                        continue
-                    except Exception as ex:  # noqa: BLE001
-                        failures.append((idx, ex))
-                        break
-                reason = "does not exist" if tool is None else "has no implementation"
-                msg = f'tool "{tc.name}" {reason}'
-                indexed_results.append(
-                    (
-                        idx,
-                        ToolResult(
-                            name=tc.name,
-                            output="Error: " + msg,
-                            tool_call_id=tc.tool_call_id,
-                            exception=KeyError(msg),
-                        ),
-                    )
-                )
-                continue
-
-            if inspect.iscoroutinefunction(tool.implementation):
-
-                async def run_async(tc=tc, tool=tool, idx=idx):
-                    # before_call inside the task
+                if tool is None or not tool.implementation:
+                    # Mirror the sync executor: append an error ToolResult so
+                    # the provider still receives a result for every tool
+                    # call. before_call fires even though the tool is
+                    # unavailable.
                     if before_call:
                         try:
                             cb = before_call(tool, tc)
                             if inspect.isawaitable(cb):
                                 await cb
                         except CancelToolCall as ex:
-                            return idx, ToolResult(
-                                name=tc.name,
-                                output="Cancelled: " + str(ex),
-                                tool_call_id=tc.tool_call_id,
-                                exception=ex,
+                            indexed_results.append(
+                                (
+                                    idx,
+                                    ToolResult(
+                                        name=tc.name,
+                                        output="Cancelled: " + str(ex),
+                                        tool_call_id=tc.tool_call_id,
+                                        exception=ex,
+                                    ),
+                                )
                             )
+                            continue
+                        except Exception as ex:  # noqa: BLE001
+                            failures.append((idx, ex))
+                            break
+                    reason = (
+                        "does not exist" if tool is None else "has no implementation"
+                    )
+                    msg = f'tool "{tc.name}" {reason}'
+                    indexed_results.append(
+                        (
+                            idx,
+                            ToolResult(
+                                name=tc.name,
+                                output="Error: " + msg,
+                                tool_call_id=tc.tool_call_id,
+                                exception=KeyError(msg),
+                            ),
+                        )
+                    )
+                    continue
+
+                if inspect.iscoroutinefunction(tool.implementation):
+
+                    async def run_async(tc=tc, tool=tool, idx=idx):
+                        # before_call inside the task
+                        if before_call:
+                            try:
+                                cb = before_call(tool, tc)
+                                if inspect.isawaitable(cb):
+                                    await cb
+                            except CancelToolCall as ex:
+                                return idx, ToolResult(
+                                    name=tc.name,
+                                    output="Cancelled: " + str(ex),
+                                    tool_call_id=tc.tool_call_id,
+                                    exception=ex,
+                                )
+
+                        exception = None
+                        attachments = []
+
+                        try:
+                            result = await tool.implementation(
+                                **_implementation_arguments(tool, tc)
+                            )
+                            if isinstance(result, ToolOutput):
+                                attachments.extend(result.attachments)
+                                result = result.output
+                            output = (
+                                result
+                                if isinstance(result, str)
+                                else json.dumps(result, default=repr)
+                            )
+                        except PauseChain as ex:
+                            # Propagates out of the task; collected after
+                            # the gather so siblings finish first.
+                            ex.tool_call = tc
+                            raise
+                        except Exception as ex:  # noqa: BLE001
+                            output = f"Error: {ex}"
+                            exception = ex
+
+                        tr = ToolResult(
+                            name=tc.name,
+                            output=output,
+                            attachments=attachments,
+                            tool_call_id=tc.tool_call_id,
+                            instance=_get_instance(tool.implementation),
+                            exception=exception,
+                        )
+
+                        # after_call inside the task
+                        if tool is not None and after_call:
+                            cb2 = after_call(tool, tc, tr)
+                            if inspect.isawaitable(cb2):
+                                await cb2
+
+                        return idx, tr
+
+                    async_tasks.append(asyncio.create_task(run_async()))
+                    async_task_indexes.append(idx)
+
+                else:
+                    # Sync implementation: do hooks and call inline
+                    if before_call:
+                        try:
+                            cb = before_call(tool, tc)
+                            if inspect.isawaitable(cb):
+                                await cb
+                        except CancelToolCall as ex:
+                            indexed_results.append(
+                                (
+                                    idx,
+                                    ToolResult(
+                                        name=tc.name,
+                                        output="Cancelled: " + str(ex),
+                                        tool_call_id=tc.tool_call_id,
+                                        exception=ex,
+                                    ),
+                                )
+                            )
+                            continue
+                        except Exception as ex:  # noqa: BLE001
+                            failures.append((idx, ex))
+                            break
 
                     exception = None
                     attachments = []
 
                     try:
-                        result = await tool.implementation(
-                            **_implementation_arguments(tool, tc)
-                        )
-                        if isinstance(result, ToolOutput):
-                            attachments.extend(result.attachments)
-                            result = result.output
+                        res = tool.implementation(**_implementation_arguments(tool, tc))
+                        if inspect.isawaitable(res):
+                            res = await res
+                        if isinstance(res, ToolOutput):
+                            attachments.extend(res.attachments)
+                            res = res.output
                         output = (
-                            result
-                            if isinstance(result, str)
-                            else json.dumps(result, default=repr)
+                            res
+                            if isinstance(res, str)
+                            else json.dumps(res, default=repr)
                         )
                     except PauseChain as ex:
-                        # Propagates out of the task; collected after
-                        # the gather so siblings finish first.
+                        # Inline execution stops here; later calls never
+                        # start. Tasks already started are still awaited
+                        # below before the pause propagates.
                         ex.tool_call = tc
-                        raise
+                        paused.append((idx, ex))
+                        break
                     except Exception as ex:  # noqa: BLE001
                         output = f"Error: {ex}"
                         exception = ex
@@ -2416,96 +2489,35 @@ class AsyncResponse(_BaseResponse):
                         exception=exception,
                     )
 
-                    # after_call inside the task
-                    if tool is not None and after_call:
-                        cb2 = after_call(tool, tc, tr)
-                        if inspect.isawaitable(cb2):
-                            await cb2
-
-                    return idx, tr
-
-                async_tasks.append(asyncio.create_task(run_async()))
-                async_task_indexes.append(idx)
-
-            else:
-                # Sync implementation: do hooks and call inline
-                if before_call:
                     try:
-                        cb = before_call(tool, tc)
-                        if inspect.isawaitable(cb):
-                            await cb
-                    except CancelToolCall as ex:
-                        indexed_results.append(
-                            (
-                                idx,
-                                ToolResult(
-                                    name=tc.name,
-                                    output="Cancelled: " + str(ex),
-                                    tool_call_id=tc.tool_call_id,
-                                    exception=ex,
-                                ),
-                            )
-                        )
-                        continue
+                        if after_call:
+                            cb2 = after_call(tool, tc, tr)
+                            if inspect.isawaitable(cb2):
+                                await cb2
                     except Exception as ex:  # noqa: BLE001
                         failures.append((idx, ex))
                         break
 
-                exception = None
-                attachments = []
+                    indexed_results.append((idx, tr))
 
-                try:
-                    res = tool.implementation(**_implementation_arguments(tool, tc))
-                    if inspect.isawaitable(res):
-                        res = await res
-                    if isinstance(res, ToolOutput):
-                        attachments.extend(res.attachments)
-                        res = res.output
-                    output = (
-                        res if isinstance(res, str) else json.dumps(res, default=repr)
-                    )
-                except PauseChain as ex:
-                    # Inline execution stops here; later calls never
-                    # start. Tasks already started are still awaited
-                    # below before the pause propagates.
-                    ex.tool_call = tc
-                    paused.append((idx, ex))
-                    break
-                except Exception as ex:  # noqa: BLE001
-                    output = f"Error: {ex}"
-                    exception = ex
-
-                tr = ToolResult(
-                    name=tc.name,
-                    output=output,
-                    attachments=attachments,
-                    tool_call_id=tc.tool_call_id,
-                    instance=_get_instance(tool.implementation),
-                    exception=exception,
-                )
-
-                try:
-                    if after_call:
-                        cb2 = after_call(tool, tc, tr)
-                        if inspect.isawaitable(cb2):
-                            await cb2
-                except Exception as ex:  # noqa: BLE001
-                    failures.append((idx, ex))
-                    break
-
-                indexed_results.append((idx, tr))
-
-        # Await every task that was started; return_exceptions so a pause
-        # or hook failure in one task cannot orphan its siblings mid-flight.
-        if async_tasks:
-            outcomes = await asyncio.gather(*async_tasks, return_exceptions=True)
-            for task_idx, outcome in zip(async_task_indexes, outcomes):
-                if isinstance(outcome, PauseChain):
-                    paused.append((task_idx, outcome))
-                elif isinstance(outcome, BaseException):
-                    failures.append((task_idx, outcome))
-                else:
-                    indexed_results.append(outcome)
+            # Await every task that was started; return_exceptions so a pause
+            # or hook failure in one task cannot orphan its siblings mid-flight.
+            if async_tasks:
+                outcomes = await asyncio.gather(*async_tasks, return_exceptions=True)
+                for task_idx, outcome in zip(async_task_indexes, outcomes):
+                    if isinstance(outcome, PauseChain):
+                        paused.append((task_idx, outcome))
+                    elif isinstance(outcome, BaseException):
+                        failures.append((task_idx, outcome))
+                    else:
+                        indexed_results.append(outcome)
+        except asyncio.CancelledError:
+            # Cancellation can arrive during an inline tool or hook, before
+            # gather owns the tasks. Do not leave those siblings running.
+            for task in async_tasks:
+                task.cancel()
+            await asyncio.gather(*async_tasks, return_exceptions=True)
+            raise
 
         # Reorder by original index
         indexed_results.sort(key=lambda x: x[0])
