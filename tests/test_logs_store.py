@@ -558,15 +558,74 @@ class TestLogResponse:
             "Hello",
         ]
 
-    def test_logging_the_same_response_twice_is_idempotent(self, store, mock_model):
+    @pytest.mark.parametrize("new_store", [False, True])
+    def test_logging_the_same_response_twice_is_idempotent(
+        self, store, mock_model, new_store
+    ):
         # A turn is identified by the response it records, so re-logging
         # one updates it in place rather than duplicating the event.
         mock_model.enqueue(["Hello"])
         response = mock_model.prompt("Hi")
         response.text()
-        assert store.log(response) == store.log(response)
+        turn_id = store.log(response)
+        thread_id = store.db["turns"].get(turn_id)["thread_id"]
+        thread = store.db["threads"].get(thread_id)
+        logger = LogStore(store.db) if new_store else store
+        assert logger.log(response) == turn_id
         assert store.db["messages"].count == 2
         assert store.db["turns"].count == 1
+        assert store.db["threads"].count == 1
+        assert store.db["turns"].get(turn_id)["thread_id"] == thread_id
+        assert store.db["threads"].get(thread_id) == thread
+
+    def test_distinct_responses_with_identical_messages_get_separate_threads(
+        self, store, mock_model
+    ):
+        for _ in range(2):
+            mock_model.enqueue(["Hello"])
+            response = mock_model.prompt("Hi")
+            response.text()
+            store.log(response)
+        assert store.db["messages"].count == 2
+        assert store.db["turns"].count == 2
+        assert store.db["threads"].count == 2
+
+    def test_relogging_the_current_turn_can_refresh_the_thread_tip(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        store.log(response)
+        thread_id = store.db["turns"].get(response.id)["thread_id"]
+        previous_tip = store.thread_tip(thread_id)
+        data = response.to_dict()
+        data["messages"] = [llm.assistant("Updated reply").to_dict()]
+        updated = llm.Response.from_dict(data)
+        store.log(updated)
+        assert store.db["threads"].count == 1
+        assert store.db["turns"].count == 1
+        assert store.thread_tip(thread_id) != previous_tip
+        assert [
+            message.parts[0].text for message in store.thread_messages(thread_id)
+        ] == ["Hi", "Updated reply"]
+
+    def test_same_response_logged_to_different_databases_gets_separate_threads(
+        self, store, db_factory, mock_model
+    ):
+        mock_model.enqueue(["Hello"])
+        response = mock_model.prompt("Hi")
+        response.text()
+        other = LogStore(db_factory(memory=True))
+        thread_ids = []
+        for logger in (store, other):
+            logger.log(response)
+            thread_id = logger.db["turns"].get(response.id)["thread_id"]
+            logger.log(response)
+            assert logger.db["threads"].count == 1
+            assert logger.db["turns"].get(response.id)["thread_id"] == thread_id
+            thread_ids.append(thread_id)
+        assert thread_ids[0] != thread_ids[1]
 
 
 # ---- conversations map onto threads ----------------------------------
@@ -615,6 +674,36 @@ class TestConversationThreads:
         assert store.db["threads"].count == 1
         assert len(store.thread_messages(thread_id)) == 2
 
+    @pytest.mark.parametrize("with_conversation", [False, True])
+    def test_relogging_can_move_to_an_explicit_thread(
+        self, store, mock_model, with_conversation
+    ):
+        model = mock_model.conversation() if with_conversation else mock_model
+        mock_model.enqueue(["Hello"])
+        response = model.prompt("Hi")
+        response.text()
+        store.log(response)
+        thread_id = store.create_thread(name="Move here")
+        store.log(response, thread_id=thread_id)
+        assert store.db["turns"].count == 1
+        assert store.db["turns"].get(response.id)["thread_id"] == thread_id
+        assert len(store.thread_messages(thread_id)) == 2
+        assert store.db["threads"].get(thread_id)["name"] == "Move here"
+
+    def test_relogging_prefers_the_conversation_to_the_previous_thread(
+        self, store, mock_model
+    ):
+        conversation = mock_model.conversation()
+        mock_model.enqueue(["Hello"])
+        response = conversation.prompt("Hi")
+        response.text()
+        thread_id = store.create_thread()
+        store.log(response, thread_id=thread_id)
+        store.log(response)
+        assert store.db["turns"].count == 1
+        assert store.db["turns"].get(response.id)["thread_id"] == conversation.id
+        assert len(store.thread_messages(conversation.id)) == 2
+
 
 # ---- CLI integration -------------------------------------------------
 
@@ -659,6 +748,56 @@ class TestCliWrites:
 
 
 class TestCliContinuation:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("async_", [False, True])
+    @pytest.mark.parametrize("reopen", [False, True])
+    async def test_relogged_standalone_response_can_still_be_continued(
+        self,
+        cli_store,
+        db_factory,
+        user_path,
+        mock_model,
+        async_mock_model,
+        async_,
+        reopen,
+    ):
+        model = async_mock_model if async_ else mock_model
+        model.enqueue(["First reply"])
+        response = model.prompt("First")
+        if async_:
+            await response.text()
+        else:
+            response.text()
+        response.log_to_db(cli_store.db)
+        thread_id = cli_store.db["turns"].get(response.id)["thread_id"]
+        if reopen:
+            cli_store.db.close()
+            cli_store = LogStore(db_factory(str(user_path / "logs.db")))
+        response.log_to_db(cli_store.db)
+
+        mock_model.enqueue(["Second reply"])
+        result = run("-m", "mock", "Second", "--cid", thread_id)
+        assert "Second reply" in result.output
+        assert cli_store.db["threads"].count == 1
+        assert cli_store.db["turns"].count == 2
+        assert [
+            message.parts[0].text for message in cli_store.thread_messages(thread_id)
+        ] == ["First", "First reply", "Second", "Second reply"]
+
+        # Re-logging the first response after continuation must not rewind
+        # the thread and hide its later turns from the next prompt.
+        response.log_to_db(cli_store.db)
+        mock_model.enqueue(["Third reply"])
+        run("-m", "mock", "Third", "--cid", thread_id)
+        assert [
+            message.parts[0].text for message in mock_model.history[-1][0].messages
+        ] == ["First", "First reply", "Second", "Second reply", "Third"]
+        assert cli_store.db["threads"].count == 1
+        assert cli_store.db["turns"].count == 3
+        assert [
+            message.parts[0].text for message in cli_store.thread_messages(thread_id)
+        ] == ["First", "First reply", "Second", "Second reply", "Third", "Third reply"]
+
     def test_continuing_extends_the_same_thread(self, cli_store):
         run("-m", "echo", "First")
         run("-m", "echo", "Second", "-c")
@@ -1014,10 +1153,42 @@ class TestAtomicWrites:
         store.log(response)
         assert store.db.conn.in_transaction
         assert store.db["turns"].count == 1
+        rolled_back_thread = store.db["turns"].get(response.id)["thread_id"]
         store.db.conn.rollback()
         assert store.db["turns"].count == 0
         assert store.db["messages"].count == 0
         assert store.db["threads"].count == 0
+        store.log(response)
+        assert store.db["threads"].count == 1
+        assert store.db["turns"].get(response.id)["thread_id"] != rolled_back_thread
+
+    @pytest.mark.parametrize("outer_transaction", [False, True])
+    def test_failed_relog_preserves_the_existing_turn_and_thread(
+        self, store, mock_model, monkeypatch, outer_transaction
+    ):
+        mock_model.enqueue(["reply"])
+        response = mock_model.prompt("hello")
+        response.text()
+        store.log(response)
+        turn = store.db["turns"].get(response.id)
+        if outer_transaction:
+            store.db.conn.execute("BEGIN")
+            store.create_thread(name="caller's work")
+        threads = list(store.db["threads"].rows)
+        response.input_tokens = 99
+        with monkeypatch.context() as patch:
+            patch.setattr("llm.logs.TURN_SEARCH_INSERT_SQL", "this is not sql")
+            with pytest.raises(sqlite3.OperationalError):
+                store.log(response)
+        assert store.db.conn.in_transaction == outer_transaction
+        assert store.db["turns"].get(response.id) == turn
+        assert list(store.db["threads"].rows) == threads
+        store.log(response)
+        assert store.db["turns"].get(response.id)["input_tokens"] == 99
+        assert store.db["turns"].get(response.id)["thread_id"] == turn["thread_id"]
+        assert list(store.db["threads"].rows) == threads
+        if outer_transaction:
+            store.db.conn.rollback()
 
     def test_failed_log_preserves_outer_transaction(
         self, store, mock_model, monkeypatch

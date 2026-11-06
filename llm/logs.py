@@ -475,18 +475,43 @@ class LogStore:
         return turn_id
 
     def _log_in_transaction(self, response, thread_id: str | None) -> str:
+        update_thread_tip = True
         if thread_id is None:
             conversation = getattr(response, "conversation", None)
+            existing_turn = None
+            if conversation:
+                thread_id = conversation.id
+            else:
+                # Re-logging a standalone response must not move its turn
+                # to a new thread, leaving the original uncontinuable.
+                existing_turn = next(
+                    self.db.query(
+                        "select thread_id, tip_message_hash from turns where id = ?",
+                        [response.id],
+                    ),
+                    None,
+                )
+                thread_id = existing_turn["thread_id"] if existing_turn else None
+                if thread_id is None:
+                    thread_id = str(monotonic_ulid()).lower()
             # A response logged outside any conversation still gets a
             # thread of its own, so `llm -c` and `llm logs` can always
             # find it - the same guarantee the conversations table used
             # to provide.
             thread_id = self.ensure_thread(
-                conversation.id if conversation else str(monotonic_ulid()).lower(),
+                thread_id,
                 name=_conversation_name(
                     response.prompt.prompt or response.prompt.system or ""
                 ),
             )
+            if existing_turn:
+                # A later response may already have advanced this thread.
+                # Refresh the old turn without rewinding that history.
+                current_tip = self.thread_tip(thread_id)
+                update_thread_tip = current_tip in (
+                    None,
+                    existing_turn["tip_message_hash"],
+                )
 
         prompt_fragments = list(response.prompt.fragments or [])
         system_fragments = list(response.prompt.system_fragments or [])
@@ -625,7 +650,7 @@ class LogStore:
         # fragment content back into the searchable text.
         self.db["turn_search"].delete_where("turn_id = ?", [turn_id])
         self.db.execute(TURN_SEARCH_INSERT_SQL, {"turn_id": turn_id})
-        if thread_id is not None:
+        if thread_id is not None and update_thread_tip:
             self.db["threads"].update(thread_id, {"tip_message_hash": tip})
         return turn_id
 
