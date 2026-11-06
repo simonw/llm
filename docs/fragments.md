@@ -58,6 +58,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!attach <url-or-path>' to attach a file
 > Explain this document to me
 ```
 
@@ -69,6 +70,7 @@ Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 Type '!edit' to open your default editor and modify the prompt.
 Type '!fragment <my_fragment> [<another_fragment> ...]' to insert one or more fragments
+Type '!attach <url-or-path>' to attach a file
 > !fragment https://llm.datasette.io/en/stable/fragments.html
 ```
 
