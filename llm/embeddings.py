@@ -76,6 +76,7 @@ class Collection:
                     model = llm.get_embedding_model(model_id)
                     self._model = model
                 model_id = cast(EmbeddingModel, model).model_id
+                self.model_id = model_id
                 self.id = (
                     cast(Table, self.db["collections"])
                     .insert(
