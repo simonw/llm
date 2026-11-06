@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import itertools
 import json
@@ -290,19 +291,26 @@ def resolve_schema_input(db, schema_input, load_template):
             return json.loads(schema_input)
         except ValueError:
             pass
+    # Check files before DSL, since filenames can contain spaces and commas.
+    path = pathlib.Path(schema_input)
+    try:
+        path_exists = path.exists()
+    except OSError as e:
+        if e.errno != errno.ENAMETOOLONG:
+            raise
+        # A valid schema DSL string may be too long to be a filename.
+        path_exists = False
+    if path_exists:
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            raise click.ClickException("Schema file contained invalid JSON")
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
         try:
             return schema_dsl(schema_input)
         except ValueError as e:
             raise click.BadParameter(str(e)) from None
-    # Is it a file on disk?
-    path = pathlib.Path(schema_input)
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except ValueError:
-            raise click.ClickException("Schema file contained invalid JSON")
     # Last attempt: is it an ID in the DB?
     try:
         row = db["schemas"].get(schema_input)
