@@ -223,6 +223,41 @@ def test_chat_basic(mock_model, logs_db):
     ]
 
 
+def test_chat_eof_exits_cleanly(mock_model, logs_db):
+    mock_model.enqueue(["one world"])
+
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+        input="Hi\n",
+    )
+
+    assert result.exit_code == 0, (
+        f"Exit code: {result.exit_code}\n"
+        f"Output: {result.output}\n"
+        f"Exception: {result.exception!r}"
+    )
+    assert "one world" in result.stdout
+    assert "Aborted!" not in result.output
+
+
+def test_chat_ctrl_c_is_not_treated_as_eof(mock_model, monkeypatch):
+    def raise_keyboard_interrupt(prompt_func, prompt, err):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(
+        llm.cli.click.termui, "_readline_prompt", raise_keyboard_interrupt
+    )
+
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-m", "mock"],
+    )
+
+    assert result.exit_code == 1
+    assert "Aborted!" in result.output
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_respects_logs_off(mock_model, logs_db):
     runner = CliRunner()
