@@ -183,9 +183,12 @@ def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
     Extracts and returns Markdown fenced code block found in the given text.
 
     The function handles fenced code blocks that:
-    - Use at least three backticks (`).
-    - May include a language tag immediately after the opening backticks.
-    - Use more than three backticks as long as the closing fence has the same number.
+    - Use at least three backticks (`) or tildes (~).
+    - May include a language tag immediately after the opening fence.
+    - Use a longer fence as long as the closing fence has the same length.
+    - Are indented, for example inside a Markdown list item. The closing
+      fence must have the same indentation, which is removed from the
+      returned code.
 
     If no fenced code block is found, the function returns None.
 
@@ -197,22 +200,30 @@ def extract_fenced_code_block(text: str, last: bool = False) -> str | None:
         Optional[str]: The content of the fenced code block, or None if not found.
     """
     # Regex pattern to match fenced code blocks
-    # - ^ or \n ensures that the fence is at the start of a line
-    # - (`{3,}) captures the opening backticks (at least three)
+    # - ^ ensures that the fence is at the start of a line
+    # - ([ ]*) captures optional indentation before the fence
+    # - (`{3,}|~{3,}) captures the opening backticks or tildes (at least three)
     # - (\w+)? optionally captures the language tag
     # - \r?\n matches the newline after the opening fence
     # - (.*?) non-greedy match for the code block content
-    # - (?P=fence) ensures that the closing fence has the same number of backticks
+    # - (?P=indent)(?P=fence) ensures that the closing fence has the same
+    #   indentation and the same characters as the opening fence
     # - [ ]* allows for optional spaces between the closing fence and newline
     # - (?=\r?\n|$) ensures that the closing fence is followed by a newline or end of string
     pattern = re.compile(
-        r"""(?m)^(?P<fence>`{3,})(?P<lang>\w+)?\r?\n(?P<code>.*?)^(?P=fence)[ ]*(?=\r?\n|$)""",
+        r"""(?m)^(?P<indent>[ ]*)(?P<fence>`{3,}|~{3,})(?P<lang>\w+)?\r?\n"""
+        r"""(?P<code>.*?)^(?P=indent)(?P=fence)[ ]*(?=\r?\n|$)""",
         re.DOTALL,
     )
     matches = list(pattern.finditer(text))
     if matches:
         match = matches[-1] if last else matches[0]
-        return match.group("code")
+        code = match.group("code")
+        indent = match.group("indent")
+        if indent:
+            # Remove the fence indentation from each line of the code
+            code = re.sub(rf"(?m)^{indent}", "", code)
+        return code
     return None
 
 
