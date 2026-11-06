@@ -317,6 +317,25 @@ def test_schema_dsl_duplicate_field_name():
     assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
 
 
+def test_resolve_schema_input_long_dsl():
+    description = "A description " * 100
+    assert resolve_schema_input(None, "name: " + description, load_template=None) == {
+        "type": "object",
+        "properties": {"name": {"type": "string", "description": description.strip()}},
+        "required": ["name"],
+    }
+
+
+def test_resolve_schema_input_dsl_with_matching_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "name,age").mkdir()
+    assert resolve_schema_input(None, "name,age", load_template=None) == {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "string"}},
+        "required": ["name", "age"],
+    }
+
+
 def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
     with pytest.raises(click.BadParameter) as ex:
         resolve_schema_input(None, "name, age badtype", load_template=None)
