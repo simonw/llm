@@ -63,6 +63,40 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert part_attachment["attachment_id"] == attachment["id"]
 
 
+@pytest.mark.skipif(
+    sys.platform not in ("darwin", "linux"),
+    reason="File descriptor paths only supported on macOS and Linux",
+)
+@pytest.mark.parametrize("attachment_option", ("-a", "--at"))
+def test_prompt_attachment_from_pipe(mock_model, logs_db, attachment_option):
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, TINY_PNG)
+    finally:
+        os.close(write_fd)
+    try:
+        mock_model.enqueue(["two boxes"])
+        attachment_args = [attachment_option, f"/dev/fd/{read_fd}"]
+        if attachment_option == "--at":
+            attachment_args.append("image/png")
+        result = CliRunner().invoke(
+            cli.cli,
+            ["prompt", "-m", "mock", "describe file", *attachment_args],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        assert result.output == "two boxes\n"
+        attachment = mock_model.history[0][0].attachments[0]
+        assert attachment.resolve_type() == "image/png"
+        assert attachment.content_bytes() == TINY_PNG
+        assert attachment.content_bytes() == TINY_PNG
+        stored = next(iter(logs_db["attachments"].rows))
+        assert stored["content"] == TINY_PNG
+        assert stored["path"] is None
+    finally:
+        os.close(read_fd)
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":
