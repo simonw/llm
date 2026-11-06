@@ -380,14 +380,23 @@ def resolve_attachment(value):
     path = pathlib.Path(value)
     if not path.exists():
         raise AttachmentError(f"File {value} does not exist")
-    path = path.resolve()
-
     # Try to guess type
-    mimetype = mimetype_from_path(str(path))
+    content = None
+    if path.is_fifo():
+        content = path.read_bytes()
+        mimetype = mimetype_from_string(content)
+    else:
+        path = path.resolve()
+        mimetype = mimetype_from_path(str(path))
     if mimetype is None:
         raise AttachmentError(f"Could not determine mimetype of {value}")
 
-    return Attachment(type=mimetype, path=str(path), url=None, content=None)
+    return Attachment(
+        type=mimetype,
+        path=None if content is not None else str(path),
+        url=None,
+        content=content,
+    )
 
 
 class AttachmentType(click.ParamType):
@@ -411,8 +420,11 @@ def resolve_attachment_with_type(value: str, mimetype: str) -> Attachment:
         path = pathlib.Path(value)
         if not path.exists():
             raise click.BadParameter(f"File {value} does not exist")
-        path = path.resolve()
-        attachment = Attachment(mimetype, str(path), None, None)
+        if path.is_fifo():
+            attachment = Attachment(mimetype, None, None, path.read_bytes())
+        else:
+            path = path.resolve()
+            attachment = Attachment(mimetype, str(path), None, None)
     return attachment
 
 
