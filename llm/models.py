@@ -43,6 +43,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict, create_model
 
 from .utils import (
+    MIME_TYPE_FIXES,
     Fragment,
     mimetype_from_path,
     mimetype_from_string,
@@ -96,7 +97,11 @@ class Attachment:
             with httpx2.Client(follow_redirects=True, max_redirects=3) as client:
                 response = client.head(self.url)
             response.raise_for_status()
-            return response.headers.get("content-type")
+            content_type = response.headers.get("content-type")
+            if content_type is None:
+                return None
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            return MIME_TYPE_FIXES.get(media_type, media_type)
         if self.content:
             return mimetype_from_string(self.content)
         raise ValueError("Attachment has no type and no content to derive it from")
