@@ -86,10 +86,11 @@ This should produce a working installation of that plugin.
 
 {ref}`plugins` can be used to add support for other language models, including models that can run on your own device.
 
-For example, the [llm-gpt4all](https://github.com/simonw/llm-gpt4all) plugin adds support for 17 new models that can be installed on your own machine. You can install that like so:
+For example, the [llm-ollama](https://github.com/taketwo/llm-ollama) plugin adds support for models running on your own machine using [Ollama](https://ollama.com/). You can install that like so:
 ```bash
-llm install llm-gpt4all
+llm install llm-ollama
 ```
+See {ref}`other-models` for more on running local models.
 
 (api-keys)=
 ## API key management
