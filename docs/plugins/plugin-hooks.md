@@ -42,7 +42,7 @@ def register_models(register):
 class HelloWorld(llm.Model):
     model_id = "helloworld"
 
-    def execute(self, prompt, stream, response):
+    def execute(self, prompt, stream, response, conversation):
         return ["hello world"]
 ```
 If your model includes an async version, you can register that too:
@@ -51,14 +51,16 @@ If your model includes an async version, you can register that too:
 class AsyncHelloWorld(llm.AsyncModel):
     model_id = "helloworld"
 
-    async def execute(self, prompt, stream, response):
-        return ["hello world"]
+    async def execute(self, prompt, stream, response, conversation):
+        yield "hello world"
 
 @llm.hookimpl
 def register_models(register):
     register(HelloWorld(), AsyncHelloWorld(), aliases=("hw",))
 ```
 This demonstrates how to register a model with both sync and async versions, and how to specify an alias for that model.
+
+The async `execute()` method must yield strings rather than returning a list.
 
 The `model_aliases` parameter is a list of {class}`~llm.ModelWithAliases` objects representing all models registered so far by other plugins. Plugins that use `@llm.hookimpl(trylast=True)` can use this to inspect or modify models registered by other plugins. Both parameters are optional - plugins can accept just `register`, just `model_aliases`, or both.
 
