@@ -12,6 +12,7 @@ import httpx2
 import openai
 import sqlite_utils
 import yaml
+from click_default_group import DefaultGroup
 from pydantic import Field, ValidationError, create_model, field_validator
 
 import llm
@@ -35,6 +36,83 @@ from llm.utils import (
     remove_dict_none_values,
     simplify_usage_dict,
 )
+
+EXTRA_MODELS_FILENAME = "extra-openai-models.yaml"
+OPENAI_DEFAULT_API_BASE = "https://api.openai.com/v1"
+
+
+def extra_models_path():
+    "Path to the extra-openai-models.yaml configuration file"
+    return llm.user_dir() / EXTRA_MODELS_FILENAME
+
+
+def load_extra_models(path=None):
+    """
+    Return the list of model records stored in extra-openai-models.yaml
+
+    Returns an empty list if the file does not exist or is empty. Raises
+    TypeError if the file does not contain a YAML list.
+    """
+    if path is None:
+        path = extra_models_path()
+    if not path.exists():
+        return []
+    with open(path) as f:
+        records = yaml.safe_load(f)
+    if records is None:
+        return []
+    if not isinstance(records, list):
+        raise TypeError(f"{path} should contain a YAML list of models")
+    return records
+
+
+def _dump_extra_models(records):
+    return yaml.safe_dump(
+        records, sort_keys=False, allow_unicode=True, default_flow_style=False
+    )
+
+
+def _write_extra_models(path, records):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_dump_extra_models(records), "utf-8")
+
+
+def _append_extra_model(path, record):
+    """
+    Append a single record to the file, preserving any existing content
+    (including comments) rather than re-serializing the whole file.
+    """
+    text = _dump_extra_models([record])
+    existing = path.read_text("utf-8") if path.exists() else ""
+    # Removing the last model leaves "[]", which is replaced rather than
+    # extended so the file stays in block style
+    if existing.strip() in ("", "[]"):
+        _write_extra_models(path, [record])
+        return
+    events = list(yaml.parse(existing, Loader=yaml.SafeLoader))
+    # Comment-only files have no document/root events.
+    sequence = events[2] if len(events) > 2 else None
+    if isinstance(sequence, yaml.SequenceStartEvent) and sequence.flow_style:
+        # Insert after the last item (or opening bracket), before any trailing comma.
+        last_item = events[-4]  # Before sequence, document and stream end events
+        position = last_item.end_mark.index
+        text = yaml.safe_dump(
+            record, sort_keys=False, allow_unicode=True, default_flow_style=True
+        ).rstrip()
+        if last_item is not sequence:
+            text = ", " + text
+        path.write_text(existing[:position] + text + existing[position:], "utf-8")
+        return
+    if not existing.endswith("\n"):
+        existing += "\n"
+    path.write_text(existing + text, "utf-8")
+
+
+def _load_extra_models_for_cli(path):
+    try:
+        return load_extra_models(path)
+    except (TypeError, yaml.YAMLError) as ex:
+        raise click.ClickException(f"Could not read {path}: {ex}")
 
 
 @hookimpl
@@ -75,7 +153,7 @@ def register_models(register):
         aliases=("4o-mini",),
     )
     # GPT-4.1
-    for model_id in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+    for model_id in ("gpt-4.1", "gpt-4.1-mini"):
         register(
             Chat(
                 model_id,
@@ -93,71 +171,6 @@ def register_models(register):
             ),
             aliases=(model_id.replace("gpt-", ""),),
         )
-    # 3.5 and 4
-    register(
-        Chat("gpt-3.5-turbo", service_tier=True),
-        AsyncChat("gpt-3.5-turbo", service_tier=True),
-        aliases=("3.5", "chatgpt"),
-    )
-    register(
-        Chat("gpt-3.5-turbo-16k", service_tier=True),
-        AsyncChat("gpt-3.5-turbo-16k", service_tier=True),
-        aliases=("chatgpt-16k", "3.5-16k"),
-    )
-    register(
-        Chat("gpt-4", service_tier=True),
-        AsyncChat("gpt-4", service_tier=True),
-        aliases=("4", "gpt4"),
-    )
-    # GPT-4 Turbo models
-    register(
-        Chat("gpt-4-turbo-2024-04-09", service_tier=True),
-        AsyncChat("gpt-4-turbo-2024-04-09", service_tier=True),
-    )
-    register(
-        Chat("gpt-4-turbo", service_tier=True),
-        AsyncChat("gpt-4-turbo", service_tier=True),
-        aliases=("gpt-4-turbo-preview", "4-turbo", "4t"),
-    )
-    # o1
-    for model_id in ("o1", "o1-2024-12-17"):
-        register(
-            Responses(
-                model_id,
-                vision=True,
-                can_stream=False,
-                reasoning=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-            AsyncResponses(
-                model_id,
-                vision=True,
-                can_stream=False,
-                reasoning=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-        )
-
-    register(
-        Responses(
-            "o3-mini",
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncResponses(
-            "o3-mini",
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
     register(
         Responses(
             "o3",
@@ -169,24 +182,6 @@ def register_models(register):
         ),
         AsyncResponses(
             "o3",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
-    register(
-        Responses(
-            "o4-mini",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncResponses(
-            "o4-mini",
             vision=True,
             reasoning=True,
             service_tier=True,
@@ -245,7 +240,7 @@ def register_models(register):
         ),
     )
     # GPT-5.2
-    for model_id in ("gpt-5.2", "gpt-5.2-chat-latest"):
+    for model_id in ("gpt-5.2",):
         register(
             Responses(
                 model_id,
@@ -358,6 +353,7 @@ def register_models(register):
         "gpt-6-sol",
         "gpt-6-luna",
         "gpt-6.1-sol",
+        "gpt-6.1-terra",
         "chat-latest",
     ):
         register(
@@ -383,19 +379,8 @@ def register_models(register):
             ),
         )
 
-    # The -instruct completion model
-    register(
-        Completion("gpt-3.5-turbo-instruct", default_max_tokens=256),
-        aliases=("3.5-instruct", "chatgpt-instruct"),
-    )
-
     # Load extra models
-    extra_path = llm.user_dir() / "extra-openai-models.yaml"
-    if not extra_path.exists():
-        return
-    with open(extra_path) as f:
-        extra_models = yaml.safe_load(f)
-    for extra_model in extra_models:
+    for extra_model in load_extra_models():
         model_id = extra_model["model_id"]
         aliases = extra_model.get("aliases", [])
         model_name = extra_model["model_name"]
@@ -533,7 +518,22 @@ def register_commands(cli):
     def openai_():
         "Commands for working with OpenAI and OpenAI-compatible APIs"
 
-    @openai_.command()
+    @openai_.group(
+        name="endpoint",
+        cls=DefaultGroup,
+        default="prompt",
+        default_if_no_args=False,
+    )
+    def endpoint_():
+        """
+        Work with OpenAI-compatible endpoints
+
+        "llm openai endpoint URL ..." runs the "prompt" subcommand. Use
+        "add", "list" and "remove" to manage endpoints saved in
+        extra-openai-models.yaml.
+        """
+
+    @endpoint_.command(name="prompt")
     @click.argument("url")
     @click.argument("prompt", required=False)
     @click.option(
@@ -612,7 +612,7 @@ def register_commands(cli):
     )
     @click.option("--no-stream", is_flag=True, help="Do not stream output")
     @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
-    def endpoint(
+    def endpoint_prompt(
         url,
         prompt,
         model_id,
@@ -866,6 +866,210 @@ def register_commands(cli):
             ):
                 raise
             raise click.ClickException(str(ex))
+
+    @endpoint_.command(name="add")
+    @click.argument("url")
+    @click.option(
+        "model_name",
+        "-m",
+        "--model",
+        required=True,
+        help="Model name to send to the API",
+    )
+    @click.option(
+        "model_id",
+        "--id",
+        help="Model ID to use with LLM, defaults to the model name",
+    )
+    @click.option(
+        "aliases",
+        "--alias",
+        multiple=True,
+        help="Alias for the model, can be used multiple times",
+    )
+    @click.option(
+        "key_name",
+        "--key",
+        help="Name of a stored key to send to the endpoint, see 'llm keys set'",
+    )
+    @click.option(
+        "headers",
+        "-H",
+        "--header",
+        type=(str, str),
+        multiple=True,
+        help="Additional HTTP header",
+    )
+    @click.option(
+        "use_responses",
+        "--responses",
+        is_flag=True,
+        help="Use the Responses API instead of Chat Completions",
+    )
+    @click.option(
+        "--completion",
+        is_flag=True,
+        help="Use the Completions API",
+    )
+    @click.option("--supports-tools", is_flag=True, help="Model supports tool calling")
+    @click.option(
+        "--supports-schema", is_flag=True, help="Model supports JSON schema output"
+    )
+    @click.option("--vision", is_flag=True, help="Model accepts image attachments")
+    @click.option("--audio", is_flag=True, help="Model accepts audio attachments")
+    @click.option("--reasoning", is_flag=True, help="Model is a reasoning model")
+    @click.option(
+        "--service-tier", is_flag=True, help="Model supports the service_tier option"
+    )
+    @click.option("--no-stream", is_flag=True, help="Model cannot stream responses")
+    @click.option("--api-type", help="api_type, for Azure OpenAI")
+    @click.option("--api-version", help="api_version, for Azure OpenAI")
+    @click.option("--api-engine", help="api_engine, for Azure OpenAI")
+    @click.option(
+        "--replace",
+        is_flag=True,
+        help="Replace an existing record with the same model ID",
+    )
+    def endpoint_add(
+        url,
+        model_name,
+        model_id,
+        aliases,
+        key_name,
+        headers,
+        use_responses,
+        completion,
+        supports_tools,
+        supports_schema,
+        vision,
+        audio,
+        reasoning,
+        service_tier,
+        no_stream,
+        api_type,
+        api_version,
+        api_engine,
+        replace,
+    ):
+        """
+        Save an OpenAI-compatible endpoint to extra-openai-models.yaml
+
+        The model can then be used with "llm -m MODEL_ID". Example usage:
+
+        \b
+            llm openai endpoint add https://openrouter.ai/api/v1 \\
+              -m anthropic/claude-sonnet-4.5 --id claude-sonnet \\
+              --key openrouter --alias claude --supports-tools
+
+        If URL is the default OpenAI API URL the api_base key is omitted and
+        the model uses your regular OpenAI API key.
+        """
+        if use_responses and completion:
+            raise click.ClickException(
+                "--responses and --completion cannot be used together"
+            )
+        if key_name:
+            keys_path = llm.user_dir() / "keys.json"
+            stored_keys = {}
+            if keys_path.exists():
+                stored_keys = json.loads(keys_path.read_text("utf-8"))
+            if key_name not in stored_keys:
+                raise click.ClickException(
+                    f"No stored key named '{key_name}' - "
+                    f"run 'llm keys set {key_name}' first"
+                )
+        model_id = model_id or model_name
+        record = {"model_id": model_id, "model_name": model_name}
+        if aliases:
+            record["aliases"] = list(aliases)
+        if url.rstrip("/") != OPENAI_DEFAULT_API_BASE:
+            record["api_base"] = url
+        if key_name:
+            record["api_key_name"] = key_name
+        if headers:
+            record["headers"] = dict(headers)
+        for key, value in (
+            ("api_type", api_type),
+            ("api_version", api_version),
+            ("api_engine", api_engine),
+        ):
+            if value:
+                record[key] = value
+        for key, flag in (
+            ("completion", completion),
+            ("responses", use_responses),
+            ("supports_tools", supports_tools),
+            ("supports_schema", supports_schema),
+            ("vision", vision),
+            ("audio", audio),
+            ("reasoning", reasoning),
+            ("service_tier", service_tier),
+        ):
+            if flag:
+                record[key] = True
+        if no_stream:
+            record["can_stream"] = False
+
+        path = extra_models_path()
+        existing = _load_extra_models_for_cli(path)
+        matching = [
+            index
+            for index, existing_record in enumerate(existing)
+            if isinstance(existing_record, dict)
+            and existing_record.get("model_id") == model_id
+        ]
+        if matching and not replace:
+            raise click.ClickException(
+                f"A model with ID '{model_id}' already exists in {path} - "
+                "use --replace to overwrite it"
+            )
+        if matching:
+            existing[matching[0]] = record
+            _write_extra_models(path, existing)
+            click.echo(f"Replaced {model_id} in {path}")
+        else:
+            _append_extra_model(path, record)
+            click.echo(f"Saved {model_id} to {path}")
+        click.echo(f"Run a prompt with: llm -m {model_id} 'Hello'")
+
+    @endpoint_.command(name="list")
+    @click.option("json_", "--json", is_flag=True, help="Output as JSON")
+    def endpoint_list(json_):
+        "List endpoints saved in extra-openai-models.yaml"
+        records = _load_extra_models_for_cli(extra_models_path())
+        if json_:
+            click.echo(json.dumps(records, indent=2))
+            return
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            bits = [f"{record.get('model_id')}: {record.get('model_name')}"]
+            if record.get("api_base"):
+                bits.append(f"at {record['api_base']}")
+            if record.get("aliases"):
+                bits.append("(aliases: {})".format(", ".join(record["aliases"])))
+            click.echo(" ".join(bits))
+
+    @endpoint_.command(name="remove")
+    @click.argument("model_id")
+    def endpoint_remove(model_id):
+        "Remove a saved endpoint from extra-openai-models.yaml"
+        path = extra_models_path()
+        records = _load_extra_models_for_cli(path)
+        remaining = [
+            record
+            for record in records
+            if not (isinstance(record, dict) and record.get("model_id") == model_id)
+        ]
+        if len(remaining) == len(records):
+            raise click.ClickException(f"No model with ID '{model_id}' in {path}")
+        _write_extra_models(path, remaining)
+        click.echo(f"Removed {model_id} from {path}")
+
+    @endpoint_.command(name="path")
+    def endpoint_path():
+        "Output the path to the extra-openai-models.yaml file"
+        click.echo(extra_models_path())
 
     @openai_.command()
     @click.option("json_", "--json", is_flag=True, help="Output as JSON")
@@ -1497,7 +1701,8 @@ class Chat(_Shared, KeyModel):
                 stream=False,
                 **kwargs,
             )
-            usage = completion.usage.model_dump()
+            if completion.usage:
+                usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
@@ -1614,7 +1819,8 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 **kwargs,
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
-            usage = completion.usage.model_dump()
+            if completion.usage:
+                usage = completion.usage.model_dump()
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(

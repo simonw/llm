@@ -2365,3 +2365,53 @@ class TestLogListingCost:
         message_lookups = [s for s in statements if "from messages" in s]
         # One user and one assistant message per turn, each fetched once
         assert len(message_lookups) <= 2 * turns
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("consume_first", [False, True])
+def test_log_to_db_consumes_response(store, mock_model, stream, consume_first):
+    mock_model.enqueue(["Hello", " there"])
+    mock_model.resolved_model_name = "mock-resolved"
+    response = mock_model.prompt("Hi there", stream=stream)
+    if consume_first:
+        response.text()
+
+    response.log_to_db(store.db)
+
+    turn = store.db["turns"].get(response.id)
+    chain = store.load_chain(turn["tip_message_hash"])
+    assert {
+        "messages": [message.to_dict() for message in chain],
+        "input_tokens": turn["input_tokens"],
+        "output_tokens": turn["output_tokens"],
+        "resolved_model": turn["resolved_model"],
+    } == {
+        "messages": [
+            llm.user("Hi there").to_dict(),
+            llm.assistant("Hello there").to_dict(),
+        ],
+        "input_tokens": 2,
+        "output_tokens": 2,
+        "resolved_model": "mock-resolved",
+    }
+    assert len(mock_model.history) == 1
+    assert response.text() == "Hello there"
+    assert store.verify() == []
+
+
+@pytest.mark.parametrize("error_class", [RuntimeError, KeyboardInterrupt])
+def test_log_to_db_does_not_store_failed_response(store, error_class):
+    class FailingModel(llm.Model):
+        model_id = "failing"
+
+        def execute(self, prompt, stream, response, conversation):
+            yield "partial"
+            raise error_class("stopped")
+
+    response = FailingModel().prompt("Hi")
+    with pytest.raises(error_class, match="stopped"):
+        response.log_to_db(store.db)
+
+    assert store.db["threads"].count == 0
+    assert store.db["turns"].count == 0
+    assert store.db["messages"].count == 0
