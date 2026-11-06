@@ -19,6 +19,20 @@ Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>
 brew install llm
 ```
 
+## Shell completion
+
+Generate a completion script for Bash, Zsh or Fish:
+
+```bash
+llm completions bash > llm-completion.bash
+llm completions zsh > llm-completion.zsh
+llm completions fish > llm-completion.fish
+```
+
+For Bash or Zsh, source the corresponding file from your shell configuration.
+For Fish, save the script as `~/.config/fish/completions/llm.fish`.
+Regenerate the script after upgrading LLM or Click.
+
 ## Upgrading to the latest version
 
 If you installed using `pip`:
