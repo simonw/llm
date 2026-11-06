@@ -3,7 +3,16 @@
 
 A **template** can combine a prompt, system prompt, model, default model options, schema, and fragments into a single reusable unit.
 
-Only one template can be used at a time. To compose multiple shorter pieces of prompts together consider using {ref}`fragments <fragments>` instead.
+Use a template to save **how to run a prompt**, such as the instructions, model options, and output schema for a recurring task. Use {ref}`fragments <fragments>` to supply **text to include in a prompt**, such as a document or a set of instructions. Fragments do not configure the model or output schema, and their text is stored only once in the logs database even when reused across prompts.
+
+You can use both together. This saves summarization instructions as a template, then supplies a document as a fragment when running it:
+
+```bash
+llm --system 'Summarize the supplied document in three bullet points' --save summarize
+llm -t summarize -f document.txt
+```
+
+Repeat `-f` to include several fragments, or `-t` to combine templates from left to right. A template can also include fragments; see {ref}`prompt-templates-yaml` for the YAML format.
 
 (prompt-templates-save)=
 
