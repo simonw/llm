@@ -36,6 +36,7 @@ from llm import (
     Conversation,
     Fragment,
     KeyModel,
+    ModelError,
     Response,
     ServerSideTool,
     Template,
@@ -224,14 +225,17 @@ def _run_chat(
         if transform_prompt is not None:
             prompt = transform_prompt(prompt)
 
-        response = prompt_callback(prompt, fragments, attachments)
-        display_stream_events(
-            response.stream_events(),
-            show_reasoning=show_reasoning,
-        )
-        print()
-        if show_usage:
-            _display_token_usage(response)
+        try:
+            response = prompt_callback(prompt, fragments, attachments)
+            display_stream_events(
+                response.stream_events(),
+                show_reasoning=show_reasoning,
+            )
+            print()
+            if show_usage:
+                _display_token_usage(response)
+        except ModelError as ex:
+            raise click.ClickException(str(ex))
 
 
 def validate_fragment_alias(ctx, param, value):
