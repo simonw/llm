@@ -9,13 +9,13 @@ import re
 import readline
 import shutil
 import sqlite3
+import subprocess
 import sys
 import textwrap
 import warnings
 from collections.abc import Iterable
 from dataclasses import asdict
 from importlib.metadata import version
-from runpy import run_module
 from typing import Any, cast
 
 import click
@@ -3332,7 +3332,7 @@ def display_truncated(text):
 )
 def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     """Install packages from PyPI into the same environment as LLM"""
-    args = ["pip", "install"]
+    args = [sys.executable, "-m", "pip", "install"]
     if upgrade:
         args += ["--upgrade"]
     if editable:
@@ -3344,8 +3344,7 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     if pre:
         args += ["--pre"]
     args += list(packages)
-    sys.argv = args
-    run_module("pip", run_name="__main__")
+    sys.exit(subprocess.call(args))
 
 
 @cli.command()
@@ -3353,8 +3352,9 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
 @click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
 def uninstall(packages, yes):
     """Uninstall Python packages from the LLM environment"""
-    sys.argv = ["pip", "uninstall"] + list(packages) + (["-y"] if yes else [])
-    run_module("pip", run_name="__main__")
+    args = [sys.executable, "-m", "pip", "uninstall"]
+    args += list(packages) + (["-y"] if yes else [])
+    sys.exit(subprocess.call(args))
 
 
 @cli.command()
