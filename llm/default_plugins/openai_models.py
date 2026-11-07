@@ -1659,6 +1659,16 @@ class Chat(_Shared, KeyModel):
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
                         idx = tool_call.index
+                        if idx is None:
+                            # Some compatible endpoints omit index: a chunk
+                            # with an id or name starts a new call, otherwise
+                            # it continues the most recent one
+                            if not tool_calls:
+                                idx = 0
+                            elif tool_call.id or tool_call.function.name:
+                                idx = max(tool_calls) + 1
+                            else:
+                                idx = max(tool_calls)
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
                             yield StreamEvent(
@@ -1778,6 +1788,16 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
                         idx = tool_call.index
+                        if idx is None:
+                            # Some compatible endpoints omit index: a chunk
+                            # with an id or name starts a new call, otherwise
+                            # it continues the most recent one
+                            if not tool_calls:
+                                idx = 0
+                            elif tool_call.id or tool_call.function.name:
+                                idx = max(tool_calls) + 1
+                            else:
+                                idx = max(tool_calls)
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
                             yield StreamEvent(
