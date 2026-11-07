@@ -55,18 +55,41 @@ def test_tools_streaming_variant_d():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("async_", [False, True])
-async def test_streaming_tool_calls_without_index(httpx2_mock, async_):
+@pytest.mark.parametrize(
+    "fragments,expected",
+    [
+        (
+            [
+                ("call_first", "first", '{"value":'),
+                (None, None, "1}"),
+                ("call_second", "second", '{"value":'),
+                (None, None, "2}"),
+            ],
+            [
+                ("call_first", "first", {"value": 1}),
+                ("call_second", "second", {"value": 2}),
+            ],
+        ),
+        # Gemini repeats id and name on each argument fragment and omits index.
+        (
+            [
+                ("call_split", "lookup", '{"value":'),
+                ("call_split", "lookup", "1}"),
+            ],
+            [
+                ("call_split", "lookup", {"value": 1}),
+            ],
+        ),
+    ],
+)
+async def test_streaming_tool_calls_without_index(
+    httpx2_mock, async_, fragments, expected
+):
     # Some OpenAI-compatible endpoints omit "index" on streamed tool calls
     import json
 
     from pytest_httpx2 import IteratorStream
 
-    fragments = [
-        ("call_first", "first", '{"value":'),
-        (None, None, "1}"),
-        ("call_second", "second", '{"value":'),
-        (None, None, "2}"),
-    ]
     chunks = []
     for call_id, name, arguments in fragments:
         tool_call = {
@@ -97,7 +120,6 @@ async def test_streaming_tool_calls_without_index(httpx2_mock, async_):
     else:
         list(response.stream_events())
         calls = response.tool_calls()
-    assert [(call.tool_call_id, call.name, call.arguments) for call in calls] == [
-        ("call_first", "first", {"value": 1}),
-        ("call_second", "second", {"value": 2}),
-    ]
+    assert [
+        (call.tool_call_id, call.name, call.arguments) for call in calls
+    ] == expected
