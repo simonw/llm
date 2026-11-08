@@ -862,6 +862,29 @@ def _load(value: str | None) -> dict | None:
     return json.loads(value) if value else None
 
 
+_SINCE_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800, "M": 2592000}
+
+
+def parse_since(value: str) -> datetime.datetime:
+    """Parse a human duration or ISO timestamp into a UTC datetime.
+
+    Supported durations: ``30m``, ``2h``, ``1d``, ``2w``, ``3M``.
+    Falls back to ``datetime.fromisoformat`` for ISO strings.
+    """
+    if value and value[-1] in _SINCE_UNITS:
+        try:
+            n = float(value[:-1])
+            delta = datetime.timedelta(seconds=n * _SINCE_UNITS[value[-1]])
+            return datetime.datetime.now(datetime.timezone.utc) - delta
+        except ValueError:
+            pass
+    # ISO date or datetime
+    dt = datetime.datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt
+
+
 def _now() -> str:
     return str(datetime.datetime.now(datetime.timezone.utc))
 
@@ -1414,6 +1437,7 @@ def log_rows(
     id_gt: str | None = None,
     id_gte: str | None = None,
     ids=(),
+    since: datetime.datetime | None = None,
     query: str | None = None,
     latest: bool = False,
 ) -> list[dict]:
@@ -1469,6 +1493,9 @@ def log_rows(
         key = f"tool_{index}"
         where.append(_tool_result_clause(f"and parts.tool_name = :{key}"))
         params[key] = tool_name
+    if since:
+        where.append("turns.datetime_utc >= :since")
+        params["since"] = since.isoformat()
 
     rank_select = ""
     join = ""
@@ -1757,6 +1784,7 @@ def legacy_log_rows(
     id_gt: str | None = None,
     id_gte: str | None = None,
     ids=(),
+    since: datetime.datetime | None = None,
     query: str | None = None,
     latest: bool = False,
 ) -> list[dict]:
@@ -1828,6 +1856,9 @@ def legacy_log_rows(
                 and tools.name = :{key}
             )""")
         params[key] = tool_name
+    if since:
+        where.append("responses.datetime_utc >= :since")
+        params["since"] = since.isoformat()
 
     rank_select = ""
     join = ""

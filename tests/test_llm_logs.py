@@ -1696,3 +1696,94 @@ def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
         json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
         is allowed
     )
+
+
+# -- --since tests ----------------------------------------------------------
+
+
+from llm.logs import parse_since  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "value,seconds_ago",
+    [
+        ("30m", 30 * 60),
+        ("2h", 2 * 3600),
+        ("1d", 86400),
+        ("2w", 2 * 604800),
+        ("3M", 3 * 2592000),
+    ],
+)
+def test_parse_since_duration(value, seconds_ago):
+    before = datetime.datetime.now(datetime.timezone.utc)
+    dt = parse_since(value)
+    after = datetime.datetime.now(datetime.timezone.utc)
+    expected = before - datetime.timedelta(seconds=seconds_ago)
+    # Allow a small tolerance for test execution time
+    assert abs((dt - expected).total_seconds()) < 2
+    assert dt.tzinfo is not None
+
+
+def test_parse_since_iso_date():
+    dt = parse_since("2024-01-15")
+    assert dt.year == 2024
+    assert dt.month == 1
+    assert dt.day == 15
+    assert dt.tzinfo is not None
+
+
+def test_parse_since_iso_datetime_with_tz():
+    dt = parse_since("2024-06-01T12:00:00+00:00")
+    assert dt.year == 2024
+    assert dt.hour == 12
+    assert dt.tzinfo is not None
+
+
+def test_parse_since_bad_value():
+    with pytest.raises(ValueError):
+        parse_since("notadate")
+
+
+def test_logs_since_filters_legacy_rows(db_factory, user_path):
+    log_path = str(user_path / "logs_since.db")
+    db = db_factory(log_path)
+    migrate(db)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    old = (now - datetime.timedelta(days=10)).isoformat()
+    recent = (now - datetime.timedelta(hours=1)).isoformat()
+    db["responses"].insert_all(
+        [
+            {
+                "id": str(monotonic_ulid()).lower(),
+                "prompt": "old prompt",
+                "response": "old",
+                "model": "davinci",
+                "datetime_utc": old,
+            },
+            {
+                "id": str(monotonic_ulid()).lower(),
+                "prompt": "recent prompt",
+                "response": "recent",
+                "model": "davinci",
+                "datetime_utc": recent,
+            },
+        ],
+        alter=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["logs", "--since", "2h", "-n", "0", "--json", "-p", log_path],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    prompts = {r["prompt"] for r in rows}
+    assert "recent prompt" in prompts
+    assert "old prompt" not in prompts
+
+
+def test_logs_since_bad_value_gives_clean_error(db_factory, user_path, logs_db):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "--since", "bogus!"])
+    assert result.exit_code == 1
+    assert "Invalid --since value" in result.output
