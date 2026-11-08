@@ -62,6 +62,17 @@ Use the `llm models --options` command to see which options are supported by eac
 
 You can also {ref}`configure default options <usage-executing-default-options>` for a model using the `llm models options` commands.
 
+(usage-reasoning-effort)=
+### Reasoning effort
+
+Many reasoning models accept a "reasoning effort" option, but different plugins name it differently (for example `reasoning_effort` for OpenAI models). The `-e/--effort` shortcut sets that option without needing to know its exact name:
+
+```bash
+llm -m gpt-5.5 -e high 'A poem about an otter who grows wings'
+```
+
+This is equivalent to passing the model's own reasoning effort option with `-o`. If you also pass that option explicitly with `-o`, the explicit value wins. Models that do not expose a reasoning effort option return an error when `-e` is used.
+
 (usage-attachments)=
 ### Attachments
 
