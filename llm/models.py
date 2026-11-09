@@ -711,6 +711,20 @@ def _combine_system(system, system_fragments):
     return "\n\n".join(bits)
 
 
+def _with_system(messages, system, system_fragments) -> list[Any]:
+    """Copy of an explicit ``messages=`` list with ``system=`` as its first
+    message, so adapters that build requests from ``prompt.messages``
+    alone still see it. A list that already starts with a system message
+    is left as it is."""
+    from .parts import Message, TextPart
+
+    chain = list(messages)
+    system_text = _combine_system(system, system_fragments)
+    if system_text and not (chain and chain[0].role == "system"):
+        chain.insert(0, Message(role="system", parts=[TextPart(text=system_text)]))
+    return chain
+
+
 def _merge_options(options: dict | None, kwargs: dict) -> dict:
     if not options:
         return kwargs
@@ -778,13 +792,14 @@ class _BaseConversation:
 
         If ``explicit_messages`` is provided, the caller has opted out
         of history reconstruction: the list is the authoritative history,
-        and the new turn's input is appended to it.
+        and the new turn's input is appended to it. A ``system`` prompt is
+        added as its first message unless it already starts with one.
         """
         from .parts import Message, TextPart
 
         if explicit_messages is not None:
             return _append_turn_input(
-                list(explicit_messages),
+                _with_system(explicit_messages, system, system_fragments),
                 prompt,
                 fragments,
                 attachments,
@@ -1044,7 +1059,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools,
+                tools=tools or self.tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
@@ -1782,6 +1797,11 @@ class Response(_BaseResponse):
     model: "Model"
     conversation: Optional["Conversation"] = None
 
+    def log_to_db(self, db):
+        "Execute this response if needed and record it in a log database."
+        self._force()
+        super().log_to_db(db)
+
     def reply(
         self,
         prompt: str | None = None,
@@ -1812,7 +1832,11 @@ class Response(_BaseResponse):
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
         if tool_results is None and self._tool_calls:
-            tool_results = self.execute_tool_calls(tools=kwargs.get("tools"))
+            tool_results = self.execute_tool_calls(
+                before_call=cast(BeforeCallSync | None, self.before_call),
+                after_call=cast(AfterCallSync | None, self.after_call),
+                tools=kwargs.get("tools"),
+            )
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             tool_attachments: list[Attachment] = []
@@ -1823,7 +1847,12 @@ class Response(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, options=options, **kwargs)
+        follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
+        # Keep the originating response's tool lifecycle hooks available
+        # if this follow-up also requests local tool calls.
+        follow_up.before_call = self.before_call
+        follow_up.after_call = self.after_call
+        return follow_up
 
     def to_dict(self) -> ResponseDict:
         """Serialize this response for JSON persistence.
@@ -2181,7 +2210,11 @@ class AsyncResponse(_BaseResponse):
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
         if tool_results is None and self._tool_calls:
-            tool_results = await self.execute_tool_calls(tools=kwargs.get("tools"))
+            tool_results = await self.execute_tool_calls(
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tools=kwargs.get("tools"),
+            )
         chain: list[Any] = list(self.prompt.messages) + list(self._messages_now())
         if tool_results:
             tool_attachments: list[Attachment] = []
@@ -2192,7 +2225,12 @@ class AsyncResponse(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
-        return self.model.prompt(messages=chain, options=options, **kwargs)
+        follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
+        # Keep the originating response's tool lifecycle hooks available
+        # if this follow-up also requests local tool calls.
+        follow_up.before_call = self.before_call
+        follow_up.after_call = self.after_call
+        return follow_up
 
     def to_dict(self) -> ResponseDict:
         """Async counterpart of Response.to_dict(). Requires awaiting."""
@@ -2911,6 +2949,7 @@ class _BaseChainResponse:
             messages=next_chain,
             system=prompt._system,
             system_fragments=prompt.system_fragments,
+            schema=prompt.schema,
             options=prompt.options,
             attachments=attachments,
             hide_reasoning=prompt.hide_reasoning,
@@ -2998,6 +3037,10 @@ class ChainResponse(_BaseChainResponse):
                         # of the chain loop.
                         system=self.prompt._system,
                         system_fragments=self.prompt.system_fragments,
+                        # The schema describes the final answer, which
+                        # arrives after the tool rounds - it has to
+                        # survive them too.
+                        schema=self.prompt.schema,
                         options=self.prompt.options,
                         attachments=attachments,
                         hide_reasoning=current_response.prompt.hide_reasoning,
@@ -3137,6 +3180,7 @@ class AsyncChainResponse(_BaseChainResponse):
                     # reasoning as the sync path.
                     system=self.prompt._system,
                     system_fragments=self.prompt.system_fragments,
+                    schema=self.prompt.schema,
                     options=self.prompt.options,
                     attachments=attachments,
                     hide_reasoning=current_response.prompt.hide_reasoning,
@@ -3323,7 +3367,11 @@ class _Model(_BaseModel):
             # arguments are this turn's new input, folded in so that
             # response.prompt.messages stays exactly what the model sees.
             messages = _append_turn_input(
-                list(messages), prompt, fragments, attachments, tool_results
+                _with_system(messages, system, system_fragments),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
             )
         return Response(
             Prompt(
@@ -3448,7 +3496,11 @@ class _AsyncModel(_BaseModel):
             # Same fold as Model.prompt: messages= is the history, the
             # other prompt arguments are this turn's new input.
             messages = _append_turn_input(
-                list(messages), prompt, fragments, attachments, tool_results
+                _with_system(messages, system, system_fragments),
+                prompt,
+                fragments,
+                attachments,
+                tool_results,
             )
         return AsyncResponse(
             Prompt(

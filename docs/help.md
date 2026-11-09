@@ -1119,14 +1119,35 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  endpoint  Run against an OpenAI-compatible endpoint without logging.
+  endpoint  Work with OpenAI-compatible endpoints
   models    List models available to you from the OpenAI API
 ```
 
 (help-openai-endpoint)=
 #### llm openai endpoint --help
 ```
-Usage: llm openai endpoint [OPTIONS] URL [PROMPT]
+Usage: llm openai endpoint [OPTIONS] COMMAND [ARGS]...
+
+  Work with OpenAI-compatible endpoints
+
+  "llm openai endpoint URL ..." runs the "prompt" subcommand. Use "add", "list"
+  and "remove" to manage endpoints saved in extra-openai-models.yaml.
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  prompt*  Run against an OpenAI-compatible endpoint without logging.
+  add      Save an OpenAI-compatible endpoint to extra-openai-models.yaml
+  list     List endpoints saved in extra-openai-models.yaml
+  path     Output the path to the extra-openai-models.yaml file
+  remove   Remove a saved endpoint from extra-openai-models.yaml
+```
+
+(help-openai-endpoint-prompt)=
+##### llm openai endpoint prompt --help
+```
+Usage: llm openai endpoint prompt [OPTIONS] URL [PROMPT]
 
   Run against an OpenAI-compatible endpoint without logging.
 
@@ -1164,6 +1185,80 @@ Options:
   --no-stream                     Do not stream output
   -R, --hide-reasoning            Hide reasoning output
   -h, --help                      Show this message and exit.
+```
+
+(help-openai-endpoint-add)=
+##### llm openai endpoint add --help
+```
+Usage: llm openai endpoint add [OPTIONS] URL
+
+  Save an OpenAI-compatible endpoint to extra-openai-models.yaml
+
+  The model can then be used with "llm -m MODEL_ID". Example usage:
+
+      llm openai endpoint add https://openrouter.ai/api/v1 \
+        -m anthropic/claude-sonnet-4.5 --id claude-sonnet \
+        --key openrouter --alias claude --supports-tools
+
+  If URL is the default OpenAI API URL the api_base key is omitted and the model
+  uses your regular OpenAI API key.
+
+Options:
+  -m, --model TEXT             Model name to send to the API  [required]
+  --id TEXT                    Model ID to use with LLM, defaults to the model
+                               name
+  --alias TEXT                 Alias for the model, can be used multiple times
+  --key TEXT                   Name of a stored key to send to the endpoint, see
+                               'llm keys set'
+  -H, --header <TEXT TEXT>...  Additional HTTP header
+  --responses                  Use the Responses API instead of Chat Completions
+  --completion                 Use the Completions API
+  --supports-tools             Model supports tool calling
+  --supports-schema            Model supports JSON schema output
+  --vision                     Model accepts image attachments
+  --audio                      Model accepts audio attachments
+  --reasoning                  Model is a reasoning model
+  --service-tier               Model supports the service_tier option
+  --no-stream                  Model cannot stream responses
+  --api-type TEXT              api_type, for Azure OpenAI
+  --api-version TEXT           api_version, for Azure OpenAI
+  --api-engine TEXT            api_engine, for Azure OpenAI
+  --replace                    Replace an existing record with the same model ID
+  -h, --help                   Show this message and exit.
+```
+
+(help-openai-endpoint-list)=
+##### llm openai endpoint list --help
+```
+Usage: llm openai endpoint list [OPTIONS]
+
+  List endpoints saved in extra-openai-models.yaml
+
+Options:
+  --json      Output as JSON
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-endpoint-remove)=
+##### llm openai endpoint remove --help
+```
+Usage: llm openai endpoint remove [OPTIONS] MODEL_ID
+
+  Remove a saved endpoint from extra-openai-models.yaml
+
+Options:
+  -h, --help  Show this message and exit.
+```
+
+(help-openai-endpoint-path)=
+##### llm openai endpoint path --help
+```
+Usage: llm openai endpoint path [OPTIONS]
+
+  Output the path to the extra-openai-models.yaml file
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-openai-models)=

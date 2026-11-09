@@ -6,7 +6,7 @@ from unittest.mock import ANY
 import pytest
 from click.testing import CliRunner
 
-from llm import Attachment, Collection
+from llm import Attachment, Collection, encode
 from llm.cli import cli
 
 TINY_PNG = (
@@ -54,13 +54,8 @@ def capture_typed_attachments(monkeypatch, embed_demo):
         ),
         (
             "blob",
-            (
-                b"\x00\x00\xef\xbf\xbd@\x00\x00\xef\xbf\xbd@\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\n"
-            ).decode("utf-8"),
+            # Exact little-endian float32 bytes
+            b"\x00\x00\xa0\x40\x00\x00\xa0\x40" + b"\x00" * 56,
         ),
     ),
 )
@@ -80,7 +75,12 @@ def test_embed_output_format(tmpdir, format_, expected, scenario):
         args.extend(["-i", "-"])
     result = runner.invoke(cli, args, input=input)
     assert result.exit_code == 0
-    assert result.output == expected
+    if format_ == "blob":
+        assert result.stdout_bytes == expected
+        assert result.stdout_bytes == encode([5, 5] + [0] * 14)
+        assert len(result.stdout_bytes) == 16 * 4
+    else:
+        assert result.output == expected
 
 
 @pytest.mark.parametrize(
@@ -937,6 +937,46 @@ def test_embed_multi_files_encoding(
         assert rows == [
             {"id": "ignored.ini", "content": "Has weird \x96 character"},
         ]
+
+
+@pytest.mark.parametrize(
+    "encodings,content,expected",
+    (
+        ([], "Café résumé".encode(), "Café résumé"),
+        (["utf-8", "latin-1"], "Café".encode(), "Café"),
+        (["latin-1", "utf-8"], "Café".encode(), "CafÃ©"),
+        (["ascii", "utf-8", "latin-1"], "Café".encode(), "Café"),
+        ([], "Café".encode("latin-1"), "Café"),
+        (["utf-16", "latin-1"], "雪".encode("utf-16"), "雪"),
+    ),
+)
+def test_embed_multi_files_first_successful_encoding(
+    db_factory, tmp_path, embed_demo, encodings, content, expected
+):
+    (tmp_path / "document.txt").write_bytes(content)
+    db_path = tmp_path / "embeddings.db"
+    args = [
+        "embed-multi",
+        "files",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        "--files",
+        str(tmp_path),
+        "*.txt",
+        "--store",
+    ]
+    for encoding in encodings:
+        args.extend(("--encoding", encoding))
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert not result.stderr
+    assert embed_demo.embedded_content == [expected]
+    embeddings_db = db_factory(str(db_path))
+    assert list(embeddings_db.query("select id, content from embeddings")) == [
+        {"id": "document.txt", "content": expected}
+    ]
 
 
 def test_default_embedding_model():

@@ -380,14 +380,23 @@ def resolve_attachment(value):
     path = pathlib.Path(value)
     if not path.exists():
         raise AttachmentError(f"File {value} does not exist")
-    path = path.resolve()
-
     # Try to guess type
-    mimetype = mimetype_from_path(str(path))
+    content = None
+    if path.is_fifo():
+        content = path.read_bytes()
+        mimetype = mimetype_from_string(content)
+    else:
+        path = path.resolve()
+        mimetype = mimetype_from_path(str(path))
     if mimetype is None:
         raise AttachmentError(f"Could not determine mimetype of {value}")
 
-    return Attachment(type=mimetype, path=str(path), url=None, content=None)
+    return Attachment(
+        type=mimetype,
+        path=None if content is not None else str(path),
+        url=None,
+        content=content,
+    )
 
 
 class AttachmentType(click.ParamType):
@@ -411,8 +420,11 @@ def resolve_attachment_with_type(value: str, mimetype: str) -> Attachment:
         path = pathlib.Path(value)
         if not path.exists():
             raise click.BadParameter(f"File {value} does not exist")
-        path = path.resolve()
-        attachment = Attachment(mimetype, str(path), None, None)
+        if path.is_fifo():
+            attachment = Attachment(mimetype, None, None, path.read_bytes())
+        else:
+            path = path.resolve()
+            attachment = Attachment(mimetype, str(path), None, None)
     return attachment
 
 
@@ -1385,7 +1397,8 @@ def chat(
             system=system,
             **kwargs,
         )
-        response.on_response(lambda response: response.log_to_db(db))
+        if logs_on():
+            response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -2714,15 +2727,21 @@ def schemas_list(path, database, queries, full, json_, nl):
         params.extend(f"%{q}%" for q in queries)
 
     sql = f"""
+    with schema_uses as (
+      select schema_id, datetime_utc from turns
+      union all
+      select schema_id, datetime_utc from responses
+      where responses.id not in (select id from turns)
+    )
     select
       schemas.id,
       schemas.content,
-      max(responses.datetime_utc) as recently_used,
+      max(schema_uses.datetime_utc) as recently_used,
       count(*) as times_used
     from schemas
-    join responses
-      on responses.schema_id = schemas.id
-    {where_sql} group by responses.schema_id
+    join schema_uses
+      on schema_uses.schema_id = schemas.id
+    {where_sql} group by schema_uses.schema_id
     order by recently_used
     """
     rows = db.query(sql, params)
@@ -3490,7 +3509,8 @@ def embed(
         if format_ == "json" or format_ is None:
             click.echo(json.dumps(embedding))
         elif format_ == "blob":
-            click.echo(encode(embedding))
+            # Write blob as raw bytes, no trailing newline.
+            click.echo(encode(embedding), nl=False)
         elif format_ == "base64":
             click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
         elif format_ == "hex":
@@ -3713,6 +3733,7 @@ def embed_multi(
                         for encoding in encodings:
                             try:
                                 content = path.read_text(encoding=encoding)
+                                break
                             except UnicodeDecodeError:
                                 continue
                     if content is None:

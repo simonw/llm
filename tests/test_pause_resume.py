@@ -248,6 +248,34 @@ async def test_chain_resumes_trailing_pending_tool_calls_async():
     ]
 
 
+def test_resumed_chain_keeps_the_schema(mock_model, monkeypatch):
+    # Resuming replays the pending call through a fresh prompt; the
+    # schema the caller asked for still describes the eventual answer.
+    prompts = []
+
+    def execute(prompt, stream, response, conversation):
+        prompts.append(prompt)
+        yield "ok"
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+
+    def upper(text: str) -> str:
+        "Convert to uppercase"
+        return text.upper()
+
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    chain = mock_model.conversation().chain(
+        None,
+        messages=_pending_history(),
+        tools=[upper],
+        schema=schema,
+    )
+    chain.text()
+
+    assert len(prompts) == 1
+    assert prompts[0].schema == schema
+
+
 def test_resume_skips_calls_that_already_have_results():
     executed = []
 

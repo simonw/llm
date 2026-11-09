@@ -662,3 +662,23 @@ def test_toolbox_config_capture_inherited():
     assert next(iter(tools.tools())).implementation() == "example"
     assert tools._config == {"root": "example", "limit": 2}
     assert LimitedTools("example")._config == {"root": "example", "limit": 10}
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+@pytest.mark.parametrize("nested", [False, True])
+def test_schema_summary_boolean_properties(allowed, nested):
+    schema = {"type": "object", "properties": {"value": allowed}}
+    expected = "{value}"
+    if nested:
+        schema = {"type": "object", "properties": {"nested": schema}}
+        expected = "{nested: {value}}"
+    assert llm.utils.schema_summary(schema) == expected
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schema_summary_boolean_array_items(allowed):
+    schema = {
+        "type": "object",
+        "properties": {"values": {"type": "array", "items": allowed}},
+    }
+    assert llm.utils.schema_summary(schema) == "{values: []}"

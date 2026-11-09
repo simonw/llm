@@ -87,7 +87,7 @@ def test_templates_list(templates_path, args):
 @pytest.mark.parametrize(
     "args,expected,expected_error",
     (
-        (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
+        (["-m", "4o", "hello"], {"model": "gpt-4o", "prompt": "hello"}, None),
         (["hello $foo"], {"prompt": "hello $foo"}, None),
         (["--system", "system"], {"system": "system"}, None),
         (["-t", "template"], None, "--save cannot be used with --template"),
@@ -210,10 +210,10 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
         ),
         (
-            "prompt: 'Summarize this: $input'\nmodel: gpt-4",
+            "prompt: 'Summarize this: $input'\nmodel: gpt-4o",
             "Input text",
             [],
-            "gpt-4",
+            "gpt-4o",
             "Summarize this: Input text",
             None,
             None,
@@ -221,8 +221,8 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'",
             "Input text",
-            ["-m", "4"],
-            "gpt-4",
+            ["-m", "4o"],
+            "gpt-4o",
             "Summarize this: Input text",
             None,
             None,
@@ -352,7 +352,7 @@ def test_execute_prompt_with_multiple_templates_in_order(
     templates_path, mocked_openai_chat
 ):
     (templates_path / "configuration.yaml").write_text(
-        "model: gpt-4\noptions:\n  temperature: 0.5", "utf-8"
+        "model: gpt-4o\noptions:\n  temperature: 0.5", "utf-8"
     )
     (templates_path / "instruction.yaml").write_text(
         "prompt: 'Summarize this: $input'", "utf-8"
@@ -379,7 +379,7 @@ def test_execute_prompt_with_multiple_templates_in_order(
     assert result.exit_code == 0
     request = mocked_openai_chat.get_requests()[-1]
     assert json.loads(request.content) == {
-        "model": "gpt-4",
+        "model": "gpt-4o",
         "messages": [
             {
                 "role": "user",
