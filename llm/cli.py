@@ -42,6 +42,7 @@ from llm import (
     Tool,
     Toolbox,
     UnknownModelError,
+    decode,
     encode,
     get_async_model,
     get_default_embedding_model,
@@ -3499,9 +3500,11 @@ def embed(
         raise click.ClickException("No content provided")
 
     if collection_obj:
-        embedding = collection_obj.embed(
-            id, content, metadata=metadata, store=store, key=key
-        )
+        collection_obj.embed(id, content, metadata=metadata, store=store, key=key)
+        if show_output:
+            # Collection.embed() stores the embedding without returning it
+            row = collection_obj.db["embeddings"].get((collection_obj.id, id))
+            embedding = list(decode(row["embedding"]))
     else:
         embedding = model_obj.embed(content, key=key)
 
