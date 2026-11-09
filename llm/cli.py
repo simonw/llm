@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import difflib
 import inspect
 import io
 import json
@@ -929,7 +930,7 @@ def prompt(
                     if v is not None
                 }
             except pydantic.ValidationError as ex:
-                raise click.ClickException(render_errors(ex.errors()))
+                raise click.ClickException(render_errors(ex.errors(), model))
         path.write_text(
             yaml.safe_dump(
                 to_save,
@@ -1044,7 +1045,7 @@ def prompt(
                 if value is not None
             }
         except pydantic.ValidationError as ex:
-            raise click.ClickException(render_errors(ex.errors()))
+            raise click.ClickException(render_errors(ex.errors(), model))
 
     # Add on any default model options
     default_options = get_model_options(model.model_id)
@@ -1337,7 +1338,7 @@ def chat(
                 if value is not None
             }
         except pydantic.ValidationError as ex:
-            raise click.ClickException(render_errors(ex.errors()))
+            raise click.ClickException(render_errors(ex.errors(), model))
 
     kwargs = {}
     if validated_options:
@@ -4149,7 +4150,7 @@ def options_set(model, key, value):
             test_options = {key: value}
             model_obj.Options(**test_options)
         except pydantic.ValidationError as ex:
-            raise click.ClickException(render_errors(ex.errors()))
+            raise click.ClickException(render_errors(ex.errors(), model_obj))
 
     except llm.UnknownModelError:
         # Use as-is if not found
@@ -4237,11 +4238,26 @@ def get_history(chat_id):
         return chat_id, list(rows)
 
 
-def render_errors(errors):
+def render_errors(errors, model=None):
     output = []
     for error in errors:
         output.append(", ".join(error["loc"]))
-        output.append("  " + error["msg"])
+        if model is not None and error["type"] == "extra_forbidden":
+            option = error["loc"][-1]
+            output.append(
+                f"  '{option}' is not a valid option for model '{model.model_id}'"
+            )
+            suggestions = difflib.get_close_matches(
+                str(option), list(model.Options.model_fields), n=1
+            )
+            if suggestions:
+                output.append(f"  Did you mean '{suggestions[0]}'?")
+            output.append(
+                f"  Run 'llm models --options -m {model.model_id}'"
+                " to see supported options"
+            )
+        else:
+            output.append("  " + error["msg"])
     return "\n".join(output)
 
 
