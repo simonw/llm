@@ -5,6 +5,7 @@ import textwrap
 from importlib.metadata import version
 from unittest import mock
 
+import llm_echo
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -194,6 +195,35 @@ def test_templates_error_on_missing_schema(templates_path):
         cli, ["hi", "--schema", "t:bad_template"], catch_exceptions=False
     )
     assert result2.output == "Error: Invalid template: bad_template\n"
+
+
+@pytest.mark.parametrize("use_cli_schema", (True, False))
+def test_cli_schema_takes_precedence_over_template_schema(
+    templates_path, user_path, db_factory, use_cli_schema, monkeypatch
+):
+    monkeypatch.setattr(llm_echo.Echo, "supports_schema", True)
+    template_schema = {
+        "type": "object",
+        "properties": {"from_template": {"type": "string"}},
+    }
+    cli_schema = {
+        "type": "object",
+        "properties": {"from_cli": {"type": "string"}},
+    }
+    (templates_path / "schema.yaml").write_text(
+        yaml.safe_dump({"prompt": "Say hello", "schema_object": template_schema}),
+        "utf-8",
+    )
+    args = ["-t", "schema", "-m", "echo"]
+    if use_cli_schema:
+        args.extend(["--schema", json.dumps(cli_schema)])
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+
+    schemas = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
+    assert len(schemas) == 1
+    expected = cli_schema if use_cli_schema else template_schema
+    assert json.loads(schemas[0]["content"]) == expected
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
