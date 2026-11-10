@@ -734,16 +734,6 @@ def m027_turns_response_json(db):
     db["turns"].add_column("response_json", str)
 
 
-# FORK-LOCAL migration (rs) - note for future rebases onto upstream:
-# a same-numbered upstream m028_* does NOT clash (migrations are
-# recorded by function name, and these indexes depend only on tables
-# from m010/m017/m023, so ordering against future upstream migrations
-# is irrelevant). The clash to watch for is upstream shipping
-# equivalent indexes: sqlite-utils auto-generates the same
-# idx_<table>_<columns> names, so if_not_exists below keeps this
-# migration a no-op when upstream's version ran first. If upstream's
-# equivalent lacks that guard and would run AFTER this one, drop this
-# migration during the rebase instead.
 @migration
 def m028_log_lookup_indexes(db):
     # Indexes for the columns `llm logs` looks rows up by but
