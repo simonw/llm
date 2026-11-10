@@ -452,9 +452,14 @@ def register_models(register):
         chat_model = klass(**model_kwargs)
         async_model = async_klass(**model_kwargs) if async_klass else None
         if api_base:
+            # Never fall back to the user's OpenAI key for a custom endpoint:
+            # clearing key_env_var stops OPENAI_API_KEY from being used even
+            # when api_key_name names a key that has not been stored.
             chat_model.needs_key = None
+            chat_model.key_env_var = None
             if async_model:
                 async_model.needs_key = None
+                async_model.key_env_var = None
         if extra_model.get("api_key_name"):
             chat_model.needs_key = extra_model["api_key_name"]
             if async_model:
@@ -2764,6 +2769,10 @@ class Responses(_SharedResponses, KeyModel):
     ) -> Iterator[str | StreamEvent]:
         if getattr(prompt.options, "chat_completions", None):
             chat = Chat(**self._delegate_chat_kwargs())
+            # Without this the delegate keeps the class default needs_key of
+            # "openai" and sends the user's OpenAI key to a custom api_base.
+            chat.needs_key = self.needs_key
+            chat.key_env_var = self.key_env_var
             _partition_tools(chat, prompt.tools)
             yield from chat.execute(prompt, stream, response, conversation, key)
             return
@@ -3008,6 +3017,10 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
     ) -> AsyncGenerator[str | StreamEvent, None]:
         if getattr(prompt.options, "chat_completions", None):
             chat = AsyncChat(**self._delegate_chat_kwargs())
+            # Without this the delegate keeps the class default needs_key of
+            # "openai" and sends the user's OpenAI key to a custom api_base.
+            chat.needs_key = self.needs_key
+            chat.key_env_var = self.key_env_var
             _partition_tools(chat, prompt.tools)
             async for event in chat.execute(
                 prompt, stream, response, conversation, key
