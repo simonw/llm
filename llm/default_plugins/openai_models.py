@@ -1671,7 +1671,7 @@ class Chat(_Shared, KeyModel):
                 **kwargs,
             )
             chunks = []
-            tool_calls = {}
+            tool_calls: dict[int, Any] = {}
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
@@ -1790,7 +1790,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 **kwargs,
             )
             chunks = []
-            tool_calls = {}
+            tool_calls: dict[int, Any] = {}
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
