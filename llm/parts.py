@@ -36,7 +36,7 @@ def _attachment_to_dict(att: Attachment) -> AttachmentDict:
         d["url"] = att.url
     if att.path:
         d["path"] = att.path
-    if att.content:
+    if att.content is not None:
         d["content"] = base64.b64encode(att.content).decode("ascii")
     return d  # type: ignore[return-value]
 
