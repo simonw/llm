@@ -651,6 +651,9 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
     seed: int
       Integer seed to attempt to sample deterministically
+    chat_template_kwargs: dict, str
+      Provider-specific arguments for the model's chat template. Pass a JSON
+      object string like '{"enable_thinking":false}'
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
     image_detail: str
@@ -680,6 +683,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     image_detail: str
     service_tier: str
@@ -703,6 +707,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     image_detail: str
     service_tier: str
@@ -726,6 +731,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     image_detail: str
     service_tier: str
@@ -768,6 +774,9 @@ OpenAI Responses: o3
       Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
     seed: int
       Integer seed to attempt to sample deterministically
+    chat_template_kwargs: dict, str
+      Provider-specific arguments for the model's chat template. Pass a JSON
+      object string like '{"enable_thinking":false}'
     json_object: boolean
       Output a valid JSON object {...}. Prompt must mention JSON.
     chat_completions: boolean
@@ -809,6 +818,7 @@ OpenAI Responses: gpt-5
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -836,6 +846,7 @@ OpenAI Responses: gpt-5-mini
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -863,6 +874,7 @@ OpenAI Responses: gpt-5-nano
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -890,6 +902,7 @@ OpenAI Responses: gpt-5-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -917,6 +930,7 @@ OpenAI Responses: gpt-5-mini-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -944,6 +958,7 @@ OpenAI Responses: gpt-5-nano-2025-08-07
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -971,6 +986,7 @@ OpenAI Responses: gpt-5.1
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -998,6 +1014,7 @@ OpenAI Responses: gpt-5.2
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1025,6 +1042,7 @@ OpenAI Responses: gpt-5.4
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1052,6 +1070,7 @@ OpenAI Responses: gpt-5.4-2026-03-05
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1079,6 +1098,7 @@ OpenAI Responses: gpt-5.4-mini
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1106,6 +1126,7 @@ OpenAI Responses: gpt-5.4-mini-2026-03-17
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1133,6 +1154,7 @@ OpenAI Responses: gpt-5.4-nano
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1160,6 +1182,7 @@ OpenAI Responses: gpt-5.4-nano-2026-03-17
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1187,6 +1210,7 @@ OpenAI Responses: gpt-5.5
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1214,6 +1238,7 @@ OpenAI Responses: gpt-5.5-2026-04-23
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1241,6 +1266,7 @@ OpenAI Responses: gpt-5.6-sol
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1268,6 +1294,7 @@ OpenAI Responses: gpt-5.6-terra
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1295,6 +1322,7 @@ OpenAI Responses: gpt-5.6-luna
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1322,6 +1350,7 @@ OpenAI Responses: gpt-6-astra
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1349,6 +1378,7 @@ OpenAI Responses: gpt-6-sol
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1376,6 +1406,7 @@ OpenAI Responses: gpt-6-luna
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1403,6 +1434,7 @@ OpenAI Responses: gpt-6.1-sol
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1430,6 +1462,7 @@ OpenAI Responses: gpt-6.1-terra
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str
@@ -1457,6 +1490,7 @@ OpenAI Responses: chat-latest
     stop: str
     logit_bias: dict, str
     seed: int
+    chat_template_kwargs: dict, str
     json_object: boolean
     chat_completions: boolean
     image_detail: str

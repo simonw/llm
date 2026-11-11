@@ -220,6 +220,24 @@ And confirm they were logged correctly with:
 llm logs -n 1
 ```
 
+Some OpenAI-compatible Chat Completions servers support provider-specific chat template arguments. These can be saved in a reusable template using the `chat_template_kwargs` option. For example, a server using `enable_thinking` could use a template like this:
+
+```yaml
+model: orca-openai-compat
+prompt: $input
+options:
+  chat_template_kwargs:
+    enable_thinking: false
+```
+
+The nested keys are defined by the provider, not by LLM. The equivalent command-line option accepts a JSON object:
+
+```bash
+llm -m orca-openai-compat \
+  -o chat_template_kwargs '{"enable_thinking": false}' \
+  "What is the capital of France?"
+```
+
 ### Listing and removing configured models
 
 `llm openai endpoint list` shows the records in the file, or `--json` for the raw records:
