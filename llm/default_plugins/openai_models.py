@@ -1649,6 +1649,28 @@ class _Shared:
         return kwargs
 
 
+def _streamed_tool_call_index(tool_calls, tool_call):
+    """Key for one streamed tool-call delta.
+
+    OpenAI sends an integer index. Some compatible endpoints omit it and
+    repeat id and name on every argument fragment. An id already seen
+    continues that call; a new id, or a name with no id, starts one;
+    anything else continues the most recent call.
+    """
+    idx = tool_call.index
+    if idx is not None:
+        return idx
+    if tool_call.id:
+        for existing_idx, existing in tool_calls.items():
+            if existing.id == tool_call.id:
+                return existing_idx
+    if not tool_calls:
+        return 0
+    if tool_call.id or tool_call.function.name:
+        return max(tool_calls) + 1
+    return max(tool_calls)
+
+
 class Chat(_Shared, KeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
@@ -1682,7 +1704,7 @@ class Chat(_Shared, KeyModel):
                 **kwargs,
             )
             chunks = []
-            tool_calls = {}
+            tool_calls: dict[int, Any] = {}
             for chunk in completion:
                 chunks.append(chunk)
                 if chunk.usage:
@@ -1691,7 +1713,7 @@ class Chat(_Shared, KeyModel):
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        idx = tool_call.index
+                        idx = _streamed_tool_call_index(tool_calls, tool_call)
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
                             yield StreamEvent(
@@ -1801,7 +1823,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 **kwargs,
             )
             chunks = []
-            tool_calls = {}
+            tool_calls: dict[int, Any] = {}
             async for chunk in completion:
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
@@ -1810,7 +1832,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     for tool_call in chunk.choices[0].delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
-                        idx = tool_call.index
+                        idx = _streamed_tool_call_index(tool_calls, tool_call)
                         if idx not in tool_calls:
                             tool_calls[idx] = tool_call
                             yield StreamEvent(
