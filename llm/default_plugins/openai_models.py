@@ -2650,11 +2650,17 @@ class _SharedResponses(_Shared):
                 seen_message = True
                 for content in item.content or []:
                     ctype = getattr(content, "type", None)
-                    if ctype == "output_text" and content.text:
+                    if ctype == "output_text":
+                        text = content.text
+                    elif ctype == "refusal":
+                        text = content.refusal
+                    else:
+                        continue
+                    if text:
                         events.append(
                             StreamEvent(
                                 type="text",
-                                chunk=content.text,
+                                chunk=text,
                                 message_index=message_index,
                             )
                         )
@@ -2788,7 +2794,7 @@ class Responses(_SharedResponses, KeyModel):
                             tool_call_id=item.call_id,
                             message_index=message_index,
                         )
-                elif etype == "response.output_text.delta":
+                elif etype in ("response.output_text.delta", "response.refusal.delta"):
                     yield StreamEvent(
                         type="text",
                         chunk=event.delta or "",
@@ -3035,7 +3041,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                             tool_call_id=item.call_id,
                             message_index=message_index,
                         )
-                elif etype == "response.output_text.delta":
+                elif etype in ("response.output_text.delta", "response.refusal.delta"):
                     yield StreamEvent(
                         type="text",
                         chunk=event.delta or "",

@@ -4,9 +4,11 @@ import json
 import os
 
 import pytest
+from click.testing import CliRunner
 from pytest_httpx2 import IteratorStream
 
 import llm
+from llm.cli import cli
 from llm.default_plugins.openai_models import (
     CodeInterpreter,
     Responses,
@@ -42,6 +44,119 @@ def _text_response_json(model="gpt-5.6-luna", text="ok"):
         "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
         "status": "completed",
     }
+
+
+def _refusal_response_json():
+    payload = _text_response_json()
+    payload["output"][0]["content"] = [
+        {"type": "refusal", "refusal": "I cannot help with that request."}
+    ]
+    return payload
+
+
+def _refusal_stream(payload):
+    message = payload["output"][0]
+    yield _responses_sse(
+        "response.output_item.added",
+        {
+            "output_index": 0,
+            "item": {**message, "status": "in_progress", "content": []},
+        },
+    )
+    for index, delta in enumerate(["I cannot ", "help with that request."]):
+        yield _responses_sse(
+            "response.refusal.delta",
+            {
+                "content_index": 0,
+                "item_id": message["id"],
+                "output_index": 0,
+                "sequence_number": index + 1,
+                "delta": delta,
+            },
+        )
+    yield _responses_sse(
+        "response.refusal.done",
+        {
+            "content_index": 0,
+            "item_id": message["id"],
+            "output_index": 0,
+            "sequence_number": 3,
+            "refusal": message["content"][0]["refusal"],
+        },
+    )
+    yield _responses_sse(
+        "response.output_item.done", {"output_index": 0, "item": message}
+    )
+    yield _responses_sse("response.completed", {"response": payload})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_responses_non_streaming_refusal(httpx2_mock, async_):
+    payload = _refusal_response_json()
+    httpx2_mock.add_response(
+        method="POST", url="https://api.openai.com/v1/responses", json=payload
+    )
+
+    model = (llm.get_async_model if async_ else llm.get_model)("gpt-5.6-luna")
+    response = model.prompt("hello", stream=False, key="test")
+    text = await response.text() if async_ else response.text()
+    messages = await response.messages() if async_ else response.messages()
+
+    assert text == "I cannot help with that request."
+    assert messages[0].parts == [llm.parts.TextPart(text=text)]
+    assert response.response_json == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_responses_streaming_refusal(httpx2_mock, async_):
+    payload = _refusal_response_json()
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_refusal_stream(payload)),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    model = (llm.get_async_model if async_ else llm.get_model)("gpt-5.6-luna")
+    response = model.prompt("hello", key="test")
+    if async_:
+        chunks = [chunk async for chunk in response]
+        text = await response.text()
+        messages = await response.messages()
+    else:
+        chunks = list(response)
+        text = response.text()
+        messages = response.messages()
+
+    assert chunks == ["I cannot ", "help with that request."]
+    assert text == "I cannot help with that request."
+    assert messages[0].parts == [llm.parts.TextPart(text=text)]
+    assert response.response_json == payload
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_responses_refusal_cli(httpx2_mock, stream):
+    payload = _refusal_response_json()
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            stream=IteratorStream(_refusal_stream(payload)),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST", url="https://api.openai.com/v1/responses", json=payload
+        )
+    args = ["-m", "gpt-5.6-luna", "--key", "test", "hello"]
+    if not stream:
+        args.append("--no-stream")
+
+    result = CliRunner().invoke(cli, args)
+
+    assert result.exit_code == 0
+    assert result.output == "I cannot help with that request.\n"
 
 
 @pytest.mark.parametrize(
