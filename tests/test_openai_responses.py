@@ -605,6 +605,59 @@ async def test_responses_failed_stream_does_not_execute_tools(httpx2_mock, async
     assert len(httpx2_mock.get_requests()) == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("consume_events", [False, True])
+async def test_async_failed_response_stays_failed(httpx2_mock, stream, consume_events):
+    response_json = _text_response_json()
+    response_json.update(
+        status="failed",
+        output=[],
+        error={"code": "server_error", "message": "Generation failed"},
+    )
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            stream=IteratorStream(
+                [_responses_sse("response.failed", {"response": response_json})]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=response_json,
+        )
+    conversation = llm.get_async_model("gpt-5.6-luna").conversation()
+    response = conversation.prompt("hello", stream=stream, key="test")
+    completed = []
+    await response.on_done(lambda response: completed.append(response))
+
+    async def drain_events():
+        return [event async for event in response.astream_events()]
+
+    with pytest.raises(ValueError, match="server_error: Generation failed"):
+        if consume_events:
+            await drain_events()
+        else:
+            await response.text()
+    for read in (
+        response.json,
+        response.text,
+        response.tool_calls,
+        response.execute_tool_calls,
+        drain_events,
+    ):
+        with pytest.raises(ValueError, match="server_error: Generation failed"):
+            await read()
+    assert response.response_json["status"] == "failed"
+    assert not conversation.responses
+    assert completed == []
+    assert len(httpx2_mock.get_requests()) == 1
+
+
 def _code_interpreter_stream():
     yield _responses_sse(
         "response.output_item.added",
