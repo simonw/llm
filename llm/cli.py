@@ -72,6 +72,7 @@ from .logs import (
 )
 from .migrations import migrate
 from .plugins import load_plugins, pm
+from .redaction import default_scrubber
 from .utils import (
     ensure_fragment,
     extract_fenced_code_block,
@@ -1761,6 +1762,28 @@ def annotate_log_rows(db, rows, expand=False, truncate=False):
     return {id: extras["attachments"] for id, extras in extras_by_id.items()}
 
 
+def _scrub_output(text):
+    """Scrub known secrets from text about to be printed.
+
+    The write path (llm.logs) already scrubs new log entries; scrubbing
+    on the way out also protects databases written before that existed,
+    which matters because `llm logs` output is exactly what people paste
+    into issues and chat logs.
+    """
+    scrubber = default_scrubber()
+    if scrubber is None or not text:
+        return text
+    return scrubber.scrub_text(text)
+
+
+def _scrub_output_obj(obj):
+    "Object form of _scrub_output, for structured (YAML) output."
+    scrubber = default_scrubber()
+    if scrubber is None:
+        return obj
+    return scrubber.scrub_obj(obj)
+
+
 def log_rows_as_json(rows, attachments_by_id):
     "Serialize annotated log rows to the JSON used by 'llm logs --json'"
     for row in rows:
@@ -1768,7 +1791,7 @@ def log_rows_as_json(rows, attachments_by_id):
             {k: v for k, v in attachment.items() if k != "response_id"}
             for attachment in attachments_by_id.get(row["id"], [])
         ]
-    return json.dumps(list(rows), indent=2)
+    return _scrub_output(json.dumps(list(rows), indent=2))
 
 
 def logs_json_for_response_ids(db, ids):
@@ -2033,7 +2056,7 @@ def logs_list(
             except ValueError:
                 pass
         for line in output_rows_as_json(to_output, nl=not data_array, compact=True):
-            click.echo(line)
+            click.echo(_scrub_output(line))
         return
 
     attachments_by_id = annotate_log_rows(db, rows, expand=expand, truncate=truncate)
@@ -2053,7 +2076,7 @@ def logs_list(
         output = rows[-1]["response"]
 
     if output is not None:
-        click.echo(output)
+        click.echo(_scrub_output(output))
     else:
         # Output neatly formatted human-readable logs
         def _fenced_block(value):
@@ -2211,7 +2234,9 @@ def logs_list(
                     if row["token_details"]:
                         usage_details["details"] = json.loads(row["token_details"])
                     obj["usage"] = usage_details
-                click.echo(yaml.dump([obj], sort_keys=False).strip())
+                click.echo(
+                    yaml.dump([_scrub_output_obj(obj)], sort_keys=False).strip()
+                )
                 continue
             # Not short, output Markdown
             click.echo(
@@ -3183,6 +3208,7 @@ def fragments_list(queries, aliases, json_):
     results = list(db.query(sql, params))
     for result in results:
         result["aliases"] = json.loads(result["aliases"])
+        result["content"] = _scrub_output(result["content"])
     if json_:
         click.echo(json.dumps(results, indent=4))
     else:
@@ -3244,7 +3270,7 @@ def fragments_show(alias_or_hash):
         resolved = resolve_fragments(db, [alias_or_hash])[0]
     except FragmentNotFound as ex:
         raise click.ClickException(str(ex))
-    click.echo(resolved)
+    click.echo(_scrub_output(resolved))
 
 
 @fragments.command(name="remove")
