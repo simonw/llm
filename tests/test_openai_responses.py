@@ -842,6 +842,44 @@ def test_responses_input_translation_assistant_text_uses_easy_input_message():
     ]
 
 
+def _responses_input_for_attachment(httpx2_mock, attachment):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json=_text_response_json(model="gpt-6-luna"),
+        headers={"Content-Type": "application/json"},
+    )
+    model = llm.get_model("gpt-6-luna")
+    response = model.prompt(
+        "Summarize this", attachments=[attachment], stream=False, key="test"
+    )
+    assert response.text() == "ok"
+    request_body = json.loads(httpx2_mock.get_requests()[-1].content)
+    content = request_body["input"][0]["content"]
+    assert content[0] == {"type": "input_text", "text": "Summarize this"}
+    return content[1]
+
+
+def test_responses_pdf_url_attachment_passed_as_file_url(httpx2_mock):
+    # httpx2_mock fails the test if LLM tries to download the PDF itself
+    attachment = llm.Attachment(
+        type="application/pdf", url="https://example.com/document.pdf"
+    )
+    assert _responses_input_for_attachment(httpx2_mock, attachment) == {
+        "type": "input_file",
+        "file_url": "https://example.com/document.pdf",
+    }
+
+
+def test_responses_pdf_content_attachment_passed_as_file_data(httpx2_mock):
+    attachment = llm.Attachment(type="application/pdf", content=b"%PDF-1.4")
+    assert _responses_input_for_attachment(httpx2_mock, attachment) == {
+        "type": "input_file",
+        "filename": f"{attachment.id()}.pdf",
+        "file_data": "data:application/pdf;base64,JVBERi0xLjQ=",
+    }
+
+
 def test_responses_reply_sends_prior_assistant_text_as_string(httpx2_mock):
     """response.reply() should send the same simple history shape a direct
     openai-python Responses call would use for a text-only assistant turn."""
