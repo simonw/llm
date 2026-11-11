@@ -659,9 +659,7 @@ class TestChatCompletionsReasoningContent:
         response = model.prompt("hi", key=API_KEY, stream=False)
         events = list(response.stream_events())
         assert events == [
-            llm.parts.StreamEvent(
-                type="reasoning", chunk="think first", part_index=0
-            ),
+            llm.parts.StreamEvent(type="reasoning", chunk="think first", part_index=0),
             llm.parts.StreamEvent(type="text", chunk="Hello", part_index=1),
         ]
         assert response.messages() == [
@@ -685,12 +683,8 @@ class TestChatCompletionsReasoningContent:
         response = model.prompt("hi", key=API_KEY)
         events = list(response.stream_events())
         assert events == [
-            llm.parts.StreamEvent(
-                type="reasoning", chunk="step one", part_index=0
-            ),
-            llm.parts.StreamEvent(
-                type="reasoning", chunk=", step two", part_index=0
-            ),
+            llm.parts.StreamEvent(type="reasoning", chunk="step one", part_index=0),
+            llm.parts.StreamEvent(type="reasoning", chunk=", step two", part_index=0),
             llm.parts.StreamEvent(type="text", chunk="Hello", part_index=1),
         ]
         assert response.messages() == [
@@ -701,6 +695,36 @@ class TestChatCompletionsReasoningContent:
                     llm.parts.TextPart(text="Hello"),
                 ],
             )
+        ]
+
+    def test_streaming_response_json_keeps_reasoning_content(self, httpx2_mock):
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(_reasoning_content_stream()),
+            headers={"Content-Type": "text/event-stream"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY)
+        response.text()
+        assert response.json()["content"] == "Hello"
+        assert response.json()["reasoning_content"] == "step one, step two"
+
+    def test_no_redacted_marker_when_reasoning_text_returned(self, httpx2_mock):
+        completion = _reasoning_content_completion()
+        completion["usage"]["completion_tokens_details"] = {"reasoning_tokens": 5}
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json=completion,
+            headers={"Content-Type": "application/json"},
+        )
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt("hi", key=API_KEY, stream=False)
+        events = list(response.stream_events())
+        assert [(e.type, e.chunk, e.redacted) for e in events] == [
+            ("reasoning", "think first", False),
+            ("text", "Hello", False),
         ]
 
     @pytest.mark.asyncio

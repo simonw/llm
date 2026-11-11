@@ -1659,6 +1659,7 @@ class Chat(_Shared, KeyModel):
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key)
         usage = None
+        saw_reasoning = False
         if stream:
             completion = client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -1700,6 +1701,7 @@ class Chat(_Shared, KeyModel):
                     delta = None
                 reasoning = _chat_reasoning_content(delta)
                 if reasoning:
+                    saw_reasoning = True
                     yield StreamEvent(type="reasoning", chunk=reasoning)
                 content = getattr(delta, "content", None) if delta is not None else None
                 if content:
@@ -1747,6 +1749,7 @@ class Chat(_Shared, KeyModel):
             message = completion.choices[0].message
             reasoning = _chat_reasoning_content(message)
             if reasoning:
+                saw_reasoning = True
                 yield StreamEvent(type="reasoning", chunk=reasoning)
             if message.content is not None:
                 yield StreamEvent(
@@ -1754,8 +1757,11 @@ class Chat(_Shared, KeyModel):
                     chunk=message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
+        # Only mark reasoning as redacted when the provider counted reasoning
+        # tokens but returned no reasoning text.
+        if not saw_reasoning and (
+            usage
+            and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
         ):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
@@ -1786,6 +1792,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
         kwargs = self.build_kwargs(prompt, stream)
         client = self.get_client(key, async_=True)
         usage = None
+        saw_reasoning = False
         if stream:
             completion = await client.chat.completions.create(
                 model=self.model_name or self.model_id,
@@ -1827,6 +1834,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     delta = None
                 reasoning = _chat_reasoning_content(delta)
                 if reasoning:
+                    saw_reasoning = True
                     yield StreamEvent(type="reasoning", chunk=reasoning)
                 content = getattr(delta, "content", None) if delta is not None else None
                 if content:
@@ -1872,6 +1880,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
             message = completion.choices[0].message
             reasoning = _chat_reasoning_content(message)
             if reasoning:
+                saw_reasoning = True
                 yield StreamEvent(type="reasoning", chunk=reasoning)
             if message.content is not None:
                 yield StreamEvent(
@@ -1879,8 +1888,11 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     chunk=message.content,
                 )
         self.set_usage(response, usage)
-        if usage and (usage.get("completion_tokens_details") or {}).get(
-            "reasoning_tokens"
+        # Only mark reasoning as redacted when the provider counted reasoning
+        # tokens but returned no reasoning text.
+        if not saw_reasoning and (
+            usage
+            and (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
         ):
             yield StreamEvent(type="reasoning", chunk="", redacted=True)
         response._prompt_json = redact_data({"messages": messages})
@@ -3271,6 +3283,7 @@ def not_nulls(data) -> dict:
 
 def combine_chunks(chunks: list) -> dict:
     content = ""
+    reasoning_content = ""
     role = None
     finish_reason = None
     # If any of them have log probability, we're going to persist
@@ -3294,6 +3307,9 @@ def combine_chunks(chunks: list) -> dict:
                 content += choice.text
                 continue
             role = choice.delta.role
+            reasoning = _chat_reasoning_content(choice.delta)
+            if reasoning:
+                reasoning_content += reasoning
             if choice.delta.content is not None:
                 content += choice.delta.content
             if choice.finish_reason is not None:
@@ -3306,6 +3322,8 @@ def combine_chunks(chunks: list) -> dict:
         "finish_reason": finish_reason,
         "usage": usage,
     }
+    if reasoning_content:
+        combined["reasoning_content"] = reasoning_content
     if logprobs:
         combined["logprobs"] = logprobs
     if chunks:
