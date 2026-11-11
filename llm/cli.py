@@ -133,6 +133,21 @@ async def display_async_stream_events(events, *, show_reasoning=True):
             click.echo(click.style(event.chunk, dim=True), nl=False, err=True)
 
 
+def _display_token_usage(response):
+    responses = (
+        response._responses if isinstance(response, _BaseChainResponse) else [response]
+    )
+    for response_object in responses:
+        click.echo(
+            click.style(
+                f"Token usage: {response_object.token_usage()}",
+                fg="yellow",
+                bold=True,
+            ),
+            err=True,
+        )
+
+
 def _run_chat(
     model_label,
     prompt_callback,
@@ -142,6 +157,7 @@ def _run_chat(
     initial_attachments=None,
     transform_prompt=None,
     show_reasoning=True,
+    show_usage=False,
 ):
     """Run the terminal chat loop shared by managed and transient models."""
     click.echo(f"Chatting with {model_label}")
@@ -214,6 +230,8 @@ def _run_chat(
             show_reasoning=show_reasoning,
         )
         print()
+        if show_usage:
+            _display_token_usage(response)
 
 
 def validate_fragment_alias(ctx, param, value):
@@ -362,14 +380,23 @@ def resolve_attachment(value):
     path = pathlib.Path(value)
     if not path.exists():
         raise AttachmentError(f"File {value} does not exist")
-    path = path.resolve()
-
     # Try to guess type
-    mimetype = mimetype_from_path(str(path))
+    content = None
+    if path.is_fifo():
+        content = path.read_bytes()
+        mimetype = mimetype_from_string(content)
+    else:
+        path = path.resolve()
+        mimetype = mimetype_from_path(str(path))
     if mimetype is None:
         raise AttachmentError(f"Could not determine mimetype of {value}")
 
-    return Attachment(type=mimetype, path=str(path), url=None, content=None)
+    return Attachment(
+        type=mimetype,
+        path=None if content is not None else str(path),
+        url=None,
+        content=content,
+    )
 
 
 class AttachmentType(click.ParamType):
@@ -393,8 +420,11 @@ def resolve_attachment_with_type(value: str, mimetype: str) -> Attachment:
         path = pathlib.Path(value)
         if not path.exists():
             raise click.BadParameter(f"File {value} does not exist")
-        path = path.resolve()
-        attachment = Attachment(mimetype, str(path), None, None)
+        if path.is_fifo():
+            attachment = Attachment(mimetype, None, None, path.read_bytes())
+        else:
+            path = path.resolve()
+            attachment = Attachment(mimetype, str(path), None, None)
     return attachment
 
 
@@ -1146,20 +1176,7 @@ def prompt(
         raise click.ClickException(str(ex))
 
     if usage:
-        if isinstance(response, _BaseChainResponse):
-            responses = response._responses
-        else:
-            responses = [response]
-        for response_object in responses:
-            # Show token usage to stderr in yellow
-            click.echo(
-                click.style(
-                    f"Token usage: {response_object.token_usage()}",
-                    fg="yellow",
-                    bold=True,
-                ),
-                err=True,
-            )
+        _display_token_usage(response)
 
     if json_output:
         if isinstance(response, _BaseChainResponse):
@@ -1224,6 +1241,9 @@ def prompt(
 )
 @click.option("--no-stream", is_flag=True, help="Do not stream output")
 @click.option("-R", "--hide-reasoning", is_flag=True, help="Hide reasoning output")
+@click.option(
+    "-u", "--usage", is_flag=True, help="Show token usage after each chat turn"
+)
 @click.option("--key", help="API key to use")
 @tool_options
 def chat(
@@ -1238,6 +1258,7 @@ def chat(
     options,
     no_stream,
     hide_reasoning,
+    usage,
     key,
     database,
     tools,
@@ -1376,7 +1397,8 @@ def chat(
             system=system,
             **kwargs,
         )
-        response.on_response(lambda response: response.log_to_db(db))
+        if logs_on():
+            response.on_response(lambda response: response.log_to_db(db))
 
         # System prompt and system fragments only sent for the first message
         system = None
@@ -1391,6 +1413,7 @@ def chat(
         initial_attachments=argument_attachments,
         transform_prompt=transform_chat_prompt,
         show_reasoning=not hide_reasoning,
+        show_usage=usage,
     )
 
 
@@ -2704,15 +2727,21 @@ def schemas_list(path, database, queries, full, json_, nl):
         params.extend(f"%{q}%" for q in queries)
 
     sql = f"""
+    with schema_uses as (
+      select schema_id, datetime_utc from turns
+      union all
+      select schema_id, datetime_utc from responses
+      where responses.id not in (select id from turns)
+    )
     select
       schemas.id,
       schemas.content,
-      max(responses.datetime_utc) as recently_used,
+      max(schema_uses.datetime_utc) as recently_used,
       count(*) as times_used
     from schemas
-    join responses
-      on responses.schema_id = schemas.id
-    {where_sql} group by responses.schema_id
+    join schema_uses
+      on schema_uses.schema_id = schemas.id
+    {where_sql} group by schema_uses.schema_id
     order by recently_used
     """
     rows = db.query(sql, params)
@@ -3480,7 +3509,8 @@ def embed(
         if format_ == "json" or format_ is None:
             click.echo(json.dumps(embedding))
         elif format_ == "blob":
-            click.echo(encode(embedding))
+            # Write blob as raw bytes, no trailing newline.
+            click.echo(encode(embedding), nl=False)
         elif format_ == "base64":
             click.echo(base64.b64encode(encode(embedding)).decode("ascii"))
         elif format_ == "hex":
@@ -3703,6 +3733,7 @@ def embed_multi(
                         for encoding in encodings:
                             try:
                                 content = path.read_text(encoding=encoding)
+                                break
                             except UnicodeDecodeError:
                                 continue
                     if content is None:

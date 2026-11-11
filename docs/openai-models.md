@@ -35,17 +35,7 @@ OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
 OpenAI Chat: gpt-4.1 (aliases: 4.1)
 OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
-OpenAI Chat: gpt-4.1-nano (aliases: 4.1-nano)
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-4-turbo-2024-04-09
-OpenAI Chat: gpt-4-turbo (aliases: gpt-4-turbo-preview, 4-turbo, 4t)
-OpenAI Responses: o1
-OpenAI Responses: o1-2024-12-17
-OpenAI Responses: o3-mini
 OpenAI Responses: o3
-OpenAI Responses: o4-mini
 OpenAI Responses: gpt-5
 OpenAI Responses: gpt-5-mini
 OpenAI Responses: gpt-5-nano
@@ -54,7 +44,6 @@ OpenAI Responses: gpt-5-mini-2025-08-07
 OpenAI Responses: gpt-5-nano-2025-08-07
 OpenAI Responses: gpt-5.1
 OpenAI Responses: gpt-5.2
-OpenAI Responses: gpt-5.2-chat-latest
 OpenAI Responses: gpt-5.4
 OpenAI Responses: gpt-5.4-2026-03-05
 OpenAI Responses: gpt-5.4-mini
@@ -70,14 +59,14 @@ OpenAI Responses: gpt-6-astra
 OpenAI Responses: gpt-6-sol
 OpenAI Responses: gpt-6-luna
 OpenAI Responses: gpt-6.1-sol
+OpenAI Responses: gpt-6.1-terra
 OpenAI Responses: chat-latest
-OpenAI Completion: gpt-3.5-turbo-instruct (aliases: 3.5-instruct, chatgpt-instruct)
 ```
 <!-- [[[end]]] -->
 
 See [the OpenAI models documentation](https://platform.openai.com/docs/models) for details of each of these.
 
-[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) use the Responses API by default and support `-o reasoning_effort` values of `none`, `low`, `medium`, `high`, `xhigh` and `max`. If you opt into Chat Completions with `-o chat_completions 1`, function calling requires `-o reasoning_effort none`.
+[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol), [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra) use the Responses API by default and support `-o reasoning_effort` values of `none`, `low`, `medium`, `high`, `xhigh` and `max`. If you opt into Chat Completions with `-o chat_completions 1`, function calling with GPT-6 Sol or GPT-6 Luna requires `-o reasoning_effort none`; GPT-6.1 Terra requires the Responses API for tool calling.
 
 `gpt-6-luna` is OpenAI's cheapest frontier model, and is the default for if you don't specify a model at all. Consult [OpenAI's model documentation](https://platform.openai.com/docs/models) for details of the other models.
 
@@ -212,7 +201,7 @@ OpenAI containers are ephemeral and expire after 20 minutes without activity. Se
 
 OpenAI models can process requests at different speeds and prices using the `service_tier` API parameter. [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode) runs up to 2.5x faster than standard processing at a higher per-token price, with the biggest speed increase on `gpt-5.6-sol`. [Flex processing](https://developers.openai.com/api/docs/guides/flex-processing) is slower but cheaper. Each tier works with a different subset of models - the Fast and Flex tables on [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) are the definitive list of which models support which tier.
 
-All of the OpenAI models supported by LLM expose a `service_tier` option, with the exception of the legacy `gpt-3.5-turbo-instruct` completion model. Use `-o service_tier fast` to enable Fast mode for a prompt:
+All of the OpenAI models supported by LLM expose a `service_tier` option. Use `-o service_tier fast` to enable Fast mode for a prompt:
 
 ```bash
 llm -m gpt-5.6-sol -o service_tier fast 'Fast facts about pelicans'
@@ -260,7 +249,7 @@ The vector size of the supported OpenAI embedding models are as follows:
 
 ## OpenAI completion models
 
-The `gpt-3.5-turbo-instruct` model is a little different - it is a completion model rather than a chat model, described in [the OpenAI completions documentation](https://platform.openai.com/docs/api-reference/completions/create).
+OpenAI has shut down the completion models that LLM used to include, such as `gpt-3.5-turbo-instruct`. Other servers may still offer [the completions API](https://platform.openai.com/docs/api-reference/completions/create): to use one, {ref}`configure the model <openai-extra-models>` with `completion: true`.
 
 (openai-extra-models)=
 
@@ -268,40 +257,55 @@ The `gpt-3.5-turbo-instruct` model is a little different - it is a completion mo
 
 OpenAI occasionally release new models with new names. LLM aims to ship new releases to support these, but you can also configure them directly, by adding them to a `extra-openai-models.yaml` configuration file.
 
-Run this command to find the directory in which this file should be created:
+Suppose you are using an older version of LLM that does not yet include `gpt-6.1-sol`. You can add it to that file using the `llm openai endpoint add` command:
 
 ```bash
-dirname "$(llm logs path)"
+llm openai endpoint add https://api.openai.com/v1 \
+  -m gpt-6.1-sol \
+  --alias 6.1-sol \
+  --responses \
+  --reasoning \
+  --supports-tools
+```
+This adds the following record to the file:
+
+```yaml
+- model_id: gpt-6.1-sol
+  model_name: gpt-6.1-sol
+  aliases:
+  - 6.1-sol
+  responses: true
+  supports_tools: true
+  reasoning: true
+```
+Because the URL is OpenAI's own API the `api_base` key is omitted, so the model uses your regular OpenAI API key. See {ref}`openai-endpoint-add` for the full set of options, including how to point at other OpenAI-compatible endpoints.
+
+You can also create or edit the file by hand. Run this command to find its location:
+
+```bash
+llm openai endpoint path
 ```
 On my Mac laptop I get this:
 ```
-~/Library/Application Support/io.datasette.llm
+~/Library/Application Support/io.datasette.llm/extra-openai-models.yaml
 ```
-Create a file in that directory called `extra-openai-models.yaml`.
 
-Let's say OpenAI have just released the `gpt-3.5-turbo-0613` model and you want to use it, despite LLM not yet shipping support. You could configure that by adding this to the file:
-
-```yaml
-- model_id: gpt-3.5-turbo-0613
-  model_name: gpt-3.5-turbo-0613
-  aliases: ["0613"]
-```
 The `model_id` is the identifier that will be recorded in the LLM logs. You can use this to specify the model, or you can optionally include a list of aliases for that model. The `model_name` is the actual model identifier that will be passed to the API, which must match exactly what the API expects.
 
-If the model is a completion model (such as `gpt-3.5-turbo-instruct`) add `completion: true` to the configuration.
+If the model is a completion model add `completion: true` to the configuration.
 
-If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration. This is useful for models such as `o1`, `o3-mini` and `gpt-5`-style models that are accessed through `/v1/responses`.
+If the model should use the OpenAI Responses API rather than Chat Completions, add `responses: true` to the configuration, as shown above.
 
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
-For reasoning models like `o1` or `o3-mini` add `reasoning: true`.
+For reasoning models like `o3` add `reasoning: true`.
 
 If the model supports the `service_tier` parameter - see {ref}`openai-models-service-tier` - add `service_tier: true` to enable the corresponding option.
 
 With this configuration in place, the following command should run a prompt against the new model:
 
 ```bash
-llm -m 0613 'What is the capital of France?'
+llm -m 6.1-sol 'What is the capital of France?'
 ```
 Run `llm models` to confirm that the new model is now available:
 ```bash
@@ -309,9 +313,7 @@ llm models
 ```
 Example output:
 ```
-OpenAI Chat: gpt-3.5-turbo (aliases: 3.5, chatgpt)
-OpenAI Chat: gpt-3.5-turbo-16k (aliases: chatgpt-16k, 3.5-16k)
-OpenAI Chat: gpt-4 (aliases: 4, gpt4)
-OpenAI Chat: gpt-3.5-turbo-0613 (aliases: 0613)
+...
+OpenAI Responses: gpt-6.1-sol (aliases: 6.1-sol)
 ```
 Running `llm logs -n 1` should confirm that the prompt and response has been correctly logged to the database.

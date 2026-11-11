@@ -398,6 +398,14 @@ def mocked_openai_chat_stream(httpx2_mock):
 
 
 @pytest.fixture
+def completion_model(user_path):
+    (user_path / "extra-openai-models.yaml").write_text(
+        "- model_id: completion-demo\n  model_name: completion-demo\n  completion: true\n",
+        "utf-8",
+    )
+
+
+@pytest.fixture
 def mocked_openai_completion(httpx2_mock):
     httpx2_mock.add_response(
         method="POST",
@@ -406,7 +414,7 @@ def mocked_openai_completion(httpx2_mock):
             "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
             "object": "text_completion",
             "created": 1589478378,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nThis is indeed a test",
@@ -487,7 +495,7 @@ def stream_completion_events():
                     "object": "text_completion",
                     "created": 1695097702,
                     "choices": choices,
-                    "model": "gpt-3.5-turbo-instruct",
+                    "model": "completion-demo",
                 }
             )
         ).encode("utf-8")
@@ -514,7 +522,7 @@ def mocked_openai_completion_logprobs(httpx2_mock):
             "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
             "object": "text_completion",
             "created": 1695097747,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nHi.",

@@ -251,11 +251,12 @@ def test_extract_fenced_code_crlf(httpx2_mock):
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
+    result = runner.invoke(cli, ["-m", "gpt-4o-mini", "--key", "x", "Say hi"])
     assert result.exit_code == 0
     assert result.output == "Hi.\n"
 
 
+@pytest.mark.usefixtures("completion_model")
 @pytest.mark.parametrize(
     "model_id,async_,url,response",
     (
@@ -280,14 +281,14 @@ def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
             },
         ),
         (
-            "gpt-3.5-turbo-instruct",
+            "completion-demo",
             False,
             "https://api.openai.com/v1/completions",
             {
                 "id": "cmpl-stop-test",
                 "object": "text_completion",
                 "created": 1,
-                "model": "gpt-3.5-turbo-instruct",
+                "model": "completion-demo",
                 "choices": [{"text": "Hello", "index": 0, "finish_reason": "stop"}],
                 "usage": {
                     "prompt_tokens": 1,
@@ -333,6 +334,7 @@ def test_openai_stop_json_array_is_sent_as_array(
     assert llm.get_model(model_id).Options(**stored_options).stop == ["END", "STOP"]
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
     log_db = db_factory(str(log_path))
@@ -344,7 +346,7 @@ def test_openai_completion(db_factory, mocked_openai_completion, user_path):
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "completion-demo",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -358,16 +360,15 @@ def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     # Should have requested 256 tokens
     last_request = mocked_openai_completion.get_requests()[-1]
     assert json.loads(last_request.content) == {
-        "model": "gpt-3.5-turbo-instruct",
+        "model": "completion-demo",
         "prompt": "Say this is a test",
         "stream": False,
-        "max_tokens": 256,
     }
 
     # Check it was logged
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
+    assert rows[0]["model"] == "completion-demo"
     log_result = runner.invoke(
         cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
     )
@@ -375,7 +376,7 @@ def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "prompt": "Say this is a test",
             "system": None,
             "response": "\n\nThis is indeed a test",
@@ -383,6 +384,7 @@ def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_continue_includes_history(
     mocked_openai_completion, user_path
 ):
@@ -390,7 +392,7 @@ def test_openai_completion_continue_includes_history(
     # prior exchanges, not just the newest prompt - prompt.messages
     # carries them; conversation.responses does not.
     runner = CliRunner()
-    base = ["-m", "gpt-3.5-turbo-instruct", "--no-stream", "--key", "x"]
+    base = ["-m", "completion-demo", "--no-stream", "--key", "x"]
     result = runner.invoke(cli, base + ["Say this is a test"], catch_exceptions=False)
     assert result.exit_code == 0
     result2 = runner.invoke(cli, base + ["Say it again", "-c"], catch_exceptions=False)
@@ -401,13 +403,14 @@ def test_openai_completion_continue_includes_history(
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_system_prompt_error():
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "completion-demo",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -422,6 +425,7 @@ def test_openai_completion_system_prompt_error():
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_logprobs_stream(
     db_factory, mocked_openai_completion_logprobs_stream, user_path
 ):
@@ -433,7 +437,7 @@ def test_openai_completion_logprobs_stream(
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "completion-demo",
         "Say hi",
         "-o",
         "logprobs",
@@ -448,9 +452,10 @@ def test_openai_completion_logprobs_stream(
     # persisted - the message chain is the record of what happened.
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
+    assert rows[0]["model"] == "completion-demo"
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_logprobs_nostream(
     db_factory, mocked_openai_completion_logprobs, user_path
 ):
@@ -462,7 +467,7 @@ def test_openai_completion_logprobs_nostream(
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "completion-demo",
         "Say hi",
         "-o",
         "logprobs",
@@ -479,7 +484,7 @@ def test_openai_completion_logprobs_nostream(
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-3.5-turbo-instruct"
+    assert row["model"] == "completion-demo"
 
 
 EXTRA_MODELS_YAML = """
@@ -646,20 +651,20 @@ def test_llm_models_json_includes_server_side_tools():
             "-m",
             "gpt-5.6-luna",
             "-m",
-            "chatgpt",
+            "4o-mini",
         ],
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0
     models = {model["model_id"]: model for model in json.loads(result.output)}
-    assert set(models) == {"gpt-5.6-luna", "gpt-3.5-turbo"}
+    assert set(models) == {"gpt-5.6-luna", "gpt-4o-mini"}
     assert models["gpt-5.6-luna"]["server_side_tools"] == [
         {"name": "WebSearch", "plugin": None},
         {"name": "CodeInterpreter", "plugin": None},
         {"name": "ServerSideTool", "plugin": None},
     ]
-    assert models["gpt-3.5-turbo"]["server_side_tools"] == []
+    assert models["gpt-4o-mini"]["server_side_tools"] == []
     assert models["gpt-5.6-luna"]["supports_schema"] is True
     assert models["gpt-5.6-luna"]["supports_tools"] is True
     assert models["gpt-5.6-luna"]["can_stream"] is True

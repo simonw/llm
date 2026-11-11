@@ -56,10 +56,10 @@ def test_openai_options_min_max():
     runner = CliRunner()
 
     for option, [min_val, max_val] in options.items():
-        result = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "-10"])
+        result = runner.invoke(cli, ["-m", "4o-mini", "-o", option, "-10"])
         assert result.exit_code == 1
         assert f"greater than or equal to {min_val}" in result.output
-        result2 = runner.invoke(cli, ["-m", "chatgpt", "-o", option, "10"])
+        result2 = runner.invoke(cli, ["-m", "4o-mini", "-o", option, "10"])
         assert result2.exit_code == 1
         assert f"less than or equal to {max_val}" in result2.output
 
@@ -142,7 +142,7 @@ def test_gpt5_models_support_verbosity_option(model_id):
     assert "verbosity" in llm.get_async_model(model_id).Options.model_fields
 
 
-@pytest.mark.parametrize("model_id", ("gpt-4o", "o3", "o4-mini"))
+@pytest.mark.parametrize("model_id", ("gpt-4o", "o3"))
 def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
     assert "verbosity" not in llm.get_model(model_id).Options.model_fields
     assert "verbosity" not in llm.get_async_model(model_id).Options.model_fields
@@ -165,6 +165,18 @@ def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
         "o1-preview",
         "o1-mini",
         "gpt-5.1-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "gpt-3.5-turbo-instruct",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-4-turbo-2024-04-09",
+        "gpt-4.1-nano",
+        "o1",
+        "o1-2024-12-17",
+        "o3-mini",
+        "o4-mini",
     ),
 )
 def test_deprecated_models_are_not_registered(model_id):
@@ -548,11 +560,11 @@ def test_tools_list_for_model_includes_server_side_tools():
 
 def test_tools_list_for_model_with_no_server_side_tools():
     runner = CliRunner()
-    result = runner.invoke(cli, ["tools", "-m", "chatgpt"])
+    result = runner.invoke(cli, ["tools", "-m", "4o-mini"])
 
     assert result.exit_code == 0
 
-    json_result = runner.invoke(cli, ["tools", "-m", "chatgpt", "--json"])
+    json_result = runner.invoke(cli, ["tools", "-m", "4o-mini", "--json"])
     assert json_result.exit_code == 0
     assert json.loads(json_result.output)["server_side_tools"] == []
 
@@ -800,3 +812,47 @@ def test_gpt4o_mini_sync_and_async(
     store = LogStore(db)
     chain = store.load_chain(turn["tip_message_hash"])
     assert chain[-1].parts[0].text == "Ho ho ho"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("usage_field", ("missing", "null"))
+def test_chat_completion_without_usage_sync_and_async(
+    db_factory, monkeypatch, tmpdir, httpx2_mock, async_, usage_field
+):
+    # OpenAI-compatible servers can omit "usage" from non-streaming responses
+    user_path = tmpdir / "user_dir"
+    log_db = user_path / "logs.db"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    body = {
+        "id": "chatcmpl-no-usage",
+        "object": "chat.completion",
+        "created": 1730871958,
+        "model": "gpt-4o-mini",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "Ho ho ho"},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    if usage_field == "null":
+        body["usage"] = None
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json=body,
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "Ho ho ho\n"
+    db = db_factory(str(log_db))
+    assert db["turns"].count == 1
+    turn = next(db["turns"].rows)
+    assert turn["input_tokens"] is None
+    assert turn["output_tokens"] is None

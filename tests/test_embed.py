@@ -140,6 +140,22 @@ def test_embed_store(collection):
     )
 
 
+def test_embed_same_content_new_id_is_stored(collection):
+    # collection fixture already holds (1, "hello world")
+    # The dedup skip must only apply to the same id, not to any
+    # row in the collection with the same content hash - see #1789
+    collection.embed("3", "hello world")
+    assert collection.db["embeddings"].count == 3
+    assert next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["id"] == "3"
+
+
+def test_embed_same_id_same_content_is_noop(collection):
+    # Re-embedding the same id with unchanged content still skips
+    # the model call and leaves the row count untouched
+    collection.embed("1", "hello world")
+    assert collection.db["embeddings"].count == 2
+
+
 def test_embed_metadata(collection):
     collection.embed("3", "hello yet again", metadata={"foo": "bar"}, store=True)
     assert collection.db["embeddings"].count == 3
@@ -379,3 +395,53 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+class MismatchedEmbeddingModel(llm.EmbeddingModel):
+    model_id = "mismatched-demo"
+
+    def __init__(self, returned):
+        self.returned = returned
+
+    def embed_batch(self, items, *, key=None):
+        for i in range(self.returned):
+            yield [float(i)]
+
+
+class FlakyEmbeddingModel(llm.EmbeddingModel):
+    model_id = "flaky-demo"
+
+    def __init__(self):
+        self.batches = 0
+
+    def embed_batch(self, items, *, key=None):
+        items = list(items)
+        self.batches += 1
+        count = len(items) if self.batches == 1 else 1
+        for i in range(count):
+            yield [float(i)]
+
+
+@pytest.mark.parametrize("returned", (1, 3))
+def test_embed_multi_with_metadata_rejects_embedding_count_mismatch(
+    db_factory, returned
+):
+    db = db_factory(memory=True)
+    collection = llm.Collection(
+        "test", db, model=MismatchedEmbeddingModel(returned=returned)
+    )
+    entries = [("1", "hello", None), ("2", "world", None)]
+    with pytest.raises(ValueError, match=f"^Expected 2 embeddings, got {returned}$"):
+        collection.embed_multi_with_metadata(entries)
+    # Nothing from the mismatched batch was written
+    assert collection.count() == 0
+
+
+def test_embed_multi_with_metadata_keeps_completed_batches_on_mismatch(db_factory):
+    db = db_factory(memory=True)
+    collection = llm.Collection("test", db, model=FlakyEmbeddingModel())
+    entries = [(str(i), f"hello {i}", None) for i in range(4)]
+    with pytest.raises(ValueError, match="^Expected 2 embeddings, got 1$"):
+        collection.embed_multi_with_metadata(entries, batch_size=2)
+    # First batch committed, mismatched second batch did not
+    assert collection.count() == 2
