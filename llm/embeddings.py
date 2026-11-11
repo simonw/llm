@@ -63,6 +63,8 @@ class Collection:
             row = rows[0]
             self.id = row["id"]
             self.model_id = row["model"]
+            if self._model is not None and self._model.model_id != self.model_id:
+                self._model = None
         else:
             if create:
                 # Collection does not exist, so model or model_id is required

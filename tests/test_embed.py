@@ -184,6 +184,34 @@ def test_collection_embed_multi_key(embed_key_demo, request):
     assert embed_key_demo.key is None
 
 
+def test_reopened_collection_uses_persisted_model(db_factory, tmp_path, embed_demo):
+    path = str(tmp_path / "embeddings.db")
+    original = llm.Collection("test", db_factory(path), model=embed_demo)
+    original.embed("1", "hello world")
+
+    reopened = llm.Collection(
+        "test",
+        db_factory(path),
+        model=TypedAttachmentEmbeddingModel(),
+        create=False,
+    )
+    reopened.embed("2", "second value")
+
+    dimensions = {
+        row["id"]: len(llm.decode(row["embedding"]))
+        for row in reopened.db["embeddings"].rows
+    }
+    assert dimensions == {"1": 16, "2": 16}
+    assert reopened.model().model_id == reopened.model_id == "embed-demo"
+    assert reopened.db["collections"].get(reopened.id)["model"] == "embed-demo"
+
+    configured_model = type(embed_demo)()
+    configured = llm.Collection(
+        "test", db_factory(path), model=configured_model, create=False
+    )
+    assert configured.model() is configured_model
+
+
 def test_collection(collection):
     assert collection.id == 1
     assert collection.count() == 2
