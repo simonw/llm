@@ -56,6 +56,31 @@ def test_migrate_blank(db_factory):
     }
 
 
+def test_migrate_creates_log_lookup_indexes():
+    """m028: the columns `llm logs` filters and joins on are indexed,
+    so listings never scan the tool, parts or responses tables."""
+    db = sqlite_utils.Database(memory=True)
+    migrate(db)
+    indexed = {
+        (table.name, tuple(index.columns))
+        for table in db.tables
+        for index in table.indexes
+    }
+    for expected in (
+        ("tool_calls", ("response_id",)),
+        ("tool_results", ("response_id",)),
+        ("tool_responses", ("response_id",)),
+        ("responses", ("conversation_id",)),
+        ("parts", ("tool_name", "message_hash")),
+    ):
+        assert expected in indexed
+    # Partial, so lookups that bind type as a parameter cannot pick it
+    sql = db.execute(
+        "select sql from sqlite_master where name = 'idx_parts_tool_result_tool_name'"
+    ).fetchone()[0]
+    assert sql.endswith("where type = 'tool_result'")
+
+
 @pytest.mark.parametrize("has_record", [True, False])
 def test_migrate_from_original_schema(db_factory, has_record):
     db = db_factory(memory=True)

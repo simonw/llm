@@ -732,3 +732,36 @@ def m027_turns_response_json(db):
     # response. NULL for turns logged before this column existed and
     # for models that expose no raw payload.
     db["turns"].add_column("response_json", str)
+
+
+@migration
+def m028_log_lookup_indexes(db):
+    # Indexes for the columns `llm logs` looks rows up by but
+    # previously had to scan for.
+    # The legacy tool tables are only ever read through correlated
+    # subqueries on response_id - without an index that is one full
+    # scan per listed response, and tool_results rows carry the actual
+    # tool outputs, so those scans read the payloads too.
+    # tool_responses' primary key starts with tool_id, so it cannot
+    # serve a response_id probe either.
+    db["tool_calls"].create_index(["response_id"], if_not_exists=True)
+    db["tool_results"].create_index(["response_id"], if_not_exists=True)
+    db["tool_responses"].create_index(["response_id"], if_not_exists=True)
+    # -c/--cid filtering on the legacy side was a full responses scan:
+    # turns got idx_turns_thread_id in m023, but the equivalent
+    # responses.conversation_id was never indexed.
+    db["responses"].create_index(["conversation_id"], if_not_exists=True)
+    # The -T/--tool filter resolves "which messages carry a tool_result
+    # part (with this tool name)" - previously a full scan of parts,
+    # the fastest-growing table in the store, plus a transient
+    # automatic index sqlite built on every query. Trailing
+    # message_hash makes the index covering for exactly that subquery.
+    # Partial on purpose: without sqlite_stat1, an index that leads with
+    # type gets picked for every "type = ?" lookup, which then reads all
+    # parts of that type instead of one message's parts through
+    # idx_parts_message_hash_position. Only queries that spell out
+    # type = 'tool_result' can use this one.
+    db.execute(
+        "create index if not exists idx_parts_tool_result_tool_name"
+        " on parts (tool_name, message_hash) where type = 'tool_result'"
+    )
