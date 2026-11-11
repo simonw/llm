@@ -2072,6 +2072,13 @@ class CodeInterpreter(llm.ServerSideTool):
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
 
+    def _raise_response_error(self, response_json):
+        error = response_json.get("error") or {}
+        message = error.get("message") or "Response failed"
+        if error.get("code"):
+            message = f"{error['code']}: {message}"
+        raise ValueError(message)
+
     @property
     def supported_server_side_tools(self):
         return (WebSearch, CodeInterpreter, llm.ServerSideTool)
@@ -2867,6 +2874,12 @@ class Responses(_SharedResponses, KeyModel):
                         if item_id and server_events:
                             server_tool_done_events[item_id] = server_events
                         yield from server_events
+                elif etype == "response.failed":
+                    response.response_json = remove_dict_none_values(
+                        event.response.model_dump(warnings=False)
+                    )
+                    stream_obj.close()
+                    self._raise_response_error(response.response_json)
                 elif etype == "response.completed":
                     self._refresh_server_tool_events(
                         event.response.output, server_tool_done_events
@@ -2888,6 +2901,8 @@ class Responses(_SharedResponses, KeyModel):
             )
             dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
+            if dumped.get("status") == "failed":
+                self._raise_response_error(response.response_json)
             usage = dumped.get("usage")
             events, had_reasoning = self._non_streaming_output_events(
                 completion.output, response
@@ -3115,6 +3130,12 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                             server_tool_done_events[item_id] = server_events
                         for server_event in server_events:
                             yield server_event
+                elif etype == "response.failed":
+                    response.response_json = remove_dict_none_values(
+                        event.response.model_dump(warnings=False)
+                    )
+                    await stream_obj.close()
+                    self._raise_response_error(response.response_json)
                 elif etype == "response.completed":
                     self._refresh_server_tool_events(
                         event.response.output, server_tool_done_events
@@ -3137,6 +3158,8 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             )
             dumped = completion.model_dump(warnings=False)
             response.response_json = remove_dict_none_values(dumped)
+            if dumped.get("status") == "failed":
+                self._raise_response_error(response.response_json)
             usage = dumped.get("usage")
             events, had_reasoning = self._non_streaming_output_events(
                 completion.output, response
