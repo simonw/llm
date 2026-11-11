@@ -67,6 +67,12 @@ def load_extra_models(path=None):
     return records
 
 
+def _encode_endpoint_json_value(value):
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _dump_extra_models(records):
     return yaml.safe_dump(
         records, sort_keys=False, allow_unicode=True, default_flow_style=False
@@ -1058,7 +1064,9 @@ def register_commands(cli):
         "List endpoints saved in extra-openai-models.yaml"
         records = _load_extra_models_for_cli(extra_models_path())
         if json_:
-            click.echo(json.dumps(records, indent=2))
+            click.echo(
+                json.dumps(records, indent=2, default=_encode_endpoint_json_value)
+            )
             return
         for record in records:
             if not isinstance(record, dict):
