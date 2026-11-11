@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import sys
+import textwrap
 from collections.abc import AsyncGenerator, Iterable, Iterator
 from enum import Enum
 from functools import cache
@@ -103,9 +104,28 @@ def _append_extra_model(path, record):
             text = ", " + text
         path.write_text(existing[:position] + text + existing[position:], "utf-8")
         return
-    if not existing.endswith("\n"):
-        existing += "\n"
-    path.write_text(existing + text, "utf-8")
+    if isinstance(sequence, yaml.SequenceStartEvent):
+        # A tag or anchor can precede the list, so use the block's token
+        # rather than the sequence event to find the indentation.
+        block = next(
+            token
+            for token in yaml.scan(existing, Loader=yaml.SafeLoader)
+            if isinstance(token, yaml.BlockSequenceStartToken)
+        )
+        text = textwrap.indent(text, " " * block.start_mark.column)
+    # Keep an explicit document end marker (and its comments) after the list.
+    position = next(
+        (
+            event.start_mark.index
+            for event in events
+            if isinstance(event, yaml.DocumentEndEvent) and event.explicit
+        ),
+        len(existing),
+    )
+    before, after = existing[:position], existing[position:]
+    if not before.endswith("\n"):
+        before += "\n"
+    path.write_text(before + text + after, "utf-8")
 
 
 def _load_extra_models_for_cli(path):

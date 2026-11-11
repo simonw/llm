@@ -367,3 +367,71 @@ def test_endpoint_group_help_lists_subcommands(user_path):
     result = _invoke("prompt", "--help")
     assert result.exit_code == 0
     assert "Usage: cli openai endpoint prompt [OPTIONS] URL [PROMPT]" in result.output
+
+
+@pytest.mark.parametrize("indent", [0, 2, 4])
+@pytest.mark.parametrize(
+    "ending",
+    ["", "\n# Keep this comment\n", "\n... # End of models\n# After document\n"],
+)
+def test_endpoint_add_preserves_block_layout(user_path, indent, ending):
+    path = user_path / "extra-openai-models.yaml"
+    prefix = (
+        "# My models\n---\n"
+        + " " * indent
+        + "- model_id: first\n"
+        + " " * indent
+        + "  model_name: 'first-model' # Keep these quotes\n"
+        + " " * indent
+        + "  api_base: http://localhost:1234"
+        + ending
+    )
+    path.write_text(prefix, "utf-8")
+    records = _read_yaml(user_path)
+    for model in ("second", "third"):
+        result = _invoke("add", "http://localhost:8080", "-m", model)
+        assert result.exit_code == 0, result.output
+        records.append(
+            {
+                "model_id": model,
+                "model_name": model,
+                "api_base": "http://localhost:8080",
+            }
+        )
+        result = _invoke("list", "--json")
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output) == records
+        assert llm.get_model(model).api_base == "http://localhost:8080"
+    text = path.read_text("utf-8")
+    original_prefix = prefix.split("...")[0]
+    assert text.startswith(original_prefix)
+    assert " " * indent + "- model_id: second\n" in text
+    if "..." in ending:
+        assert text.endswith("... # End of models\n# After document\n")
+    assert llm.get_model("first").model_name == "first-model"
+
+
+@pytest.mark.parametrize("properties", ["&models", "!!seq", "!!seq &models"])
+def test_endpoint_add_preserves_indented_sequence_properties(user_path, properties):
+    path = user_path / "extra-openai-models.yaml"
+    existing = properties + "\n  - model_id: first\n    model_name: first-model\n"
+    path.write_text(existing, "utf-8")
+    result = _invoke("add", "http://localhost:8080", "-m", "second")
+    assert result.exit_code == 0, result.output
+    assert [record["model_id"] for record in _read_yaml(user_path)] == [
+        "first",
+        "second",
+    ]
+    assert path.read_text("utf-8").startswith(existing)
+    assert llm.get_model("second").api_base == "http://localhost:8080"
+
+
+def test_endpoint_add_to_empty_document_with_end_marker(user_path):
+    path = user_path / "extra-openai-models.yaml"
+    path.write_text("---\n# My models\n... # End\n", "utf-8")
+    result = _invoke("add", "http://localhost:8080", "-m", "first")
+    assert result.exit_code == 0, result.output
+    assert [record["model_id"] for record in _read_yaml(user_path)] == ["first"]
+    text = path.read_text("utf-8")
+    assert text.startswith("---\n# My models\n")
+    assert text.endswith("... # End\n")
