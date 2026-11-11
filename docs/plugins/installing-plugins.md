@@ -7,11 +7,11 @@ You can find names of plugins to install in the {ref}`plugin directory <plugin-d
 
 Use the `llm install` command (a thin wrapper around `pip install`) to install plugins in the correct environment:
 ```bash
-llm install llm-gpt4all
+llm install llm-ollama
 ```
 Plugins can be uninstalled with `llm uninstall`:
 ```bash
-llm uninstall llm-gpt4all -y
+llm uninstall llm-ollama -y
 ```
 The `-y` flag skips asking for confirmation.
 
@@ -93,7 +93,7 @@ LLM_LOAD_PLUGINS='' llm ...
 Or to a comma-separated list of plugin names to load only those plugins:
 
 ```bash
-LLM_LOAD_PLUGINS='llm-gpt4all,llm-cluster' llm ...
+LLM_LOAD_PLUGINS='llm-ollama,llm-cluster' llm ...
 ```
 You can use the `llm plugins` command to check that it is working correctly:
 ```
