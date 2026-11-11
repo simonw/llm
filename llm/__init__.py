@@ -494,8 +494,8 @@ def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
 
 def set_default_model(model, filename="default_model.txt"):
     path = user_dir() / filename
-    if model is None and path.exists():
-        path.unlink()
+    if model is None:
+        path.unlink(missing_ok=True)
     else:
         path.write_text(model)
 
