@@ -219,6 +219,43 @@ def test_extract_fenced_code(
         assert "```" in output
 
 
+@pytest.mark.parametrize(
+    "args",
+    (
+        ["-x"],
+        ["--xl"],
+        ["-x", "--async"],
+    ),
+)
+def test_extract_fenced_code_empty_block(httpx2_mock, args):
+    """An empty fenced code block extracts to empty output, not the full text."""
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "usage": {},
+            "choices": [
+                {
+                    "message": {
+                        "content": "before\n```\n```\nafter",
+                    }
+                }
+            ],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "gpt-4o-mini", "--key", "x", "Write code"] + args,
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "before" not in result.output
+    assert "```" not in result.output
+
+
 def test_extract_fenced_code_crlf(httpx2_mock):
     """The CLI extracts fenced code when the model response uses CRLF."""
     httpx2_mock.add_response(
