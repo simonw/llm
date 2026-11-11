@@ -168,3 +168,52 @@ def test_backfill_content_hash(db_factory):
     assert row1["content_hash"] is not None
     # This should be a hash of 'goodbye world'
     assert row2["content_hash"] == llm.Collection.content_hash("goodbye world")
+
+
+def test_migrate_is_idempotent_when_schema_already_exists(db_factory):
+    """
+    A logs.db can already contain the tables/columns a migration would add -
+    another tool (or an interrupted upgrade) may have created them. Every
+    migration must then be a no-op instead of raising "already exists".
+    """
+    db = db_factory(memory=True)
+    migrate(db)
+    # Forget which migrations ran, then run them all again against a database
+    # that already has the finished schema:
+    db["_llm_migrations"].delete_where()
+    migrate(db)
+    assert set(db.table_names()).issuperset(
+        {"_llm_migrations", "conversations", "responses", "responses_fts"}
+    )
+    assert db["responses"].columns_dict == EXPECTED
+
+
+def test_migrate_tolerates_preexisting_columns_and_tables(db_factory):
+    """
+    Simulates the situation from a real-world database: conversations and
+    responses exist, several later-migration columns already exist, and the
+    migration bookkeeping is missing those entries.
+    """
+    db = db_factory(memory=True)
+    db["conversations"].create({"id": str, "name": str, "model": str}, pk="id")
+    db["responses"].create(
+        {
+            "id": str,
+            "model": str,
+            "prompt": str,
+            "system": str,
+            "prompt_json": str,
+            "options_json": str,
+            "response": str,
+            "response_json": str,
+            "conversation_id": str,
+            "duration_ms": int,
+            "datetime_utc": str,
+            "input_tokens": int,
+            "resolved_model": str,
+            "reasoning": str,
+        },
+        pk="id",
+    )
+    migrate(db)
+    assert set(db.table_names()).issuperset({"conversations", "responses"})
