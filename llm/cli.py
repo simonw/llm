@@ -2417,6 +2417,22 @@ def model_matches_id_or_alias(model_with_aliases, model_ids):
     return ids_and_aliases.intersection(model_ids)
 
 
+def _resolve_option_schema(field, schema):
+    # Pydantic uses local definitions for types such as enums.
+    seen = set()
+    while "$ref" in field:
+        ref = field["$ref"]
+        if not ref.startswith("#/$defs/") or ref in seen:
+            break
+        name = ref[len("#/$defs/") :].replace("~1", "/").replace("~0", "~")
+        definition = schema.get("$defs", {}).get(name)
+        if not isinstance(definition, dict):
+            break
+        seen.add(ref)
+        field = definition
+    return field
+
+
 def render_model_with_aliases(
     model_with_aliases,
     *,
@@ -2431,12 +2447,15 @@ def render_model_with_aliases(
     output = str(model)
     if extra_info:
         output += " ({})".format(", ".join(extra_info))
-    if options and model.Options.model_json_schema()["properties"]:
+    options_schema = model.Options.model_json_schema() if options else {}
+    if options and options_schema["properties"]:
         output += "\n  Options:"
-        for name, field in model.Options.model_json_schema()["properties"].items():
-            any_of = field.get("anyOf")
+        for name, field in options_schema["properties"].items():
+            resolved_field = _resolve_option_schema(field, options_schema)
+            any_of = resolved_field.get("anyOf")
             if any_of is None:
-                any_of = [{"type": field.get("type", "str")}]
+                any_of = [resolved_field]
+            any_of = [_resolve_option_schema(item, options_schema) for item in any_of]
             types = ", ".join(
                 [
                     _type_lookup.get(item.get("type"), item.get("type", "str"))
