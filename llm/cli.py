@@ -842,6 +842,14 @@ def prompt(
         stdin_prompt = None
         if not sys.stdin.isatty():
             stdin_prompt = sys.stdin.read()
+            # Retry UTF-8 only when the configured decoder escaped invalid bytes.
+            if any("\udc80" <= char <= "\udcff" for char in stdin_prompt):
+                try:
+                    stdin_prompt = stdin_prompt.encode(
+                        sys.stdin.encoding or "utf-8", errors="surrogateescape"
+                    ).decode("utf-8")
+                except UnicodeError:
+                    pass
 
         if stdin_prompt:
             bits = [stdin_prompt]
