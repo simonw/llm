@@ -138,3 +138,64 @@ def test_prompt_uses_model_options(user_path):
         "previous": [],
         "options": {"example_bool": True},
     }
+
+
+@pytest.mark.parametrize(
+    "model,key,value",
+    (
+        ("gpt-4o-mini", "frequency_penalty", "-1"),
+        ("gpt-4o-mini", "presence_penalty", "-0.5"),
+        ("gpt-4o-mini", "frequency_penalty", "-.5"),
+        ("gpt-4o-mini", "frequency_penalty", "-1e-1"),
+        ("unregistered-gemini-model", "thinking_budget", "-1"),
+        ("unregistered-model", "custom_option", "--literal-value"),
+    ),
+)
+def test_set_model_default_options_accepts_negative_values(
+    user_path, model, key, value
+):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["models", "options", "set", model, key, value])
+    assert result.exit_code == 0, result.output
+    assert json.loads((user_path / "model_options.json").read_text("utf-8")) == {
+        model: {key: value}
+    }
+    shown = runner.invoke(cli, ["models", "options", "show", model])
+    assert shown.exit_code == 0
+    assert shown.output == f"{key}: {value}\n"
+
+
+def test_set_model_default_options_still_validates_negative_values(user_path):
+    result = CliRunner().invoke(
+        cli, ["models", "options", "set", "gpt-4o-mini", "temperature", "-1"]
+    )
+    assert result.exit_code == 1
+    assert "Input should be greater than or equal to 0" in result.output
+    assert not (user_path / "model_options.json").exists()
+
+
+def test_set_model_default_options_preserves_end_of_options(user_path):
+    result = CliRunner().invoke(
+        cli,
+        ["models", "options", "set", "gpt-4o-mini", "frequency_penalty", "--", "-1"],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads((user_path / "model_options.json").read_text("utf-8")) == {
+        "gpt-4o-mini": {"frequency_penalty": "-1"}
+    }
+
+
+def test_set_model_default_options_help_remains_an_option(user_path):
+    result = CliRunner().invoke(cli, ["models", "options", "set", "--help"])
+    assert result.exit_code == 0
+    assert "Set a default option for a model" in result.output
+    assert not (user_path / "model_options.json").exists()
+
+
+def test_set_model_default_options_rejects_extra_arguments(user_path):
+    result = CliRunner().invoke(
+        cli,
+        ["models", "options", "set", "gpt-4o-mini", "frequency_penalty", "-1", "extra"],
+    )
+    assert result.exit_code == 2
+    assert not (user_path / "model_options.json").exists()
