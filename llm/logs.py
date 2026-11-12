@@ -1962,7 +1962,9 @@ select responses.id,
                 'plugin', ti.plugin,
                 'arguments', ti.arguments
             ) else null end,
-            'attachments', coalesce(
+            -- json() because newer SQLite drops the JSON subtype of a
+            -- scalar subquery, which would embed the list as a string
+            'attachments', json(coalesce(
                 -- json_group_array keeps the order of an ordered subquery
                 (select json_group_array(json(attachment)) from (
                     select json_object(
@@ -1979,7 +1981,7 @@ select responses.id,
                     order by tra."order"
                 )),
                 '[]'
-            )
+            ))
         ))
         from tool_results tr
         left join tool_instances ti on tr.instance_id = ti.id
