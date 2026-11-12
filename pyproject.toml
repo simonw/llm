@@ -59,13 +59,13 @@ dev = [
     "types-click",
     "types-PyYAML",
     "types-setuptools",
-    "llm-echo==0.3a3",
+    "llm-echo==0.5",
     # docs
-    "sphinx==7.2.6",
-    "furo==2023.9.10",
+    "sphinx==9.0.4",
+    "furo==2025.12.19",
     "sphinx-autobuild",
     "sphinx-copybutton",
-    "sphinx-markdown-builder==0.6.8",
+    "sphinx-markdown-builder==0.6.11",
     "myst-parser",
 ]
 
