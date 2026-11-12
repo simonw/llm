@@ -68,6 +68,19 @@ In LLM every tool is defined as a Python function. The function can take any num
 
 Tool functions should include a docstring that describes what the function does. This docstring will become the description that is passed to the model.
 
+Parameter annotations can use `typing.Annotated` and Pydantic's `Field` to include descriptions and constraints in the tool schema sent to the model:
+
+```python
+from typing import Annotated
+from pydantic import Field
+
+def search(query: Annotated[str, Field(description="Search text", min_length=2)],
+           limit: Annotated[int, Field(ge=1, le=10)] = 3):
+    ...
+```
+
+Parameter names and defaults come from the Python function signature. These annotations describe the model's tool schema; tools remain responsible for validating arguments when they execute.
+
 Tools can also be defined as {ref}`toolbox classes <python-api-toolbox>`, a subclass of `llm.Toolbox` that allows multiple related tools to be bundled together. Toolbox classes can be configured when they are instantiated, and can also maintain state in between multiple tool calls.
 
 The Python API can accept functions directly. The command-line interface has two ways for tools to be defined: via plugins that implement the {ref}`register_tools() plugin hook <plugin-hooks-register-tools>`, or directly on the command-line using the `--functions` argument to specify a block of Python code defining one or more functions - or a path to a Python file containing the same.
