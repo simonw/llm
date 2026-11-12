@@ -3319,14 +3319,15 @@ def combine_chunks(chunks: list) -> dict:
                     }
                 )
 
+            if choice.finish_reason is not None:
+                finish_reason = choice.finish_reason
             if not hasattr(choice, "delta"):
                 content += choice.text
                 continue
-            role = choice.delta.role
+            if choice.delta.role is not None:
+                role = choice.delta.role
             if choice.delta.content is not None:
                 content += choice.delta.content
-            if choice.finish_reason is not None:
-                finish_reason = choice.finish_reason
 
     # Imitations of the OpenAI API may be missing some of these fields
     combined = {
