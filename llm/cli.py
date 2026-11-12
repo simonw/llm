@@ -3788,7 +3788,10 @@ def embed_multi(
                 elif binary:
                     content = cast(bytes, values[1])
                 else:
-                    content = " ".join(v or "" for v in values[1:])
+                    content = " ".join(
+                        str(v) if isinstance(v, (int, float)) else v or ""
+                        for v in values[1:]
+                    )
                 if prepend and isinstance(content, str):
                     content = prepend + content
                 yield id, content or ""
