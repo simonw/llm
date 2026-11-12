@@ -2016,6 +2016,7 @@ def logs_list(
                 if (
                     isinstance(decoded, dict)
                     and (data_key in decoded)
+                    and isinstance(decoded[data_key], list)
                     and all(isinstance(item, dict) for item in decoded[data_key])
                 ):
                     new_items = list(decoded[data_key])
