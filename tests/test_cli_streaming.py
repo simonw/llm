@@ -157,3 +157,26 @@ def test_plain_str_plugin_still_works(mock_model):
     assert result.exit_code == 0
     assert "plain text" in result.stdout
     assert result.stderr == ""
+
+
+def test_non_streaming_reasoning_goes_to_stderr(mock_model):
+    """A non-streaming response can still carry reasoning events; the CLI
+    must display them on stderr instead of dropping them with response.text()."""
+    mock_model.enqueue(
+        [
+            llm.parts.StreamEvent(
+                type="reasoning", chunk="thinking hard", part_index=0
+            ),
+            llm.parts.StreamEvent(type="text", chunk="answer", part_index=1),
+        ]
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-m", "mock", "hi", "--no-log", "--no-stream"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "thinking hard" in result.stderr
+    assert "thinking hard" not in result.stdout
+    assert "answer" in result.stdout
