@@ -100,6 +100,16 @@ class FragmentNotFound(Exception):
     pass
 
 
+def _response_reasoning(response):
+    """Reasoning text collected from a non-streaming response, if any."""
+    return "".join(
+        event.chunk
+        for event in getattr(response, "_stream_events", [])
+        if getattr(event, "type", None) == "reasoning"
+        and not getattr(event, "redacted", False)
+    )
+
+
 def display_stream_events(events, *, show_reasoning=True):
     """Consume a sync iterator of StreamEvents and write them.
 
@@ -1143,6 +1153,11 @@ def prompt(
                     print()
                 else:
                     text = await response.text()
+                    if not hide_reasoning:
+                        reasoning = _response_reasoning(response)
+                        if reasoning:
+                            click.echo(click.style(reasoning, dim=True), err=True)
+                            click.echo("", err=True)
                     if extract or extract_last:
                         text = (
                             extract_fenced_code_block(text, last=extract_last) or text
@@ -1160,6 +1175,11 @@ def prompt(
                 print()
             else:
                 text = response.text()
+                if not hide_reasoning:
+                    reasoning = _response_reasoning(response)
+                    if reasoning:
+                        click.echo(click.style(reasoning, dim=True), err=True)
+                        click.echo("", err=True)
                 if extract or extract_last:
                     text = extract_fenced_code_block(text, last=extract_last) or text
                 if not json_output:
