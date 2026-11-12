@@ -644,8 +644,10 @@ OpenAI Chat: gpt-4o (aliases: 4o)
       Number between -2.0 and 2.0. Positive values penalize new tokens based
       on whether they appear in the text so far, increasing the model's
       likelihood to talk about new topics.
-    stop: str
-      A string where the API will stop generating further tokens.
+    stop: str, array
+      A string or a list of up to four strings where the API will stop
+      generating further tokens. Pass a JSON array for multiple stop
+      sequences.
     logit_bias: dict, str
       Modify the likelihood of specified tokens appearing in the completion.
       Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
@@ -677,7 +679,7 @@ OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -700,7 +702,7 @@ OpenAI Chat: gpt-4.1 (aliases: 4.1)
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -723,7 +725,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -761,8 +763,10 @@ OpenAI Responses: o3
       Number between -2.0 and 2.0. Positive values penalize new tokens based
       on whether they appear in the text so far, increasing the model's
       likelihood to talk about new topics.
-    stop: str
-      A string where the API will stop generating further tokens.
+    stop: str, array
+      A string or a list of up to four strings where the API will stop
+      generating further tokens. Pass a JSON array for multiple stop
+      sequences.
     logit_bias: dict, str
       Modify the likelihood of specified tokens appearing in the completion.
       Pass a JSON string like '{"1712":-100, "892":-100, "1489":-100}'
@@ -806,7 +810,7 @@ OpenAI Responses: gpt-5
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -833,7 +837,7 @@ OpenAI Responses: gpt-5-mini
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -860,7 +864,7 @@ OpenAI Responses: gpt-5-nano
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -887,7 +891,7 @@ OpenAI Responses: gpt-5-2025-08-07
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -914,7 +918,7 @@ OpenAI Responses: gpt-5-mini-2025-08-07
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -941,7 +945,7 @@ OpenAI Responses: gpt-5-nano-2025-08-07
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -968,7 +972,7 @@ OpenAI Responses: gpt-5.1
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -995,7 +999,7 @@ OpenAI Responses: gpt-5.2
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1022,7 +1026,7 @@ OpenAI Responses: gpt-5.4
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1049,7 +1053,7 @@ OpenAI Responses: gpt-5.4-2026-03-05
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1076,7 +1080,7 @@ OpenAI Responses: gpt-5.4-mini
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1103,7 +1107,7 @@ OpenAI Responses: gpt-5.4-mini-2026-03-17
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1130,7 +1134,7 @@ OpenAI Responses: gpt-5.4-nano
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1157,7 +1161,7 @@ OpenAI Responses: gpt-5.4-nano-2026-03-17
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1184,7 +1188,7 @@ OpenAI Responses: gpt-5.5
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1211,7 +1215,7 @@ OpenAI Responses: gpt-5.5-2026-04-23
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1238,7 +1242,7 @@ OpenAI Responses: gpt-5.6-sol
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1265,7 +1269,7 @@ OpenAI Responses: gpt-5.6-terra
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1292,7 +1296,7 @@ OpenAI Responses: gpt-5.6-luna
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1319,7 +1323,7 @@ OpenAI Responses: gpt-6-astra
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1346,7 +1350,7 @@ OpenAI Responses: gpt-6-sol
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1373,7 +1377,7 @@ OpenAI Responses: gpt-6-luna
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1400,7 +1404,7 @@ OpenAI Responses: gpt-6.1-sol
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1427,7 +1431,7 @@ OpenAI Responses: gpt-6.1-terra
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
@@ -1454,7 +1458,7 @@ OpenAI Responses: chat-latest
     top_p: float
     frequency_penalty: float
     presence_penalty: float
-    stop: str
+    stop: str, array
     logit_bias: dict, str
     seed: int
     json_object: boolean
