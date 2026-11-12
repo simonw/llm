@@ -1,9 +1,11 @@
 import json
 
 import pytest
+from click.testing import CliRunner
 from pytest_httpx2 import IteratorStream
 
 import llm
+from llm.cli import cli
 from llm.default_plugins.openai_models import Chat
 from llm.models import Prompt
 
@@ -25,12 +27,68 @@ def _sse(delta, finish_reason=None, usage=None, tool_calls=None):
     return f"data: {json.dumps(chunk)}\n\n".encode()
 
 
-def _text_stream():
+def _text_stream(finish_reason="stop", include_usage=False):
     yield _sse({"role": "assistant", "content": ""})
     yield _sse({"content": "Hel"})
     yield _sse({"content": "lo"})
-    yield _sse({}, finish_reason="stop")
+    yield _sse({}, finish_reason=finish_reason)
+    if include_usage:
+        yield (
+            b'data: {"id":"c1","object":"chat.completion.chunk",'
+            b'"created":1700000000,"model":"gpt-4o-mini","choices":[],"usage":'
+            b'{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}\n\n'
+        )
     yield b"data: [DONE]\n\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize(
+    ("finish_reason", "include_usage"), [("stop", False), ("length", True)]
+)
+async def test_streamed_chat_json_preserves_role(
+    httpx2_mock, logs_db, asynchronous, finish_reason, include_usage
+):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        stream=IteratorStream(_text_stream(finish_reason, include_usage)),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    model = (
+        llm.get_async_model("gpt-4o-mini")
+        if asynchronous
+        else llm.get_model("gpt-4o-mini")
+    )
+    response = model.prompt("hi", key=API_KEY)
+    data = await response.json() if asynchronous else response.json()
+    assert data["role"] == "assistant"
+    assert data["content"] == "Hello"
+    assert data["finish_reason"] == finish_reason
+    if include_usage:
+        assert data["usage"] == {
+            "prompt_tokens": 2,
+            "completion_tokens": 3,
+            "total_tokens": 5,
+        }
+    response.log_to_db(logs_db)
+    result = CliRunner().invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["response_json"] == data
+
+
+def test_streamed_completion_json_preserves_finish_reason(
+    completion_model, mocked_openai_completion_logprobs_stream, logs_db
+):
+    response = llm.get_model("completion-demo").prompt("hi", key=API_KEY)
+    data = response.json()
+    assert data["finish_reason"] == "stop"
+    assert data["content"] == "\n\nHi."
+    assert data["logprobs"][0]["top_logprobs"] == [{"\n\n": -0.6, "\n": -1.9}]
+    response.log_to_db(logs_db)
+    result = CliRunner().invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["response_json"] == data
 
 
 def _tool_call_stream():
