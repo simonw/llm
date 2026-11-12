@@ -3463,18 +3463,23 @@ def embed(
                     raise click.ClickException(
                         "You need to specify an embedding model (no default model is set)"
                     )
-            collection_obj = Collection(collection, db=db, model_id=model)
+            try:
+                collection_obj = Collection(collection, db=db, model_id=model)
+            except UnknownModelError:
+                raise click.ClickException(f"Unknown embedding model: {model}")
             model_obj = collection_obj.model()
 
     if model_obj is None:
         if model is None:
             model = get_default_embedding_model()
+            if model is None:
+                raise click.ClickException(
+                    "You need to specify an embedding model (no default model is set)"
+                )
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError:
-            raise click.ClickException(
-                "You need to specify an embedding model (no default model is set)"
-            )
+            raise click.ClickException(f"Unknown embedding model: {model}")
 
     show_output = True
     if collection and (format_ is None):
@@ -3684,10 +3689,12 @@ def embed_multi(
         collection_obj = Collection(
             collection, db=db, model_id=model_id, create=model_id is not None
         )
-    except (Collection.DoesNotExist, UnknownModelError):
+    except Collection.DoesNotExist:
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
         )
+    except UnknownModelError:
+        raise click.ClickException(f"Unknown embedding model: {model_id}")
 
     expected_length = None
     if resolved_attachments:
