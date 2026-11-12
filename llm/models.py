@@ -262,6 +262,12 @@ def _get_arguments_input_schema(function, name):
     type_hints = get_type_hints(function)
     fields = {}
     for param_name, param in signature.parameters.items():
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            # Variadic parameter names are not named inputs to the function.
+            continue
         if param_name in ("self", "llm_tool_call"):
             # llm_tool_call is reserved: populated with the ToolCall object
             # at execution time, never exposed to the model.
