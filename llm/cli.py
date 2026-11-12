@@ -9,13 +9,13 @@ import re
 import readline
 import shutil
 import sqlite3
+import subprocess
 import sys
 import textwrap
 import warnings
 from collections.abc import Iterable
 from dataclasses import asdict
 from importlib.metadata import version
-from runpy import run_module
 from typing import Any, cast
 
 import click
@@ -3303,6 +3303,17 @@ def display_truncated(text):
         return text
 
 
+def _run_pip_subprocess(args):
+    # pip does not support being run inside the interpreter that imports it:
+    # it mutates global interpreter state and is not thread-safe, which
+    # corrupts the running LLM process (including any loaded plugins).
+    # Run pip in a child process instead. Fixes #1811
+    completed = subprocess.run(
+        [sys.executable, "-m", "pip", *args],
+    )
+    sys.exit(completed.returncode)
+
+
 @cli.command()
 @click.argument("packages", nargs=-1, required=False)
 @click.option(
@@ -3330,7 +3341,7 @@ def display_truncated(text):
 )
 def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     """Install packages from PyPI into the same environment as LLM"""
-    args = ["pip", "install"]
+    args = ["install"]
     if upgrade:
         args += ["--upgrade"]
     if editable:
@@ -3342,8 +3353,7 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
     if pre:
         args += ["--pre"]
     args += list(packages)
-    sys.argv = args
-    run_module("pip", run_name="__main__")
+    _run_pip_subprocess(args)
 
 
 @cli.command()
@@ -3351,8 +3361,8 @@ def install(packages, upgrade, editable, force_reinstall, no_cache_dir, pre):
 @click.option("-y", "--yes", is_flag=True, help="Don't ask for confirmation")
 def uninstall(packages, yes):
     """Uninstall Python packages from the LLM environment"""
-    sys.argv = ["pip", "uninstall"] + list(packages) + (["-y"] if yes else [])
-    run_module("pip", run_name="__main__")
+    args = ["uninstall"] + list(packages) + (["-y"] if yes else [])
+    _run_pip_subprocess(args)
 
 
 @cli.command()
