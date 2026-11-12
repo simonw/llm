@@ -25,27 +25,24 @@ classifiers = [
 ]
 
 dependencies = [
-    "click",
-    "httpx2",
+    "click>=8.2.0",
+    "httpx2>=0.28,<1",
     "condense-json>=1.1",
-    "openai>3",
+    "openai>=3,<4",
     "click-default-group>=1.2.3",
     "sqlite-utils>=4.0",
-    "pydantic>=2.0.0",
-    "typing-extensions",
-    "PyYAML",
-    "pluggy",
-    "python-ulid",
-    "setuptools",
-    "pip",
+    "pydantic>=2.0.0,<3",
+    "typing-extensions>=4.12",
+    "PyYAML>=6.0",
+    "pluggy>=1.5",
+    "python-ulid>=2.0",
     "pyreadline3; sys_platform == 'win32'",
-    "puremagic",
+    "puremagic>=1.0",
 ]
 
 [dependency-groups]
 dev = [
     "build",
-    "click>=8.2.0",
     "pytest",
     "numpy",
     "httpx2-pytest>=2",
@@ -60,7 +57,9 @@ dev = [
     "types-PyYAML",
     "types-setuptools",
     "llm-echo==0.5",
-    # docs
+]
+
+docs = [
     "sphinx==9.0.4",
     "furo==2025.12.19",
     "sphinx-autobuild",
@@ -87,4 +86,4 @@ build-backend = "setuptools.build_meta"
 include = ["llm*"]
 
 [tool.black]
-target-version = ["py310"]
+target-version = ["py311"]
