@@ -34,6 +34,7 @@ from .parts import (
     ToolCallPart,
     ToolResultPart,
 )
+from .redaction import default_scrubber, scrub_fragment, scrub_message
 from .utils import (
     ensure_fragment,
     ensure_tool,
@@ -152,6 +153,7 @@ class LogStore:
 
     def __init__(self, db):
         self.db = db
+        self._scrubber = default_scrubber()
         migrate(db)
 
     # -- writing -------------------------------------------------------
@@ -176,7 +178,14 @@ class LogStore:
         feature: ask a hundred questions about a novel and the novel is
         stored once. It never affects the hashes - identity is always the
         resolved text.
+
+        Messages and fragments are scrubbed for known secrets (see
+        ``llm.redaction``) before anything is hashed or stored, so the
+        hash chain covers exactly what is on disk and ``verify()`` still
+        passes - the scrubbed form is the stored form.
         """
+        if self._scrubber is not None:
+            messages = [scrub_message(message, self._scrubber) for message in messages]
         fragment_map = self._fragment_map(fragments)
         tip = parent
         for message in messages:
@@ -187,11 +196,14 @@ class LogStore:
         "Map fragment content to its id, registering any that are new."
         if not fragments:
             return {}
-        return {
-            str(fragment): ensure_fragment(self.db, fragment)
-            for fragment in fragments
-            if str(fragment)
-        }
+        fragment_map = {}
+        for fragment in fragments:
+            if not str(fragment):
+                continue
+            if self._scrubber is not None:
+                fragment = scrub_fragment(fragment, self._scrubber)
+            fragment_map[str(fragment)] = ensure_fragment(self.db, fragment)
+        return fragment_map
 
     def _ensure_message(
         self,
@@ -238,7 +250,8 @@ class LogStore:
         used_fragments = _encode_text_refs(payload, fragment_map)
         if attachments:
             attachment_ids = [
-                ensure_attachment(self.db, attachment) for attachment in attachments
+                ensure_attachment(self.db, attachment, scrubber=self._scrubber)
+                for attachment in attachments
             ]
             _encode_attachment_refs(payload, attachment_ids, part_type)
         else:
@@ -474,6 +487,12 @@ class LogStore:
             raise
         return turn_id
 
+    def _scrub_stored(self, value: str | None) -> str | None:
+        "Scrub a serialized turn-level field (options, provider payload)."
+        if self._scrubber is None or value is None:
+            return value
+        return self._scrubber.scrub_text(value)
+
     def _log_in_transaction(self, response, thread_id: str | None) -> str:
         if thread_id is None:
             conversation = getattr(response, "conversation", None)
@@ -481,15 +500,29 @@ class LogStore:
             # thread of its own, so `llm -c` and `llm logs` can always
             # find it - the same guarantee the conversations table used
             # to provide.
+            name_source = response.prompt.prompt or response.prompt.system or ""
+            if self._scrubber is not None:
+                # The thread name is derived from the prompt text and is
+                # printed by `llm logs`, so it gets the same scrub.
+                name_source = self._scrubber.scrub_text(name_source)
             thread_id = self.ensure_thread(
                 conversation.id if conversation else str(monotonic_ulid()).lower(),
-                name=_conversation_name(
-                    response.prompt.prompt or response.prompt.system or ""
-                ),
+                name=_conversation_name(name_source),
             )
 
         prompt_fragments = list(response.prompt.fragments or [])
         system_fragments = list(response.prompt.system_fragments or [])
+        if self._scrubber is not None:
+            # Scrubbed once here so the turn_fragments rows below and the
+            # fragments registered by ensure_chain agree on one form.
+            prompt_fragments = [
+                scrub_fragment(fragment, self._scrubber)
+                for fragment in prompt_fragments
+            ]
+            system_fragments = [
+                scrub_fragment(fragment, self._scrubber)
+                for fragment in system_fragments
+            ]
 
         parent = self.ensure_chain(
             response.prompt.messages,
@@ -516,12 +549,14 @@ class LogStore:
                 "tip_message_hash": tip,
                 "model": response.model.model_id,
                 "resolved_model": response.resolved_model,
-                "options_json": _dump(
-                    {
-                        key: value
-                        for key, value in dict(response.prompt.options).items()
-                        if value is not None
-                    }
+                "options_json": self._scrub_stored(
+                    _dump(
+                        {
+                            key: value
+                            for key, value in dict(response.prompt.options).items()
+                            if value is not None
+                        }
+                    )
                 ),
                 "schema_id": schema_id,
                 "input_tokens": response.input_tokens,
@@ -529,14 +564,19 @@ class LogStore:
                 "token_details": _dump(response.token_details),
                 "duration_ms": response.duration_ms(),
                 "datetime_utc": response.datetime_utc(),
-                "response_json": condense_payload(
-                    getattr(response, "response_json", None),
-                    own_messages,
-                    [(tool.name, tool.description) for tool in response.prompt.tools],
-                    schema=response.prompt.schema,
-                    model_replacements=getattr(
-                        response.model, "json_replacements", None
-                    ),
+                "response_json": self._scrub_stored(
+                    condense_payload(
+                        getattr(response, "response_json", None),
+                        own_messages,
+                        [
+                            (tool.name, tool.description)
+                            for tool in response.prompt.tools
+                        ],
+                        schema=response.prompt.schema,
+                        model_replacements=getattr(
+                            response.model, "json_replacements", None
+                        ),
+                    )
                 ),
             },
             replace=True,
@@ -725,8 +765,21 @@ class LogStore:
         ]
 
 
-def ensure_attachment(db, attachment) -> str:
+def ensure_attachment(db, attachment, scrubber=None) -> str:
     "Store an attachment, returning its content-addressed id."
+    if scrubber is None:
+        scrubber = default_scrubber()
+    if scrubber is not None and attachment.content:
+        # Scrub before the id is computed, so the content-addressed id
+        # always matches the bytes actually stored.
+        new_content = scrubber.scrub_bytes(attachment.content)
+        if new_content != attachment.content:
+            attachment = Attachment(
+                type=attachment.type,
+                path=attachment.path,
+                url=attachment.url,
+                content=new_content,
+            )
     attachment_id = attachment.id()
     db["attachments"].insert(
         {
