@@ -1050,6 +1050,31 @@ def test_default_embed_model_errors(db_factory, user_path, default_is_set, comma
     assert db["embeddings"].count == 1
 
 
+@pytest.mark.parametrize(
+    "args,input",
+    (
+        (["embed", "-m", "not-a-model", "-c", "hello"], None),
+        (["embed", "-m", "not-a-model", "example", "1", "-c", "hello"], None),
+        (["embed-multi", "-m", "not-a-model", "example", "-"], "id,name\n1,hello"),
+        # A default that names a model which is no longer installed
+        (["embed", "-c", "hello"], None),
+        (["embed", "example", "1", "-c", "hello"], None),
+        (["embed-multi", "example", "-"], "id,name\n1,hello"),
+    ),
+)
+def test_embed_unknown_model_error(db_factory, user_path, args, input):
+    if "-m" not in args:
+        (user_path / "default_embedding_model.txt").write_text(
+            "not-a-model", encoding="utf8"
+        )
+    result = CliRunner().invoke(cli, args, input=input)
+    assert result.exit_code == 1
+    assert result.output == "Error: Unknown embedding model: not-a-model\n"
+    # No collection was created for the unknown model
+    db = db_factory(str(user_path / "embeddings.db"))
+    assert not db["collections"].exists() or db["collections"].count == 0
+
+
 def test_embed_multi_existing_collection_without_default(db_factory, user_path):
     db = db_factory(str(user_path / "embeddings.db"))
     Collection("example", db, model_id="embed-demo")
