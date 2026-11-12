@@ -597,6 +597,71 @@ def test_embed_multi_file_input(
     assert ids == expected_ids
 
 
+@pytest.mark.parametrize("source", ("json", "json-stdin", "nl", "nl-stdin", "sql"))
+@pytest.mark.parametrize("value,expected", ((0, "0"), (7, "7"), (-2.5, "-2.5")))
+def test_embed_multi_numeric_content(
+    db_factory, embed_demo, tmp_path, source, value, expected
+):
+    db_path = tmp_path / "embeddings.db"
+    args = [
+        "embed-multi",
+        "numbers",
+        "-d",
+        str(db_path),
+        "-m",
+        "embed-demo",
+        "--store",
+        "--prefix",
+        "item/",
+        "--prepend",
+        "search_document: ",
+    ]
+    input = None
+    if source == "sql":
+        args.extend(
+            (
+                "--sql",
+                f"select 1 as id, 'value' as label, {value} as number, null as missing",
+            )
+        )
+    else:
+        row = {"id": 1, "label": "value", "number": value, "missing": None}
+        format = source.split("-")[0]
+        content = json.dumps([row] if format == "json" else row)
+        args.extend(("--format", format))
+        if source.endswith("-stdin"):
+            args.append("-")
+            input = content
+        else:
+            path = tmp_path / f"input.{format}"
+            path.write_text(content, encoding="utf-8")
+            args.append(str(path))
+
+    result = CliRunner().invoke(cli, args, input=input)
+
+    assert result.exit_code == 0, result.output
+    expected_content = f"search_document: value {expected} "
+    assert embed_demo.embedded_content == [expected_content]
+    db = db_factory(str(db_path))
+    assert list(db.query("select id, content from embeddings")) == [
+        {"id": "item/1", "content": expected_content}
+    ]
+
+
+@pytest.mark.parametrize("format", ("json", "nl"))
+@pytest.mark.parametrize("value,expected", ((False, "False"), (True, "True")))
+def test_embed_multi_boolean_content(embed_demo, format, value, expected):
+    row = {"id": 1, "value": value}
+    result = CliRunner().invoke(
+        cli,
+        ["embed-multi", "booleans", "-", "--format", format, "-m", "embed-demo"],
+        input=json.dumps([row] if format == "json" else row),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert embed_demo.embedded_content == [expected]
+
+
 def test_embed_multi_files_binary_store(db_factory, tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
