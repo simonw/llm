@@ -640,6 +640,21 @@ def test_toolbox_config_capture():
     assert Tool6()._config == {}
 
 
+def test_resolve_schema_input_long_dsl():
+    schema = "name: " + "A long description " * 30
+    assert resolve_schema_input(None, schema, load_template=None) == schema_dsl(schema)
+
+
+@pytest.mark.parametrize("filename", ("my schema.json", "schema,one.json"))
+def test_resolve_schema_input_invalid_json_file(tmp_path, filename):
+    path = tmp_path / filename
+    path.write_text("not JSON")
+    with pytest.raises(
+        click.ClickException, match="Schema file contained invalid JSON"
+    ):
+        resolve_schema_input(None, str(path), load_template=None)
+
+
 @pytest.mark.parametrize("allowed", [True, False])
 @pytest.mark.parametrize("nested", [False, True])
 def test_schema_summary_boolean_properties(allowed, nested):
