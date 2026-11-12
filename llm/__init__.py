@@ -287,9 +287,13 @@ def get_embedding_model_aliases() -> dict[str, EmbeddingModel]:
     return model_aliases
 
 
-def get_async_model_aliases() -> dict[str, AsyncModel]:
+def get_async_model_aliases(
+    models_with_aliases: list[ModelWithAliases] | None = None,
+) -> dict[str, AsyncModel]:
     async_model_aliases = {}
-    for model_with_aliases in get_models_with_aliases():
+    if models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
+    for model_with_aliases in models_with_aliases:
         if model_with_aliases.async_model:
             for alias in model_with_aliases.aliases:
                 async_model_aliases[alias] = model_with_aliases.async_model
@@ -299,9 +303,13 @@ def get_async_model_aliases() -> dict[str, AsyncModel]:
     return async_model_aliases
 
 
-def get_model_aliases() -> dict[str, Model]:
+def get_model_aliases(
+    models_with_aliases: list[ModelWithAliases] | None = None,
+) -> dict[str, Model]:
     model_aliases = {}
-    for model_with_aliases in get_models_with_aliases():
+    if models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
+    for model_with_aliases in models_with_aliases:
         if model_with_aliases.model:
             for alias in model_with_aliases.aliases:
                 model_aliases[alias] = model_with_aliases.model
@@ -325,9 +333,15 @@ def get_async_models() -> list[AsyncModel]:
     return [mwa.async_model for mwa in models_with_aliases if mwa.async_model]
 
 
-def get_async_model(name: str | None = None) -> AsyncModel:
+def get_async_model(
+    name: str | None = None,
+    *,
+    models_with_aliases: list[ModelWithAliases] | None = None,
+) -> AsyncModel:
     "Get an async model by name or alias"
-    aliases = get_async_model_aliases()
+    if models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
+    aliases = get_async_model_aliases(models_with_aliases)
     name = name or get_default_model()
     try:
         return aliases[name]
@@ -335,7 +349,9 @@ def get_async_model(name: str | None = None) -> AsyncModel:
         # Does a sync model exist?
         sync_model = None
         try:
-            sync_model = get_model(name, _skip_async=True)
+            sync_model = get_model(
+                name, _skip_async=True, models_with_aliases=models_with_aliases
+            )
         except UnknownModelError:
             pass
         if sync_model:
@@ -344,9 +360,16 @@ def get_async_model(name: str | None = None) -> AsyncModel:
             raise UnknownModelError("Unknown model: " + name)
 
 
-def get_model(name: str | None = None, _skip_async: bool = False) -> Model:
+def get_model(
+    name: str | None = None,
+    _skip_async: bool = False,
+    *,
+    models_with_aliases: list[ModelWithAliases] | None = None,
+) -> Model:
     "Get a model by name or alias"
-    aliases = get_model_aliases()
+    if models_with_aliases is None:
+        models_with_aliases = get_models_with_aliases()
+    aliases = get_model_aliases(models_with_aliases)
     name = name or get_default_model()
     try:
         return aliases[name]
@@ -356,7 +379,7 @@ def get_model(name: str | None = None, _skip_async: bool = False) -> Model:
             raise UnknownModelError("Unknown model: " + name)
         async_model = None
         try:
-            async_model = get_async_model(name)
+            async_model = get_async_model(name, models_with_aliases=models_with_aliases)
         except UnknownModelError:
             pass
         if async_model:
