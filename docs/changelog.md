@@ -4,6 +4,17 @@
 
 - `llm install` and `llm uninstall` now run pip in a separate process using LLM's Python interpreter, keeping pip's changes to interpreter state out of the running CLI. [#1811](https://github.com/simonw/llm/issues/1811)
 
+(v0_37_2)=
+## 0.37.2 (2026-11-11)
+
+- **Security:** Models in `extra-openai-models.yaml` with an `api_base` and an `api_key_name` no longer send the `OPENAI_API_KEY` environment variable to that endpoint when the named key has not been stored. They now fail with a `No key found` error instead. [GHSA-v9h7-jj4g-f862](https://github.com/simonw/llm/security/advisories/GHSA-v9h7-jj4g-f862)
+- **Security:** Models with `responses: true` and an `api_base` no longer send your stored `openai` key or the `OPENAI_API_KEY` environment variable to that endpoint when run with `-o chat_completions 1`. This also applied to `llm openai endpoint URL --responses -o chat_completions 1` run without `--key`. [GHSA-r639-rr7r-x72w](https://github.com/simonw/llm/security/advisories/GHSA-r639-rr7r-x72w)
+- `-a/--attachment` and `--at/--attachment-type` now work with pipes such as Bash process substitution, so `llm "Describe this image" -a <(cat image.png)` works. Previously LLM could not detect the type of a piped attachment, and `--at` could lose its content before it was sent. Thanks, [Steven Huang](https://github.com/remote-controlled-man). [#971](https://github.com/simonw/llm/issues/971), [#1857](https://github.com/simonw/llm/pull/1857)
+- An empty attachment, such as `llm -a -` with nothing on standard input or `-a` with an empty file, now shows the usual `Could not determine mimetype` error instead of a traceback. Thanks, [Ansansan](https://github.com/Ansansan). [#1853](https://github.com/simonw/llm/issues/1853), [#1854](https://github.com/simonw/llm/pull/1854)
+- `llm openai endpoint add` no longer breaks `extra-openai-models.yaml` when the existing list is indented or ends with a `...` document end marker. Previously the file stopped parsing, so LLM could not load any models until it was fixed by hand. Thanks, [ledd](https://github.com/wsj040303). [#1864](https://github.com/simonw/llm/issues/1864), [#1865](https://github.com/simonw/llm/pull/1865)
+- `llm openai endpoint list --json` no longer crashes with a `TypeError` when `extra-openai-models.yaml` contains an unquoted date, such as `api_version: 2024-02-01`. Thanks, [Steven Huang](https://github.com/remote-controlled-man). [#1850](https://github.com/simonw/llm/pull/1850)
+- In the Python API, reopening an embedding collection with a `model=` other than the one it was created with now uses the collection's stored model. Previously new embeddings were calculated with the supplied model, mixing vectors from two models in one collection. Thanks, [Chen Yufeiyang](https://github.com/feiiiiii5). [#1859](https://github.com/simonw/llm/pull/1859)
+
 (v0_37_1)=
 ## 0.37.1 (2026-11-03)
 

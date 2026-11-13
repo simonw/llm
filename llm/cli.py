@@ -380,14 +380,23 @@ def resolve_attachment(value):
     path = pathlib.Path(value)
     if not path.exists():
         raise AttachmentError(f"File {value} does not exist")
-    path = path.resolve()
-
     # Try to guess type
-    mimetype = mimetype_from_path(str(path))
+    content = None
+    if path.is_fifo():
+        content = path.read_bytes()
+        mimetype = mimetype_from_string(content)
+    else:
+        path = path.resolve()
+        mimetype = mimetype_from_path(str(path))
     if mimetype is None:
         raise AttachmentError(f"Could not determine mimetype of {value}")
 
-    return Attachment(type=mimetype, path=str(path), url=None, content=None)
+    return Attachment(
+        type=mimetype,
+        path=None if content is not None else str(path),
+        url=None,
+        content=content,
+    )
 
 
 class AttachmentType(click.ParamType):
@@ -411,8 +420,11 @@ def resolve_attachment_with_type(value: str, mimetype: str) -> Attachment:
         path = pathlib.Path(value)
         if not path.exists():
             raise click.BadParameter(f"File {value} does not exist")
-        path = path.resolve()
-        attachment = Attachment(mimetype, str(path), None, None)
+        if path.is_fifo():
+            attachment = Attachment(mimetype, None, None, path.read_bytes())
+        else:
+            path = path.resolve()
+            attachment = Attachment(mimetype, str(path), None, None)
     return attachment
 
 
@@ -1258,13 +1270,11 @@ def chat(
     """
     Hold an ongoing chat with a model.
     """
-    # Left and right arrow keys to move cursor:
+    # GNU readline bindings work on Unix; pyreadline3 handles Windows arrows
+    # itself and rejects these GNU bindings (see #585).
     if sys.platform != "win32":
         readline.parse_and_bind("\\e[D: backward-char")
         readline.parse_and_bind("\\e[C: forward-char")
-    else:
-        readline.parse_and_bind("bind -x '\\e[D: backward-char'")
-        readline.parse_and_bind("bind -x '\\e[C: forward-char'")
     log_path = pathlib.Path(database) if database else logs_db_path()
     (log_path.parent).mkdir(parents=True, exist_ok=True)
     db = _cli_database(log_path)

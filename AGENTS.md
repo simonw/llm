@@ -6,7 +6,7 @@ This project uses a Python environment for development and tests.
 
 1. Install the project with its test dependencies:
    ```bash
-   pip install -e '.[test]'
+   pip install -e . --group dev
    ```
 2. Run the tests:
    ```bash
