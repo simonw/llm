@@ -1915,6 +1915,9 @@ def _responses_attachment(attachment, image_detail=None):
         base64_content = attachment.base64_content()
         url = f"data:{attachment.resolve_type()};base64,{base64_content}"
     if attachment.resolve_type() == "application/pdf":
+        if attachment.url:
+            # The Responses API can fetch PDFs from a URL itself
+            return {"type": "input_file", "file_url": attachment.url}
         if not base64_content:
             base64_content = attachment.base64_content()
         return {
