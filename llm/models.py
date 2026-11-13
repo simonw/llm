@@ -2169,6 +2169,8 @@ class Response(_BaseResponse):
 class AsyncResponse(_BaseResponse):
     "Async response from a model."
 
+    _exception: Exception | None = None
+
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
 
@@ -2543,6 +2545,8 @@ class AsyncResponse(_BaseResponse):
         return self
 
     def _ensure_async_generator(self):
+        if self._exception is not None:
+            raise self._exception
         if not hasattr(self, "_generator"):
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
@@ -2586,6 +2590,9 @@ class AsyncResponse(_BaseResponse):
             except StopAsyncIteration:
                 await self._async_finalize()
                 raise
+            except Exception as ex:
+                self._exception = ex
+                raise
             assert chunk is not None
             text = self._process_chunk(chunk)
             if text is not None:
@@ -2608,6 +2615,9 @@ class AsyncResponse(_BaseResponse):
                 except StopAsyncIteration:
                     await self._async_finalize()
                     return
+                except Exception as ex:
+                    self._exception = ex
+                    raise
                 assert chunk is not None
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]

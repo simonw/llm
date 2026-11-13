@@ -3,10 +3,13 @@
 import json
 import os
 
+import httpx2
 import pytest
+from click.testing import CliRunner
 from pytest_httpx2 import IteratorStream
 
 import llm
+from llm.cli import cli
 from llm.default_plugins.openai_models import (
     CodeInterpreter,
     Responses,
@@ -419,6 +422,240 @@ async def test_async_responses_web_search_request(httpx2_mock):
 def _responses_sse(event_type, data):
     data = {"type": event_type, **data}
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n".encode()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_responses_failed_stream_raises(httpx2_mock, async_):
+    response_json = _text_response_json(text="partial")
+    response_json["status"] = "failed"
+    response_json["error"] = {
+        "code": "server_error",
+        "message": "The model failed to generate a response.",
+    }
+    wire_response = httpx2.Response(
+        200,
+        stream=IteratorStream(
+            [
+                _responses_sse(
+                    "response.output_text.delta",
+                    {
+                        "item_id": "msg_server_tool",
+                        "output_index": 0,
+                        "content_index": 0,
+                        "delta": "partial",
+                    },
+                ),
+                _responses_sse("response.failed", {"response": response_json}),
+            ]
+        ),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    httpx2_mock.add_callback(
+        lambda request: wire_response,
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+    )
+    get_model = llm.get_async_model if async_ else llm.get_model
+    conversation = get_model("gpt-5.6-luna").conversation()
+    response = conversation.prompt("hello", key="test")
+    if async_:
+        chunks = response.__aiter__()
+        assert await anext(chunks) == "partial"
+    else:
+        chunks = iter(response)
+        assert next(chunks) == "partial"
+    with pytest.raises(ValueError, match="server_error.*The model failed"):
+        if async_:
+            await anext(chunks)
+        else:
+            next(chunks)
+    assert wire_response.is_closed
+    assert not conversation.responses
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (
+            {"code": "server_error", "message": "Generation failed"},
+            "server_error: Generation failed",
+        ),
+        (None, "Response failed"),
+    ],
+)
+async def test_responses_failed_response_raises(
+    httpx2_mock, async_, stream, error, message
+):
+    response_json = _text_response_json()
+    response_json.update(status="failed", output=[], error=error)
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            stream=IteratorStream(
+                [_responses_sse("response.failed", {"response": response_json})]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=response_json,
+        )
+    get_model = llm.get_async_model if async_ else llm.get_model
+    conversation = get_model("gpt-5.6-luna").conversation()
+    response = conversation.prompt("hello", stream=stream, key="test")
+
+    with pytest.raises(ValueError, match=message):
+        if async_:
+            await response.text()
+        else:
+            response.text()
+    assert response.response_json["status"] == "failed"
+    assert not conversation.responses
+    assert len(httpx2_mock.get_requests()) == 1
+
+
+@pytest.mark.parametrize("async_", [False, True])
+def test_responses_failed_stream_cli(httpx2_mock, async_):
+    response_json = _text_response_json()
+    response_json.update(
+        status="failed",
+        output=[],
+        error={"code": "server_error", "message": "Generation failed"},
+    )
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(
+            [_responses_sse("response.failed", {"response": response_json})]
+        ),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    args = ["prompt", "hello", "-m", "gpt-5.6-luna", "--key", "test"]
+    if async_:
+        args.append("--async")
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 1
+    assert "Error: server_error: Generation failed" in result.stderr
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+async def test_responses_failed_stream_does_not_execute_tools(httpx2_mock, async_):
+    effects = []
+
+    def record(value: str) -> str:
+        "Record a value."
+        effects.append(value)
+        return value
+
+    response_json = _text_response_json()
+    response_json.update(
+        status="failed",
+        output=[],
+        error={"code": "server_error", "message": "Generation failed"},
+    )
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(
+            [
+                _responses_sse(
+                    "response.output_item.done",
+                    {
+                        "output_index": 0,
+                        "item": {
+                            "id": "fc_1",
+                            "type": "function_call",
+                            "status": "completed",
+                            "call_id": "call_1",
+                            "name": "record",
+                            "arguments": '{"value": "should not run"}',
+                        },
+                    },
+                ),
+                _responses_sse("response.failed", {"response": response_json}),
+            ]
+        ),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(
+            [_responses_sse("response.completed", {"response": _text_response_json()})]
+        ),
+        headers={"Content-Type": "text/event-stream"},
+        is_optional=True,
+    )
+    get_model = llm.get_async_model if async_ else llm.get_model
+    chain = get_model("gpt-5.6-luna").chain("hello", tools=[record], key="test")
+    with pytest.raises(ValueError, match="server_error: Generation failed"):
+        if async_:
+            await chain.text()
+        else:
+            chain.text()
+    assert effects == []
+    assert len(httpx2_mock.get_requests()) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("consume_events", [False, True])
+async def test_async_failed_response_stays_failed(httpx2_mock, stream, consume_events):
+    response_json = _text_response_json()
+    response_json.update(
+        status="failed",
+        output=[],
+        error={"code": "server_error", "message": "Generation failed"},
+    )
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            stream=IteratorStream(
+                [_responses_sse("response.failed", {"response": response_json})]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=response_json,
+        )
+    conversation = llm.get_async_model("gpt-5.6-luna").conversation()
+    response = conversation.prompt("hello", stream=stream, key="test")
+    completed = []
+    await response.on_done(lambda response: completed.append(response))
+
+    async def drain_events():
+        return [event async for event in response.astream_events()]
+
+    with pytest.raises(ValueError, match="server_error: Generation failed"):
+        if consume_events:
+            await drain_events()
+        else:
+            await response.text()
+    for read in (
+        response.json,
+        response.text,
+        response.tool_calls,
+        response.execute_tool_calls,
+        drain_events,
+    ):
+        with pytest.raises(ValueError, match="server_error: Generation failed"):
+            await read()
+    assert response.response_json["status"] == "failed"
+    assert not conversation.responses
+    assert completed == []
+    assert len(httpx2_mock.get_requests()) == 1
 
 
 def _code_interpreter_stream():
