@@ -291,19 +291,19 @@ def resolve_schema_input(db, schema_input, load_template):
             return json.loads(schema_input)
         except ValueError:
             pass
+    # Existing files take precedence over schema DSL.
+    path = pathlib.Path(schema_input)
+    if os.path.isfile(path):
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            raise click.ClickException("Schema file contained invalid JSON")
     if " " in schema_input.strip() or "," in schema_input:
         # Treat it as schema DSL
         try:
             return schema_dsl(schema_input)
         except ValueError as e:
             raise click.BadParameter(str(e)) from None
-    # Is it a file on disk?
-    path = pathlib.Path(schema_input)
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except ValueError:
-            raise click.ClickException("Schema file contained invalid JSON")
     # Last attempt: is it an ID in the DB?
     try:
         row = db["schemas"].get(schema_input)
