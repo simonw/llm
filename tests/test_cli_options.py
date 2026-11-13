@@ -1,9 +1,12 @@
 import json
 
+import pydantic
 import pytest
 from click.testing import CliRunner
 
+import llm
 from llm.cli import cli
+from llm.plugins import pm
 
 
 @pytest.mark.parametrize(
@@ -39,6 +42,49 @@ def test_set_model_default_options(user_path, args, expected_options, expected_e
     else:
         assert result.exit_code == 1
         assert expected_error in result.output
+
+
+@pytest.mark.parametrize("command", ("prompt", "save", "chat", "set"))
+def test_nested_model_option_validation_error(user_path, command):
+    class NestedOptionsModel(llm.Model):
+        model_id = "nested-options"
+
+        class Options(llm.Options):
+            numbers: pydantic.Json[list[int]]
+
+        def execute(self, prompt, stream, response, conversation):
+            pytest.fail("Invalid options should not execute the model")
+            yield
+
+    class Plugin:
+        @llm.hookimpl
+        def register_models(self, register):
+            register(NestedOptionsModel())
+
+    plugin = Plugin()
+    pm.register(plugin)
+    try:
+        if command == "set":
+            args = ["models", "options", "set", "nested-options", "numbers", '["bad"]']
+        else:
+            args = [
+                "chat" if command == "chat" else "prompt",
+                "-m",
+                "nested-options",
+                "-o",
+                "numbers",
+                '["bad"]',
+            ]
+            if command == "save":
+                args += ["--save", "invalid-options"]
+        result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    finally:
+        pm.unregister(plugin)
+
+    assert result.exit_code == 1
+    assert "numbers, 0\n  Input should be a valid integer" in result.output
+    assert not (user_path / "model_options.json").exists()
+    assert not (user_path / "templates" / "invalid-options.yaml").exists()
 
 
 def test_model_options_list_and_show(user_path):
