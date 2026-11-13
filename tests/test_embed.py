@@ -305,6 +305,77 @@ def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
     assert collection.model().batch_count == expected_batches
 
 
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 2))
+@pytest.mark.parametrize("binary", (False, True))
+def test_embed_multi_updates_swapped_content(
+    db_factory, embed_demo, with_metadata, batch_size, binary
+):
+    collection = llm.Collection("test", db_factory(memory=True), model=embed_demo)
+    first = b"hello world" if binary else "hello world"
+    second = b"goodbye" if binary else "goodbye"
+    collection.embed("1", first, store=True)
+    collection.embed("2", second, store=True)
+    embed_demo.embedded_content.clear()
+
+    entries = [("1", second), ("2", first)]
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            [(id, text, {"updated": id}) for id, text in entries],
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(entries, store=True, batch_size=batch_size)
+
+    assert embed_demo.embedded_content == [second, first]
+    assert collection.count() == 2
+    results = collection.similar_by_vector([1.0] + [0.0] * 15)
+    assert [entry.id for entry in results] == ["1", "2"]
+    assert [entry.content for entry in results] == (
+        [None, None] if binary else ["goodbye", "hello world"]
+    )
+    assert [entry.score for entry in results] == pytest.approx([1, 2**-0.5])
+    assert [entry.metadata for entry in results] == (
+        [{"updated": "1"}, {"updated": "2"}] if with_metadata else [None, None]
+    )
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+def test_embed_multi_skips_only_unchanged_ids(db_factory, embed_demo, with_metadata):
+    db = db_factory(memory=True)
+    collection = llm.Collection("test", db, model=embed_demo)
+    collection.embed("unchanged", "hello world", store=True)
+    other = llm.Collection("other", db, model=embed_demo)
+    other.embed("new", "goodbye", store=True)
+    embed_demo.embedded_content.clear()
+
+    entries = [
+        ("unchanged", "hello world"),
+        ("new", "goodbye"),
+        ("copy", "hello world"),
+    ]
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            [(id, text, {"updated": id}) for id, text in entries], store=True
+        )
+    else:
+        collection.embed_multi(entries, store=True)
+
+    assert embed_demo.embedded_content == ["goodbye", "hello world"]
+    assert collection.count() == 3
+    results = {
+        entry.id: entry for entry in collection.similar_by_vector([1.0] + [0.0] * 15)
+    }
+    assert {id: entry.content for id, entry in results.items()} == dict(entries)
+    assert results["unchanged"].metadata is None
+    for id in ("new", "copy"):
+        assert results[id].metadata == ({"updated": id} if with_metadata else None)
+    assert [entry.id for entry in other.similar_by_vector([1.0] + [0.0] * 15)] == [
+        "new"
+    ]
+
+
 def test_collection_typed_attachments(db_factory):
     model = TypedAttachmentEmbeddingModel()
     collection = llm.Collection("typed", db_factory(memory=True), model=model)
