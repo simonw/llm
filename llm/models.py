@@ -3770,8 +3770,23 @@ def _remove_titles_recursively(obj):
         # "title" has an object value and must be kept.
         if isinstance(obj.get("title"), str):
             obj.pop("title")
-        for value in obj.values():
-            _remove_titles_recursively(value)
+        for key, value in obj.items():
+            # These keywords contain JSON data, rather than child schemas.
+            if key in {"default", "const", "enum", "examples"}:
+                continue
+            # Names in schema maps may themselves be data keyword names.
+            if key in {
+                "properties",
+                "patternProperties",
+                "$defs",
+                "definitions",
+                "dependentSchemas",
+                "dependencies",
+            } and isinstance(value, dict):
+                for child_schema in value.values():
+                    _remove_titles_recursively(child_schema)
+            else:
+                _remove_titles_recursively(value)
     elif isinstance(obj, list):
         for item in obj:
             _remove_titles_recursively(item)
