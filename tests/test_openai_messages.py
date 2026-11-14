@@ -611,3 +611,88 @@ class TestNonStreamingExecuteYieldsStreamEvents:
         assert response.messages() == [
             llm.Message(role="assistant", parts=[llm.parts.TextPart(text="Hello")])
         ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("stream", (False, True))
+async def test_tool_call_with_invalid_json_arguments(httpx2_mock, async_, stream):
+    # Models sometimes return tool call arguments that are not valid JSON.
+    # Keep them as {"_raw": ...} like the Responses API path does, instead
+    # of raising JSONDecodeError.
+    bad_arguments = '{"city": "Paris"'
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                [
+                    _sse(
+                        {"role": "assistant", "content": None},
+                        tool_calls=[
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": bad_arguments,
+                                },
+                            }
+                        ],
+                    ),
+                    _sse({}, finish_reason="tool_calls"),
+                    b"data: [DONE]\n\n",
+                ]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": bad_arguments,
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            },
+        )
+
+    def get_weather(city: str) -> str:
+        "Look up the weather."
+        return "sunny"
+
+    if async_:
+        model = llm.get_async_model("gpt-4o-mini")
+        response = model.prompt(
+            "weather?", tools=[get_weather], key=API_KEY, stream=stream
+        )
+        await response.text()
+        tool_calls = await response.tool_calls()
+    else:
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt(
+            "weather?", tools=[get_weather], key=API_KEY, stream=stream
+        )
+        response.text()
+        tool_calls = response.tool_calls()
+    assert [(tc.tool_call_id, tc.name, tc.arguments) for tc in tool_calls] == [
+        ("call_1", "get_weather", {"_raw": bad_arguments})
+    ]
