@@ -882,7 +882,7 @@ def parse_since(value: str) -> datetime.datetime:
     dt = datetime.datetime.fromisoformat(value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
-    return dt
+    return dt.astimezone(datetime.timezone.utc)
 
 
 def _now() -> str:

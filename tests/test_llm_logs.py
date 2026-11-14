@@ -1787,3 +1787,45 @@ def test_logs_since_bad_value_gives_clean_error(db_factory, user_path, logs_db):
     result = runner.invoke(cli, ["logs", "--since", "bogus!"])
     assert result.exit_code == 1
     assert "Invalid --since value" in result.output
+
+def test_parse_since_iso_offset_converted_to_utc():
+    dt = parse_since("2024-06-01T12:00:00+05:00")
+    assert dt.utcoffset() == datetime.timedelta(0)
+    assert dt == datetime.datetime(2024, 6, 1, 7, 0, tzinfo=datetime.timezone.utc)
+
+def test_logs_since_iso_with_offset_compares_in_utc(db_factory, user_path):
+    log_path = str(user_path / "logs_since_offset.db")
+    db = db_factory(log_path)
+    migrate(db)
+    before_cut = datetime.datetime(2024, 6, 1, 6, 0, tzinfo=datetime.timezone.utc)
+    after_cut = datetime.datetime(2024, 6, 1, 8, 0, tzinfo=datetime.timezone.utc)
+    db["responses"].insert_all(
+        [
+            {
+                "id": str(monotonic_ulid()).lower(),
+                "prompt": "06 utc prompt",
+                "response": "06",
+                "model": "davinci",
+                "datetime_utc": before_cut.isoformat(),
+            },
+            {
+                "id": str(monotonic_ulid()).lower(),
+                "prompt": "08 utc prompt",
+                "response": "08",
+                "model": "davinci",
+                "datetime_utc": after_cut.isoformat(),
+            },
+        ],
+        alter=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["logs", "--since", "2024-06-01T12:00:00+05:00", "-n", "0", "--json", "-p", log_path],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    prompts = {r["prompt"] for r in json.loads(result.output)}
+    # 12:00+05:00 == 07:00 UTC: 08:00 UTC is after the cutoff, 06:00 UTC is before it
+    assert "08 utc prompt" in prompts
+    assert "06 utc prompt" not in prompts
