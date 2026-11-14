@@ -1479,3 +1479,61 @@ async def test_async_chain_carries_schema_through_tool_rounds(
 
     assert len(prompts) == 2
     assert [prompt.schema for prompt in prompts] == [schema, schema]
+
+
+@pytest.mark.parametrize(
+    "field_name", ["payload", "default", "const", "enum", "examples"]
+)
+def test_tool_schema_preserves_literal_titles(field_name):
+    from pydantic import create_model
+
+    value = {"title": "A document", "nested": {"title": "Section"}, "id": 1}
+    model = create_model("LiteralTitles", **{field_name: (dict, value)})
+    tool = llm.Tool(name="parse_document", input_schema=model)
+    field_schema = tool.input_schema["properties"][field_name]
+    assert field_schema["default"] == value
+    assert "title" not in field_schema
+    assert "title" not in tool.input_schema
+
+
+@pytest.mark.parametrize("keyword", ["const", "enum", "examples", "default"])
+def test_schema_title_removal_preserves_json_values(keyword):
+    from llm.models import _remove_titles_recursively
+
+    value = {"title": "A document", "nested": {"title": "Section"}}
+    literal = [value] if keyword in ("enum", "examples") else value
+    schema = {
+        "title": "Schema annotation",
+        "type": "object",
+        keyword: literal,
+        "properties": {"title": {"type": "string", "title": "Field annotation"}},
+    }
+    _remove_titles_recursively(schema)
+    assert schema[keyword] == literal
+    assert schema[keyword] == ([value] if keyword in ("enum", "examples") else value)
+    assert value["title"] == "A document"
+    assert "title" not in schema
+    assert schema["properties"]["title"] == {"type": "string"}
+
+
+@pytest.mark.parametrize(
+    "schema_map",
+    [
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+        "dependencies",
+    ],
+)
+@pytest.mark.parametrize("field_name", ["default", "const", "enum", "examples"])
+def test_schema_title_removal_walks_keyword_named_schemas(schema_map, field_name):
+    from llm.models import _remove_titles_recursively
+
+    literal = {"title": "A document"}
+    schema = {
+        schema_map: {field_name: {"title": "Annotation", "default": literal.copy()}}
+    }
+    _remove_titles_recursively(schema)
+    assert schema[schema_map][field_name] == {"default": literal}
