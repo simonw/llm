@@ -3152,7 +3152,11 @@ def fragments_list(queries, aliases, json_):
         p = f"p{param_count}"
         params[p] = q
         where_bits.append(f"""
-            (fragments.hash = :{p} or fragment_aliases.alias = :{p}
+            (fragments.hash = :{p} or exists (
+                select 1 from fragment_aliases as matching_aliases
+                where matching_aliases.fragment_id = fragments.id
+                and matching_aliases.alias = :{p}
+            )
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
         """)
