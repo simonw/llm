@@ -1792,7 +1792,12 @@ def _response_from_dict(
 
 
 class Response(_BaseResponse):
-    "Sync response from a model."
+    """Sync response from a model.
+
+    Model iteration failures are raised again on subsequent reads.
+    """
+
+    _exception: Exception | None = None
 
     model: "Model"
     conversation: Optional["Conversation"] = None
@@ -2076,6 +2081,8 @@ class Response(_BaseResponse):
         """Drive self.model.execute() once and yield each raw chunk it
         produces. Callers normalize chunks through _process_chunk.
         """
+        if self._exception is not None:
+            raise self._exception
         if isinstance(self.model, Model):
             generator = self.model.execute(
                 self.prompt,
@@ -2094,9 +2101,13 @@ class Response(_BaseResponse):
         else:
             raise TypeError("self.model must be a Model or KeyModel")
 
-        for chunk in generator:
-            assert chunk is not None
-            yield chunk
+        try:
+            for chunk in generator:
+                assert chunk is not None
+                yield chunk
+        except Exception as ex:
+            self._exception = ex
+            raise
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()

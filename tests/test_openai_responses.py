@@ -547,7 +547,10 @@ def test_responses_failed_stream_cli(httpx2_mock, async_):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("async_", [False, True])
-async def test_responses_failed_stream_does_not_execute_tools(httpx2_mock, async_):
+@pytest.mark.parametrize("read_again", [False, True], ids=["chain", "repeated-read"])
+async def test_responses_failed_stream_does_not_execute_tools(
+    httpx2_mock, async_, read_again
+):
     effects = []
 
     def record(value: str) -> str:
@@ -595,20 +598,35 @@ async def test_responses_failed_stream_does_not_execute_tools(httpx2_mock, async
         is_optional=True,
     )
     get_model = llm.get_async_model if async_ else llm.get_model
-    chain = get_model("gpt-5.6-luna").chain("hello", tools=[record], key="test")
-    with pytest.raises(ValueError, match="server_error: Generation failed"):
+    model = get_model("gpt-5.6-luna")
+    prompt = model.prompt if read_again else model.chain
+    response = prompt("hello", tools=[record], key="test")
+    with pytest.raises(ValueError, match="server_error: Generation failed") as first:
         if async_:
-            await chain.text()
+            await response.text()
         else:
-            chain.text()
+            response.text()
+    if read_again:
+        assert effects == []
+        with pytest.raises(
+            ValueError, match="server_error: Generation failed"
+        ) as repeated:
+            if async_:
+                await response.execute_tool_calls()
+            else:
+                response.execute_tool_calls()
+        assert repeated.value is first.value
     assert effects == []
     assert len(httpx2_mock.get_requests()) == 1
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("consume_events", [False, True])
-async def test_async_failed_response_stays_failed(httpx2_mock, stream, consume_events):
+async def test_failed_response_stays_failed(
+    httpx2_mock, async_, stream, consume_events
+):
     response_json = _text_response_json()
     response_json.update(
         status="failed",
@@ -620,9 +638,27 @@ async def test_async_failed_response_stays_failed(httpx2_mock, stream, consume_e
             method="POST",
             url="https://api.openai.com/v1/responses",
             stream=IteratorStream(
-                [_responses_sse("response.failed", {"response": response_json})]
+                [
+                    _responses_sse("response.output_text.delta", {"delta": "old"}),
+                    _responses_sse("response.failed", {"response": response_json}),
+                ]
             ),
             headers={"Content-Type": "text/event-stream"},
+        )
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            stream=IteratorStream(
+                [
+                    _responses_sse("response.output_text.delta", {"delta": "new"}),
+                    _responses_sse(
+                        "response.completed",
+                        {"response": _text_response_json(text="new")},
+                    ),
+                ]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+            is_optional=True,
         )
     else:
         httpx2_mock.add_response(
@@ -630,28 +666,49 @@ async def test_async_failed_response_stays_failed(httpx2_mock, stream, consume_e
             url="https://api.openai.com/v1/responses",
             json=response_json,
         )
-    conversation = llm.get_async_model("gpt-5.6-luna").conversation()
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            json=_text_response_json(text="new"),
+            is_optional=True,
+        )
+    get_model = llm.get_async_model if async_ else llm.get_model
+    conversation = get_model("gpt-5.6-luna").conversation()
     response = conversation.prompt("hello", stream=stream, key="test")
     completed = []
-    await response.on_done(lambda response: completed.append(response))
+    if async_:
+        await response.on_done(lambda response: completed.append(response))
+    else:
+        response.on_done(lambda response: completed.append(response))
 
-    async def drain_events():
+    async def drain_async_events():
         return [event async for event in response.astream_events()]
 
-    with pytest.raises(ValueError, match="server_error: Generation failed"):
-        if consume_events:
-            await drain_events()
+    drain_events = (
+        drain_async_events if async_ else lambda: list(response.stream_events())
+    )
+    read = drain_events if consume_events else response.text
+    with pytest.raises(ValueError, match="server_error: Generation failed") as first:
+        if async_:
+            await read()
         else:
-            await response.text()
+            read()
     for read in (
         response.json,
         response.text,
         response.tool_calls,
         response.execute_tool_calls,
+        response.messages,
         drain_events,
     ):
-        with pytest.raises(ValueError, match="server_error: Generation failed"):
-            await read()
+        with pytest.raises(
+            ValueError, match="server_error: Generation failed"
+        ) as repeated:
+            if async_:
+                await read()
+            else:
+                read()
+        assert repeated.value is first.value
     assert response.response_json["status"] == "failed"
     assert not conversation.responses
     assert completed == []
