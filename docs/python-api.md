@@ -664,6 +664,36 @@ The `user()`, `assistant()`, and `system()` helpers accept strings (wrapped as `
 
 Calling `model.prompt("hi", system="Be brief.")` is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
 
+(python-api-messages-with-prompt)=
+
+#### Combining messages= with a prompt
+
+`messages=` is the conversation so far. If you also pass a prompt, it is sent as a new user message after those messages:
+
+```python
+history = [
+    user("What is the capital of France?"),
+    assistant("Paris, matey."),
+]
+response = model.prompt("And Germany?", messages=history)
+```
+
+This sends the same three messages as adding `user("And Germany?")` to the end of the list. Any `fragments=` and `attachments=` become part of that final user message, and `tool_results=` are added as a tool message before it.
+
+Pass the new input one way or the other, not both. If `messages=` already ends with the latest user message, passing that message as the prompt as well sends it to the model twice:
+
+```python
+# Don't do this - the model receives "And Germany?" twice
+response = model.prompt(
+    "And Germany?",
+    messages=history + [user("And Germany?")],
+)
+```
+
+`system=` is added as the first message, unless `messages=` already starts with a system message.
+
+This applies to `model.prompt()`, `conversation.prompt()` and `chain()`, and to their asynchronous equivalents. The list you pass in is not modified. `response.prompt.messages` shows exactly what was sent to the model.
+
 #### Streaming events as they arrive
 
 `response.stream_events()` yields typed events for every content block the model produces as they stream in. This is useful for interfaces that show the model response "live".

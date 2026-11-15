@@ -543,15 +543,27 @@ class Prompt:
         was (or will be) sent for this turn — the full chain including
         any prior conversation history.
 
-        - If ``messages=`` was passed explicitly, it is authoritative:
-          returned verbatim. Other kwargs (``prompt=``, ``system=``,
-          ``attachments=``, ``tool_results=``) are ignored for the
-          messages list (they remain available via ``prompt.prompt``,
-          ``prompt.system``, etc., for adapters that still read them).
+        - If ``messages=`` was passed to this constructor, it is
+          returned verbatim. The other constructor arguments
+          (``prompt=``, ``system=``, ``attachments=``,
+          ``tool_results=``) are not added to it. They remain available
+          via ``prompt.prompt``, ``prompt.system``, etc., for adapters
+          that still read them.
         - Otherwise the list is synthesized from the legacy kwargs
           (system, tool_results, prompt, attachments), producing just
           the current turn — prior history is not folded in, because
           no conversation context is reachable here.
+
+        The first point describes this class only, not the public API.
+        ``model.prompt()``, ``conversation.prompt()``, ``chain()`` and
+        their async equivalents do not ignore those arguments when a
+        caller also passes ``messages=``. They append them to that list
+        as the new turn's input - see ``_append_turn_input()`` - and add
+        ``system=`` as its first message, then construct the ``Prompt``
+        with the result. So ``model.prompt("Hello", messages=history)``
+        sends ``history`` followed by a user message "Hello", and a
+        caller whose ``history`` already ends with that message sends
+        it twice.
 
         Conversation.prompt / AsyncConversation.prompt / reply() all
         pre-compute the full chain and pass it as ``messages=``, so
