@@ -58,7 +58,7 @@ def load_extra_models(path=None):
         path = extra_models_path()
     if not path.exists():
         return []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         records = yaml.safe_load(f)
     if records is None:
         return []

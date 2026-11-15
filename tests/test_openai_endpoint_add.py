@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 import llm
 from llm.cli import cli
+from llm.default_plugins import openai_models
 
 
 def _invoke(*args):
@@ -37,6 +38,35 @@ def test_endpoint_add_minimal(user_path):
     assert model.api_base == "http://localhost:8080"
     assert model.needs_key is None
     assert not model.supports_tools
+
+
+@pytest.mark.parametrize("default_encoding", ["cp1252", "gbk"])
+@pytest.mark.parametrize("alias", ["\u4e2d", "\u6d4b\u8bd5", "caf\u00e9"])
+def test_endpoint_unicode_alias_non_utf8_locale(
+    user_path, monkeypatch, default_encoding, alias
+):
+    # Simulate a non-UTF-8 default without changing the process-wide locale.
+    def open_with_locale(path, mode="r", encoding=None):
+        return open(path, mode, encoding=encoding or default_encoding)
+
+    monkeypatch.setattr(openai_models, "open", open_with_locale, raising=False)
+
+    result = _invoke(
+        "add", "http://localhost:8080", "-m", "local-model", "--alias", alias
+    )
+    assert result.exit_code == 0, result.output
+
+    result = _invoke("list", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == [
+        {
+            "model_id": "local-model",
+            "model_name": "local-model",
+            "aliases": [alias],
+            "api_base": "http://localhost:8080",
+        }
+    ]
+    assert llm.get_model(alias).model_id == "local-model"
 
 
 def test_endpoint_add_all_options(user_path):
