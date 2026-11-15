@@ -342,6 +342,127 @@ def test_embed_multi_updates_swapped_content(
 
 
 @pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 2, 3))
+@pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize(
+    "values,expected_embedded,expected_value,expected_step",
+    [
+        (["goodbye", "hello world"], ["goodbye", "hello world"], "hello world", 1),
+        (["goodbye", "goodbye"], ["goodbye"], "goodbye", 0),
+        (
+            ["goodbye", "hello world", "goodbye"],
+            ["goodbye", "hello world", "goodbye"],
+            "goodbye",
+            2,
+        ),
+        (["hello world", "hello world"], [], "hello world", "original"),
+    ],
+    ids=["restore", "repeat-changed", "alternate", "unchanged"],
+)
+def test_embed_multi_repeated_ids_follow_input_order(
+    db_factory,
+    embed_demo,
+    with_metadata,
+    batch_size,
+    binary,
+    values,
+    expected_embedded,
+    expected_value,
+    expected_step,
+):
+    collection = llm.Collection("test", db_factory(memory=True), model=embed_demo)
+    original = b"hello world" if binary else "hello world"
+    collection.embed("x", original, metadata={"step": "original"}, store=True)
+    embed_demo.embedded_content.clear()
+    if binary:
+        values = [value.encode() for value in values]
+        expected_embedded = [value.encode() for value in expected_embedded]
+
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            (("x", value, {"step": i}) for i, value in enumerate(values)),
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(
+            (("x", value) for value in values), store=True, batch_size=batch_size
+        )
+
+    assert collection.count() == 1
+    entry = collection.similar_by_vector([1.0] + [0.0] * 15)[0]
+    assert entry.id == "x"
+    assert entry.content == (None if binary else expected_value)
+    assert entry.score == pytest.approx(
+        2**-0.5 if expected_value == "hello world" else 1
+    )
+    assert entry.metadata == (
+        {"step": "original"}
+        if expected_step == "original"
+        else {"step": expected_step} if with_metadata else None
+    )
+    assert embed_demo.embedded_content == expected_embedded
+    row = next(collection.db["embeddings"].rows)
+    assert row["content_blob"] == (expected_value.encode() if binary else None)
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 2))
+def test_embed_multi_repeated_new_id_skips_unchanged_value(
+    db_factory, embed_demo, with_metadata, batch_size
+):
+    collection = llm.Collection("test", db_factory(memory=True), model=embed_demo)
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            (("x", "hello world", {"step": i}) for i in range(2)), batch_size=batch_size
+        )
+    else:
+        collection.embed_multi(
+            (("x", "hello world") for _ in range(2)), batch_size=batch_size
+        )
+    assert collection.count() == 1
+    entry = collection.similar_by_vector([1.0] + [0.0] * 15)[0]
+    assert entry.id == "x"
+    assert entry.content is None
+    assert entry.score == pytest.approx(2**-0.5)
+    assert entry.metadata == ({"step": 0} if with_metadata else None)
+    assert embed_demo.embedded_content == ["hello world"]
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 2))
+def test_embed_multi_repeated_id_with_typed_attachments(
+    db_factory, with_metadata, batch_size
+):
+    model = TypedAttachmentEmbeddingModel()
+    collection = llm.Collection("typed", db_factory(memory=True), model=model)
+    image = llm.Attachment(type="image/png", content=b"same bytes")
+    audio = llm.Attachment(type="audio/wav", content=b"same bytes")
+    collection.embed("x", image, store=True)
+    model.embedded_content.clear()
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            (("x", value, {"step": i}) for i, value in enumerate([audio, image])),
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(
+            (("x", value) for value in [audio, image]),
+            store=True,
+            batch_size=batch_size,
+        )
+    entry = collection.similar_by_vector([1.0, 0.0])[0]
+    assert entry.id == "x"
+    assert entry.content_type == "image/png"
+    assert entry.score == 1
+    assert entry.metadata == ({"step": 1} if with_metadata else None)
+    assert model.embedded_content == [audio, image]
+    row = next(collection.db["embeddings"].rows)
+    assert row["content_blob"] == b"same bytes"
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
 def test_embed_multi_skips_only_unchanged_ids(db_factory, embed_demo, with_metadata):
     db = db_factory(memory=True)
     collection = llm.Collection("test", db, model=embed_demo)
