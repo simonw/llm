@@ -291,8 +291,20 @@ def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
 
     Implementations with an explicit ``llm_tool_call`` parameter receive
     the ToolCall object itself - a ``**kwargs`` catch-all does not count.
+
+    Arguments that were not valid JSON arrive as ``{"_raw": ...}``. Raise
+    instead of passing that on, so the tool does not run with its defaults
+    and the model gets an error result.
     """
     arguments = dict(tool_call.arguments)
+    if (
+        list(arguments) == ["_raw"]
+        and isinstance(arguments["_raw"], str)
+        and "_raw" not in tool.input_schema.get("properties", {})
+    ):
+        raise ValueError(
+            "Tool call arguments were not valid JSON: " + arguments["_raw"]
+        )
     if _accepts_llm_tool_call(tool.implementation):
         arguments["llm_tool_call"] = tool_call
     return arguments
