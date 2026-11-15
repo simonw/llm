@@ -90,6 +90,7 @@ The following plugins add new {ref}`tools <tools>` that can be used by models:
 - **[llm-python](https://github.com/simonw/llm-python)** adds a `llm python` command for running a Python interpreter in the same virtual environment as LLM. This is useful for debugging, and also provides a convenient way to interact with the LLM {ref}`python-api` if you installed LLM using Homebrew or `pipx`.
 - **[llm-cluster](https://github.com/simonw/llm-cluster)** adds a `llm cluster` command for calculating clusters for a collection of embeddings. Calculated clusters can then be passed to a Large Language Model to generate a summary description.
 - **[llm-jq](https://github.com/simonw/llm-jq)** lets you pipe in JSON data and a prompt describing a `jq` program, then executes the generated program against the JSON.
+- **[llm-token-costs](https://github.com/Mattbusel/llm-token-costs)** by Matthew Busel adds `llm costs`, which prices the token usage recorded in your logs database by model, day or conversation, and `llm costs estimate` for pricing a prompt across several models before you run it.
 
 (plugin-directory-fun)=
 ## Just for fun
