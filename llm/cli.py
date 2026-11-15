@@ -3454,7 +3454,12 @@ def embed(
         if Collection.exists(db, collection):
             # Load existing collection and use its model
             collection_obj = Collection(collection, db)
-            model_obj = collection_obj.model()
+            try:
+                model_obj = collection_obj.model()
+            except UnknownModelError:
+                raise click.ClickException(
+                    f"Unknown embedding model: {collection_obj.model_id}"
+                )
         else:
             # We will create a new one, but that means model is required
             if not model:
@@ -3695,6 +3700,13 @@ def embed_multi(
         )
     except UnknownModelError:
         raise click.ClickException(f"Unknown embedding model: {model_id}")
+    try:
+        # An existing collection can use a model that is no longer installed
+        collection_obj.model()
+    except UnknownModelError:
+        raise click.ClickException(
+            f"Unknown embedding model: {collection_obj.model_id}"
+        )
 
     expected_length = None
     if resolved_attachments:
@@ -3917,7 +3929,12 @@ def similar(
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number, prefix=prefix)
+        try:
+            results = collection_obj.similar(content, number, prefix=prefix)
+        except UnknownModelError:
+            raise click.ClickException(
+                f"Unknown embedding model: {collection_obj.model_id}"
+            )
 
     for result in results:
         if plain:

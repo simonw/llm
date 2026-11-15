@@ -1075,6 +1075,26 @@ def test_embed_unknown_model_error(db_factory, user_path, args, input):
     assert not db["collections"].exists() or db["collections"].count == 0
 
 
+@pytest.mark.parametrize(
+    "args,input",
+    (
+        (["embed", "example", "2", "-c", "hello"], None),
+        (["embed-multi", "example", "-"], "id,name\n2,hello"),
+        (["similar", "example", "-c", "hello"], None),
+    ),
+)
+def test_existing_collection_unknown_model_error(db_factory, user_path, args, input):
+    # A collection whose embedding model plugin has since been uninstalled
+    db = db_factory(str(user_path / "embeddings.db"))
+    collection = Collection("example", db, model_id="embed-demo")
+    collection.embed("1", "hello")
+    db["collections"].update(collection.id, {"model": "not-a-model"})
+    result = CliRunner().invoke(cli, args, input=input)
+    assert result.exit_code == 1
+    assert result.output == "Error: Unknown embedding model: not-a-model\n"
+    assert db["embeddings"].count == 1
+
+
 def test_embed_multi_existing_collection_without_default(db_factory, user_path):
     db = db_factory(str(user_path / "embeddings.db"))
     Collection("example", db, model_id="embed-demo")
