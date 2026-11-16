@@ -13,19 +13,12 @@
 # such as the ones installed by actions/setup-python or a Linux distribution.
 # It has no effect on builds that link SQLite statically, such as uv's.
 #
-# To build a different version set SQLITE_VERSION, SQLITE_YEAR (the year of
-# that release, which is part of the download URL) and SQLITE_SHA3_256 (the
-# hash of the amalgamation zip listed on https://sqlite.org/download.html).
+# To build a different version set SQLITE_VERSION. The source comes from
+# the matching version-X.Y.Z tag of https://github.com/sqlite/sqlite
 set -euo pipefail
 
 SQLITE_VERSION="${SQLITE_VERSION:-3.54.1}"
-SQLITE_YEAR="${SQLITE_YEAR:-2026}"
-SQLITE_SHA3_256="${SQLITE_SHA3_256:-92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30}"
 output_dir="${1:-sqlite-build}"
-
-# 3.54.1 -> 3540100
-IFS=. read -r major minor patch <<< "$SQLITE_VERSION"
-name="sqlite-amalgamation-$(printf '%d%02d%02d00' "$major" "$minor" "$patch")"
 
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
@@ -33,15 +26,15 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 cd "$work_dir"
 
-curl -sSfLO "https://sqlite.org/$SQLITE_YEAR/$name.zip"
-actual_hash="$(openssl dgst -sha3-256 -r "$name.zip" | cut -d' ' -f1)"
-if [ "$actual_hash" != "$SQLITE_SHA3_256" ]; then
-    echo "SHA3-256 mismatch for $name.zip" >&2
-    echo "  expected $SQLITE_SHA3_256" >&2
-    echo "  actual   $actual_hash" >&2
-    exit 1
-fi
-unzip -q "$name.zip"
+git -c advice.detachedHead=false clone --quiet --depth 1 \
+    --branch "version-$SQLITE_VERSION" \
+    https://github.com/sqlite/sqlite.git sqlite
+cd sqlite
+
+# Generate the sqlite3.c amalgamation, then compile it with the options
+# we want. This uses the bundled jimsh so Tcl does not need to be installed.
+./configure > /dev/null
+make sqlite3.c > /dev/null
 
 gcc -O2 -fPIC -shared \
     -DSQLITE_ENABLE_COLUMN_METADATA \
@@ -52,7 +45,7 @@ gcc -O2 -fPIC -shared \
     -DSQLITE_ENABLE_LOAD_EXTENSION \
     -DSQLITE_ENABLE_MATH_FUNCTIONS \
     -DSQLITE_ENABLE_RTREE \
-    "$name/sqlite3.c" \
+    sqlite3.c \
     -Wl,-soname,libsqlite3.so.0 \
     -o "$output_dir/libsqlite3.so.0" \
     -lpthread -ldl -lm

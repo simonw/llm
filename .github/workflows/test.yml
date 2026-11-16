@@ -73,12 +73,21 @@ jobs:
         python-version: "3.15"
         cache: pip
         cache-dependency-path: pyproject.toml
+    - name: Cache compiled SQLite
+      id: cache-sqlite
+      uses: actions/cache@v6
+      with:
+        path: sqlite-build
+        key: sqlite-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sqlite-version }}-${{ hashFiles('scripts/build-sqlite.sh') }}
     - name: Build SQLite ${{ matrix.sqlite-version }}
+      if: steps.cache-sqlite.outputs.cache-hit != 'true'
       env:
         SQLITE_VERSION: ${{ matrix.sqlite-version }}
       run: |
-        scripts/build-sqlite.sh "$RUNNER_TEMP/sqlite"
-        echo "LD_LIBRARY_PATH=$RUNNER_TEMP/sqlite" >> "$GITHUB_ENV"
+        scripts/build-sqlite.sh sqlite-build
+    - name: Use the compiled SQLite
+      run: |
+        echo "LD_LIBRARY_PATH=$PWD/sqlite-build" >> "$GITHUB_ENV"
     - name: Check Python is using SQLite ${{ matrix.sqlite-version }}
       env:
         SQLITE_VERSION: ${{ matrix.sqlite-version }}
