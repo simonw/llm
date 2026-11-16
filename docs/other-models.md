@@ -28,6 +28,52 @@ Check the {ref}`plugin directory <plugin-directory>` for the latest list of avai
 
 Projects such as [LocalAI](https://localai.io/) offer a REST API that imitates the OpenAI API but can be used to run other models, including models that can be installed on your own machine. These can be added using the same configuration mechanism.
 
+(demonroute)=
+### DemonRoute
+
+[DemonRoute](https://demonroute.com/) provides prepaid access to open-weight models, including uncensored fine-tunes, through an OpenAI-compatible API. Its [quickstart](https://demonroute.com/docs) documents the base URL `https://api.demonroute.com/v1` and bearer-token authentication. The example below uses Chat Completions, not the Responses API.
+
+Create an account and API key using the [quickstart](https://demonroute.com/docs), then store the key under a separate name:
+
+```bash
+llm keys set demonroute
+```
+
+Enter your DemonRoute key at the prompt, not an OpenAI key. Access is prepaid: paid models require credit, and even designated complimentary models require a confirmed deposit before use. Check [current funding terms](https://demonroute.com/pricing) and [per-model input/output rates](https://demonroute.com/models) before sending requests. Anonymous accounts use a username and password, accept crypto deposits only, and have [no account recovery](https://demonroute.com/terms/anonymous).
+
+Find your additional-model configuration file:
+
+```bash
+llm openai endpoint path
+```
+
+Append this record to `extra-openai-models.yaml` (create the file if it does not exist):
+
+```yaml
+- model_id: demonroute-dolphin
+  model_name: dphn/Dolphin3.0-Llama3.1-8B
+  api_base: https://api.demonroute.com/v1
+  api_key_name: demonroute
+```
+
+`model_id` is a local LLM identifier; `model_name` is the exact upstream channel ID shown in DemonRoute's catalog and quickstart. Copy the channel ID from the [current catalog](https://demonroute.com/models) when configuring a different model. Do not add a provider prefix to it. The [integration guide](https://demonroute.com/integrations) also documents authenticated model discovery at `/v1/models`.
+
+Check registration locally without sending a request:
+
+```bash
+llm models --options -m demonroute-dolphin
+```
+
+Once the account is funded, this command sends a non-streaming Chat Completions request. It may consume prepaid credit according to the model's current rate and complimentary-lane limits:
+
+```bash
+llm -m demonroute-dolphin --no-stream --no-log 'Say hello.'
+```
+
+`--no-log` prevents LLM from saving this prompt and response in its local database; it does not control provider-side handling. DemonRoute's [privacy policy](https://demonroute.com/privacy) states that it does not persist client IPs or retain prompts, retains usage metadata, and forwards request bodies to upstream inference hosts. These are the provider's published practices, not an independently verified end-to-end privacy guarantee.
+
+This configuration was checked locally, but no funded DemonRoute request was tested for this example. Live completions, streaming, tool calling, structured output, attachments, embeddings and Responses API behavior have not been validated here. See DemonRoute's [documentation](https://demonroute.com/docs) and [status](https://demonroute.com/status) for current service information. DemonRoute contact: <demonroute@brainer.one>.
+
 (openai-endpoint)=
 ### Run against an endpoint without configuring it
 
