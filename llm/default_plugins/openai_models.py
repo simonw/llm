@@ -1671,6 +1671,21 @@ def _streamed_tool_call_index(tool_calls, tool_call):
     return max(tool_calls)
 
 
+def _tool_call_arguments(arguments):
+    """Parse the JSON arguments of a Chat Completions tool call.
+
+    Models sometimes return arguments that are not valid JSON. Keep them
+    as {"_raw": ...}, as the Responses API path does, instead of
+    crashing the whole response.
+    """
+    if not arguments:
+        return {}
+    try:
+        return json.loads(arguments)
+    except json.JSONDecodeError:
+        return {"_raw": arguments}
+
+
 class Chat(_Shared, KeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
@@ -1746,7 +1761,7 @@ class Chat(_Shared, KeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments or "{}"),
+                            arguments=_tool_call_arguments(value.function.arguments),
                         )
                     )
         else:
@@ -1764,7 +1779,7 @@ class Chat(_Shared, KeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments or "{}"),
+                        arguments=_tool_call_arguments(tool_call.function.arguments),
                     )
                 )
                 yield StreamEvent(
@@ -1862,7 +1877,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments or "{}"),
+                            arguments=_tool_call_arguments(value.function.arguments),
                         )
                     )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
@@ -1881,7 +1896,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments or "{}"),
+                        arguments=_tool_call_arguments(tool_call.function.arguments),
                     )
                 )
                 yield StreamEvent(
