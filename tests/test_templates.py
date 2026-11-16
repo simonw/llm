@@ -85,6 +85,33 @@ def test_templates_list(templates_path, args):
 
 
 @pytest.mark.parametrize(
+    "content,location",
+    (
+        ("attachments: [123]", "attachments, 0"),
+        (
+            "attachment_types: [{type: text/plain, value: 123}]",
+            "attachment_types, 0, value",
+        ),
+    ),
+)
+@pytest.mark.parametrize("list_templates", (False, True))
+def test_template_nested_validation_error(
+    templates_path, content, location, list_templates
+):
+    (templates_path / "invalid.yaml").write_text(content, "utf-8")
+    (templates_path / "valid.yaml").write_text("A valid prompt", "utf-8")
+    args = ["templates", "list"] if list_templates else ["-t", "invalid", "hi"]
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    if list_templates:
+        assert result.exit_code == 0
+        assert result.output == "valid : A valid prompt\n"
+    else:
+        assert result.exit_code == 1
+        assert location in result.output
+        assert "Input should be a valid string" in result.output
+
+
+@pytest.mark.parametrize(
     "args,expected,expected_error",
     (
         (["-m", "4o", "hello"], {"model": "gpt-4o", "prompt": "hello"}, None),
