@@ -816,7 +816,7 @@ This `await model.prompt()` method takes the same arguments as the synchronous `
 
 {ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
 
-If an `async def` function is used in a synchronous context LLM will automatically execute it in a thread pool using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
+If an `async def` function is used in a synchronous context LLM will automatically execute it using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
 
 ```python
 async def hello(name: str) -> str:
@@ -830,6 +830,8 @@ chain_response = model.chain(
 print(chain_response.text())
 ```
 This also works for `async def` methods of `llm.Toolbox` subclasses.
+
+If the synchronous model is called from code where an event loop is already running, such as a Jupyter notebook, the `async def` tool runs in a separate thread with its own event loop. The tool should not depend on objects that belong to the calling event loop, such as locks, queues or async HTTP clients created outside the tool. Awaiting something that the calling event loop must complete will hang, because that loop is blocked until the tool returns. Use an {ref}`async model <python-api-async>` to run tools on the current event loop instead.
 
 ### Tool use for async models
 
