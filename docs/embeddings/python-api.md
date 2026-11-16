@@ -149,8 +149,8 @@ A collection instance has the following properties and methods:
 - `embed(id: str, value: str | bytes | Attachment, metadata: dict[str, Any] | None = None, store: bool = False, *, key: str | None = None)` - embeds the given value and stores it in the collection under the given ID. Can optionally include metadata (stored as JSON), store the text or binary content itself in the database table and pass an API key or stored key alias.
 - `embed_multi(entries: Iterable[tuple[str, str | bytes | Attachment]], store: bool = False, batch_size: int = 100, *, key: str | None = None)` - see above
 - `embed_multi_with_metadata(entries: Iterable[tuple[str, str | bytes | Attachment, dict[str, Any] | None]], store: bool = False, batch_size: int = 100, *, key: str | None = None)` - see above
-- `similar(value: str | bytes | Attachment, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the given value
-- `similar_by_id(id: str, number: int = 10, prefix: str | None = None)` - returns a list of entries that are most similar to the embedding of the item with the given ID
+- `similar(value: str | bytes | Attachment, number: int = 10, prefix: str | None = None, min_score: float | None = None)` - returns a list of entries that are most similar to the embedding of the given value, optionally only those scoring at least `min_score`
+- `similar_by_id(id: str, number: int = 10, prefix: str | None = None, min_score: float | None = None)` - returns a list of entries that are most similar to the embedding of the item with the given ID
 - `similar_by_vector(vector: list[float], number: int = 10, skip_id: str | None = None, prefix: str | None = None)` - returns a list of entries that are most similar to the given embedding vector, optionally skipping the entry with the given ID
 - `delete()` - deletes the collection and its embeddings from the database
 

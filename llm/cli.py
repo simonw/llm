@@ -3841,6 +3841,12 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option("--prefix", help="Just IDs with this prefix", default="")
+@click.option(
+    "min_score",
+    "--min-score",
+    type=float,
+    help="Only return results with a similarity score at or above this value",
+)
 def similar(
     collection,
     id,
@@ -3853,6 +3859,7 @@ def similar(
     plain,
     database,
     prefix,
+    min_score,
 ):
     """
     Return top N similar IDs from a collection using cosine similarity.
@@ -3895,7 +3902,9 @@ def similar(
 
     if id:
         try:
-            results = collection_obj.similar_by_id(id, number, prefix=prefix)
+            results = collection_obj.similar_by_id(
+                id, number, prefix=prefix, min_score=min_score
+            )
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
@@ -3913,7 +3922,9 @@ def similar(
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number, prefix=prefix)
+        results = collection_obj.similar(
+            content, number, prefix=prefix, min_score=min_score
+        )
 
     for result in results:
         if plain:
