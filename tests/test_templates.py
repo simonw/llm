@@ -606,3 +606,15 @@ def test_tools_in_templates(
     finally:
         after()
         pm.unregister(name="greetings-plugin")
+
+
+def test_templates_edit_invalid_yaml(templates_path, monkeypatch):
+    # An edit that leaves invalid YAML is reported as an error, not a traceback
+    def edit(filename):
+        pathlib.Path(filename).write_text("prompt: [unclosed", "utf-8")
+
+    monkeypatch.setattr("click.edit", edit)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "edit", "broken"])
+    assert result.exit_code == 1
+    assert result.output.startswith("Error: Invalid YAML: ")
