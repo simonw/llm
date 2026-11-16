@@ -41,6 +41,18 @@ def test_set_model_default_options(user_path, args, expected_options, expected_e
         assert expected_error in result.output
 
 
+def test_set_model_default_option_to_negative_value(user_path):
+    path = user_path / "model_options.json"
+    result = CliRunner().invoke(
+        cli, ["models", "options", "set", "gpt-4o-mini", "max_tokens", "-1"]
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(path.read_text("utf-8")) == {
+        "gpt-4o-mini": {"max_tokens": "-1"}
+    }
+
+
 def test_model_options_list_and_show(user_path):
     (user_path / "model_options.json").write_text(
         json.dumps(
