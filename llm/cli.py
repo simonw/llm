@@ -23,6 +23,7 @@ import httpx2
 import pydantic
 import sqlite_utils
 import yaml
+from click.shell_completion import BashComplete, add_completion_class
 from click_default_group import DefaultGroup
 from sqlite_utils.utils import Format, rows_from_file
 
@@ -556,6 +557,23 @@ def tool_options(fn):
     for decorator in reversed(decorators):
         fn = decorator(fn)
     return fn
+
+
+class _LLMBashComplete(BashComplete):
+    def source(self):
+        source = super().source()
+        completion = f"complete -o nosort -F {self.func_name} {self.prog_name}"
+        compatible_completion = (
+            "if [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then\n"
+            f"        {completion}\n"
+            "    else\n"
+            f"        complete -F {self.func_name} {self.prog_name}\n"
+            "    fi"
+        )
+        return source.replace(f"    {completion}", f"    {compatible_completion}")
+
+
+add_completion_class(_LLMBashComplete)
 
 
 @click.group(

@@ -41,6 +41,24 @@ def test_set_model_default_options(user_path, args, expected_options, expected_e
         assert expected_error in result.output
 
 
+def test_bash_completion_supports_bash_3():
+    result = CliRunner().invoke(
+        cli,
+        [],
+        prog_name="llm",
+        env={"_LLM_COMPLETE": "bash_source"},
+    )
+
+    assert result.exit_code == 0
+    assert (
+        "if [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then\n"
+        "        complete -o nosort -F _llm_completion llm\n"
+        "    else\n"
+        "        complete -F _llm_completion llm\n"
+        "    fi"
+    ) in result.output
+
+
 def test_model_options_list_and_show(user_path):
     (user_path / "model_options.json").write_text(
         json.dumps(
