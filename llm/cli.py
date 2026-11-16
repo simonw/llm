@@ -3457,7 +3457,12 @@ def embed(
         if Collection.exists(db, collection):
             # Load existing collection and use its model
             collection_obj = Collection(collection, db)
-            model_obj = collection_obj.model()
+            try:
+                model_obj = collection_obj.model()
+            except UnknownModelError:
+                raise click.ClickException(
+                    f"Unknown embedding model: {collection_obj.model_id}"
+                )
         else:
             # We will create a new one, but that means model is required
             if not model:
@@ -3466,18 +3471,23 @@ def embed(
                     raise click.ClickException(
                         "You need to specify an embedding model (no default model is set)"
                     )
-            collection_obj = Collection(collection, db=db, model_id=model)
+            try:
+                collection_obj = Collection(collection, db=db, model_id=model)
+            except UnknownModelError:
+                raise click.ClickException(f"Unknown embedding model: {model}")
             model_obj = collection_obj.model()
 
     if model_obj is None:
         if model is None:
             model = get_default_embedding_model()
+            if model is None:
+                raise click.ClickException(
+                    "You need to specify an embedding model (no default model is set)"
+                )
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError:
-            raise click.ClickException(
-                "You need to specify an embedding model (no default model is set)"
-            )
+            raise click.ClickException(f"Unknown embedding model: {model}")
 
     show_output = True
     if collection and (format_ is None):
@@ -3687,9 +3697,18 @@ def embed_multi(
         collection_obj = Collection(
             collection, db=db, model_id=model_id, create=model_id is not None
         )
-    except (Collection.DoesNotExist, UnknownModelError):
+    except Collection.DoesNotExist:
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
+        )
+    except UnknownModelError:
+        raise click.ClickException(f"Unknown embedding model: {model_id}")
+    try:
+        # An existing collection can use a model that is no longer installed
+        collection_obj.model()
+    except UnknownModelError:
+        raise click.ClickException(
+            f"Unknown embedding model: {collection_obj.model_id}"
         )
 
     expected_length = None
@@ -3913,7 +3932,12 @@ def similar(
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number, prefix=prefix)
+        try:
+            results = collection_obj.similar(content, number, prefix=prefix)
+        except UnknownModelError:
+            raise click.ClickException(
+                f"Unknown embedding model: {collection_obj.model_id}"
+            )
 
     for result in results:
         if plain:
