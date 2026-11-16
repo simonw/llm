@@ -72,6 +72,7 @@ Commands:
   aliases       Manage model aliases
   chat          Hold an ongoing chat with a model.
   collections   View and manage collections of embeddings
+  completions   Generate a shell completion script for bash, zsh or fish.
   embed         Embed text and store or return the result
   embed-models  Manage available embedding models
   embed-multi   Store embeddings for multiple strings at once in the...
@@ -87,6 +88,17 @@ Commands:
   templates     Manage stored prompt templates
   tools         Manage tools that can be made available to LLMs
   uninstall     Uninstall Python packages from the LLM environment
+```
+
+(help-completions)=
+### llm completions --help
+```
+Usage: llm completions [OPTIONS] {bash|zsh|fish}
+
+  Generate a shell completion script for bash, zsh or fish.
+
+Options:
+  -h, --help  Show this message and exit.
 ```
 
 (help-prompt)=
