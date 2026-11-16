@@ -73,9 +73,9 @@ jobs:
         python-version: "3.15"
         cache: pip
         cache-dependency-path: pyproject.toml
-    - name: Cache compiled SQLite
+    - name: Restore compiled SQLite from cache
       id: cache-sqlite
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: sqlite-build
         key: sqlite-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sqlite-version }}-${{ hashFiles('scripts/build-sqlite.sh') }}
@@ -85,6 +85,13 @@ jobs:
         SQLITE_VERSION: ${{ matrix.sqlite-version }}
       run: |
         scripts/build-sqlite.sh sqlite-build
+    # Saved here, not in a post-job step, so it is kept if the tests fail
+    - name: Save compiled SQLite to cache
+      if: steps.cache-sqlite.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: sqlite-build
+        key: ${{ steps.cache-sqlite.outputs.cache-primary-key }}
     - name: Use the compiled SQLite
       run: |
         echo "LD_LIBRARY_PATH=$PWD/sqlite-build" >> "$GITHUB_ENV"
