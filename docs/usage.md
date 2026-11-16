@@ -60,6 +60,15 @@ llm 'Ten names for cheesecakes' -o temperature 1.5
 
 Use the `llm models --options` command to see which options are supported by each model, or `llm -m gpt-5.5 --options` to show the options for a specific selected model.
 
+Option names are defined by each model's plugin, so they are not always the same across models. For example, OpenAI models use `max_tokens` to limit the length of the response, but models from other plugins may use a different name for the same setting. If you pass an option a model does not support, LLM will show an error suggesting the closest matching option and the command to see all supported options:
+
+```
+Error: max_token
+  'max_token' is not a valid option for model 'gpt-4o-mini'
+  Did you mean 'max_tokens'?
+  Run 'llm models --options -m gpt-4o-mini' to see supported options
+```
+
 You can also {ref}`configure default options <usage-executing-default-options>` for a model using the `llm models options` commands.
 
 (usage-attachments)=

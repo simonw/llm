@@ -22,7 +22,12 @@ from llm.cli import cli
         (
             ["gpt-4o-mini", "not-an-option", "invalid"],
             {},
-            "Extra inputs are not permitted",
+            "'not-an-option' is not a valid option for model 'gpt-4o-mini'",
+        ),
+        (
+            ["gpt-4o-mini", "max_token", "100"],
+            {},
+            "Did you mean 'max_tokens'?",
         ),
     ),
 )
@@ -138,3 +143,23 @@ def test_prompt_uses_model_options(user_path):
         "previous": [],
         "options": {"example_bool": True},
     }
+
+
+@pytest.mark.parametrize(
+    "option,expected_suggestion",
+    (
+        ("max_token", "  Did you mean 'max_tokens'?\n"),
+        ("banana", ""),
+    ),
+)
+def test_prompt_invalid_option_error(user_path, option, expected_suggestion):
+    # https://github.com/simonw/llm/issues/1231
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "gpt-4o-mini", "-o", option, "100", "hi"])
+    assert result.exit_code == 1
+    assert result.output == (
+        f"Error: {option}\n"
+        f"  '{option}' is not a valid option for model 'gpt-4o-mini'\n"
+        f"{expected_suggestion}"
+        "  Run 'llm models --options -m gpt-4o-mini' to see supported options\n"
+    )
