@@ -1002,6 +1002,11 @@ def test_default_embedding_model():
     assert result7.output == "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"
 
 
+def test_remove_unset_default_embedding_model():
+    result = CliRunner().invoke(cli, ["embed-models", "default", "--remove-default"])
+    assert result.exit_code == 0
+
+
 @pytest.mark.parametrize(
     "args,expected_model_id",
     (
