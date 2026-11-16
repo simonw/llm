@@ -58,3 +58,35 @@ jobs:
       with:
         name: dist-${{ matrix.os }}-${{ matrix.python-version }}
         path: dist/*
+  test-sqlite:
+    # A single extra run against a newer SQLite than the runners provide
+    name: test (Python 3.15, SQLite ${{ matrix.sqlite-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sqlite-version: ["3.54.1"]
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up Python 3.15
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.15"
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - name: Build SQLite ${{ matrix.sqlite-version }}
+      env:
+        SQLITE_VERSION: ${{ matrix.sqlite-version }}
+      run: |
+        scripts/build-sqlite.sh "$RUNNER_TEMP/sqlite"
+        echo "LD_LIBRARY_PATH=$RUNNER_TEMP/sqlite" >> "$GITHUB_ENV"
+    - name: Check Python is using SQLite ${{ matrix.sqlite-version }}
+      env:
+        SQLITE_VERSION: ${{ matrix.sqlite-version }}
+      run: |
+        python -c "import os, sqlite3; print(sqlite3.sqlite_version); assert sqlite3.sqlite_version == os.environ['SQLITE_VERSION']"
+    - name: Install dependencies
+      run: |
+        pip install . --group dev
+    - name: Run tests
+      run: |
+        python -m pytest -vv
