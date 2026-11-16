@@ -10,7 +10,7 @@ import yaml
 from click.testing import CliRunner
 
 from llm import Template, Toolbox, hookimpl, user_dir
-from llm.cli import cli
+from llm.cli import cli, display_truncated
 from llm.plugins import pm
 
 
@@ -57,7 +57,8 @@ def test_templates_list_no_templates_found():
 
 
 @pytest.mark.parametrize("args", (["templates", "list"], ["templates"]))
-def test_templates_list(templates_path, args):
+def test_templates_list(templates_path, args, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "80")
     (templates_path / "one.yaml").write_text("template one", "utf-8")
     (templates_path / "two.yaml").write_text("template two", "utf-8")
     (templates_path / "three.yaml").write_text(
@@ -81,6 +82,72 @@ def test_templates_list(templates_path, args):
         "sys   : system: Summarize this\n"
         "three : template three is very long template three is very long template thre...\n"
         "two   : template two\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "text,prefix,suffix,expected",
+    (
+        ("short", "", "", "short"),
+        ("a" * 30, "", "", "a" * 17 + "..."),
+        ("a" * 30, "name : ", "[schema]", "name : a... [schema]"),
+        ("", "name : ", "[schema]", "name : [schema]"),
+        # prefix and suffix are kept even if there is no room for the text
+        (
+            "a" * 30,
+            "long-name : ",
+            "[model: gpt-4o]",
+            "long-name : ... [model: gpt-4o]",
+        ),
+    ),
+)
+def test_display_truncated(monkeypatch, text, prefix, suffix, expected):
+    monkeypatch.setenv("COLUMNS", "20")
+    assert display_truncated(text, prefix=prefix, suffix=suffix) == expected
+
+
+def test_templates_list_markers(templates_path, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "80")
+    (templates_path / "plain.yaml").write_text("prompt: just a prompt", "utf-8")
+    (templates_path / "model.yaml").write_text("prompt: hello\nmodel: gpt-4o", "utf-8")
+    (templates_path / "schema.yaml").write_text(
+        "prompt: invent a dog\nschema_object:\n  type: object", "utf-8"
+    )
+    (templates_path / "tools.yaml").write_text(
+        "system: Write a QA report\nmodel: gpt-4o\ntools:\n- llm_time\n- search",
+        "utf-8",
+    )
+    (templates_path / "funcs.yaml").write_text(
+        "prompt: hi\nfunctions: |\n  def hello():\n      return 'hi'", "utf-8"
+    )
+    (templates_path / "long.yaml").write_text(
+        "prompt: '{}'\nmodel: gpt-4o".format("very long prompt " * 6), "utf-8"
+    )
+    (templates_path / "toolbox.yaml").write_text(
+        "prompt: hi\ntools:\n"
+        '- Datasette("https://datasette.io/content")\n'
+        "- QuickJS\n- llm_time",
+        "utf-8",
+    )
+    (templates_path / "onlymodel.yaml").write_text("model: gpt-4o", "utf-8")
+    (templates_path / "empty.yaml").write_text(
+        "prompt: hi\ntools: []\nschema_object: {}", "utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates"])
+    assert result.exit_code == 0
+    assert result.output == (
+        "empty     : hi\n"
+        "funcs     : hi [functions]\n"
+        # Prompt is truncated so the markers still fit
+        "long      : very long prompt very long prompt very long promp... [model: gpt-4o]\n"
+        "model     : hello [model: gpt-4o]\n"
+        "onlymodel : [model: gpt-4o]\n"
+        "plain     : just a prompt\n"
+        "schema    : invent a dog [schema]\n"
+        # Long tools lists show a count instead
+        "toolbox   : hi [tools: 3]\n"
+        "tools     : system: Write a QA report [model: gpt-4o] [tools: llm_time, search]\n"
     )
 
 

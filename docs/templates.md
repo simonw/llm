@@ -105,7 +105,10 @@ The output looks something like this:
 ```
 cmd        : system: reply with macos terminal commands only, no extra information
 glados     : system: You are GlaDOS prompt: Summarize this:
+dog        : invent a dog [schema]
+report     : system: Write a QA report [model: gpt-4o] [tools: llm_time]
 ```
+Templates that set a {ref}`model <prompt-templates-default-model>`, a {ref}`schema <prompt-templates-schemas>`, or {ref}`tools or functions <prompt-templates-tools>` show those as markers at the end of the line. Long prompts are truncated to fit the terminal width so the markers stay visible, and a long list of tools is shown as a count, for example `[tools: 5]`.
 
 (prompt-templates-yaml)=
 
