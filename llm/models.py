@@ -346,6 +346,9 @@ class Toolbox:
             sig = inspect.signature(original_init)
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
+            self._extra_tools = []
+
+            original_init(self, *args, **kwargs)
 
             self._config = {
                 name: value
@@ -354,9 +357,6 @@ class Toolbox:
                 and sig.parameters[name].kind
                 not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
-            self._extra_tools = []
-
-            original_init(self, *args, **kwargs)
 
         cls.__init__ = wrapped_init
 
