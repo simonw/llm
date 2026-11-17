@@ -317,6 +317,82 @@ def test_schema_dsl_duplicate_field_name():
     assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
 
 
+@pytest.mark.parametrize(
+    "schema",
+    (
+        " name, age int ",
+        "name, age int\n",
+        "name, age int\r\n",
+        "\nname, age int\n",
+        "\r\nname, age int\r\n",
+        " \tname, age int\t ",
+    ),
+)
+def test_schema_dsl_comma_format_surrounding_whitespace(schema):
+    assert schema_dsl(schema) == {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+        },
+        "required": ["name", "age"],
+    }
+
+
+def test_schema_dsl_newline_format_preserves_internal_lines():
+    assert schema_dsl("\nname: person's name\n\nage int: years old, positive\n") == {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "person's name"},
+            "age": {
+                "type": "integer",
+                "description": "years old, positive",
+            },
+        },
+        "required": ["name", "age"],
+    }
+
+
+def test_schema_dsl_surrounding_whitespace_multi():
+    assert schema_dsl(" \nname, age int\n ", multi=True) == {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"},
+                    },
+                    "required": ["name", "age"],
+                },
+            }
+        },
+        "required": ["items"],
+    }
+
+
+def test_schema_dsl_empty_input_unchanged():
+    assert schema_dsl("") == {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+
+def test_schema_dsl_surrounding_whitespace_preserves_errors():
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(" \nname, age badtype\n ")
+    assert str(ex.value) == (
+        "Invalid schema DSL: unknown type 'badtype' for field 'age'"
+    )
+
+    with pytest.raises(ValueError) as ex:
+        schema_dsl(" \nname, age int, name\n ")
+    assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
+
+
 def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
     with pytest.raises(click.BadParameter) as ex:
         resolve_schema_input(None, "name, age badtype", load_template=None)
