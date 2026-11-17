@@ -1612,7 +1612,7 @@ class _Shared:
         if self.headers:
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
+            kwargs["http_client"] = logging_client(async_=async_)
         import openai  # deferred: importing openai adds ~100ms to CLI startup
 
         if async_:
