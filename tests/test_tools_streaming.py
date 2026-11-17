@@ -51,3 +51,75 @@ def test_tools_streaming_variant_d():
         "What is the current llm version?", tools=[llm_version], key=API_KEY
     )
     assert "".join(chain) == "The current version of *llm* is **0.fixed-version**."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", [False, True])
+@pytest.mark.parametrize(
+    "fragments,expected",
+    [
+        (
+            [
+                ("call_first", "first", '{"value":'),
+                (None, None, "1}"),
+                ("call_second", "second", '{"value":'),
+                (None, None, "2}"),
+            ],
+            [
+                ("call_first", "first", {"value": 1}),
+                ("call_second", "second", {"value": 2}),
+            ],
+        ),
+        # Gemini repeats id and name on each argument fragment and omits index.
+        (
+            [
+                ("call_split", "lookup", '{"value":'),
+                ("call_split", "lookup", "1}"),
+            ],
+            [
+                ("call_split", "lookup", {"value": 1}),
+            ],
+        ),
+    ],
+)
+async def test_streaming_tool_calls_without_index(
+    httpx2_mock, async_, fragments, expected
+):
+    # Some OpenAI-compatible endpoints omit "index" on streamed tool calls
+    import json
+
+    from pytest_httpx2 import IteratorStream
+
+    chunks = []
+    for call_id, name, arguments in fragments:
+        tool_call = {
+            "type": "function",
+            "function": {"name": name, "arguments": arguments},
+        }
+        if call_id:
+            tool_call["id"] = call_id
+        chunk = {
+            "id": "chat_test",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "gpt-4.1-mini",
+            "choices": [{"index": 0, "delta": {"tool_calls": [tool_call]}}],
+        }
+        chunks.append(("data: " + json.dumps(chunk) + "\n\n").encode())
+    chunks.append(b"data: [DONE]\n\n")
+    httpx2_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        stream=IteratorStream(chunks),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    model = (llm.get_async_model if async_ else llm.get_model)("gpt-4.1-mini")
+    response = model.prompt("Call both tools", key=API_KEY, stream=True)
+    if async_:
+        [event async for event in response.astream_events()]
+        calls = await response.tool_calls()
+    else:
+        list(response.stream_events())
+        calls = response.tool_calls()
+    assert [
+        (call.tool_call_id, call.name, call.arguments) for call in calls
+    ] == expected

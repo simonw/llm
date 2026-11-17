@@ -184,6 +184,34 @@ def test_collection_embed_multi_key(embed_key_demo, request):
     assert embed_key_demo.key is None
 
 
+def test_reopened_collection_uses_persisted_model(db_factory, tmp_path, embed_demo):
+    path = str(tmp_path / "embeddings.db")
+    original = llm.Collection("test", db_factory(path), model=embed_demo)
+    original.embed("1", "hello world")
+
+    reopened = llm.Collection(
+        "test",
+        db_factory(path),
+        model=TypedAttachmentEmbeddingModel(),
+        create=False,
+    )
+    reopened.embed("2", "second value")
+
+    dimensions = {
+        row["id"]: len(llm.decode(row["embedding"]))
+        for row in reopened.db["embeddings"].rows
+    }
+    assert dimensions == {"1": 16, "2": 16}
+    assert reopened.model().model_id == reopened.model_id == "embed-demo"
+    assert reopened.db["collections"].get(reopened.id)["model"] == "embed-demo"
+
+    configured_model = type(embed_demo)()
+    configured = llm.Collection(
+        "test", db_factory(path), model=configured_model, create=False
+    )
+    assert configured.model() is configured_model
+
+
 def test_collection(collection):
     assert collection.id == 1
     assert collection.count() == 2
@@ -275,6 +303,51 @@ def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
     assert all(row["content_hash"] is not None for row in rows)
     # Check batch count
     assert collection.model().batch_count == expected_batches
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 100))
+def test_embed_multi_updates_swapped_content(
+    db_factory, with_metadata, binary, batch_size
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    hello = b"hello world" if binary else "hello world"
+    goodbye = b"goodbye world" if binary else "goodbye world"
+    unchanged = b"unchanged" if binary else "unchanged"
+    collection.embed_multi([("1", hello), ("2", goodbye), ("3", unchanged)], store=True)
+    model = collection.model()
+    model.embedded_content.clear()
+    entries = [("1", goodbye), ("2", hello), ("3", unchanged), ("4", hello)]
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            [(id, value, {"id": id}) for id, value in entries],
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(entries, store=True, batch_size=batch_size)
+
+    results = {entry.id: entry for entry in collection.similar(goodbye)}
+    assert collection.count() == 4
+    assert results["1"].score == pytest.approx(1.0)
+    assert results["2"].score < results["1"].score
+    assert results["4"].score == pytest.approx(results["2"].score)
+    if not binary:
+        assert {id: entry.content for id, entry in results.items()} == {
+            "1": "goodbye world",
+            "2": "hello world",
+            "3": "unchanged",
+            "4": "hello world",
+        }
+    if with_metadata:
+        assert results["1"].metadata == {"id": "1"}
+        assert results["2"].metadata == {"id": "2"}
+        assert results["3"].metadata is None
+        assert results["4"].metadata == {"id": "4"}
+    # The unchanged ID is skipped, while a new ID with existing content is stored.
+    # similar() itself embeds the query once at the end.
+    assert model.embedded_content == [goodbye, hello, hello, goodbye]
 
 
 def test_collection_typed_attachments(db_factory):

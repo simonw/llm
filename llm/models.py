@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextvars
 import dataclasses
 import datetime
 import functools
@@ -15,6 +16,7 @@ from collections.abc import (
     Iterable,
     Iterator,
 )
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path
@@ -51,6 +53,12 @@ from .utils import (
 )
 
 CONVERSATION_NAME_LENGTH = 32
+
+_sync_tool_executor = ThreadPoolExecutor()
+
+
+def _run_async_tool(coro):
+    return asyncio.run(coro)
 
 
 @dataclass
@@ -291,8 +299,20 @@ def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
 
     Implementations with an explicit ``llm_tool_call`` parameter receive
     the ToolCall object itself - a ``**kwargs`` catch-all does not count.
+
+    Arguments that were not valid JSON arrive as ``{"_raw": ...}``. Raise
+    instead of passing that on, so the tool does not run with its defaults
+    and the model gets an error result.
     """
     arguments = dict(tool_call.arguments)
+    if (
+        list(arguments) == ["_raw"]
+        and isinstance(arguments["_raw"], str)
+        and "_raw" not in tool.input_schema.get("properties", {})
+    ):
+        raise ValueError(
+            "Tool call arguments were not valid JSON: " + arguments["_raw"]
+        )
     if _accepts_llm_tool_call(tool.implementation):
         arguments["llm_tool_call"] = tool_call
     return arguments
@@ -543,15 +563,27 @@ class Prompt:
         was (or will be) sent for this turn — the full chain including
         any prior conversation history.
 
-        - If ``messages=`` was passed explicitly, it is authoritative:
-          returned verbatim. Other kwargs (``prompt=``, ``system=``,
-          ``attachments=``, ``tool_results=``) are ignored for the
-          messages list (they remain available via ``prompt.prompt``,
-          ``prompt.system``, etc., for adapters that still read them).
+        - If ``messages=`` was passed to this constructor, it is
+          returned verbatim. The other constructor arguments
+          (``prompt=``, ``system=``, ``attachments=``,
+          ``tool_results=``) are not added to it. They remain available
+          via ``prompt.prompt``, ``prompt.system``, etc., for adapters
+          that still read them.
         - Otherwise the list is synthesized from the legacy kwargs
           (system, tool_results, prompt, attachments), producing just
           the current turn — prior history is not folded in, because
           no conversation context is reachable here.
+
+        The first point describes this class only, not the public API.
+        ``model.prompt()``, ``conversation.prompt()``, ``chain()`` and
+        their async equivalents do not ignore those arguments when a
+        caller also passes ``messages=``. They append them to that list
+        as the new turn's input - see ``_append_turn_input()`` - and add
+        ``system=`` as its first message, then construct the ``Prompt``
+        with the result. So ``model.prompt("Hello", messages=history)``
+        sends ``history`` followed by a user message "Hello", and a
+        caller whose ``history`` already ends with that message sends
+        it twice.
 
         Conversation.prompt / AsyncConversation.prompt / reply() all
         pre-compute the full chain and pass it as ``messages=``, so
@@ -1991,9 +2023,21 @@ class Response(_BaseResponse):
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    result = asyncio.run(
-                        tool.implementation(**implementation_arguments)
-                    )
+                    coro = tool.implementation(**implementation_arguments)
+                    try:
+                        asyncio.get_running_loop()
+                    except RuntimeError:
+                        result = asyncio.run(coro)
+                    else:
+                        # A synchronous chain can be called from inside an existing
+                        # event loop (for example, in a notebook). Run the coroutine
+                        # in a worker thread so asyncio.run() gets its own loop.
+                        context = contextvars.copy_context()
+                        result = _sync_tool_executor.submit(
+                            context.run,
+                            _run_async_tool,
+                            coro,
+                        ).result()
                 else:
                     result = tool.implementation(**implementation_arguments)
 
