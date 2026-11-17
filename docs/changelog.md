@@ -1,5 +1,25 @@
 # Changelog
 
+(v0_38)=
+## 0.38 (2026-11-17)
+
+New features:
+
+- New OpenAI models: `gpt-6.2-astra` and `gpt-6.2-sol` for [GPT-6.2 Astra and Sol](https://openai.com/index/introducing-gpt-6-2-astra-sol/).
+
+Bug fixes:
+
+- CLI commands that do not call OpenAI, such as `llm --version` and `llm models list`, now start faster because the `openai` package is only imported when it is first needed. Thanks, [Seba Breguel](https://github.com/sebastianbreguel). [#1892](https://github.com/simonw/llm/pull/1892)
+- Setting `LLM_OPENAI_SHOW_RESPONSES=1` no longer breaks async OpenAI models, such as `llm --async`. Previously every prompt failed with an ``Invalid `http_client` argument`` error before any request was sent. Async requests and responses are now logged in the same way as sync ones. Thanks, [Alex Castillo González](https://github.com/pcbeingused333). [#1896](https://github.com/simonw/llm/pull/1896)
+- Tool schemas now keep `title` keys that are part of a `default`, `const`, `enum` or `examples` value. Previously the cleanup that removes Pydantic's `title` annotations also removed them from those values, so a tool with a default such as `{"title": "A document"}` was described to the model with that key missing. Thanks, [Goran](https://github.com/goranai). [#1885](https://github.com/simonw/llm/issues/1885), [#1886](https://github.com/simonw/llm/pull/1886)
+- Templates, fragment files passed to `-f` and Python files passed to `--functions` are now read as UTF-8, falling back to the system default encoding for files that are not valid UTF-8. Previously, on systems with a different default encoding such as Windows, a file containing non-ASCII characters could cause a `UnicodeDecodeError`. Thanks, [CJstate](https://github.com/CJstate). [#1893](https://github.com/simonw/llm/pull/1893)
+- `llm fragments list -q` now shows every alias for a matching fragment, not just the alias that matched. Passing `-q` more than once with different aliases for the same fragment now returns that fragment, where previously it returned nothing. Thanks, [winking](https://github.com/lzywzh). [#1890](https://github.com/simonw/llm/pull/1890)
+- A `Toolbox` subclass that calls `super().__init__()` on another `Toolbox` with its own `__init__()` now records the subclass's constructor arguments. Previously the parent's arguments replaced them, so instances that differed only in a subclass argument were logged without it and treated as the same toolbox instance. Thanks, [Allen Flux](https://github.com/allenflux). [#1802](https://github.com/simonw/llm/pull/1802)
+
+Documentation:
+
+- The setup and plugin installation documentation now warn that `uv tool upgrade llm`, `pipx upgrade llm` and `brew upgrade llm` remove plugins installed using `llm install`, and recommend `llm install -U llm` to upgrade while keeping them. See {ref}`Upgrading to the latest version <upgrading-to-the-latest-version>`. Thanks, [bei](https://github.com/beipeonbei). [#1113](https://github.com/simonw/llm/issues/1113), [#1895](https://github.com/simonw/llm/pull/1895)
+
 (v0_37_3)=
 ## 0.37.3 (2026-11-16)
 
