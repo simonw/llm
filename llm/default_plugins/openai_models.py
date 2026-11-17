@@ -660,6 +660,7 @@ def register_commands(cli):
         tools_debug,
         tools_approve,
         chain_limit,
+        tool_call_limit,
         key,
         headers,
         use_responses,
@@ -796,6 +797,7 @@ def register_commands(cli):
             tools_debug,
             tools_approve,
             chain_limit,
+            tool_call_limit=tool_call_limit,
             model=model,
         )
         resolved_attachments = [*attachments, *attachment_types]

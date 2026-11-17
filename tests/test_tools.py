@@ -1518,3 +1518,65 @@ async def test_async_chain_carries_schema_through_tool_rounds(
 
     assert len(prompts) == 2
     assert [prompt.schema for prompt in prompts] == [schema, schema]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_tool_call_limit_checks_whole_batch(asynchronous):
+    actions = []
+
+    def mark() -> str:
+        actions.append(True)
+        return "done"
+
+    model = llm.get_async_model("echo") if asynchronous else llm.get_model("echo")
+    payload = json.dumps({"tool_calls": [{"name": "mark"}, {"name": "mark"}]})
+    chain = model.chain(payload, tools=[mark], tool_call_limit=1)
+    with pytest.raises(ValueError, match="Tool call limit of 1 exceeded"):
+        if asynchronous:
+            await chain.text()
+        else:
+            chain.text()
+    assert actions == []
+    chain = model.conversation().chain(payload, tools=[mark], tool_call_limit=2)
+    if asynchronous:
+        await chain.text()
+    else:
+        chain.text()
+    assert actions == [True, True]
+
+
+def test_tool_call_limit_is_cumulative(mock_model, monkeypatch):
+    mock_model.supports_tools = True
+    executed = []
+
+    def mark() -> str:
+        executed.append(True)
+        return "done"
+
+    def execute(prompt, stream, response, conversation):
+        response.add_tool_call(llm.ToolCall(name="mark", arguments={}))
+        yield "calling"
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+    with pytest.raises(ValueError, match="Tool call limit of 2 exceeded"):
+        mock_model.chain("start", tools=[mark], tool_call_limit=2).text()
+    assert executed == [True, True]
+
+
+def test_cli_tool_call_limit():
+    result = CliRunner().invoke(
+        cli.cli,
+        [
+            "prompt",
+            "-m",
+            "echo",
+            "--functions",
+            "def mark(): return 'ok'",
+            "--tool-call-limit",
+            "0",
+            json.dumps({"tool_calls": [{"name": "mark"}]}),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Tool call limit of 0 exceeded" in str(result.exception) + result.output

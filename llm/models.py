@@ -934,6 +934,7 @@ class Conversation(_BaseConversation):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        tool_call_limit: int | None = None,
         chain_limit: int | None = None,
         before_call: BeforeCallSync | None = None,
         after_call: AfterCallSync | None = None,
@@ -976,6 +977,7 @@ class Conversation(_BaseConversation):
             key=key,
             before_call=before_call or self.before_call,
             after_call=after_call or self.after_call,
+            tool_call_limit=tool_call_limit,
             chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
@@ -1013,6 +1015,7 @@ class AsyncConversation(_BaseConversation):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        tool_call_limit: int | None = None,
         chain_limit: int | None = None,
         before_call: BeforeCallAsync | None = None,
         after_call: AfterCallAsync | None = None,
@@ -1051,6 +1054,7 @@ class AsyncConversation(_BaseConversation):
             key=key,
             before_call=before_call or self.before_call,
             after_call=after_call or self.after_call,
+            tool_call_limit=tool_call_limit,
             chain_limit=chain_limit if chain_limit is not None else self.chain_limit,
         )
 
@@ -2938,6 +2942,7 @@ class _BaseChainResponse:
         chain_limit: int | None = 10,
         before_call: BeforeCallSync | BeforeCallAsync | None = None,
         after_call: AfterCallSync | AfterCallAsync | None = None,
+        tool_call_limit: int | None = None,
     ):
         self.prompt = prompt
         self.model = model
@@ -2946,6 +2951,9 @@ class _BaseChainResponse:
         self._responses: list[Any] = []
         self.conversation = conversation
         self.chain_limit = chain_limit
+        if tool_call_limit is not None and tool_call_limit < 0:
+            raise ValueError("tool_call_limit must be non-negative")
+        self.tool_call_limit = tool_call_limit
         self.before_call = before_call
         self.after_call = after_call
         self._response_callbacks: list[Callable] = []
@@ -2962,6 +2970,12 @@ class _BaseChainResponse:
     def log_to_db(self, db):
         for response in self._responses:
             response.log_to_db(db)
+
+    def _count_tool_calls(self, used: int, calls: list[ToolCall]) -> int:
+        used += len(calls)
+        if self.tool_call_limit is not None and used > self.tool_call_limit:
+            raise ValueError(f"Tool call limit of {self.tool_call_limit} exceeded.")
+        return used
 
     def _pending_tool_calls(self) -> list[ToolCall]:
         """Unresolved tool calls at the end of this chain's history.
@@ -3023,6 +3037,7 @@ class ChainResponse(_BaseChainResponse):
         # before_call/after_call machinery - then start the loop on
         # the tool-result turn. This could raise llm.PauseChain.
         pending_tool_calls = self._pending_tool_calls()
+        used = self._count_tool_calls(0, pending_tool_calls)
         if pending_tool_calls:
             tool_results = initial_response.execute_tool_calls(
                 before_call=self.before_call,
@@ -3045,16 +3060,16 @@ class ChainResponse(_BaseChainResponse):
                 current_response.on_done(callback)
             yield current_response
             self._responses.append(current_response)
-            if (
-                self.chain_limit
-                and count >= self.chain_limit
-                and current_response.tool_calls()
-            ):
+            calls = current_response.tool_calls()
+            if self.chain_limit and count >= self.chain_limit and calls:
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
+            used = self._count_tool_calls(used, calls)
             # This could raise llm.CancelToolCall:
             tool_results = current_response.execute_tool_calls(
-                before_call=self.before_call, after_call=self.after_call
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tool_calls_list=calls,
             )
             attachments = []
             for tool_result in tool_results:
@@ -3171,6 +3186,7 @@ class AsyncChainResponse(_BaseChainResponse):
         # unresolved tool calls before the first provider call. This
         # could raise llm.PauseChain.
         pending_tool_calls = self._pending_tool_calls()
+        used = self._count_tool_calls(0, pending_tool_calls)
         if pending_tool_calls:
             tool_results = await initial_response.execute_tool_calls(
                 before_call=self.before_call,
@@ -3194,16 +3210,16 @@ class AsyncChainResponse(_BaseChainResponse):
             yield current_response
             self._responses.append(current_response)
 
-            if (
-                self.chain_limit
-                and count >= self.chain_limit
-                and await current_response.tool_calls()
-            ):
+            calls = await current_response.tool_calls()
+            if self.chain_limit and count >= self.chain_limit and calls:
                 raise ValueError(f"Chain limit of {self.chain_limit} exceeded.")
 
+            used = self._count_tool_calls(used, calls)
             # This could raise llm.CancelToolCall:
             tool_results = await current_response.execute_tool_calls(
-                before_call=self.before_call, after_call=self.after_call
+                before_call=self.before_call,
+                after_call=self.after_call,
+                tool_calls_list=calls,
             )
             if tool_results:
                 attachments = []
@@ -3450,6 +3466,7 @@ class _Model(_BaseModel):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        tool_call_limit: int | None = None,
         before_call: BeforeCallSync | None = None,
         after_call: AfterCallSync | None = None,
         key: str | None = None,
@@ -3467,6 +3484,7 @@ class _Model(_BaseModel):
             schema=schema,
             tools=tools,
             tool_results=tool_results,
+            tool_call_limit=tool_call_limit,
             before_call=before_call,
             after_call=after_call,
             key=key,
@@ -3579,6 +3597,7 @@ class _AsyncModel(_BaseModel):
         schema: dict | type[BaseModel] | None = None,
         tools: list[ToolDef] | None = None,
         tool_results: list[ToolResult] | None = None,
+        tool_call_limit: int | None = None,
         before_call: BeforeCallAsync | None = None,
         after_call: AfterCallAsync | None = None,
         key: str | None = None,
@@ -3596,6 +3615,7 @@ class _AsyncModel(_BaseModel):
             schema=schema,
             tools=tools,
             tool_results=tool_results,
+            tool_call_limit=tool_call_limit,
             before_call=before_call,
             after_call=after_call,
             key=key,
