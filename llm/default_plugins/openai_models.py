@@ -9,7 +9,6 @@ from functools import cache
 from typing import Any, ClassVar, Literal, cast
 
 import click
-import httpx2
 import sqlite_utils
 import yaml
 from click_default_group import DefaultGroup
@@ -1112,6 +1111,8 @@ def register_commands(cli):
     @click.option("--key", help="OpenAI API key")
     def models(json_, key):
         "List models available to you from the OpenAI API"
+        import httpx2
+
         from llm import get_key
 
         api_key = get_key(key, "openai", "OPENAI_API_KEY")

@@ -31,8 +31,6 @@ from typing import (
     get_type_hints,
 )
 
-import httpx2
-
 from .errors import ConversationNotSupported, NeedsKeyException
 from .serialization import ResponseDict
 
@@ -95,6 +93,8 @@ class Attachment:
 
     def resolve_type(self):
         "Return the content type, guessing from content if not specified."
+        import httpx2
+
         if self.type:
             return self.type
         # Derive it from path or url or content
@@ -111,6 +111,8 @@ class Attachment:
 
     def content_bytes(self):
         "Return the binary content, reading from path or URL if needed."
+        import httpx2
+
         content = self.content
         if not content:
             if self.path:

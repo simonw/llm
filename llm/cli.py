@@ -19,7 +19,6 @@ from runpy import run_module
 from typing import Any, cast
 
 import click
-import httpx2
 import pydantic
 import sqlite_utils
 import yaml
@@ -267,6 +266,8 @@ def resolve_fragments(
     resolved: list[Fragment | Attachment] = []
     for fragment in fragments:
         if fragment.startswith(("http://", "https://")):
+            import httpx2
+
             llm_version = version("llm")
             headers = {"User-Agent": f"llm/{llm_version} (https://llm.datasette.io/)"}
             client = httpx2.Client(
@@ -360,6 +361,8 @@ def resolve_attachment(value):
     Returns an Attachment object.
     Raises AttachmentError if the attachment cannot be resolved.
     """
+    import httpx2
+
     if value == "-":
         content = sys.stdin.buffer.read()
         # Try to guess type
@@ -4425,6 +4428,8 @@ def _read_text_file(path: pathlib.Path) -> str:
 
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
+    import httpx2
+
     if name.startswith(("https://", "http://")):
         response = httpx2.get(name)
         try:
