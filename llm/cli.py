@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import inspect
 import io
 import json
@@ -1688,6 +1689,212 @@ def logs_turn_off():
     "Turn off logging for all prompts"
     path = user_dir() / "logs-off"
     path.touch()
+
+
+def _parse_log_datetime(value):
+    "Parse a stored datetime_utc value, assuming UTC if it is naive"
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _delete_thread(db, thread_id):
+    "Delete a thread and its turns, returning the number of turns removed"
+    turn_count = db["turns"].count_where("thread_id = ?", [thread_id])
+    for table in (
+        "turn_tools",
+        "turn_fragments",
+        "tool_instantiations",
+        "turn_search",
+    ):
+        db.execute(
+            f"delete from {table} where turn_id in "
+            "(select id from turns where thread_id = ?)",
+            [thread_id],
+        )
+    db.execute("delete from turns where thread_id = ?", [thread_id])
+    db.execute("delete from threads where id = ?", [thread_id])
+    return turn_count
+
+
+def _delete_legacy_conversation(db, conversation_id):
+    "Delete a legacy conversation and its responses, returning the count"
+    response_count = db["responses"].count_where(
+        "conversation_id = ?", [conversation_id]
+    )
+    for table in (
+        "prompt_attachments",
+        "prompt_fragments",
+        "system_fragments",
+        "tool_responses",
+        "tool_calls",
+        "tool_results",
+    ):
+        db.execute(
+            f"delete from {table} where response_id in "
+            "(select id from responses where conversation_id = ?)",
+            [conversation_id],
+        )
+    db.execute("delete from responses where conversation_id = ?", [conversation_id])
+    db.execute("delete from conversations where id = ?", [conversation_id])
+    return response_count
+
+
+def _last_activity_by_conversation(db):
+    """
+    Map every conversation ID to the datetime of its most recent
+    response, across both the threads/turns tables and the legacy
+    conversations/responses tables.
+    """
+    last_activity = {}
+    for row in db.query(
+        "select thread_id, max(datetime_utc) as last from turns group by thread_id"
+    ):
+        parsed = _parse_log_datetime(row["last"])
+        if parsed is not None:
+            last_activity[row["thread_id"]] = parsed
+    # Threads with no turns yet count from when they were created
+    for row in db["threads"].rows:
+        if row["id"] not in last_activity:
+            parsed = _parse_log_datetime(row["datetime_utc"])
+            if parsed is not None:
+                last_activity[row["id"]] = parsed
+    for row in db.query(
+        "select conversation_id, max(datetime_utc) as last "
+        "from responses group by conversation_id"
+    ):
+        parsed = _parse_log_datetime(row["last"])
+        if parsed is not None:
+            existing = last_activity.get(row["conversation_id"])
+            if existing is None or parsed > existing:
+                last_activity[row["conversation_id"]] = parsed
+    return last_activity
+
+
+@logs.command(name="rm")
+@click.argument("conversation_ids", nargs=-1)
+@click.option(
+    "--all",
+    "remove_all",
+    is_flag=True,
+    help="Remove all logged conversations",
+)
+@click.option(
+    "--hours",
+    type=int,
+    default=None,
+    help="Remove conversations whose most recent response was within "
+    "this many hours",
+)
+@click.option(
+    "--days",
+    type=int,
+    default=None,
+    help="Remove conversations whose most recent response was within " "this many days",
+)
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Do not ask for confirmation before removing conversations",
+)
+def logs_rm(conversation_ids, remove_all, hours, days, yes):
+    "Remove logged conversations from the logs database"
+    modes = sum(
+        (
+            bool(conversation_ids),
+            bool(remove_all),
+            hours is not None,
+            days is not None,
+        )
+    )
+    if modes != 1:
+        raise click.ClickException(
+            "Specify exactly one of: one or more conversation IDs, "
+            "--all, --hours or --days"
+        )
+    for name, value in (("--hours", hours), ("--days", days)):
+        if value is not None and value <= 0:
+            raise click.ClickException(f"{name} must be a positive integer")
+    path = logs_db_path()
+    if not path.exists():
+        raise click.ClickException(f"No log database found at {path}")
+    db = _cli_database(path)
+    migrate(db)
+
+    def locations(conversation_id):
+        "Which of the two generations of tables hold this conversation"
+        return (
+            bool(db["threads"].count_where("id = ?", [conversation_id])),
+            bool(db["conversations"].count_where("id = ?", [conversation_id])),
+        )
+
+    if conversation_ids:
+        targets = list(dict.fromkeys(conversation_ids))
+        missing = [cid for cid in targets if not any(locations(cid))]
+        if missing:
+            raise click.ClickException(
+                "Conversation not found: {}".format(", ".join(missing))
+            )
+    else:
+        if remove_all:
+            targets = [row["id"] for row in db.query("select id from threads")] + [
+                row["id"] for row in db.query("select id from conversations")
+            ]
+            description = "all logged conversations"
+        else:
+            if hours is not None:
+                delta = datetime.timedelta(hours=hours)
+                description = (
+                    f"conversations from the last {hours} hour"
+                    f"{'' if hours == 1 else 's'}"
+                )
+            else:
+                delta = datetime.timedelta(days=days)
+                description = (
+                    f"conversations from the last {days} day"
+                    f"{'' if days == 1 else 's'}"
+                )
+            cutoff = datetime.datetime.now(datetime.timezone.utc) - delta
+            targets = [
+                cid
+                for cid, last in _last_activity_by_conversation(db).items()
+                if last >= cutoff
+            ]
+        targets = list(dict.fromkeys(targets))
+        if not targets:
+            click.echo("No conversations matched")
+            return
+        if not yes:
+            click.confirm(
+                f"Remove {len(targets)} {description}?",
+                abort=True,
+            )
+
+    with db.atomic():
+        for cid in targets:
+            in_threads, in_legacy = locations(cid)
+            removed = []
+            if in_threads:
+                turn_count = _delete_thread(db, cid)
+                removed.append(f"{turn_count} turn{'' if turn_count == 1 else 's'}")
+            if in_legacy:
+                response_count = _delete_legacy_conversation(db, cid)
+                removed.append(
+                    f"{response_count} legacy response"
+                    f"{'' if response_count == 1 else 's'}"
+                )
+            click.echo(
+                "Removed conversation {}{}".format(
+                    cid, f" ({', '.join(removed)})" if removed else ""
+                )
+            )
 
 
 def annotate_log_rows(db, rows, expand=False, truncate=False):
