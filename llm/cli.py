@@ -176,9 +176,21 @@ def _run_chat(
     accumulated_fragments = []
     accumulated_attachments = []
     end_token = "!end"
-
     while True:
-        prompt = click.prompt("", prompt_suffix="> " if not in_multi else "")
+        prompt = click.termui._build_prompt(
+            "",
+            "> " if not in_multi else "",
+            show_default=False,
+        )
+        try:
+            prompt = click.termui._readline_prompt(
+                click.termui.visible_prompt_func, prompt, False
+            )
+        except EOFError:
+            return
+        if not prompt:
+            continue
+
         fragments = []
         attachments = []
         if argument_fragments:
