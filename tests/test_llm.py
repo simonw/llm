@@ -4,13 +4,14 @@ import os
 import pathlib
 import re
 import sys
+from enum import Enum, IntEnum
 from importlib import metadata
 from importlib.metadata import version
 from unittest import mock
 
 import pytest
 from click.testing import CliRunner
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import llm
 from llm.cli import cli
@@ -537,6 +538,86 @@ def test_llm_models_options(user_path):
     assert "    key: openai" in result.output
     assert "    env_var: OPENAI_API_KEY" in result.output
     assert "AsyncMockModel (async): mock" not in result.output
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_llm_models_options_enum_types(
+    mock_model, async_mock_model, monkeypatch, async_
+):
+    class Level(IntEnum):
+        low = 1
+        high = 2
+
+    class Style(str, Enum):
+        brief = "brief"
+        detailed = "detailed"
+
+    class Options(llm.Options):
+        level: Level = Field(default=Level.low, description="Detail level.")
+        optional_level: Level | None = None
+        style: Style = Style.brief
+        optional_style: Style | None = None
+        count: int = 1
+        temperature: float = 0.5
+        enabled: bool = True
+        label: str = "default"
+        items: list[str] | None = None
+
+    monkeypatch.setattr(mock_model, "Options", Options)
+    monkeypatch.setattr(async_mock_model, "Options", Options)
+    model = async_mock_model if async_ else mock_model
+    # These are valid model options, including coercion from CLI strings.
+    prompt = model.prompt("hello", level="2", optional_level="1", style="detailed")
+    assert prompt.prompt.options.level is Level.high
+    assert prompt.prompt.options.optional_level is Level.low
+    assert prompt.prompt.options.style is Style.detailed
+
+    args = ["models", "--options", "-m", "mock"] + (["--async"] if async_ else [])
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert (
+        "  Options:\n"
+        "    level: int\n"
+        "      Detail level.\n"
+        "    optional_level: int\n"
+        "    style: str\n"
+        "    optional_style: str\n"
+        "    count: int\n"
+        "    temperature: float\n"
+        "    enabled: boolean\n"
+        "    label: str\n"
+        "    items: array\n"
+    ) in result.output
+    json_result = CliRunner().invoke(cli, args + ["--json"], catch_exceptions=False)
+    assert json_result.exit_code == 0
+    assert (
+        json.loads(json_result.output)[0]["options"]
+        == Options.model_json_schema()["properties"]
+    )
+
+
+def test_llm_models_options_unresolved_refs(mock_model, monkeypatch):
+    # Plugins can customize their Options schema. Unresolvable references should
+    # retain the existing fallback without fetching URLs or following cycles.
+    schema = {
+        "$defs": {
+            "First": {"$ref": "#/$defs/Second"},
+            "Second": {"$ref": "#/$defs/First"},
+        },
+        "properties": {
+            "missing": {"$ref": "#/$defs/Missing"},
+            "external": {"$ref": "https://example.com/schema.json"},
+            "cycle": {"$ref": "#/$defs/First"},
+        },
+    }
+    monkeypatch.setattr(mock_model.Options, "model_json_schema", lambda: schema)
+    result = CliRunner().invoke(
+        cli, ["models", "--options", "-m", "mock"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert (
+        "  Options:\n    missing: str\n    external: str\n    cycle: str\n"
+    ) in result.output
 
 
 def test_prompt_options_shows_selected_model_options(user_path):
