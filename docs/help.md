@@ -301,6 +301,7 @@ Commands:
   off     Turn off logging for all prompts
   on      Turn on logging for all prompts
   path    Output the path to the logs.db file
+  rm      Remove logged conversations from the logs database
   status  Show current status of database logging
 ```
 
@@ -357,6 +358,23 @@ Usage: llm logs off [OPTIONS]
 
 Options:
   -h, --help  Show this message and exit.
+```
+
+(help-logs-rm)=
+#### llm logs rm --help
+```
+Usage: llm logs rm [OPTIONS] [CONVERSATION_IDS]...
+
+  Remove logged conversations from the logs database
+
+Options:
+  --all            Remove all logged conversations
+  --hours INTEGER  Remove conversations whose most recent response was within
+                   this many hours
+  --days INTEGER   Remove conversations whose most recent response was within
+                   this many days
+  -y, --yes        Do not ask for confirmation before removing conversations
+  -h, --help       Show this message and exit.
 ```
 
 (help-logs-list)=
