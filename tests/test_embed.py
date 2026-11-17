@@ -306,39 +306,48 @@ def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
 
 
 @pytest.mark.parametrize("with_metadata", (False, True))
-@pytest.mark.parametrize("batch_size", (1, 2))
 @pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 100))
 def test_embed_multi_updates_swapped_content(
-    db_factory, embed_demo, with_metadata, batch_size, binary
+    db_factory, with_metadata, binary, batch_size
 ):
-    collection = llm.Collection("test", db_factory(memory=True), model=embed_demo)
-    first = b"hello world" if binary else "hello world"
-    second = b"goodbye" if binary else "goodbye"
-    collection.embed("1", first, store=True)
-    collection.embed("2", second, store=True)
-    embed_demo.embedded_content.clear()
-
-    entries = [("1", second), ("2", first)]
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    hello = b"hello world" if binary else "hello world"
+    goodbye = b"goodbye world" if binary else "goodbye world"
+    unchanged = b"unchanged" if binary else "unchanged"
+    collection.embed_multi([("1", hello), ("2", goodbye), ("3", unchanged)], store=True)
+    model = collection.model()
+    model.embedded_content.clear()
+    entries = [("1", goodbye), ("2", hello), ("3", unchanged), ("4", hello)]
     if with_metadata:
         collection.embed_multi_with_metadata(
-            [(id, text, {"updated": id}) for id, text in entries],
+            [(id, value, {"id": id}) for id, value in entries],
             store=True,
             batch_size=batch_size,
         )
     else:
         collection.embed_multi(entries, store=True, batch_size=batch_size)
 
-    assert embed_demo.embedded_content == [second, first]
-    assert collection.count() == 2
-    results = collection.similar_by_vector([1.0] + [0.0] * 15)
-    assert [entry.id for entry in results] == ["1", "2"]
-    assert [entry.content for entry in results] == (
-        [None, None] if binary else ["goodbye", "hello world"]
-    )
-    assert [entry.score for entry in results] == pytest.approx([1, 2**-0.5])
-    assert [entry.metadata for entry in results] == (
-        [{"updated": "1"}, {"updated": "2"}] if with_metadata else [None, None]
-    )
+    results = {entry.id: entry for entry in collection.similar(goodbye)}
+    assert collection.count() == 4
+    assert results["1"].score == pytest.approx(1.0)
+    assert results["2"].score < results["1"].score
+    assert results["4"].score == pytest.approx(results["2"].score)
+    if not binary:
+        assert {id: entry.content for id, entry in results.items()} == {
+            "1": "goodbye world",
+            "2": "hello world",
+            "3": "unchanged",
+            "4": "hello world",
+        }
+    if with_metadata:
+        assert results["1"].metadata == {"id": "1"}
+        assert results["2"].metadata == {"id": "2"}
+        assert results["3"].metadata is None
+        assert results["4"].metadata == {"id": "4"}
+    # The unchanged ID is skipped, while a new ID with existing content is stored.
+    # similar() itself embeds the query once at the end.
+    assert model.embedded_content == [goodbye, hello, hello, goodbye]
 
 
 @pytest.mark.parametrize("with_metadata", (False, True))

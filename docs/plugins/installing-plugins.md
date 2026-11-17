@@ -15,6 +15,8 @@ llm uninstall llm-gpt4all -y
 ```
 The `-y` flag skips asking for confirmation.
 
+Note that plugins installed with `llm install` live in the same virtual environment as LLM itself. If you upgrade LLM using `uv tool upgrade llm`, `pipx upgrade llm` or `brew upgrade llm` that environment is replaced and the plugins are lost - see {ref}`upgrading to the latest version <upgrading-to-the-latest-version>` for how to upgrade while keeping your plugins. Run `llm plugins` to check which plugins are currently installed.
+
 You can see additional models that have been added by plugins by running:
 ```bash
 llm models

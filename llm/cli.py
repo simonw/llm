@@ -305,7 +305,9 @@ def resolve_fragments(
                 # Now try path
                 path = pathlib.Path(fragment)
                 if path.exists():
-                    resolved.append(Fragment(path.read_text(), str(path.resolve())))
+                    resolved.append(
+                        Fragment(_read_text_file(path), str(path.resolve()))
+                    )
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
@@ -2650,7 +2652,10 @@ def templates_edit(name):
         path.write_text(DEFAULT_TEMPLATE, "utf-8")
     click.edit(filename=str(path))
     # Validate that template
-    load_template(name)
+    try:
+        load_template(name)
+    except LoadTemplateError as ex:
+        raise click.ClickException(str(ex))
 
 
 @templates.command(name="path")
@@ -3152,7 +3157,11 @@ def fragments_list(queries, aliases, json_):
         p = f"p{param_count}"
         params[p] = q
         where_bits.append(f"""
-            (fragments.hash = :{p} or fragment_aliases.alias = :{p}
+            (fragments.hash = :{p} or exists (
+                select 1 from fragment_aliases as matching_aliases
+                where matching_aliases.fragment_id = fragments.id
+                and matching_aliases.alias = :{p}
+            )
             or fragments.source like '%' || :{p} || '%'
             or fragments.content like '%' || :{p} || '%')
         """)
@@ -3454,7 +3463,12 @@ def embed(
         if Collection.exists(db, collection):
             # Load existing collection and use its model
             collection_obj = Collection(collection, db)
-            model_obj = collection_obj.model()
+            try:
+                model_obj = collection_obj.model()
+            except UnknownModelError:
+                raise click.ClickException(
+                    f"Unknown embedding model: {collection_obj.model_id}"
+                )
         else:
             # We will create a new one, but that means model is required
             if not model:
@@ -3463,18 +3477,23 @@ def embed(
                     raise click.ClickException(
                         "You need to specify an embedding model (no default model is set)"
                     )
-            collection_obj = Collection(collection, db=db, model_id=model)
+            try:
+                collection_obj = Collection(collection, db=db, model_id=model)
+            except UnknownModelError:
+                raise click.ClickException(f"Unknown embedding model: {model}")
             model_obj = collection_obj.model()
 
     if model_obj is None:
         if model is None:
             model = get_default_embedding_model()
+            if model is None:
+                raise click.ClickException(
+                    "You need to specify an embedding model (no default model is set)"
+                )
         try:
             model_obj = get_embedding_model(model)
         except UnknownModelError:
-            raise click.ClickException(
-                "You need to specify an embedding model (no default model is set)"
-            )
+            raise click.ClickException(f"Unknown embedding model: {model}")
 
     show_output = True
     if collection and (format_ is None):
@@ -3684,9 +3703,18 @@ def embed_multi(
         collection_obj = Collection(
             collection, db=db, model_id=model_id, create=model_id is not None
         )
-    except (Collection.DoesNotExist, UnknownModelError):
+    except Collection.DoesNotExist:
         raise click.ClickException(
             "You need to specify an embedding model (no default model is set)"
+        )
+    except UnknownModelError:
+        raise click.ClickException(f"Unknown embedding model: {model_id}")
+    try:
+        # An existing collection can use a model that is no longer installed
+        collection_obj.model()
+    except UnknownModelError:
+        raise click.ClickException(
+            f"Unknown embedding model: {collection_obj.model_id}"
         )
 
     expected_length = None
@@ -3910,7 +3938,12 @@ def similar(
                     content = f.read()
         if not content:
             raise click.ClickException("No content provided")
-        results = collection_obj.similar(content, number, prefix=prefix)
+        try:
+            results = collection_obj.similar(content, number, prefix=prefix)
+        except UnknownModelError:
+            raise click.ClickException(
+                f"Unknown embedding model: {collection_obj.model_id}"
+            )
 
     for result in results:
         if plain:
@@ -4238,7 +4271,7 @@ def get_history(chat_id):
 def render_errors(errors):
     output = []
     for error in errors:
-        output.append(", ".join(error["loc"]))
+        output.append(", ".join(str(part) for part in error["loc"]))
         output.append("  " + error["msg"])
     return "\n".join(output)
 
@@ -4381,6 +4414,15 @@ def _parse_yaml_template(name, content):
         raise LoadTemplateError(msg)
 
 
+def _read_text_file(path: pathlib.Path) -> str:
+    "Read a text file as UTF-8, falling back to the locale default encoding"
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # Not UTF-8 - read it using the default encoding for this system
+        return path.read_text()
+
+
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith(("https://", "http://")):
@@ -4412,7 +4454,7 @@ def load_template(name: str) -> Template:
         path = template_dir() / f"{name}.yaml"
     if not path.exists():
         raise LoadTemplateError(f"Invalid template: {name}")
-    content = path.read_text()
+    content = _read_text_file(path)
     template_obj = _parse_yaml_template(name, content)
     # We trust functions here because they came from the filesystem
     template_obj._functions_is_trusted = True
@@ -4425,7 +4467,7 @@ def _tools_from_code(code_or_path: str) -> list[Tool]:
     """
     if "\n" not in code_or_path and code_or_path.endswith(".py"):
         try:
-            code_or_path = pathlib.Path(code_or_path).read_text()
+            code_or_path = _read_text_file(pathlib.Path(code_or_path))
         except FileNotFoundError:
             raise click.ClickException(f"File not found: {code_or_path}")
     namespace: dict[str, Any] = {}

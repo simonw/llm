@@ -1002,6 +1002,11 @@ def test_default_embedding_model():
     assert result7.output == "[5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n"
 
 
+def test_remove_unset_default_embedding_model():
+    result = CliRunner().invoke(cli, ["embed-models", "default", "--remove-default"])
+    assert result.exit_code == 0
+
+
 @pytest.mark.parametrize(
     "args,expected_model_id",
     (
@@ -1047,6 +1052,51 @@ def test_default_embed_model_errors(db_factory, user_path, default_is_set, comma
         assert result3.exit_code == 0
     # At the end of this, there should be 2 embeddings
     db = db_factory(str(user_path / "embeddings.db"))
+    assert db["embeddings"].count == 1
+
+
+@pytest.mark.parametrize(
+    "args,input",
+    (
+        (["embed", "-m", "not-a-model", "-c", "hello"], None),
+        (["embed", "-m", "not-a-model", "example", "1", "-c", "hello"], None),
+        (["embed-multi", "-m", "not-a-model", "example", "-"], "id,name\n1,hello"),
+        # A default that names a model which is no longer installed
+        (["embed", "-c", "hello"], None),
+        (["embed", "example", "1", "-c", "hello"], None),
+        (["embed-multi", "example", "-"], "id,name\n1,hello"),
+    ),
+)
+def test_embed_unknown_model_error(db_factory, user_path, args, input):
+    if "-m" not in args:
+        (user_path / "default_embedding_model.txt").write_text(
+            "not-a-model", encoding="utf8"
+        )
+    result = CliRunner().invoke(cli, args, input=input)
+    assert result.exit_code == 1
+    assert result.output == "Error: Unknown embedding model: not-a-model\n"
+    # No collection was created for the unknown model
+    db = db_factory(str(user_path / "embeddings.db"))
+    assert not db["collections"].exists() or db["collections"].count == 0
+
+
+@pytest.mark.parametrize(
+    "args,input",
+    (
+        (["embed", "example", "2", "-c", "hello"], None),
+        (["embed-multi", "example", "-"], "id,name\n2,hello"),
+        (["similar", "example", "-c", "hello"], None),
+    ),
+)
+def test_existing_collection_unknown_model_error(db_factory, user_path, args, input):
+    # A collection whose embedding model plugin has since been uninstalled
+    db = db_factory(str(user_path / "embeddings.db"))
+    collection = Collection("example", db, model_id="embed-demo")
+    collection.embed("1", "hello")
+    db["collections"].update(collection.id, {"model": "not-a-model"})
+    result = CliRunner().invoke(cli, args, input=input)
+    assert result.exit_code == 1
+    assert result.output == "Error: Unknown embedding model: not-a-model\n"
     assert db["embeddings"].count == 1
 
 
