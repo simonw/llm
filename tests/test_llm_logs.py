@@ -1696,3 +1696,292 @@ def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
         json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
         is allowed
     )
+
+
+@pytest.fixture
+def rm_log_path(db_factory, user_path):
+    """
+    A logs.db holding both generations of logged conversations:
+
+    - thread-a: two turns, the most recent one just now. Its chain
+      shares a prefix with thread-b.
+    - thread-b: one turn from three days ago.
+    - legacy-a: two legacy responses, one with a prompt attachment,
+      the most recent one just now.
+    - legacy-b: one legacy response from three days ago.
+    """
+    log_path = str(user_path / "logs.db")
+    db = db_factory(log_path)
+    migrate(db)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    old = now - datetime.timedelta(days=3)
+
+    def iso(dt):
+        return dt.isoformat()
+
+    # Shared message chain: hash-u1 is the common prefix of both threads
+    db["messages"].insert_all(
+        [
+            {"hash": "hash-u1", "parent_hash": None, "role": "user"},
+            {"hash": "hash-a1", "parent_hash": "hash-u1", "role": "assistant"},
+            {"hash": "hash-a2", "parent_hash": "hash-u1", "role": "assistant"},
+        ]
+    )
+    db["parts"].insert_all(
+        [
+            {
+                "message_hash": "hash-u1",
+                "position": 0,
+                "type": "text",
+                "text": "question one",
+            },
+            {
+                "message_hash": "hash-a1",
+                "position": 0,
+                "type": "text",
+                "text": "answer one",
+            },
+            {
+                "message_hash": "hash-a2",
+                "position": 0,
+                "type": "text",
+                "text": "answer two",
+            },
+        ]
+    )
+    db["tools"].insert(
+        {"id": 1, "hash": "tool-hash", "name": "demo_tool", "description": "demo"}
+    )
+    db["fragments"].insert(
+        {"id": 1, "hash": "fragment-hash", "content": "fragment content"}
+    )
+    db["threads"].insert_all(
+        [
+            {
+                "id": "thread-a",
+                "name": "Thread A",
+                "tip_message_hash": "hash-a2",
+                "datetime_utc": iso(now),
+            },
+            {
+                "id": "thread-b",
+                "name": "Thread B",
+                "tip_message_hash": "hash-a1",
+                "datetime_utc": iso(old),
+            },
+        ]
+    )
+    db["turns"].insert_all(
+        [
+            {
+                "id": "turn-a1",
+                "thread_id": "thread-a",
+                "parent_message_hash": None,
+                "tip_message_hash": "hash-a2",
+                "model": "mock",
+                "datetime_utc": iso(now - datetime.timedelta(days=5)),
+            },
+            {
+                "id": "turn-a2",
+                "thread_id": "thread-a",
+                "parent_message_hash": None,
+                "tip_message_hash": "hash-a2",
+                "model": "mock",
+                "datetime_utc": iso(now),
+            },
+            {
+                "id": "turn-b1",
+                "thread_id": "thread-b",
+                "parent_message_hash": None,
+                "tip_message_hash": "hash-a1",
+                "model": "mock",
+                "datetime_utc": iso(old),
+            },
+        ]
+    )
+    db["turn_search"].insert_all(
+        [
+            {"turn_id": "turn-a1", "prompt": "question", "response": "answer"},
+            {"turn_id": "turn-a2", "prompt": "question", "response": "answer"},
+            {"turn_id": "turn-b1", "prompt": "question", "response": "answer"},
+        ]
+    )
+    db["turn_tools"].insert({"turn_id": "turn-a1", "tool_id": 1})
+    db["turn_fragments"].insert(
+        {"turn_id": "turn-a1", "fragment_id": 1, "order": 0, "kind": "prompt"}
+    )
+    db["tool_instantiations"].insert(
+        {"turn_id": "turn-a1", "tool_call_id": "call-1", "instance_id": None}
+    )
+
+    db["conversations"].insert_all(
+        [
+            {"id": "legacy-a", "name": "Legacy A", "model": "davinci"},
+            {"id": "legacy-b", "name": "Legacy B", "model": "davinci"},
+        ]
+    )
+    db["responses"].insert_all(
+        [
+            {
+                "id": "response-a1",
+                "model": "davinci",
+                "prompt": "prompt",
+                "response": "response",
+                "conversation_id": "legacy-a",
+                "datetime_utc": iso(now - datetime.timedelta(days=5)),
+            },
+            {
+                "id": "response-a2",
+                "model": "davinci",
+                "prompt": "prompt",
+                "response": "response",
+                "conversation_id": "legacy-a",
+                "datetime_utc": iso(now),
+            },
+            {
+                "id": "response-b1",
+                "model": "davinci",
+                "prompt": "prompt",
+                "response": "response",
+                "conversation_id": "legacy-b",
+                "datetime_utc": iso(old),
+            },
+        ]
+    )
+    db["attachments"].insert(
+        {"id": "attachment-1", "type": "text/plain", "content": b"data"}
+    )
+    db["prompt_attachments"].insert(
+        {"response_id": "response-a1", "attachment_id": "attachment-1", "order": 0}
+    )
+    return log_path
+
+
+def test_logs_rm_thread(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "thread-a"])
+    assert result.exit_code == 0, result.output
+    assert "Removed conversation thread-a (2 turns)" in result.output
+    db = db_factory(rm_log_path)
+    assert db["threads"].count_where("id = ?", ["thread-a"]) == 0
+    assert db["turns"].count_where("thread_id = ?", ["thread-a"]) == 0
+    # Rows that exist only to serve those turns are gone too
+    assert db["turn_search"].count == 1
+    assert db["turn_tools"].count == 0
+    assert db["turn_fragments"].count == 0
+    assert db["tool_instantiations"].count == 0
+    # The other thread is intact, including its shared message chain
+    assert db["threads"].count_where("id = ?", ["thread-b"]) == 1
+    assert db["turns"].count_where("thread_id = ?", ["thread-b"]) == 1
+    from llm.logs import LogStore
+
+    messages = LogStore(db).thread_messages("thread-b")
+    assert [m.parts[0].text for m in messages] == ["question one", "answer one"]
+    # Content-addressed messages are shared storage and are left alone
+    assert db["messages"].count == 3
+
+
+def test_logs_rm_legacy_conversation(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "legacy-a"])
+    assert result.exit_code == 0, result.output
+    assert "Removed conversation legacy-a (2 legacy responses)" in result.output
+    db = db_factory(rm_log_path)
+    assert db["conversations"].count_where("id = ?", ["legacy-a"]) == 0
+    assert db["responses"].count_where("conversation_id = ?", ["legacy-a"]) == 0
+    assert db["prompt_attachments"].count == 0
+    # The attachment content itself is shared storage and stays
+    assert db["attachments"].count == 1
+    # The other legacy conversation is intact
+    assert db["conversations"].count_where("id = ?", ["legacy-b"]) == 1
+    assert db["responses"].count_where("conversation_id = ?", ["legacy-b"]) == 1
+
+
+def test_logs_rm_multiple_ids(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "thread-a", "legacy-b"])
+    assert result.exit_code == 0, result.output
+    assert "Removed conversation thread-a" in result.output
+    assert "Removed conversation legacy-b" in result.output
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 1
+    assert db["conversations"].count == 1
+
+
+def test_logs_rm_unknown_id(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "nope"])
+    assert result.exit_code != 0
+    assert "Conversation not found: nope" in result.output
+    # A mix of valid and unknown IDs deletes nothing
+    result = CliRunner().invoke(cli, ["logs", "rm", "thread-a", "nope"])
+    assert result.exit_code != 0
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 2
+    assert db["conversations"].count == 2
+
+
+def test_logs_rm_all_with_yes(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "--all", "--yes"])
+    assert result.exit_code == 0, result.output
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 0
+    assert db["turns"].count == 0
+    assert db["turn_search"].count == 0
+    assert db["conversations"].count == 0
+    assert db["responses"].count == 0
+
+
+def test_logs_rm_all_aborted_at_prompt(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "--all"], input="n\n")
+    assert result.exit_code != 0
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 2
+    assert db["turns"].count == 3
+    assert db["conversations"].count == 2
+    assert db["responses"].count == 3
+
+
+def test_logs_rm_all_confirmed_at_prompt(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "--all"], input="y\n")
+    assert result.exit_code == 0, result.output
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 0
+    assert db["conversations"].count == 0
+
+
+def test_logs_rm_hours_window(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "--hours", "24", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "Removed conversation thread-a" in result.output
+    assert "Removed conversation legacy-a" in result.output
+    db = db_factory(rm_log_path)
+    # Conversations whose most recent response is three days old stay
+    assert db["threads"].count_where("id = ?", ["thread-b"]) == 1
+    assert db["conversations"].count_where("id = ?", ["legacy-b"]) == 1
+
+
+def test_logs_rm_days_window(rm_log_path, db_factory):
+    result = CliRunner().invoke(cli, ["logs", "rm", "--days", "7", "-y"])
+    assert result.exit_code == 0, result.output
+    db = db_factory(rm_log_path)
+    assert db["threads"].count == 0
+    assert db["conversations"].count == 0
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        [],
+        ["thread-a", "--all"],
+        ["--all", "--hours", "2"],
+        ["--hours", "2", "--days", "1"],
+        ["--hours", "0"],
+        ["--days", "-1"],
+    ],
+)
+def test_logs_rm_mode_errors(rm_log_path, args):
+    result = CliRunner().invoke(cli, ["logs", "rm"] + args)
+    assert result.exit_code != 0
+
+
+def test_logs_rm_no_database(user_path):
+    result = CliRunner().invoke(cli, ["logs", "rm", "thread-a"])
+    assert result.exit_code != 0
+    assert "No log database found" in result.output

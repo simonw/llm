@@ -285,6 +285,42 @@ llm logs backup /tmp/backup.db
 ```
 This uses SQLite [VACUUM INTO](https://sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause) under the hood.
 
+(logging-rm)=
+
+## Removing logged conversations
+
+Use `llm logs rm` to delete logged conversations from the database. This is a hard delete - the conversations are removed permanently, they are not just hidden.
+
+Pass one or more conversation IDs (as shown by `llm logs`) to remove those conversations:
+
+```bash
+llm logs rm 01ktj8kjmn7f3fps5g2agy7v3e
+```
+You can pass several IDs at once:
+
+```bash
+llm logs rm 01ktj8kjmn7f3fps5g2agy7v3e 01ktjab9vv2f8kq3m5n0d4x6hs
+```
+If any of the IDs do not match a logged conversation the command reports an error and nothing is deleted.
+
+To remove every logged conversation, use `--all`:
+
+```bash
+llm logs rm --all
+```
+To remove only recent conversations, use `--hours` or `--days`. These delete conversations whose most recent response falls within the given window - for example, to delete everything logged in the last 24 hours:
+
+```bash
+llm logs rm --hours 24
+llm logs rm --days 7
+```
+The `--all`, `--hours` and `--days` options ask for confirmation before deleting anything. Pass `-y`/`--yes` to skip the confirmation prompt:
+
+```bash
+llm logs rm --all --yes
+```
+Removing a conversation deletes its thread and turns - or its legacy conversation and responses, for history recorded by older versions of LLM - along with the rows that belong to them, such as search index entries. The content-addressed message store is shared between conversations (a fork shares its history with the conversation it was forked from), so message and attachment content that other conversations may reference is left in place.
+
 (logging-message-store)=
 
 ## The message store
