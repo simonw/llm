@@ -75,7 +75,7 @@ See [the OpenAI models documentation](https://platform.openai.com/docs/models) f
 The following features work with OpenAI models:
 
 - {ref}`System prompts <usage-system-prompts>` can be used to provide instructions that have a higher weight than the prompt itself.
-- {ref}`Attachments <usage-attachments>`. Many OpenAI models support image inputs - check which ones using `llm models --options`. Any model that accepts images can also accept PDFs.
+- {ref}`Attachments <usage-attachments>`. Many OpenAI models support image inputs - check which ones using `llm models --options`. Any model that accepts images can also accept PDFs. Models that use the Responses API pass PDF URLs, such as `-a https://example.com/document.pdf`, directly to OpenAI rather than downloading and uploading the file.
 - {ref}`Schemas <usage-schemas>` can be used to influence the JSON structure of the model output.
 - {ref}`Model options <usage-model-options>` can be used to set parameters like `temperature`. Use `llm models --options` for a full list of supported options.
 
