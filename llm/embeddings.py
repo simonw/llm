@@ -202,6 +202,10 @@ class Collection:
         """
         Embed multiple texts and store them in the collection with given IDs.
 
+        Repeated IDs are processed in order, using the latest value for each ID.
+        This includes values accepted earlier in the same batch. Unchanged values
+        are skipped.
+
         Args:
             entries (iterable): Iterable of (id: str, text: str) tuples
             store (bool, optional): Whether to store the text in the content column
@@ -226,6 +230,10 @@ class Collection:
         """
         Embed multiple values along with metadata and store them in the collection with given IDs.
 
+        Repeated IDs are processed in order, using the latest value for each ID.
+        This includes values accepted earlier in the same batch. Unchanged values
+        are skipped.
+
         Args:
             entries (iterable): Iterable of (id: str, value: str or bytes, metadata: None or dict)
             store (bool, optional): Whether to store the value in the content or content_blob column
@@ -246,23 +254,23 @@ class Collection:
                 break
             # Calculate hashes first
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
-            # Skip only IDs whose own content is unchanged.
-            existing_items = {
-                (row["id"], row["content_hash"])
+            # Track the latest value per ID, including earlier items in this batch.
+            current_hashes = {
+                row["id"]: row["content_hash"]
                 for row in self.db.query(
                     """
                     select id, content_hash from embeddings
-                    where collection_id = ? and content_hash in ({})
+                    where collection_id = ? and id in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
-                    [collection_id]
-                    + [item_and_hash[1] for item_and_hash in items_and_hashes],
+                    [collection_id] + [item[0] for item in batch],
                 )
             }
-            filtered_batch = [
-                item
-                for item, content_hash in items_and_hashes
-                if (item[0], content_hash) not in existing_items
-            ]
+            filtered_batch = []
+            for item, content_hash in items_and_hashes:
+                if current_hashes.get(item[0]) == content_hash:
+                    continue
+                filtered_batch.append(item)
+                current_hashes[item[0]] = content_hash
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )
