@@ -34,22 +34,26 @@ def test_debug_logging(monkeypatch, capsys, async_, stream):
     }
 
     async def run_async():
-        async with client:
-            async with client._client.stream(
+        async with (
+            client,
+            client._client.stream(
                 "POST", "https://example.com/test", **kwargs
-            ) as response:
-                if stream:
-                    return b"".join([chunk async for chunk in response.aiter_bytes()])
-                return await response.aread()
+            ) as response,
+        ):
+            if stream:
+                return b"".join([chunk async for chunk in response.aiter_bytes()])
+            return await response.aread()
 
     if async_:
         body = asyncio.run(run_async())
     else:
-        with client:
-            with client._client.stream(
+        with (
+            client,
+            client._client.stream(
                 "POST", "https://example.com/test", **kwargs
-            ) as response:
-                body = b"".join(response.iter_bytes()) if stream else response.read()
+            ) as response,
+        ):
+            body = b"".join(response.iter_bytes()) if stream else response.read()
 
     assert body == b'{"result":"logged response"}'
     assert "accept-encoding" not in requests[0].headers
