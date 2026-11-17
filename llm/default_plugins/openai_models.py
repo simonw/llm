@@ -10,7 +10,6 @@ from typing import Any, ClassVar, Literal, cast
 
 import click
 import httpx2
-import openai
 import sqlite_utils
 import yaml
 from click_default_group import DefaultGroup
@@ -380,6 +379,8 @@ def register_models(register):
         "gpt-6-luna",
         "gpt-6.1-sol",
         "gpt-6.1-terra",
+        "gpt-6.2-astra",
+        "gpt-6.2-sol",
         "chat-latest",
     ):
         register(
@@ -531,6 +532,8 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
+        import openai  # deferred: importing openai adds ~100ms to CLI startup
+
         client = openai.OpenAI(api_key=key)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
@@ -1610,6 +1613,8 @@ class _Shared:
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
             kwargs["http_client"] = logging_client(async_=async_)
+        import openai  # deferred: importing openai adds ~100ms to CLI startup
+
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:

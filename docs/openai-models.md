@@ -60,6 +60,8 @@ OpenAI Responses: gpt-6-sol
 OpenAI Responses: gpt-6-luna
 OpenAI Responses: gpt-6.1-sol
 OpenAI Responses: gpt-6.1-terra
+OpenAI Responses: gpt-6.2-astra
+OpenAI Responses: gpt-6.2-sol
 OpenAI Responses: chat-latest
 ```
 <!-- [[[end]]] -->
