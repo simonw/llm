@@ -23,6 +23,19 @@ Then review the new snapshots in `tests/__snapshots__/` to make sure they look c
 
 ## Debugging tricks
 
+Use `--pdb` to enter Python's post-mortem debugger if prompt execution fails:
+
+```bash
+llm prompt -m my-model 'Hello' --pdb
+```
+
+This also works with the default prompt command (`llm -m my-model 'Hello' --pdb`)
+and with `--async`. The debugger opens at the exception's traceback so you can
+inspect the failing model or plugin code. After you leave the debugger, LLM
+reports the error as usual. Successful prompts and prompts without `--pdb`
+do not open the debugger. This option applies to prompt execution, not argument
+validation, model lookup, or other commands such as `llm chat`.
+
 The default OpenAI plugin has a debugging mechanism for showing the exact requests and responses that were sent to the OpenAI API.
 
 Set the `LLM_OPENAI_SHOW_RESPONSES` environment variable like this:

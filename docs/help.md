@@ -173,6 +173,7 @@ Options:
   --key TEXT                      API key to use
   --save TEXT                     Save prompt with this template name
   --async                         Run prompt asynchronously
+  --pdb                           Enter debugger on prompt execution errors
   -u, --usage                     Show token usage
   -x, --extract                   Extract first fenced code block
   --xl, --extract-last            Extract last fenced code block
