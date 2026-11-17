@@ -178,7 +178,7 @@ This appends the following record to the file:
 
 The `model_id` is the name LLM will use for the model. The `model_name` is the name which needs to be passed to the API - this might differ from the `model_id`, especially if the `model_id` could potentially clash with other installed models. `--id` defaults to the model name if you omit it.
 
-The `api_base` key points the OpenAI client library at a different API endpoint. If `api_base` is set, the existing configured `openai` API key will not be sent by default.
+The `api_base` key points the OpenAI client library at a different API endpoint. If `api_base` is set, your OpenAI API key is never sent to that endpoint, whether you stored it using `llm keys set openai` or set it in the `OPENAI_API_KEY` environment variable. This also applies to models that use `responses: true` when they are run with `-o chat_completions 1`.
 
 Use `--key NAME` to send a key stored using the {ref}`api-keys` feature instead. This is written as `api_key_name` in the file - the key itself is never stored there, so the name must already exist in `llm keys list`:
 
@@ -191,6 +191,8 @@ llm openai endpoint add https://openrouter.ai/api/v1 \
   --key openrouter \
   --supports-tools --vision
 ```
+
+Only the key named by `api_key_name` is sent to the endpoint. If that key is missing from your stored keys, because it was never set or has since been removed from `keys.json`, running the model fails with a `No key found` error. LLM does not fall back to your OpenAI key.
 
 The other options correspond to keys in the YAML file:
 

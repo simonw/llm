@@ -750,3 +750,163 @@ class TestChatCompletionsReasoningContent:
                 ],
             )
         ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("stream", (False, True))
+async def test_tool_call_with_invalid_json_arguments(httpx2_mock, async_, stream):
+    # Models sometimes return tool call arguments that are not valid JSON.
+    # Keep them as {"_raw": ...} like the Responses API path does, instead
+    # of raising JSONDecodeError.
+    bad_arguments = '{"city": "Paris"'
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                [
+                    _sse(
+                        {"role": "assistant", "content": None},
+                        tool_calls=[
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": bad_arguments,
+                                },
+                            }
+                        ],
+                    ),
+                    _sse({}, finish_reason="tool_calls"),
+                    b"data: [DONE]\n\n",
+                ]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": bad_arguments,
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            },
+        )
+
+    def get_weather(city: str) -> str:
+        "Look up the weather."
+        return "sunny"
+
+    if async_:
+        model = llm.get_async_model("gpt-4o-mini")
+        response = model.prompt(
+            "weather?", tools=[get_weather], key=API_KEY, stream=stream
+        )
+        await response.text()
+        tool_calls = await response.tool_calls()
+    else:
+        model = llm.get_model("gpt-4o-mini")
+        response = model.prompt(
+            "weather?", tools=[get_weather], key=API_KEY, stream=stream
+        )
+        response.text()
+        tool_calls = response.tool_calls()
+    assert [(tc.tool_call_id, tc.name, tc.arguments) for tc in tool_calls] == [
+        ("call_1", "get_weather", {"_raw": bad_arguments})
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", (False, True))
+async def test_chain_does_not_run_tool_with_invalid_json_arguments(httpx2_mock, async_):
+    # A tool that accepts **kwargs would otherwise run with its defaults
+    # and the {"_raw": ...} placeholder. It should not run at all: the
+    # model gets an error result and can try again.
+    bad_arguments = '{"city": "Paris"'
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": bad_arguments,
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        },
+    )
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "Sorry"},
+                    "finish_reason": "stop",
+                }
+            ],
+        },
+    )
+    calls = []
+
+    def get_weather(city: str = "fallback", **kwargs) -> str:
+        "Look up the weather."
+        calls.append((city, kwargs))
+        return "sunny"
+
+    if async_:
+        model = llm.get_async_model("gpt-4o-mini")
+        chain = model.chain("weather?", tools=[get_weather], key=API_KEY, stream=False)
+        assert await chain.text() == "Sorry"
+    else:
+        model = llm.get_model("gpt-4o-mini")
+        chain = model.chain("weather?", tools=[get_weather], key=API_KEY, stream=False)
+        assert chain.text() == "Sorry"
+
+    assert calls == []
+    second_request = json.loads(httpx2_mock.get_requests()[1].content)
+    tool_messages = [m for m in second_request["messages"] if m["role"] == "tool"]
+    assert tool_messages == [
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "Error: Tool call arguments were not valid JSON: "
+            + bad_arguments,
+        }
+    ]
