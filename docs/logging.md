@@ -19,6 +19,24 @@ To avoid logging an individual prompt, pass `--no-log` or `-n` to the command:
 llm 'Ten names for cheesecakes' -n
 ```
 
+(logging-redaction)=
+## Secret redaction in logs
+
+Before anything is written to the log database, known secrets are replaced with `***`:
+
+- Every value stored in `keys.json`, plus environment variables ending in `_API_KEY` or `_API_TOKEN`
+- Strings shaped like well-known secret formats, such as OpenAI-style `sk-...` keys, GitHub tokens, AWS access key IDs and Slack tokens
+
+This applies to prompts, fragments, tool call arguments and results, attachment contents, and the output of the `llm logs --json` and `llm fragments` commands - so a key pasted into a prompt by mistake is not preserved in plaintext, and is not printed back when you share log output.
+
+Opaque `provider_metadata` (for example reasoning signatures, which must be sent back to the provider exactly as received) is exempt from the format-based patterns, though configured key values are still redacted inside it.
+
+This is not a general secret scanner: a secret that is split across strings, encoded, or in an unrecognized format will not be caught. To disable redaction - for example, if it ever replaces something you needed to keep - set the `LLM_NO_LOG_REDACTION` environment variable:
+
+```bash
+LLM_NO_LOG_REDACTION=1 llm 'prompt'
+```
+
 To turn logging by default off:
 
 ```bash
