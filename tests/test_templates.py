@@ -71,6 +71,8 @@ def test_templates_list(templates_path, args):
     )
     (templates_path / "sys.yaml").write_text("system: Summarize this", "utf-8")
     (templates_path / "invalid.yaml").write_text("system2: This is invalid", "utf-8")
+    (templates_path / "empty.yaml").write_text("", "utf-8")
+    (templates_path / "sequence.yaml").write_text("[]", "utf-8")
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0
