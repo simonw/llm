@@ -275,6 +275,12 @@ Usage: llm keys set [OPTIONS] NAME
 
   Save a key in the keys.json file
 
+  To find the key name expected by a registered language model, run:
+
+      $ llm models --options -m MODEL_ID
+
+  Use the 'key' value shown under 'Keys' as NAME.
+
   Example usage:
 
       $ llm keys set openai
