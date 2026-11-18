@@ -141,6 +141,8 @@ def test_simplify_usage_dict(input_data, expected_output):
             True,
             "second();\r\n",
         ],
+        # An empty fenced code block should extract as "", not None
+        ["before\n```\n```\nafter", False, ""],
     ],
 )
 def test_extract_fenced_code_block(input, last, expected):

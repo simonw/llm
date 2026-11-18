@@ -1146,9 +1146,9 @@ def prompt(
                 else:
                     text = await response.text()
                     if extract or extract_last:
-                        text = (
-                            extract_fenced_code_block(text, last=extract_last) or text
-                        )
+                        extracted = extract_fenced_code_block(text, last=extract_last)
+                        if extracted is not None:
+                            text = extracted
                     if not json_output:
                         print(text)
 
@@ -1163,7 +1163,9 @@ def prompt(
             else:
                 text = response.text()
                 if extract or extract_last:
-                    text = extract_fenced_code_block(text, last=extract_last) or text
+                    extracted = extract_fenced_code_block(text, last=extract_last)
+                    if extracted is not None:
+                        text = extracted
                 if not json_output:
                     print(text)
     # List of exceptions that should never be raised in pytest:
