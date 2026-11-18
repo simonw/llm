@@ -1119,7 +1119,10 @@ TURN_SEARCH_LITERAL = """coalesce(
 # with a newline between each, so the words either side of a part
 # boundary stay separate tokens. Each group_concat reads from an
 # ordered subquery because that is what fixes its order: an order by
-# alongside the aggregate would not.
+# alongside the aggregate would not. The response side cross joins from
+# output_messages: SQLite cannot tell the recursive chain is short, and
+# with plain joins it puts parts in the outer loop and scans the whole
+# table for every logged turn.
 TURN_SEARCH_INSERT_SQL = """
 with recursive input_messages(hash, parent_hash, role, depth) as (
     select messages.hash, messages.parent_hash, messages.role, 0
@@ -1161,8 +1164,8 @@ response_text as (
     select group_concat(text, char(10)) as text from (
         select nullif({LITERAL}, '') as text
           from output_messages om
-          join messages on messages.hash = om.hash and messages.role = 'assistant'
-          join parts on parts.message_hash = om.hash
+          cross join messages on messages.hash = om.hash and messages.role = 'assistant'
+          cross join parts on parts.message_hash = om.hash
          where parts.type = 'text'
          order by om.depth desc, parts.position
     )
