@@ -69,6 +69,7 @@ from .logs import (
     legacy_log_row_extras,
     log_row_extras,
     merged_log_rows,
+    parse_since,
 )
 from .migrations import migrate
 from .plugins import load_plugins, pm
@@ -1874,6 +1875,10 @@ def logs_json_for_response_ids(db, ids):
 @click.option("--id-gt", help="Return responses with ID > this")
 @click.option("--id-gte", help="Return responses with ID >= this")
 @click.option(
+    "--since",
+    help="Only show logs since this time (e.g. 30m, 2h, 1d, 2w, 3M or ISO date)",
+)
+@click.option(
     "json_output",
     "--json",
     is_flag=True,
@@ -1911,6 +1916,7 @@ def logs_list(
     conversation_id,
     id_gt,
     id_gte,
+    since,
     json_output,
     expand,
 ) -> None:
@@ -1977,6 +1983,16 @@ def logs_list(
 
     schema_id = make_schema_id(schema)[0] if schema else None
 
+    since_dt = None
+    if since:
+        try:
+            since_dt = parse_since(since)
+        except (ValueError, TypeError):
+            raise click.ClickException(
+                f"Invalid --since value: {since!r}. "
+                "Use a duration like 30m, 2h, 1d, 2w, 3M or an ISO date."
+            )
+
     store = LogStore(db)
     try:
         rows = merged_log_rows(
@@ -1990,6 +2006,7 @@ def logs_list(
             schema_id=schema_id,
             id_gt=id_gt,
             id_gte=id_gte,
+            since=since_dt,
             query=query,
             latest=latest,
         )
