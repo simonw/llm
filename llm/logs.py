@@ -534,8 +534,11 @@ class LogStore:
                     own_messages,
                     [(tool.name, tool.description) for tool in response.prompt.tools],
                     schema=response.prompt.schema,
-                    model_replacements=getattr(
-                        response.model, "json_replacements", None
+                    # Readers resolve model entries by id, not by this instance.
+                    model_replacements=(
+                        _model_json_replacements(response.model.model_id)
+                        if getattr(response.model, "json_replacements", None)
+                        else None
                     ),
                 ),
             },

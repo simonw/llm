@@ -2248,6 +2248,32 @@ class TestModelJsonReplacements:
         finally:
             del mock_model.json_replacements
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "sync_replacements", [{}, {"tool_usage_0": {"sync_only": True}}]
+    )
+    async def test_async_model_boilerplate_round_trips(
+        self, cli_store, mock_model, async_mock_model, monkeypatch, sync_replacements
+    ):
+        monkeypatch.setattr(
+            mock_model, "json_replacements", sync_replacements, raising=False
+        )
+        monkeypatch.setattr(
+            async_mock_model,
+            "json_replacements",
+            {"tool_usage_0": self.boiler()},
+            raising=False,
+        )
+        async_mock_model.enqueue(["ok"])
+        response = await llm.get_async_model("mock").prompt("hi")
+        payload = {"content": "ok", "tool_usage": self.boiler()}
+        response.response_json = payload
+        response.log_to_db(cli_store.db)
+
+        assert cli_store.turn_response_json(response.id) == payload
+        (row,) = json.loads(run("logs", "--json").output)
+        assert row["response_json"] == payload
+
     def test_unknown_model_fails_closed(self, store, mock_model):
         mock_model.json_replacements = {"tool_usage_0": self.boiler()}
         try:
