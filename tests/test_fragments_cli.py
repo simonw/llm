@@ -236,3 +236,9 @@ def test_fragment_url_user_agent(mocked_openai_chat, user_path):
     llm_version = version("llm")
     expected_user_agent = f"llm/{llm_version} (https://llm.datasette.io/)"
     assert fragment_request.headers["User-Agent"] == expected_user_agent
+
+
+def test_fragment_directory_rejected(tmp_path):
+    result = CliRunner().invoke(cli, ["prompt", "-m", "echo", "-f", str(tmp_path)])
+    assert result.exit_code == 1
+    assert f"Fragment '{tmp_path}' is a directory" in result.output

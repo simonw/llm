@@ -1,9 +1,9 @@
 """
-Files that users author by hand - templates, fragments and --functions code - are
-decoded as UTF-8, because that is what llm itself writes (see "llm templates
-edit") and what most editors produce. Using the locale default encoding instead
-breaks on systems where that is not UTF-8, such as Windows with a legacy code
-page.
+Files that users author by hand - templates, fragments, embed inputs and
+--functions code - are decoded as UTF-8, because that is what llm itself writes
+(see "llm templates edit") and what most editors produce. Using the locale
+default encoding instead breaks on systems where that is not UTF-8, such as
+Windows with a legacy code page.
 """
 
 import json
@@ -64,4 +64,18 @@ def test_functions_file_with_non_ascii_is_read_as_utf8(
         ["-m", "echo", "--functions", str(functions_path), "hi"],
         catch_exceptions=False,
     )
+    assert result.exit_code == 0
+
+
+def test_embed_input_file_with_non_ascii_is_read_as_utf8(
+    tmp_path, user_path, non_utf8_locale, embed_demo
+):
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("用一个中文文本嵌入测试", "utf-8")
+    result = CliRunner().invoke(
+        cli,
+        ["embed", "-m", "embed-demo", "-i", str(input_path)],
+        catch_exceptions=False,
+    )
     assert result.exit_code == 0, result.output
+    assert embed_demo.embedded_content == ["用一个中文文本嵌入测试"]

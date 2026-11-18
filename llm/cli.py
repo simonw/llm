@@ -304,10 +304,12 @@ def resolve_fragments(
             else:
                 # Now try path
                 path = pathlib.Path(fragment)
-                if path.exists():
+                if path.is_file():
                     resolved.append(
                         Fragment(_read_text_file(path), str(path.resolve()))
                     )
+                elif path.is_dir():
+                    raise FragmentNotFound(f"Fragment '{fragment}' is a directory")
                 else:
                     raise FragmentNotFound(f"Fragment '{fragment}' not found")
     return resolved
@@ -3370,7 +3372,7 @@ def uninstall(packages, yes):
 @click.option(
     "-i",
     "--input",
-    type=click.Path(exists=True, readable=True, allow_dash=True),
+    type=click.Path(exists=True, dir_okay=False, readable=True, allow_dash=True),
     help="File to embed",
 )
 @click.option(
@@ -3508,9 +3510,11 @@ def embed(
             input_source = sys.stdin.buffer if binary else sys.stdin
             content = input_source.read()
         else:
-            mode = "rb" if binary else "r"
-            with open(input, mode) as f:
-                content = f.read()
+            if binary:
+                with open(input, "rb") as f:
+                    content = f.read()
+            else:
+                content = _read_text_file(pathlib.Path(input))
 
     if not content:
         raise click.ClickException("No content provided")

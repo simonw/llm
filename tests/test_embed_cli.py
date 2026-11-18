@@ -94,6 +94,13 @@ def test_embed_errors(args, expected_error):
     assert expected_error in result.output
 
 
+def test_embed_input_directory_rejected(tmp_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["embed", "-m", "embed-demo", "-i", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "is a directory" in result.output
+
+
 @pytest.mark.parametrize(
     "metadata,metadata_error",
     (
