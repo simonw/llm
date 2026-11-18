@@ -7,6 +7,7 @@ from unittest.mock import ANY
 import pytest
 from click.testing import CliRunner
 
+import llm
 import llm.cli
 from llm.logs import LogStore, merged_log_rows
 
@@ -221,6 +222,24 @@ def test_chat_basic(mock_model, logs_db):
             "output_tokens": 1,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        llm.ModelError("This model cannot do that"),
+        llm.NeedsKeyException("No key found - add one using 'llm keys set mock'"),
+    ],
+)
+def test_chat_model_error_is_shown_without_traceback(mock_model, monkeypatch, error):
+    def execute(*args, **kwargs):
+        raise error
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(mock_model, "execute", execute)
+    result = CliRunner().invoke(llm.cli.cli, ["chat", "-m", "mock"], input="Hi\nquit\n")
+    assert result.exit_code == 1
+    assert result.stderr == f"Error: {error}\n"
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
