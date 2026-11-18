@@ -436,6 +436,20 @@ llm fragments remove cli
 
 By default, the tool will start a new conversation each time you run it.
 
+Use `--name` to give the conversation a name instead of generating one from
+the prompt:
+
+```bash
+llm --name "Research notes" "Explain continuous batching"
+```
+
+The name is saved in the logs. Continuing the conversation preserves its name.
+To rename an existing conversation, pass `--name` with `-c` or `--cid`:
+
+```bash
+llm -c --name "Inference research" "How does it affect latency?"
+```
+
 You can opt to continue the previous conversation by passing the `-c/--continue` option:
 ```bash
 llm 'More names' -c

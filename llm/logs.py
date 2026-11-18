@@ -483,10 +483,16 @@ class LogStore:
             # to provide.
             thread_id = self.ensure_thread(
                 conversation.id if conversation else str(monotonic_ulid()).lower(),
-                name=_conversation_name(
-                    response.prompt.prompt or response.prompt.system or ""
+                name=(
+                    conversation.name
+                    if conversation is not None and conversation.name is not None
+                    else _conversation_name(
+                        response.prompt.prompt or response.prompt.system or ""
+                    )
                 ),
             )
+            if conversation is not None and conversation.name is not None:
+                self.db["threads"].update(thread_id, {"name": conversation.name})
 
         prompt_fragments = list(response.prompt.fragments or [])
         system_fragments = list(response.prompt.system_fragments or [])

@@ -573,6 +573,14 @@ class TestLogResponse:
 
 
 class TestConversationThreads:
+    def test_explicit_conversation_name(self, store, mock_model):
+        conversation = mock_model.conversation()
+        conversation.name = "Research notes"
+        response = conversation.prompt("Hi")
+        response.text()
+        store.log(response)
+        assert store.db["threads"].get(conversation.id)["name"] == "Research notes"
+
     def test_log_uses_the_conversation_id_as_the_thread_id(self, store, mock_model):
         conversation = mock_model.conversation()
         mock_model.enqueue(["Hello"])
