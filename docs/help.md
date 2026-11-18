@@ -898,7 +898,7 @@ Usage: llm embed [OPTIONS] [COLLECTION] [ID]
   Embed text and store or return the result
 
 Options:
-  -i, --input PATH                File to embed
+  -i, --input FILE                File to embed
   -m, --model TEXT                Embedding model to use
   --key TEXT                      API key to use
   --store                         Store the text itself in the database
