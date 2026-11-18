@@ -405,3 +405,51 @@ def test_conversation_prompt_uses_conversation_tools(async_):
     )
     response = conversation.prompt("hello")
     assert [tool.name for tool in response.prompt.tools] == ["my_tool"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("method", ("prompt", "chain"))
+@pytest.mark.parametrize("override", ("omitted", "none", "empty", "replacement"))
+async def test_conversation_tool_override(request, async_, method, override):
+    model = request.getfixturevalue("async_mock_model" if async_ else "mock_model")
+    model.supports_tools = True
+
+    def original_tool() -> str:
+        "The conversation's default tool."
+        return "original"
+
+    def replacement_tool() -> str:
+        "A tool for just one turn."
+        return "replacement"
+
+    conversation = model.conversation(tools=[original_tool])
+    kwargs = {}
+    if override != "omitted":
+        kwargs["tools"] = {
+            "none": None,
+            "empty": [],
+            "replacement": [replacement_tool],
+        }[override]
+
+    response = getattr(conversation, method)("first turn", **kwargs)
+    if async_:
+        await response.text()
+    else:
+        response.text()
+
+    expected = {
+        "omitted": ["original_tool"],
+        "none": ["original_tool"],
+        "empty": [],
+        "replacement": ["replacement_tool"],
+    }[override]
+    assert [tool.name for tool in model.history[-1][0].tools] == expected
+
+    # The override applies to one turn, not the conversation's defaults.
+    following = getattr(conversation, method)("next turn")
+    if async_:
+        await following.text()
+    else:
+        following.text()
+    assert [tool.name for tool in model.history[-1][0].tools] == ["original_tool"]

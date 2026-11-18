@@ -939,6 +939,12 @@ print(conversation.chain(
 ```
 The `before_call=` and `after_call=` parameters {ref}`described above <python-api-tools-debug-hooks>` can be passed directly to the `model.conversation()` method to set those options for all chained prompts in that conversation.
 
+To disable the conversation's tools for a single turn, pass `tools=[]` to
+`conversation.prompt()` or `conversation.chain()`. Passing a non-empty list
+replaces the default tools for that turn. Omitting `tools` or passing `None`
+inherits the conversation's tools. These overrides also work with async
+conversations and leave the defaults for later turns unchanged.
+
 
 (python-api-listing-models)=
 
