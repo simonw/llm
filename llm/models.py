@@ -1708,6 +1708,16 @@ class _BaseResponse:
         LogStore(db).log(self)
 
 
+def _serialize_options(options: "Options") -> dict[str, Any]:
+    """Serialize model options for persistence, omitting unset top-level values."""
+    return options.model_dump(
+        mode="json",
+        round_trip=True,
+        by_alias=False,
+        exclude={key for key, value in options if value is None},
+    )
+
+
 def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     """Shared serializer for Response.to_dict / AsyncResponse.to_dict.
 
@@ -1715,11 +1725,7 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     Postgres, HTTP body) and round-trip via Response.from_dict or
     AsyncResponse.from_dict.
     """
-    options = {
-        key: value
-        for key, value in dict(response.prompt.options).items()
-        if value is not None
-    }
+    options = _serialize_options(response.prompt.options)
     payload: dict[str, Any] = {
         "model": response.model.model_id,
         "prompt": {
