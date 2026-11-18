@@ -327,9 +327,13 @@ class Collection:
         """
         import llm
 
+        query_magnitude = sum(x * x for x in vector) ** 0.5
+
         def distance_score(other_encoded):
             other_vector = llm.decode(other_encoded)
-            return llm.cosine_similarity(other_vector, vector)
+            dot_product = sum(x * y for x, y in zip(other_vector, vector))
+            other_magnitude = sum(x * x for x in other_vector) ** 0.5
+            return dot_product / (other_magnitude * query_magnitude)
 
         self.db.register_function(distance_score, replace=True)
 
