@@ -906,7 +906,7 @@ class Conversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools or self.tools,
+                tools=self.tools if tools is None else tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
@@ -962,7 +962,7 @@ class Conversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools or self.tools,
+                tools=self.tools if tools is None else tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain_messages,
@@ -1037,7 +1037,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools or self.tools,
+                tools=self.tools if tools is None else tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain_messages,
@@ -1091,7 +1091,7 @@ class AsyncConversation(_BaseConversation):
                 attachments=attachments,
                 system=system,
                 schema=schema,
-                tools=tools or self.tools,
+                tools=self.tools if tools is None else tools,
                 tool_results=tool_results,
                 system_fragments=system_fragments,
                 messages=chain,
@@ -1860,7 +1860,7 @@ class Response(_BaseResponse):
 
         self._force()
         # Forward original tools so the next turn can call them again
-        # (mirrors Conversation.prompt's `tools or self.tools` rule).
+        # An explicit tools override, including an empty list, takes precedence.
         if "tools" not in kwargs and self.prompt.tools:
             kwargs["tools"] = self.prompt.tools
         if tool_results is None and self._tool_calls:
