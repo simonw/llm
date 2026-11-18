@@ -1066,6 +1066,7 @@ Commands:
   list*   View a list of collections
   delete  Delete the specified collection
   path    Output the path to the embeddings database
+  show    Export the stored entries in an embedding collection.
 ```
 
 (help-collections-path)=
@@ -1090,6 +1091,20 @@ Options:
   -d, --database FILE  Path to embeddings database
   --json               Output as JSON
   -h, --help           Show this message and exit.
+```
+
+(help-collections-show)=
+#### llm collections show --help
+```
+Usage: llm collections show [OPTIONS] COLLECTION
+
+  Export the stored entries in an embedding collection.
+
+Options:
+  -d, --database FILE         Path to embeddings database
+  --format [json|csv|tsv|nl]  Output format (nl is newline-delimited JSON)
+                              [default: json]
+  -h, --help                  Show this message and exit.
 ```
 
 (help-collections-delete)=
