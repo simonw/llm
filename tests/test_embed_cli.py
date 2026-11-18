@@ -83,6 +83,22 @@ def test_embed_output_format(tmpdir, format_, expected, scenario):
         assert result.output == expected
 
 
+@pytest.mark.parametrize("format_", ("json", "base64", "hex", "blob"))
+def test_embed_output_format_with_collection(user_path, format_):
+    # With a collection, --format prints the stored 32-bit float embedding, which for
+    # embed-demo's whole numbers is the same as the output without a collection
+    runner = CliRunner()
+    options = ["--format", format_, "-m", "embed-demo", "-c", "hello world"]
+    expected = runner.invoke(cli, ["embed"] + options)
+    result = runner.invoke(cli, ["embed", "phrases", "1"] + options)
+    assert result.exit_code == 0, result.output
+    if format_ == "json":
+        assert json.loads(result.output) == json.loads(expected.output)
+    else:
+        assert result.stdout_bytes == expected.stdout_bytes
+    assert (user_path / "embeddings.db").exists()
+
+
 @pytest.mark.parametrize(
     "args,expected_error",
     ((["-c", "Content", "stories"], "Must provide both collection and id"),),
