@@ -1824,7 +1824,12 @@ def _response_from_dict(
 
 
 class Response(_BaseResponse):
-    "Sync response from a model."
+    """Sync response from a model.
+
+    Model iteration failures are raised again on subsequent reads.
+    """
+
+    _exception: Exception | None = None
 
     model: "Model"
     conversation: Optional["Conversation"] = None
@@ -2120,6 +2125,8 @@ class Response(_BaseResponse):
         """Drive self.model.execute() once and yield each raw chunk it
         produces. Callers normalize chunks through _process_chunk.
         """
+        if self._exception is not None:
+            raise self._exception
         if isinstance(self.model, Model):
             generator = self.model.execute(
                 self.prompt,
@@ -2138,9 +2145,13 @@ class Response(_BaseResponse):
         else:
             raise TypeError("self.model must be a Model or KeyModel")
 
-        for chunk in generator:
-            assert chunk is not None
-            yield chunk
+        try:
+            for chunk in generator:
+                assert chunk is not None
+                yield chunk
+        except Exception as ex:
+            self._exception = ex
+            raise
 
     def __iter__(self) -> Iterator[str]:
         self._start = time.monotonic()
@@ -2212,6 +2223,8 @@ class Response(_BaseResponse):
 
 class AsyncResponse(_BaseResponse):
     "Async response from a model."
+
+    _exception: Exception | None = None
 
     model: "AsyncModel"
     conversation: Optional["AsyncConversation"] = None
@@ -2587,6 +2600,8 @@ class AsyncResponse(_BaseResponse):
         return self
 
     def _ensure_async_generator(self):
+        if self._exception is not None:
+            raise self._exception
         if not hasattr(self, "_generator"):
             if isinstance(self.model, AsyncModel):
                 self._generator = self.model.execute(
@@ -2630,6 +2645,9 @@ class AsyncResponse(_BaseResponse):
             except StopAsyncIteration:
                 await self._async_finalize()
                 raise
+            except Exception as ex:
+                self._exception = ex
+                raise
             assert chunk is not None
             text = self._process_chunk(chunk)
             if text is not None:
@@ -2652,6 +2670,9 @@ class AsyncResponse(_BaseResponse):
                 except StopAsyncIteration:
                     await self._async_finalize()
                     return
+                except Exception as ex:
+                    self._exception = ex
+                    raise
                 assert chunk is not None
                 self._process_chunk(chunk)
                 yield self._stream_events[-1]
