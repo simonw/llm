@@ -1217,6 +1217,9 @@ class SharedOptions(llm.Options):
             except json.JSONDecodeError:
                 raise ValueError("Invalid JSON in logit_bias string")
 
+        if not isinstance(logit_bias, dict):
+            raise ValueError("logit_bias must be a JSON object")  # noqa: TRY004
+
         validated_logit_bias = {}
         for key, value in logit_bias.items():
             try:
@@ -1226,7 +1229,7 @@ class SharedOptions(llm.Options):
                     validated_logit_bias[int_key] = int_value
                 else:
                     raise ValueError("Value must be between -100 and 100")
-            except ValueError:
+            except (ValueError, TypeError):
                 raise ValueError("Invalid key-value pair in logit_bias dictionary")
 
         return validated_logit_bias
