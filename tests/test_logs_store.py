@@ -16,6 +16,7 @@ from click.testing import CliRunner
 import llm
 from llm.cli import cli
 from llm.logs import (
+    TURN_SEARCH_INSERT_SQL,
     LogStore,
     canonical_json,
     log_row_extras,
@@ -2415,3 +2416,14 @@ def test_log_to_db_does_not_store_failed_response(store, error_class):
     assert store.db["threads"].count == 0
     assert store.db["turns"].count == 0
     assert store.db["messages"].count == 0
+
+
+def test_turn_search_refresh_uses_the_parts_index(store, mock_model):
+    mock_model.enqueue(["Hello there"])
+    response = mock_model.prompt("Hi")
+    response.text()
+    turn_id = store.log(response)
+    plan = store.db.execute(
+        "explain query plan " + TURN_SEARCH_INSERT_SQL, {"turn_id": turn_id}
+    ).fetchall()
+    assert not [row for row in plan if row[3].startswith("SCAN parts")]

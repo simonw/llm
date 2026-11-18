@@ -1160,9 +1160,11 @@ prompt_text as (
 response_text as (
     select group_concat(text, char(10)) as text from (
         select nullif({LITERAL}, '') as text
+          -- cross join keeps om as the outer loop: with a plain join the
+          -- planner scanned every row of parts on each log
           from output_messages om
-          join messages on messages.hash = om.hash and messages.role = 'assistant'
-          join parts on parts.message_hash = om.hash
+          cross join messages on messages.hash = om.hash and messages.role = 'assistant'
+          cross join parts on parts.message_hash = om.hash
          where parts.type = 'text'
          order by om.depth desc, parts.position
     )
