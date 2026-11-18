@@ -4,6 +4,7 @@ import os
 import pathlib
 import struct
 from collections.abc import Callable
+from copy import copy
 from typing import Any
 
 import click
@@ -191,9 +192,9 @@ def get_tools() -> dict[str, Tool | type[Toolbox]]:
                     f"Toolbox classes must inherit from llm.Toolbox, {tool_or_function.__name__} does not."
                 )
 
-        # If it's already a Tool instance, use it directly
+        # Copy Tool instances so registration does not mutate shared tools.
         elif isinstance(tool_or_function, Tool):
-            tool = tool_or_function
+            tool = copy(tool_or_function)
             if name:
                 tool.name = name
             if current_plugin_name:
@@ -221,6 +222,8 @@ def get_tools() -> dict[str, Tool | type[Toolbox]]:
                 suffix += 1
                 candidate = f"{prefix}_{suffix}"
 
+            if isinstance(tool, Tool):
+                tool.name = candidate
             tools[candidate] = tool
 
     # Call each plugin's register_tools hook individually to track current_plugin_name

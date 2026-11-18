@@ -524,6 +524,125 @@ def test_register_tools(tmpdir, logs_db):
         plugins.pm.unregister(name="ToolsPlugin")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("as_tool", (False, True))
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("occupied_suffix", (False, True))
+async def test_registered_tool_name_collisions(
+    user_path, mock_model, async_mock_model, as_tool, async_, occupied_suffix
+):
+    def first():
+        return "first result"
+
+    def second():
+        return "second result"
+
+    class ToolsPlugin:
+        @hookimpl
+        def register_tools(self, register):
+            register(llm.Tool.function(first) if as_tool else first, name="lookup")
+            if occupied_suffix:
+                register(first, name="lookup_1")
+            register(llm.Tool.function(second) if as_tool else second, name="lookup")
+
+    plugin = ToolsPlugin()
+    plugins.pm.register(plugin, name="CollidingToolsPlugin")
+    try:
+        names = ["lookup", "lookup_2" if occupied_suffix else "lookup_1"]
+        tools = cli._gather_tools(names, [])
+        model = async_mock_model if async_ else mock_model
+        model.supports_tools = True
+        response = model.prompt("Call both tools", tools=tools)
+        calls = [llm.ToolCall(name=name, arguments={}) for name in names]
+        if async_:
+            results = await response.execute_tool_calls(tool_calls_list=calls)
+        else:
+            results = response.execute_tool_calls(tool_calls_list=calls)
+        assert [result.output for result in results] == [
+            "first result",
+            "second result",
+        ]
+        assert all(result.exception is None for result in results)
+        assert [tool.name for tool in response.prompt.tools] == names
+
+        # Selecting tools by their registered names must not merge their schemas.
+        listed = CliRunner().invoke(cli.cli, ["tools", "list", *names, "--json"])
+        assert listed.exit_code == 0
+        assert [tool["name"] for tool in json.loads(listed.output)["tools"]] == names
+    finally:
+        plugins.pm.unregister(plugin)
+
+
+@pytest.mark.parametrize("aliases", (("lookup", "lookup"), ("one", "two")))
+def test_register_shared_tool_preserves_original(user_path, aliases):
+    def lookup():
+        return "result"
+
+    shared = llm.Tool.function(lookup)
+    shared.plugin = "original-plugin"
+
+    class ToolsPlugin:
+        @hookimpl
+        def register_tools(self, register):
+            for alias in aliases:
+                register(shared, name=alias)
+
+    plugin = ToolsPlugin()
+    plugins.pm.register(plugin, name="SharedToolsPlugin")
+    try:
+        names = [aliases[0], "lookup_1" if aliases[0] == aliases[1] else aliases[1]]
+        for _ in range(2):
+            tools = llm.get_tools()
+            assert shared.name == "lookup"
+            assert shared.plugin == "original-plugin"
+            assert [tools[name].name for name in names] == names
+            assert all(tools[name].plugin == "SharedToolsPlugin" for name in names)
+            assert all(tools[name].implementation is lookup for name in names)
+            assert tools[names[0]] is not tools[names[1]]
+    finally:
+        plugins.pm.unregister(plugin)
+
+
+@pytest.mark.parametrize("custom_constructor", (False, True))
+def test_register_tool_subclass_preserves_state(user_path, custom_constructor):
+    def lookup():
+        return "result"
+
+    if custom_constructor:
+
+        class CustomTool(llm.Tool):
+            def __init__(self):
+                super().__init__(name="lookup", implementation=lookup)
+
+        original = CustomTool()
+    else:
+
+        class CustomTool(llm.Tool):
+            pass
+
+        original = CustomTool(name="lookup", implementation=lookup)
+
+    original.extra_state = object()
+
+    class ToolsPlugin:
+        @hookimpl
+        def register_tools(self, register):
+            register(original, name="alias")
+
+    plugin = ToolsPlugin()
+    plugins.pm.register(plugin, name="CustomToolsPlugin")
+    try:
+        tool = llm.get_tools()["alias"]
+        assert type(tool) is CustomTool
+        assert tool.extra_state is original.extra_state
+        assert tool.implementation is lookup
+        assert tool.name == "alias"
+        assert original.name == "lookup"
+        assert original.plugin is None
+    finally:
+        plugins.pm.unregister(plugin)
+
+
 class Memory(llm.Toolbox):
     _memory = None
 
