@@ -6,12 +6,14 @@ conforms to the TypedDict annotations. pydantic is already a runtime
 dependency.
 """
 
+import datetime
 import json
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
 import llm
+from llm.migrations import migrate
 from llm.serialization import (
     AttachmentPartDict,
     MessageDict,
@@ -22,6 +24,39 @@ from llm.serialization import (
     ToolCallPartDict,
     ToolResultPartDict,
 )
+
+
+@pytest.fixture
+def response_with_date_option():
+    class DateOptionModel(llm.Model):
+        model_id = "date-option"
+
+        class Options(llm.Options):
+            start_date: datetime.date | None = None
+            end_date: datetime.date | None = None
+
+        def execute(self, prompt, stream, response, conversation):
+            yield "answer"
+
+    return DateOptionModel().prompt("Search", start_date="2026-11-18")
+
+
+def test_response_with_date_option_roundtrips_through_json(response_with_date_option):
+    response = response_with_date_option
+    payload = json.loads(json.dumps(response.to_dict()))
+    assert payload["prompt"]["options"] == {"start_date": "2026-11-18"}
+    restored = llm.Response.from_dict(payload, model=response.model)
+    assert restored.prompt.options.start_date == datetime.date(2026, 11, 18)
+
+
+def test_response_with_date_option_logs_to_db(response_with_date_option, db_factory):
+    response = response_with_date_option
+    db = db_factory(memory=True)
+    migrate(db)
+    response.log_to_db(db)
+    turn = db["turns"].get(response.id)
+    assert json.loads(turn["options_json"]) == {"start_date": "2026-11-18"}
+
 
 # ---- required/optional keys ----------------------------------------
 

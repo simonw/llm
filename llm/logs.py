@@ -24,7 +24,7 @@ from typing import Any
 from condense_json import UncondenseError, condense_json, uncondense_json
 
 from .migrations import migrate
-from .models import Attachment, ServerSideTool, _conversation_name
+from .models import Attachment, ServerSideTool, _conversation_name, _serialize_options
 from .parts import (
     AttachmentPart,
     Message,
@@ -516,13 +516,7 @@ class LogStore:
                 "tip_message_hash": tip,
                 "model": response.model.model_id,
                 "resolved_model": response.resolved_model,
-                "options_json": _dump(
-                    {
-                        key: value
-                        for key, value in dict(response.prompt.options).items()
-                        if value is not None
-                    }
-                ),
+                "options_json": _dump(_serialize_options(response.prompt.options)),
                 "schema_id": schema_id,
                 "input_tokens": response.input_tokens,
                 "output_tokens": response.output_tokens,
