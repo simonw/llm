@@ -10,10 +10,11 @@ from unittest import mock
 
 import pytest
 from click.testing import CliRunner
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import llm
 from llm.cli import cli
+from llm.default_plugins.openai_models import SharedOptions
 from llm.models import Usage
 
 
@@ -523,6 +524,29 @@ OpenAI Chat: gpt-4o (aliases: 4o)
     key: openai
     env_var: OPENAI_API_KEY
 """
+
+
+@pytest.mark.parametrize(
+    "logit_bias,expected_error",
+    (
+        ("[]", "logit_bias must be a JSON object"),
+        ("5", "logit_bias must be a JSON object"),
+        ('"x"', "logit_bias must be a JSON object"),
+        ("null", "logit_bias must be a JSON object"),
+        ('{"123": null}', "Invalid key-value pair in logit_bias dictionary"),
+        ('{"123": []}', "Invalid key-value pair in logit_bias dictionary"),
+        ({"123": None}, "Invalid key-value pair in logit_bias dictionary"),
+        ({None: 1}, "Invalid key-value pair in logit_bias dictionary"),
+    ),
+)
+def test_logit_bias_invalid(logit_bias, expected_error):
+    with pytest.raises(ValidationError, match=expected_error):
+        SharedOptions(logit_bias=logit_bias)
+
+
+@pytest.mark.parametrize("logit_bias", ({"123": -100}, '{"123": -100}'))
+def test_logit_bias_valid(logit_bias):
+    assert SharedOptions(logit_bias=logit_bias).logit_bias == {123: -100}
 
 
 def test_llm_models_options(user_path):
