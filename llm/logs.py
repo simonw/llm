@@ -894,7 +894,7 @@ where turn_tools.turn_id = ?
 
 
 def _payload_replacements(
-    messages, tools=(), schema=None, model_replacements=None
+    messages, tools=(), schema=None, model_replacements=None, *, skip_conflicts=False
 ) -> dict[str, Any]:
     """Replacement values for condensing a turn's provider payload.
 
@@ -934,10 +934,16 @@ def _payload_replacements(
     condenses to one reference instead of one per string.
     """
     replacements: dict[str, Any] = {}
+    conflicts: set[str] = set()
+
+    def offer(key: str, value: Any) -> None:
+        if key in replacements and replacements[key] != value:
+            conflicts.add(key)
+        replacements[key] = value
 
     def add(key: str, value: Any) -> None:
         if isinstance(value, str) and len(value) >= _CONDENSE_MIN_LENGTH:
-            replacements[key] = value
+            offer(key, value)
 
     def add_value(key: str, value: Any) -> None:
         if isinstance(value, (dict, list)) and value:
@@ -948,7 +954,7 @@ def _payload_replacements(
             except (TypeError, ValueError):
                 return
             if size >= _CONDENSE_MIN_LENGTH:
-                replacements[key] = value
+                offer(key, value)
 
     def walk(prefix: str, obj: Any) -> None:
         if isinstance(obj, dict):
@@ -1007,6 +1013,13 @@ def _payload_replacements(
     # author chose these entries, so no length threshold applies.
     for key, value in (model_replacements or {}).items():
         replacements[f"m.{key}"] = value
+    if skip_conflicts:
+        # A dotted metadata key can collide with a nested path. Deduplicated
+        # messages may preserve a different key order, so no value can safely
+        # stand for that path in a newly condensed payload. Readers retain the
+        # historical lookup behavior for references already stored on disk.
+        for key in conflicts:
+            replacements.pop(key, None)
     return replacements
 
 
@@ -1019,7 +1032,9 @@ def condense_payload(
     return json.dumps(
         condense_json(
             payload,
-            _payload_replacements(messages, tools, schema, model_replacements),
+            _payload_replacements(
+                messages, tools, schema, model_replacements, skip_conflicts=True
+            ),
         )
     )
 
