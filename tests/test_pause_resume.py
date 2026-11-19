@@ -189,6 +189,27 @@ def _pending_history(tool_call_id="tc_resume1"):
     ]
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_resumed_tool_calls_respect_limit(asynchronous):
+    executed = []
+
+    def upper(text: str) -> str:
+        executed.append(text)
+        return text.upper()
+
+    model = llm.get_async_model("echo") if asynchronous else llm.get_model("echo")
+    chain = model.chain(
+        None, messages=_pending_history(), tools=[upper], tool_call_limit=0
+    )
+    with pytest.raises(ValueError, match="Tool call limit of 0 exceeded"):
+        if asynchronous:
+            await chain.text()
+        else:
+            chain.text()
+    assert executed == []
+
+
 def test_chain_resumes_trailing_pending_tool_calls():
     executed = []
     hook_calls = []

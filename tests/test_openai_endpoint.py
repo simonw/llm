@@ -514,6 +514,8 @@ def test_endpoint_tools_and_functions(httpx2_mock, user_path):
             "--no-stream",
             "-T",
             "llm_version",
+            "--tool-call-limit",
+            "1",
             "--functions",
             (
                 "def multiply(a: int, b: int) -> int:\n"

@@ -554,6 +554,11 @@ def tool_options(fn):
                 "default 5, set 0 for unlimited"
             ),
         ),
+        click.option(
+            "--tool-call-limit",
+            type=click.IntRange(min=0),
+            help="Maximum tool calls in this chain, including pending calls on resume. Default: unlimited.",
+        ),
     )
     for decorator in reversed(decorators):
         fn = decorator(fn)
@@ -724,6 +729,7 @@ def prompt(
     tools_debug,
     tools_approve,
     chain_limit,
+    tool_call_limit,
     options,
     show_model_options,
     schema_input,
@@ -1091,7 +1097,13 @@ def prompt(
         prompt_method = conversation.prompt
 
     tool_kwargs = _tool_chain_kwargs(
-        tools, python_tools, tools_debug, tools_approve, chain_limit, model=model
+        tools,
+        python_tools,
+        tools_debug,
+        tools_approve,
+        chain_limit,
+        tool_call_limit=tool_call_limit,
+        model=model,
     )
     if tool_kwargs:
         prompt_method = conversation.chain
@@ -1268,6 +1280,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    tool_call_limit,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1350,6 +1363,7 @@ def chat(
             tools_debug,
             tools_approve,
             chain_limit,
+            tool_call_limit=tool_call_limit,
             model=model,
         )
     )
@@ -4576,7 +4590,13 @@ def _gather_tools(
 
 
 def _tool_chain_kwargs(
-    tool_specs, python_tools, tools_debug, tools_approve, chain_limit, model=None
+    tool_specs,
+    python_tools,
+    tools_debug,
+    tools_approve,
+    chain_limit,
+    model=None,
+    tool_call_limit=None,
 ):
     """Build Conversation.chain() keyword arguments for CLI-selected tools."""
     tool_implementations = _gather_tools(tool_specs, python_tools, model=model)
@@ -4585,6 +4605,7 @@ def _tool_chain_kwargs(
     kwargs = {
         "tools": tool_implementations,
         "chain_limit": chain_limit,
+        "tool_call_limit": tool_call_limit,
     }
     if tools_debug:
         kwargs["after_call"] = _debug_tool_call
