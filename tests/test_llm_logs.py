@@ -1169,6 +1169,19 @@ def test_expand_fragment_json(fragments_fixture, arg):
     assert len(fragment2) > 200
 
 
+def test_logs_list_unknown_fragment_is_a_clean_error(logs_db, user_path, db_factory):
+    # The -d option needs a file on disk, so use the path-backed database
+    logs_db.close()
+    path = str(user_path / "logs.db")
+    db_factory(path).close()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "list", "-d", path, "-f", "no-such-fragment"])
+    assert result.exit_code == 1
+    assert "Fragment 'no-such-fragment' not found" in result.output
+    # A clean ClickException, not a raw traceback escaping FragmentNotFound
+    assert "Traceback" not in result.output
+
+
 def test_expand_fragment_markdown(fragments_fixture):
     fragments_log_path = fragments_fixture["path"]
     fragment_hashes_by_slug = fragments_fixture["fragment_hashes_by_slug"]
