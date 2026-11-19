@@ -1696,3 +1696,29 @@ def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
         json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
         is allowed
     )
+
+
+def test_logs_with_file_that_is_not_a_database(tmpdir):
+    # A file that exists but holds no SQLite database used to fail with a
+    # traceback from whichever query the command ran first.
+    bad = tmpdir / "not-a-database.db"
+    bad.write_binary(b"this file is not a sqlite database")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-p", str(bad)], catch_exceptions=False)
+    assert result.exit_code == 1
+    assert str(bad) in result.output
+    assert "file is not a database" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_prompt_with_file_that_is_not_a_database(tmpdir, user_path):
+    bad = tmpdir / "not-a-database.db"
+    bad.write_binary(b"this file is not a sqlite database")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["-m", "echo", "hi", "-d", str(bad)], catch_exceptions=False
+    )
+    assert result.exit_code == 1
+    assert str(bad) in result.output
+    assert "file is not a database" in result.output
+    assert "Traceback" not in result.output

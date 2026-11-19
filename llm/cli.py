@@ -4242,6 +4242,15 @@ def _cli_database(*args, **kwargs):
     ctx = click.get_current_context()
     db = sqlite_utils.Database(*args, **kwargs)
     ctx.call_on_close(db.close)
+    try:
+        # sqlite3 connects lazily, so a file that is not a database at all
+        # is not noticed until the command runs its first query - and that
+        # query fails with a traceback. Touch the schema here so the error
+        # arrives as a message naming the file instead.
+        db.execute("select count(*) from sqlite_master").fetchone()
+    except sqlite3.DatabaseError as ex:
+        target = args[0] if args else kwargs.get("filename_or_conn") or ":memory:"
+        raise click.ClickException(f"{target}: {ex}")
     return db
 
 
