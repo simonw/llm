@@ -1010,6 +1010,7 @@ Options:
   -p, --plain                     Output in plain text format
   -d, --database FILE
   --prefix TEXT                   Just IDs with this prefix
+  --key TEXT                      API key to use when embedding the query
   -h, --help                      Show this message and exit.
 ```
 
