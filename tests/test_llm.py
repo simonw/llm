@@ -913,6 +913,20 @@ def test_schemas_dsl():
     }
 
 
+@pytest.mark.parametrize(
+    "dsl,expected",
+    (
+        ("name, age badtype", "unknown type 'badtype' for field 'age'"),
+        (": no name", "field ': no name' is missing a name before ':'"),
+        ("name, name", "duplicate field name 'name'"),
+    ),
+)
+def test_schemas_dsl_invalid(dsl, expected):
+    result = CliRunner().invoke(cli, ["schemas", "dsl", dsl], catch_exceptions=False)
+    assert result.exit_code == 1
+    assert result.output == f"Error: Invalid schema DSL: {expected}\n"
+
+
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
