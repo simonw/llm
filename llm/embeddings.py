@@ -401,6 +401,8 @@ class Collection:
         value: str | bytes | Attachment,
         number: int = 10,
         prefix: str | None = None,
+        *,
+        key: str | None = None,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given value.
@@ -409,11 +411,12 @@ class Collection:
             value (str, bytes or Attachment): value to search by
             number (int, optional): Number of similar items to return
             prefix: (str, optional): Filter results to IDs with this prefix
+            key (str, optional): API key or stored key alias for embedding the query
 
         Returns:
             list: List of Entry objects
         """
-        comparison_vector = self.model().embed(self._materialize(value))
+        comparison_vector = self.model().embed(self._materialize(value), key=key)
         return self.similar_by_vector(comparison_vector, number, prefix=prefix)
 
     @classmethod

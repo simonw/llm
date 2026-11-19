@@ -3866,6 +3866,7 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option("--prefix", help="Just IDs with this prefix", default="")
+@click.option("--key", help="API key to use when embedding the query")
 def similar(
     collection,
     id,
@@ -3878,6 +3879,7 @@ def similar(
     plain,
     database,
     prefix,
+    key,
 ):
     """
     Return top N similar IDs from a collection using cosine similarity.
@@ -3939,7 +3941,7 @@ def similar(
         if not content:
             raise click.ClickException("No content provided")
         try:
-            results = collection_obj.similar(content, number, prefix=prefix)
+            results = collection_obj.similar(content, number, prefix=prefix, key=key)
         except UnknownModelError:
             raise click.ClickException(
                 f"Unknown embedding model: {collection_obj.model_id}"

@@ -346,6 +346,23 @@ def test_similar_errors(args, expected_error, user_path_with_embeddings):
     assert expected_error in result.output
 
 
+def test_similar_with_embedding_key(db_factory, user_path, embed_key_demo):
+    db = db_factory(str(user_path / "embeddings.db"))
+    collection = Collection("docs", db, model=embed_key_demo)
+    collection.embed("1", "hello world", key="index-key")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["similar", "docs", "-c", "hello", "--key", "query-key"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["id"] == "1"
+    assert embed_key_demo.keys == ["index-key", "query-key"]
+    assert embed_key_demo.key is None
+
+
 def test_similar_by_id_cli(user_path_with_embeddings):
     runner = CliRunner()
     result = runner.invoke(cli, ["similar", "demo", "1"], catch_exceptions=False)
