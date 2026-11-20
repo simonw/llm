@@ -4,6 +4,42 @@
 
 - `llm install` and `llm uninstall` now run pip in a separate process using LLM's Python interpreter, keeping pip's changes to interpreter state out of the running CLI. [#1811](https://github.com/simonw/llm/issues/1811)
 
+(v0_38)=
+## 0.38 (2026-11-17)
+
+New features:
+
+- New OpenAI models: `gpt-6.2-astra` and `gpt-6.2-sol` for [GPT-6.2 Astra and Sol](https://openai.com/index/introducing-gpt-6-2-astra-sol/).
+
+Bug fixes:
+
+- CLI commands that do not call OpenAI, such as `llm --version` and `llm models list`, now start faster because the `openai` package is only imported when it is first needed. Thanks, [Seba Breguel](https://github.com/sebastianbreguel). [#1892](https://github.com/simonw/llm/pull/1892)
+- Setting `LLM_OPENAI_SHOW_RESPONSES=1` no longer breaks async OpenAI models, such as `llm --async`. Previously every prompt failed with an ``Invalid `http_client` argument`` error before any request was sent. Async requests and responses are now logged in the same way as sync ones. Thanks, [Alex Castillo González](https://github.com/pcbeingused333). [#1896](https://github.com/simonw/llm/pull/1896)
+- Tool schemas now keep `title` keys that are part of a `default`, `const`, `enum` or `examples` value. Previously the cleanup that removes Pydantic's `title` annotations also removed them from those values, so a tool with a default such as `{"title": "A document"}` was described to the model with that key missing. Thanks, [Goran](https://github.com/goranai). [#1885](https://github.com/simonw/llm/issues/1885), [#1886](https://github.com/simonw/llm/pull/1886)
+- Templates, fragment files passed to `-f` and Python files passed to `--functions` are now read as UTF-8, falling back to the system default encoding for files that are not valid UTF-8. Previously, on systems with a different default encoding such as Windows, a file containing non-ASCII characters could cause a `UnicodeDecodeError`. Thanks, [CJstate](https://github.com/CJstate). [#1893](https://github.com/simonw/llm/pull/1893)
+- `llm fragments list -q` now shows every alias for a matching fragment, not just the alias that matched. Passing `-q` more than once with different aliases for the same fragment now returns that fragment, where previously it returned nothing. Thanks, [winking](https://github.com/lzywzh). [#1890](https://github.com/simonw/llm/pull/1890)
+- A `Toolbox` subclass that calls `super().__init__()` on another `Toolbox` with its own `__init__()` now records the subclass's constructor arguments. Previously the parent's arguments replaced them, so instances that differed only in a subclass argument were logged without it and treated as the same toolbox instance. Thanks, [Allen Flux](https://github.com/allenflux). [#1802](https://github.com/simonw/llm/pull/1802)
+
+Documentation:
+
+- The setup and plugin installation documentation now warn that `uv tool upgrade llm`, `pipx upgrade llm` and `brew upgrade llm` remove plugins installed using `llm install`, and recommend `llm install -U llm` to upgrade while keeping them. See {ref}`Upgrading to the latest version <upgrading-to-the-latest-version>`. Thanks, [bei](https://github.com/beipeonbei). [#1113](https://github.com/simonw/llm/issues/1113), [#1895](https://github.com/simonw/llm/pull/1895)
+
+(v0_37_3)=
+## 0.37.3 (2026-11-16)
+
+- `llm logs` no longer crashes with `AttributeError: 'str' object has no attribute 'get'` on SQLite 3.54.1 and later when a tool result logged by an LLM version before 0.32 has an attachment. Thanks, [Abel Yagubyan](https://github.com/Abelo9996). [#1879](https://github.com/simonw/llm/issues/1879), [#1880](https://github.com/simonw/llm/pull/1880)
+- An `async def` tool passed to a synchronous model now works when an event loop is already running, for example in a Jupyter notebook. Previously the tool never ran and the model received an `asyncio.run() cannot be called from a running event loop` error as the tool result. The tool now runs in a separate thread with its own event loop, see {ref}`Tool functions can be sync or async <python-api-async-tools>`. Thanks, [WU Leizhi](https://github.com/MbappeWU). [#1728](https://github.com/simonw/llm/issues/1728), [#1733](https://github.com/simonw/llm/pull/1733)
+- OpenAI Chat Completions models no longer crash with a `JSONDecodeError` when the model returns tool call arguments that are not valid JSON, such as arguments cut off part way through. The tool is not run, and the error is sent back to the model as the tool result so it can try again. Thanks, [Usama Iftikhar](https://github.com/pseudo-usama). [#1887](https://github.com/simonw/llm/pull/1887)
+- Fixed streamed tool calls from OpenAI-compatible endpoints that leave `index` out of their tool call chunks, including Gemini's OpenAI-compatible endpoint. Previously several tool calls in one response were merged into a single call. Thanks, [Alex Castillo González](https://github.com/pcbeingused333). [#1862](https://github.com/simonw/llm/pull/1862)
+- `collection.embed_multi()` and `llm embed-multi` now update items when content moves between existing IDs in the same batch, such as two IDs swapping their content. Previously those items were skipped, leaving the old embeddings and stored content in place. Thanks, [Steven Huang](https://github.com/remote-controlled-man). [#1867](https://github.com/simonw/llm/pull/1867)
+- `llm chat` no longer fails to start on Windows with an error about an invalid `\e[d` key binding. Thanks, [Dhvani Mistry](https://github.com/Dhvani30). [#585](https://github.com/simonw/llm/issues/585), [#1809](https://github.com/simonw/llm/pull/1809)
+- A template or model option with an invalid value inside a list, such as `attachments: [123]` in a template, now shows the validation error instead of a `TypeError` traceback. This also stopped `llm templates list` from working while such a template was present. Thanks, [Steven Huang](https://github.com/remote-controlled-man). [#1861](https://github.com/simonw/llm/pull/1861)
+- `llm templates edit` now shows an error message instead of a traceback when the edited template is not valid. Thanks, [Fahmid Arman](https://github.com/Fahmid-Arman). [#1852](https://github.com/simonw/llm/pull/1852)
+- `llm embed-models default --remove-default` no longer fails with a `TypeError` when no default embedding model has been set. Thanks, [Zhengyu Chen](https://github.com/Mint0424). [#1870](https://github.com/simonw/llm/pull/1870)
+- `llm embed`, `llm embed-multi` and `llm similar` now show `Unknown embedding model: name` when given an embedding model that is not installed, including a default model or a collection's model that has since been uninstalled. Previously they reported that no default model was set, or showed a traceback. Thanks, [Abel Yagubyan](https://github.com/Abelo9996). [#1881](https://github.com/simonw/llm/issues/1881), [#1882](https://github.com/simonw/llm/pull/1882)
+- `extra-openai-models.yaml` is now always read as UTF-8. Previously, on systems with a different default encoding such as Windows, a model alias containing non-ASCII characters could cause a `UnicodeDecodeError` or an alias that could not be used. Thanks, [winking](https://github.com/lzywzh). [#1889](https://github.com/simonw/llm/pull/1889)
+- The Python API documentation now explains that a prompt passed alongside `messages=` is appended to that list as a new user message.
+
 (v0_37_2)=
 ## 0.37.2 (2026-11-11)
 

@@ -10,7 +10,6 @@ from typing import Any, ClassVar, Literal, cast
 
 import click
 import httpx2
-import openai
 import sqlite_utils
 import yaml
 from click_default_group import DefaultGroup
@@ -58,7 +57,7 @@ def load_extra_models(path=None):
         path = extra_models_path()
     if not path.exists():
         return []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         records = yaml.safe_load(f)
     if records is None:
         return []
@@ -380,6 +379,8 @@ def register_models(register):
         "gpt-6-luna",
         "gpt-6.1-sol",
         "gpt-6.1-terra",
+        "gpt-6.2-astra",
+        "gpt-6.2-sol",
         "chat-latest",
     ):
         register(
@@ -531,6 +532,8 @@ class OpenAIEmbeddingModel(EmbeddingModel):
         }
         if self.dimensions:
             kwargs["dimensions"] = self.dimensions
+        import openai  # deferred: importing openai adds ~100ms to CLI startup
+
         client = openai.OpenAI(api_key=key)
         results = client.embeddings.create(**kwargs).data
         return ([float(r) for r in result.embedding] for result in results)
@@ -1609,7 +1612,9 @@ class _Shared:
         if self.headers:
             kwargs["default_headers"] = self.headers
         if os.environ.get("LLM_OPENAI_SHOW_RESPONSES"):
-            kwargs["http_client"] = logging_client()
+            kwargs["http_client"] = logging_client(async_=async_)
+        import openai  # deferred: importing openai adds ~100ms to CLI startup
+
         if async_:
             return openai.AsyncOpenAI(**kwargs)
         else:
@@ -1669,6 +1674,21 @@ def _streamed_tool_call_index(tool_calls, tool_call):
     if tool_call.id or tool_call.function.name:
         return max(tool_calls) + 1
     return max(tool_calls)
+
+
+def _tool_call_arguments(arguments):
+    """Parse the JSON arguments of a Chat Completions tool call.
+
+    Models sometimes return arguments that are not valid JSON. Keep them
+    as {"_raw": ...}, as the Responses API path does, instead of
+    crashing the whole response.
+    """
+    if not arguments:
+        return {}
+    try:
+        return json.loads(arguments)
+    except json.JSONDecodeError:
+        return {"_raw": arguments}
 
 
 class Chat(_Shared, KeyModel):
@@ -1746,7 +1766,7 @@ class Chat(_Shared, KeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments or "{}"),
+                            arguments=_tool_call_arguments(value.function.arguments),
                         )
                     )
         else:
@@ -1764,7 +1784,7 @@ class Chat(_Shared, KeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments or "{}"),
+                        arguments=_tool_call_arguments(tool_call.function.arguments),
                     )
                 )
                 yield StreamEvent(
@@ -1862,7 +1882,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                         llm.ToolCall(
                             tool_call_id=value.id,
                             name=value.function.name,
-                            arguments=json.loads(value.function.arguments or "{}"),
+                            arguments=_tool_call_arguments(value.function.arguments),
                         )
                     )
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
@@ -1881,7 +1901,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     llm.ToolCall(
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        arguments=json.loads(tool_call.function.arguments or "{}"),
+                        arguments=_tool_call_arguments(tool_call.function.arguments),
                     )
                 )
                 yield StreamEvent(

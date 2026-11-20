@@ -4,6 +4,7 @@ import textwrap
 from importlib.metadata import version
 from unittest import mock
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -125,6 +126,71 @@ def test_fragments_list(db_factory, user_path):
               source: file3.txt
               content: '3'
             """).strip())
+
+
+@pytest.mark.parametrize("json_output", [False, True])
+@pytest.mark.parametrize(
+    "queries, expected",
+    [
+        (["primary"], [("hash1", {"primary", "secondary"})]),
+        (["secondary"], [("hash1", {"primary", "secondary"})]),
+        (["primary", "secondary"], [("hash1", {"primary", "secondary"})]),
+        (["secondary", "primary"], [("hash1", {"primary", "secondary"})]),
+        (["primary", "Shared"], [("hash1", {"primary", "secondary"})]),
+        (["primary", "unrelated"], []),
+        (["missing"], []),
+        (["shared.txt"], [("hash1", {"primary", "secondary"})]),
+        (["hash1"], [("hash1", {"primary", "secondary"})]),
+        (["Unaliased"], [("hash3", set())]),
+    ],
+)
+def test_fragments_list_queries_keep_all_aliases(
+    db_factory, user_path, queries, expected, json_output
+):
+    db = db_factory(str(user_path / "logs.db"))
+    migrate(db)
+    with db.atomic():
+        db["fragments"].insert_all(
+            [
+                {
+                    "id": 1,
+                    "content": "Shared document",
+                    "datetime_utc": "2023-10-01T00:00:00Z",
+                    "source": "shared.txt",
+                    "hash": "hash1",
+                },
+                {
+                    "id": 2,
+                    "content": "Different document",
+                    "datetime_utc": "2023-10-02T00:00:00Z",
+                    "source": "different.txt",
+                    "hash": "hash2",
+                },
+                {
+                    "id": 3,
+                    "content": "Unaliased document",
+                    "datetime_utc": "2023-10-03T00:00:00Z",
+                    "source": "unaliased.txt",
+                    "hash": "hash3",
+                },
+            ]
+        )
+        db["fragment_aliases"].insert_all(
+            [
+                {"alias": "primary", "fragment_id": 1},
+                {"alias": "secondary", "fragment_id": 1},
+                {"alias": "unrelated", "fragment_id": 2},
+            ]
+        )
+    args = ["fragments", "list"]
+    for query in queries:
+        args.extend(["-q", query])
+    if json_output:
+        args.append("--json")
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output) if json_output else yaml.safe_load(result.output)
+    assert [(row["hash"], set(row["aliases"])) for row in (rows or [])] == expected
 
 
 def test_fragment_absolute_path(user_path, tmp_path):

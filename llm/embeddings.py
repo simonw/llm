@@ -246,19 +246,23 @@ class Collection:
                 break
             # Calculate hashes first
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
-            # Any of those hashes already exist?
-            existing_ids = [
-                row["id"]
+            # Skip only IDs whose own content is unchanged.
+            existing_items = {
+                (row["id"], row["content_hash"])
                 for row in self.db.query(
                     """
-                    select id from embeddings
+                    select id, content_hash from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
                     [collection_id]
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
+            }
+            filtered_batch = [
+                item
+                for item, content_hash in items_and_hashes
+                if (item[0], content_hash) not in existing_items
             ]
-            filtered_batch = [item for item in batch if item[0] not in existing_ids]
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )
