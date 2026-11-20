@@ -1010,6 +1010,9 @@ Options:
   -p, --plain                     Output in plain text format
   -d, --database FILE
   --prefix TEXT                   Just IDs with this prefix
+  --diversity FLOAT RANGE         Balance relevance with diversity (0 =
+                                  relevance only, 1 = most diverse).
+                                  [0<=x<=1]
   -h, --help                      Show this message and exit.
 ```
 
