@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `llm install` and `llm uninstall` now run pip in a separate process using LLM's Python interpreter, keeping pip's changes to interpreter state out of the running CLI. [#1811](https://github.com/simonw/llm/issues/1811)
+
 (v0_38)=
 ## 0.38 (2026-11-17)
 
