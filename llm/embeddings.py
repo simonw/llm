@@ -312,6 +312,8 @@ class Collection:
         number: int = 10,
         skip_id: str | None = None,
         prefix: str | None = None,
+        *,
+        diversity: float = 0.0,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given vector.
@@ -320,12 +322,18 @@ class Collection:
             vector (list): Vector to search by
             number (int, optional): Number of similar items to return
             skip_id (str, optional): An ID to exclude from the results
-            prefix: (str, optional): Filter results to IDs witih this prefix
+            diversity: Weight given to avoiding redundant results, from 0 to 1.
+            prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
         """
         import llm
+
+        if not 0 <= diversity <= 1:
+            raise ValueError("diversity must be between 0 and 1")
+        if diversity and number < 0:
+            raise ValueError("diversity requires a non-negative result count")
 
         def distance_score(other_encoded):
             other_vector = llm.decode(other_encoded)
@@ -344,6 +352,21 @@ class Collection:
             where_bits.append("id != ?")
             where_args.append(skip_id)
 
+        columns = "id, content, content_type, metadata"
+        limit = number
+        if diversity:
+            columns += ", embedding"
+            limit = min(number * 4, 2**63 - 1)
+        rows = self.db.query(
+            f"""
+            select {columns}, distance_score(embedding) as score
+            from embeddings where {" and ".join(where_bits)}
+            order by score desc limit ?
+            """,
+            [*where_args, limit],
+        )
+        if diversity:
+            rows = _diverse_rows(list(rows), number, diversity)
         return [
             Entry(
                 id=row["id"],
@@ -352,23 +375,16 @@ class Collection:
                 metadata=json.loads(row["metadata"]) if row["metadata"] else None,
                 content_type=row["content_type"],
             )
-            for row in self.db.query(
-                """
-            select id, content, content_type, metadata,
-                distance_score(embedding) as score
-            from embeddings
-            where {where}
-            order by score desc limit {number}
-        """.format(
-                    where=" and ".join(where_bits),
-                    number=number,
-                ),
-                where_args,
-            )
+            for row in rows
         ]
 
     def similar_by_id(
-        self, id: str, number: int = 10, prefix: str | None = None
+        self,
+        id: str,
+        number: int = 10,
+        prefix: str | None = None,
+        *,
+        diversity: float = 0.0,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given ID.
@@ -376,6 +392,7 @@ class Collection:
         Args:
             id (str): ID to search by
             number (int, optional): Number of similar items to return
+            diversity: Weight given to avoiding redundant results, from 0 to 1.
             prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
@@ -393,7 +410,7 @@ class Collection:
         embedding = matches[0]["embedding"]
         comparison_vector = llm.decode(embedding)
         return self.similar_by_vector(
-            comparison_vector, number, skip_id=id, prefix=prefix
+            comparison_vector, number, skip_id=id, prefix=prefix, diversity=diversity
         )
 
     def similar(
@@ -401,6 +418,8 @@ class Collection:
         value: str | bytes | Attachment,
         number: int = 10,
         prefix: str | None = None,
+        *,
+        diversity: float = 0.0,
     ) -> list[Entry]:
         """
         Find similar items in the collection by a given value.
@@ -408,13 +427,16 @@ class Collection:
         Args:
             value (str, bytes or Attachment): value to search by
             number (int, optional): Number of similar items to return
+            diversity: Weight given to avoiding redundant results, from 0 to 1.
             prefix: (str, optional): Filter results to IDs with this prefix
 
         Returns:
             list: List of Entry objects
         """
         comparison_vector = self.model().embed(self._materialize(value))
-        return self.similar_by_vector(comparison_vector, number, prefix=prefix)
+        return self.similar_by_vector(
+            comparison_vector, number, prefix=prefix, diversity=diversity
+        )
 
     @classmethod
     def exists(cls, db: Database, name: str) -> bool:
@@ -453,3 +475,29 @@ class Collection:
         else:
             content_to_hash = input
         return hashlib.md5(content_to_hash).digest()
+
+
+def _diverse_rows(rows, number, diversity):
+    """Greedy maximal marginal relevance over the nearest candidates."""
+    import llm
+
+    if not rows:
+        return
+    vectors = [llm.decode(row["embedding"]) for row in rows]
+    redundancy = [-1.0] * len(rows)
+    remaining = list(range(len(rows)))
+    best = 0
+    for rank in range(min(number, len(rows))):
+        yield rows[best]
+        remaining.remove(best)
+        if rank + 1 == number or not remaining:
+            break
+        for i in remaining:
+            redundancy[i] = max(
+                redundancy[i], llm.cosine_similarity(vectors[i], vectors[best])
+            )
+        best = max(
+            remaining,
+            key=lambda i: (1 - diversity) * rows[i]["score"]
+            - diversity * redundancy[i],
+        )
