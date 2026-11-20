@@ -363,6 +363,15 @@ The ID for a local attachment is its basename, a URL attachment uses the full UR
 
 The `llm similar` command searches a collection of embeddings for the items that are most similar to a given or item ID, based on [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity).
 
+When overlapping passages crowd out other relevant material, use maximal marginal relevance to diversify the results:
+
+```bash
+llm similar quotations -c 'computer science' -n 5 --diversity 0.7
+```
+
+The first result is the nearest match. For subsequent results, LLM considers the nearest four times the requested count and penalizes similarity to passages already selected. A weight of 0 uses ordinary cosine ranking; 1 prioritizes novelty within the candidate pool. The reported score remains cosine similarity to your query. This also works with stored IDs and prefix filters, without re-embedding the candidates.
+
+
 This currently uses a slow brute-force approach which does not scale well to large collections. See [issue 216](https://github.com/simonw/llm/issues/216) for plans to add a more scalable approach via vector indexes provided by plugins.
 
 To search the `quotations` collection for items that are semantically similar to `'computer science'`:
