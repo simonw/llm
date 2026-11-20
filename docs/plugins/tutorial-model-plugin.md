@@ -569,7 +569,7 @@ classifiers = [
 dependencies = [
     "llm"
 ]
-requires-python = ">3.7"
+requires-python = ">=3.11"
 
 [project.urls]
 Homepage = "https://github.com/simonw/llm-markov"
