@@ -1142,3 +1142,13 @@ def test_duplicate_content_embedded_only_once(db_factory, embed_demo):
     # Should have only embedded one more thing
     assert db["embeddings"].count == 4
     assert len(embed_demo.embedded_content) == 4
+
+
+@pytest.mark.parametrize("source", [["1"], ["-c", "hello world"]])
+def test_similar_diversity_cli(user_path_with_embeddings, source):
+    result = CliRunner().invoke(
+        cli, ["similar", "demo", *source, "--diversity", "0.7"], catch_exceptions=False
+    )
+    assert result.exit_code == 0
+    assert all("score" in json.loads(line) for line in result.output.splitlines())
+    assert result.output.strip()
