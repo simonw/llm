@@ -518,3 +518,31 @@ def test_embed_multi_with_metadata_keeps_completed_batches_on_mismatch(db_factor
         collection.embed_multi_with_metadata(entries, batch_size=2)
     # First batch committed, mismatched second batch did not
     assert collection.count() == 2
+
+
+def test_diversity_reranks_stored_vectors(db_factory):
+    collection = llm.Collection(
+        "search", db_factory(memory=True), model_id="embed-demo"
+    )
+    for key, vector in {
+        "query": [1, 0],
+        "docs/a": [1, 0],
+        "docs/b": [0.99, 0.01],
+        "docs/c": [0.8, 0.6],
+        "elsewhere": [0, 1],
+    }.items():
+        collection.db["embeddings"].insert(
+            {"collection_id": collection.id, "id": key, "embedding": llm.encode(vector)}
+        )
+
+    def search(weight):
+        return collection.similar_by_id("query", 2, prefix="docs/", diversity=weight)
+
+    assert [entry.id for entry in search(0)] == ["docs/a", "docs/b"]
+    diverse = search(0.7)
+    assert [entry.id for entry in diverse] == ["docs/a", "docs/c"]
+    assert diverse[1].score == pytest.approx(0.8)
+    assert collection.similar_by_vector([1, 0], 0, diversity=1) == []
+    assert collection.similar_by_id("query", prefix="missing", diversity=1) == []
+    with pytest.raises(ValueError, match="between"):
+        search(float("nan"))

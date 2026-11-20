@@ -3866,6 +3866,12 @@ def embed_multi(
     envvar="LLM_EMBEDDINGS_DB",
 )
 @click.option("--prefix", help="Just IDs with this prefix", default="")
+@click.option(
+    "--diversity",
+    type=click.FloatRange(0, 1),
+    default=0.0,
+    help="Balance relevance with diversity (0 = relevance only, 1 = most diverse).",
+)
 def similar(
     collection,
     id,
@@ -3878,6 +3884,7 @@ def similar(
     plain,
     database,
     prefix,
+    diversity,
 ):
     """
     Return top N similar IDs from a collection using cosine similarity.
@@ -3892,6 +3899,8 @@ def similar(
     \b
         llm similar my-collection 1234
     """
+    if diversity and (number < 0 or diversity != diversity):
+        raise click.UsageError("Diversity requires a finite weight and non-negative -n")
     resolved_attachments = [*attachments, *attachment_types]
     if len(resolved_attachments) > 1:
         raise click.UsageError("Only one attachment can be used for comparison")
@@ -3920,7 +3929,9 @@ def similar(
 
     if id:
         try:
-            results = collection_obj.similar_by_id(id, number, prefix=prefix)
+            results = collection_obj.similar_by_id(
+                id, number, prefix=prefix, diversity=diversity
+            )
         except Collection.DoesNotExist:
             raise click.ClickException("ID not found in collection")
     else:
@@ -3939,7 +3950,9 @@ def similar(
         if not content:
             raise click.ClickException("No content provided")
         try:
-            results = collection_obj.similar(content, number, prefix=prefix)
+            results = collection_obj.similar(
+                content, number, prefix=prefix, diversity=diversity
+            )
         except UnknownModelError:
             raise click.ClickException(
                 f"Unknown embedding model: {collection_obj.model_id}"
