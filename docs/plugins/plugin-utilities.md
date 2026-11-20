@@ -68,9 +68,9 @@ def test_build_prompt_conversation():
     model = llm.get_model("mpt")
     conversation = model.conversation()
     conversation.responses = [
-        llm.Response.fake(model, "prompt 1", "system 1", "response 1"),
-        llm.Response.fake(model, "prompt 2", None, "response 2"),
-        llm.Response.fake(model, "prompt 3", None, "response 3"),
+        llm.Response.fake(model, "prompt 1", system="system 1", response="response 1"),
+        llm.Response.fake(model, "prompt 2", system=None, response="response 2"),
+        llm.Response.fake(model, "prompt 3", system=None, response="response 3"),
     ]
     lines = model.build_prompt(llm.Prompt("prompt 4", model), conversation)
     assert lines == [
@@ -88,5 +88,5 @@ def test_build_prompt_conversation():
 The signature of `llm.Response.fake()` is:
 
 ```python
-def fake(cls, model: Model, prompt: str, system: str, response: str):
+def fake(cls, model: Model, prompt: str, *attachments: Attachment, system: str, response: str):
 ```
