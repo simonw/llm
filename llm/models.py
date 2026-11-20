@@ -1582,6 +1582,30 @@ class _BaseResponse:
         self.resolved_model = model_id
 
     @classmethod
+    def fake(
+        cls,
+        model: "_BaseModel",
+        prompt: str,
+        *attachments: list[Attachment],
+        system: str,
+        response: str,
+    ):
+        "Utility method to help with writing tests"
+        response_obj = cls(
+            model=model,
+            prompt=Prompt(
+                prompt,
+                model=model,
+                attachments=attachments,
+                system=system,
+            ),
+            stream=False,
+        )
+        response_obj._done = True
+        response_obj._chunks = [response]
+        return response_obj
+
+    @classmethod
     def from_row(cls, db, row, _async=False):
         from llm import get_async_model, get_model
 
@@ -2775,30 +2799,6 @@ class AsyncResponse(_BaseResponse):
         response.attachments = list(self.attachments)
         response.resolved_model = self.resolved_model
         return response
-
-    @classmethod
-    def fake(
-        cls,
-        model: "AsyncModel",
-        prompt: str,
-        *attachments: list[Attachment],
-        system: str,
-        response: str,
-    ):
-        "Utility method to help with writing tests"
-        response_obj = cls(
-            model=model,
-            prompt=Prompt(
-                prompt,
-                model=model,
-                attachments=attachments,
-                system=system,
-            ),
-            stream=False,
-        )
-        response_obj._done = True
-        response_obj._chunks = [response]
-        return response_obj
 
     def __repr__(self):
         text = "... not yet awaited ..."

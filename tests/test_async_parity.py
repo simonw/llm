@@ -405,3 +405,25 @@ def test_conversation_prompt_uses_conversation_tools(async_):
     )
     response = conversation.prompt("hello")
     assert [tool.name for tool in response.prompt.tools] == ["my_tool"]
+
+
+# ---- Response.fake / AsyncResponse.fake ----------------------------
+
+
+def test_sync_response_fake():
+    model = llm.get_model("echo")
+    response = llm.Response.fake(model, "prompt 1", system="system 1", response="hi")
+    assert response.text() == "hi"
+    assert response.prompt.prompt == "prompt 1"
+    assert response.prompt.system == "system 1"
+
+
+@pytest.mark.asyncio
+async def test_async_response_fake():
+    model = llm.get_async_model("echo")
+    response = llm.AsyncResponse.fake(
+        model, "prompt 1", system="system 1", response="hi"
+    )
+    assert await response.text() == "hi"
+    assert response.prompt.prompt == "prompt 1"
+    assert response.prompt.system == "system 1"
