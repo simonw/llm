@@ -197,7 +197,7 @@ Only the key named by `api_key_name` is sent to the endpoint. If that key is mis
 The other options correspond to keys in the YAML file:
 
 - `--alias NAME` adds an alias, written to the `aliases` list. Repeat it for multiple aliases.
-- `--completion` writes `completion: true` for completion models that should use the `/completion` endpoint as opposed to `/completion/chat`
+- `--completion` writes `completion: true` for completion models that use the `/completions` endpoint instead of `/chat/completions`
 - `--responses` writes `responses: true` for models that should use the OpenAI Responses API (`/responses`) instead of the Chat Completions API (`/chat/completions`)
 - `--supports-tools` writes `supports_tools: true` for models that support tool calling
 - `--no-stream` writes `can_stream: false` to disable streaming mode for models that cannot stream
