@@ -4567,8 +4567,13 @@ def _gather_tools(
         )
     for tool_spec in tool_specs:
         if not tool_spec[0].isupper():
-            # It's a function
-            tools.append(available_tools[tool_spec])
+            # It's a function - allow "name" or "name()", as shown by "llm tools"
+            name, _, args = tool_spec.partition("(")
+            if args.strip() not in ("", ")"):
+                raise click.ClickException(
+                    f"Tool {name.strip()} does not take arguments"
+                )
+            tools.append(available_tools[name.strip()])
         else:
             # It's a class
             tools.append(instantiate_from_spec(registered_classes, tool_spec))

@@ -1010,6 +1010,34 @@ def test_llm_prompt_json_without_logging(logs_db, logs_args):
     assert logs_db["responses"].count == 0
 
 
+@pytest.mark.parametrize("tool_spec", ["llm_version()", " llm_version"])
+def test_llm_prompt_tool_function_spec_variants(logs_db, tool_spec):
+    "-T accepts a function tool written the way 'llm tools' lists it"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "-m",
+            "echo",
+            "-T",
+            tool_spec,
+            json.dumps({"tool_calls": [{"name": "llm_version"}]}),
+            "--json",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert [tool["name"] for tool in rows[0]["tools"]] == ["llm_version"]
+
+
+def test_llm_prompt_tool_function_spec_with_arguments(logs_db):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-m", "echo", "-T", "llm_version(1)", "hi"])
+    assert result.exit_code == 1
+    assert "Tool llm_version does not take arguments" in result.output
+
+
 def test_llm_prompt_json_with_tools(logs_db):
     "Each response in a tool chain should be included in the JSON"
     runner = CliRunner()
