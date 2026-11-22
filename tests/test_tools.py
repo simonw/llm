@@ -5,6 +5,7 @@ import os
 import re
 import threading
 import time
+from functools import partial
 from importlib.metadata import version
 
 import pytest
@@ -34,6 +35,29 @@ class DemoServerSideTool(llm.ServerSideTool):
 
     def prepare_request(self, model, kwargs):
         self.prepare_calls += 1
+
+
+@pytest.mark.parametrize("name", [None, "custom_render"])
+def test_partial_function_tool(name):
+    def render(prefix: str, value: int) -> str:
+        """Render a value with its prefix."""
+        return f"{prefix}:{value}"
+
+    tool = llm.Tool.function(partial(render, "fixed"), name=name)
+    assert tool.name == (name or "render")
+    assert tool.description == "Render a value with its prefix."
+    assert set(tool.input_schema["properties"]) == {"value"}
+    assert tool.input_schema["properties"]["value"]["type"] == "integer"
+    assert tool.input_schema["required"] == ["value"]
+
+    response = llm.get_model("echo").chain(
+        json.dumps({"tool_calls": [{"name": tool.name, "arguments": {"value": 7}}]}),
+        tools=[tool],
+    )
+    response.text()
+    result = response._responses[1].prompt.tool_results[0]
+    assert result.output == "fixed:7"
+    assert result.exception is None
 
 
 class ServerToolsOnlyModel(llm.Model):
