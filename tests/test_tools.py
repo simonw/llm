@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+import functools
 import json
 import os
 import re
@@ -411,6 +412,38 @@ def test_async_tool_function_runs_on_calling_thread():
     assert len(bits) == 2
     objects = [json.loads(bits[0] + "}"), json.loads("{" + bits[1])]
     assert objects[1]["tool_results"][0]["output"] == caller
+
+
+@pytest.mark.parametrize("in_event_loop", [False, True])
+def test_wrapped_async_tool_in_sync_chain(in_event_loop):
+    calls = []
+
+    async def hello():
+        calls.append("called")
+        return "world"
+
+    @functools.wraps(hello)
+    def wrapped():
+        return hello()
+
+    def run_chain():
+        response = llm.get_model("echo").chain(
+            json.dumps({"tool_calls": [{"name": "hello"}]}), tools=[wrapped]
+        )
+        response.text()
+        result = response._responses[1].prompt.tool_results[0]
+        assert result.output == "world"
+        assert result.exception is None
+        assert calls == ["called"]
+
+    if in_event_loop:
+
+        async def run():
+            run_chain()
+
+        asyncio.run(run())
+    else:
+        run_chain()
 
 
 @pytest.mark.asyncio
