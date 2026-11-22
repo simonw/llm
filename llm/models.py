@@ -2022,8 +2022,9 @@ class Response(_BaseResponse):
 
             try:
                 implementation_arguments = _implementation_arguments(tool, tool_call)
-                if inspect.iscoroutinefunction(tool.implementation):
-                    coro = tool.implementation(**implementation_arguments)
+                result = tool.implementation(**implementation_arguments)
+                if inspect.iscoroutine(result):
+                    coro = result
                     try:
                         asyncio.get_running_loop()
                     except RuntimeError:
@@ -2038,9 +2039,6 @@ class Response(_BaseResponse):
                             _run_async_tool,
                             coro,
                         ).result()
-                else:
-                    result = tool.implementation(**implementation_arguments)
-
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
                     result = result.output
