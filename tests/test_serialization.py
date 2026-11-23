@@ -191,6 +191,21 @@ class TestResponseDictRoundTrip:
         d = r.to_dict()
         TypeAdapter(ResponseDict).validate_python(d)
 
+    def test_usage_details_without_token_totals_are_persisted(
+        self, mock_model, monkeypatch
+    ):
+        def execute(prompt, stream, response, conversation):
+            response.set_usage(details={"cached_tokens": 12})
+            yield "answer"
+
+        monkeypatch.setattr(mock_model, "execute", execute)
+        response = mock_model.prompt("q")
+        payload = response.to_dict()
+        assert payload["usage"] == {"details": {"cached_tokens": 12}}
+
+        restored = llm.Response.from_dict(payload, model=mock_model)
+        assert restored.usage() == response.usage()
+
     def test_to_dict_forces_unconsumed_response(self, mock_model):
         mock_model.enqueue(["answer"])
         r = mock_model.prompt("q")

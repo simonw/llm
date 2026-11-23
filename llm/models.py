@@ -1735,14 +1735,14 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     if response.id:
         payload["id"] = response.id
     if response._done:
-        if response.input_tokens is not None or response.output_tokens is not None:
-            usage: dict[str, Any] = {}
-            if response.input_tokens is not None:
-                usage["input"] = response.input_tokens
-            if response.output_tokens is not None:
-                usage["output"] = response.output_tokens
-            if response.token_details is not None:
-                usage["details"] = response.token_details
+        usage: dict[str, Any] = {}
+        if response.input_tokens is not None:
+            usage["input"] = response.input_tokens
+        if response.output_tokens is not None:
+            usage["output"] = response.output_tokens
+        if response.token_details is not None:
+            usage["details"] = response.token_details
+        if usage:
             payload["usage"] = usage
         if response._start_utcnow is not None:
             payload["datetime_utc"] = response._start_utcnow.isoformat()
