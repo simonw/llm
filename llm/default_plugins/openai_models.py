@@ -1502,17 +1502,21 @@ class _Shared:
         )
 
         text_bits = []
-        attachment_items = []
+        content = []
+        has_attachment = False
         tool_calls = []
         tool_results = []
 
         for part in message.parts:
             if isinstance(part, TextPart):
                 text_bits.append(part.text)
+                if content and content[-1]["type"] == "text":
+                    content[-1]["text"] += part.text
+                else:
+                    content.append({"type": "text", "text": part.text})
             elif isinstance(part, AttachmentPart) and part.attachment:
-                attachment_items.append(
-                    _attachment(part.attachment, image_detail=image_detail)
-                )
+                has_attachment = True
+                content.append(_attachment(part.attachment, image_detail=image_detail))
             elif isinstance(part, ToolCallPart):
                 tool_calls.append(
                     {
@@ -1545,11 +1549,7 @@ class _Shared:
                 return current_system
             current_system = text
 
-        if attachment_items:
-            content = []
-            if text_bits:
-                content.append({"type": "text", "text": "".join(text_bits)})
-            content.extend(attachment_items)
+        if has_attachment:
             entry = {"role": message.role, "content": content}
         else:
             entry = {
