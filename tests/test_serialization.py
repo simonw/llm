@@ -6,6 +6,7 @@ conforms to the TypedDict annotations. pydantic is already a runtime
 dependency.
 """
 
+import datetime
 import json
 
 import pytest
@@ -190,6 +191,25 @@ class TestResponseDictRoundTrip:
 
         d = r.to_dict()
         TypeAdapter(ResponseDict).validate_python(d)
+
+    def test_model_options_are_json_serializable(self, mock_model, monkeypatch):
+        class Options(llm.Options):
+            since: datetime.date
+            labels: dict[str, str | None]
+
+        monkeypatch.setattr(type(mock_model), "Options", Options)
+        mock_model.enqueue(["answer"])
+        since = datetime.date(2026, 1, 12)
+        response = mock_model.prompt("q", since=since, labels={"region": None})
+
+        payload = json.loads(json.dumps(response.to_dict()))
+        assert payload["prompt"]["options"] == {
+            "since": "2026-01-12",
+            "labels": {"region": None},
+        }
+
+        loaded = llm.Response.from_dict(payload, model=mock_model)
+        assert loaded.prompt.options == Options(since=since, labels={"region": None})
 
     def test_to_dict_forces_unconsumed_response(self, mock_model):
         mock_model.enqueue(["answer"])

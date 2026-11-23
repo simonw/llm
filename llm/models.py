@@ -1717,7 +1717,9 @@ def _response_to_dict(response: "_BaseResponse") -> ResponseDict:
     """
     options = {
         key: value
-        for key, value in dict(response.prompt.options).items()
+        for key, value in response.prompt.options.model_dump(
+            mode="json", round_trip=True
+        ).items()
         if value is not None
     }
     payload: dict[str, Any] = {
