@@ -258,11 +258,15 @@ class Collection:
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
             }
-            filtered_batch = [
-                item
-                for item, content_hash in items_and_hashes
-                if (item[0], content_hash) not in existing_items
-            ]
+            filtered_batch = []
+            seen_ids = set()
+            for item, content_hash in items_and_hashes:
+                item_id = item[0]
+                if item_id in seen_ids or (item_id, content_hash) not in existing_items:
+                    filtered_batch.append(item)
+                    # A queued update makes this ID's persisted hash stale until
+                    # the batch is written.
+                    seen_ids.add(item_id)
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
             )

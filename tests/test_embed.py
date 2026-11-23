@@ -350,6 +350,18 @@ def test_embed_multi_updates_swapped_content(
     assert model.embedded_content == [goodbye, hello, hello, goodbye]
 
 
+@pytest.mark.parametrize("batch_size", [1, 10])
+def test_embed_multi_updates_same_id_in_input_order(collection, batch_size):
+    collection.embed_multi(
+        [("1", "updated"), ("1", "hello world")],
+        store=True,
+        batch_size=batch_size,
+    )
+    assert collection.db["embeddings"].get((collection.id, "1"))["content"] == (
+        "hello world"
+    )
+
+
 def test_collection_typed_attachments(db_factory):
     model = TypedAttachmentEmbeddingModel()
     collection = llm.Collection("typed", db_factory(memory=True), model=model)
