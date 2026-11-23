@@ -1505,6 +1505,7 @@ class _Shared:
         attachment_items = []
         tool_calls = []
         tool_results = []
+        skipped_server_tool = False
 
         for part in message.parts:
             if isinstance(part, TextPart):
@@ -1513,6 +1514,12 @@ class _Shared:
                 attachment_items.append(
                     _attachment(part.attachment, image_detail=image_detail)
                 )
+            elif (
+                isinstance(part, (ToolCallPart, ToolResultPart))
+                and part.server_executed
+            ):
+                # Provider-hosted tool interactions are not client function calls.
+                skipped_server_tool = True
             elif isinstance(part, ToolCallPart):
                 tool_calls.append(
                     {
@@ -1562,8 +1569,9 @@ class _Shared:
             # OpenAI expects content=null when only tool_calls are present.
             if not text_bits:
                 entry["content"] = None
-        elif entry["content"] is None and message.role != "assistant":
-            # For user/system, an empty message is pointless — drop it.
+        elif entry["content"] is None and (
+            message.role != "assistant" or skipped_server_tool
+        ):
             return current_system
 
         out.append(entry)
