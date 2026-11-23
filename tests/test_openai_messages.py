@@ -135,6 +135,27 @@ class TestBuildMessagesFromExplicitMessages:
             }
         ]
 
+    def test_user_preserves_interleaved_text_and_images(self, chat_model):
+        before = llm.Attachment(type="image/jpeg", url="https://example.com/before.jpg")
+        after = llm.Attachment(type="image/jpeg", url="https://example.com/after.jpg")
+        prompt = Prompt(
+            None,
+            model=chat_model,
+            messages=[llm.user("Before:", before, "After:", after, "What changed?")],
+        )
+        assert chat_model.build_messages(prompt, None) == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Before:"},
+                    {"type": "image_url", "image_url": {"url": before.url}},
+                    {"type": "text", "text": "After:"},
+                    {"type": "image_url", "image_url": {"url": after.url}},
+                    {"type": "text", "text": "What changed?"},
+                ],
+            },
+        ]
+
     def test_assistant_with_tool_call(self, chat_model):
         tool_call = llm.parts.ToolCallPart(
             name="search",
