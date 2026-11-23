@@ -625,6 +625,71 @@ def test_chat_completions_opt_out_dispatches_to_chat(httpx2_mock):
     assert "reasoning_summary" not in request_body
 
 
+def test_chat_completions_replay_preserves_only_local_tool_exchange(httpx2_mock):
+    from llm.parts import ToolCallPart, ToolResultPart
+
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/chat/completions",
+        json={
+            "id": "chatcmpl-history",
+            "object": "chat.completion",
+            "model": "gpt-5.5",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Recap"},
+                    "finish_reason": "stop",
+                }
+            ],
+        },
+    )
+    provider_call = ToolCallPart(
+        name="web_search", tool_call_id="ws_1", server_executed=True
+    )
+    provider_result = ToolResultPart(
+        name="web_search",
+        tool_call_id="ws_1",
+        output="Found sources",
+        server_executed=True,
+    )
+    local_call = ToolCallPart(name="lookup", tool_call_id="call_1")
+    local_result = ToolResultPart(name="lookup", tool_call_id="call_1", output="Paris")
+
+    model = llm.get_model("gpt-5.5")
+    response = model.prompt(
+        messages=[
+            llm.user("Find the answer"),
+            llm.assistant(provider_call, provider_result),
+            llm.assistant("Checking the result", local_call),
+            llm.tool_message(provider_result, local_result),
+            llm.user("Recap"),
+        ],
+        stream=False,
+        chat_completions=True,
+        key="test",
+    )
+
+    assert response.text() == "Recap"
+    request = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request["messages"] == [
+        {"role": "user", "content": "Find the answer"},
+        {
+            "role": "assistant",
+            "content": "Checking the result",
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "call_1",
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "Paris"},
+        {"role": "user", "content": "Recap"},
+    ]
+
+
 @pytest.mark.parametrize(
     "model_id", ("gpt-5.5", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-terra")
 )
